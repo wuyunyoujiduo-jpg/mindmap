@@ -30,7 +30,10 @@ type fakePlatform struct {
 	clipImage  []byte
 	clipFiles  []string
 	picked     string
+	savePath   string
 }
+
+func (f *fakePlatform) SaveFile(name, ext string, done func(string)) { done(f.savePath) }
 
 func (f *fakePlatform) ClipboardImage() []byte      { return f.clipImage }
 func (f *fakePlatform) ClipboardFiles() []string    { return f.clipFiles }
@@ -1687,4 +1690,99 @@ func TestTaskSummary(t *testing.T) {
 	if got := a.taskSummary(&model.Task{Status: model.StatusIdea}); got != "任务：想法" {
 		t.Fatalf("got %q", got)
 	}
+}
+
+func TestExportImage(t *testing.T) {
+	a, tt := newTestApp(t)
+	clickNode(t, tt, a, "架构")
+	cam := *a.cam()
+	selected := a.selected
+	out := filepath.Join(t.TempDir(), "导出")
+	a.plat.(*fakePlatform).savePath = out
+	a.askExportImage()
+	data, err := os.ReadFile(out + ".png")
+	if err != nil {
+		t.Fatal(err, a.saveErr)
+	}
+	img, err := png.Decode(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	w, h := a.boxes.Width, a.boxes.Height
+	if b := img.Bounds(); abs(float32(b.Dx())-w*exportScale) > 4 || abs(float32(b.Dy())-h*exportScale) > 4 {
+		t.Fatalf("image %v for a map of %v×%v", b, w, h)
+	}
+	// The screen is as it was.
+	if *a.cam() != cam || a.selected != selected || a.exportCam != nil {
+		t.Fatalf("camera %v selected %q", *a.cam(), a.selected)
+	}
+	if dir := os.Getenv("MINDMAP_SNAPSHOTS"); dir != "" {
+		os.WriteFile(filepath.Join(dir, "export.png"), data, 0o644)
+	}
+	// The canvas still takes keys.
+	tt.Key(0, ui.KeyTab)
+	if a.editing == "" {
+		t.Fatal("canvas lost its handle")
+	}
+}
+
+func abs(x float32) float32 { return max(x, -x) }
+
+func TestResizePanel(t *testing.T) {
+	a, tt := newTestApp(t)
+	r, ok := tt.Find("调整面板宽度")
+	if !ok {
+		t.Fatal("no resizer")
+	}
+	x, y := r.X+r.W/2, r.Y+r.H/2
+	tt.Press(x, y)
+	tt.Move(x-60, y)
+	tt.Move(x-120, y)
+	tt.Release(x-120, y)
+	if a.panelWidth < 410 || a.panelWidth > 430 {
+		t.Fatalf("panel %v", a.panelWidth)
+	}
+	if loadConfig().PanelWidth != a.panelWidth {
+		t.Fatal("width not kept")
+	}
+	// It stops at its narrowest.
+	r, _ = tt.Find("调整面板宽度")
+	x = r.X + r.W/2
+	tt.Press(x, y)
+	tt.Move(x+500, y)
+	tt.Release(x+500, y)
+	if a.panelWidth != panelMin {
+		t.Fatalf("panel %v", a.panelWidth)
+	}
+}
+
+func TestMarkdownInChat(t *testing.T) {
+	src := "**进展**\n\n- 画布「ergora」有 **会话** 和 `特性`\n  - 子项\n1. 第一\n2. 第二\n\n> 引用\n\n```\ncode()\n```\n\n| 列 | 值 |\n|---|---|\n| a | 1 |\n\n---\n## 小标题\n普通 *斜体* ~~删除~~ [链接](https://x.y)"
+	var kinds []string
+	for _, b := range parseMarkdown(src) {
+		kinds = append(kinds, b.kind)
+	}
+	want := []string{"p", "li", "li", "ol", "ol", "quote", "code", "table", "hr", "h", "p"}
+	if !slices.Equal(kinds, want) {
+		t.Fatalf("blocks %v", kinds)
+	}
+	spans := inlineSpans("a **b** `c` [d](u) *e*", 13, ui.Color{}, ui.Color{}, ui.Color{}, mdSpanStyle{})
+	var texts []string
+	for _, s := range spans {
+		texts = append(texts, s.Text)
+	}
+	if !slices.Equal(texts, []string{"a ", "b", " ", "c", " ", "d", " ", "e"}) || spans[1].Weight != 700 || !spans[7].Italic {
+		t.Fatalf("spans %q", texts)
+	}
+
+	a, tt := newTestApp(t)
+	a.aiOpen, a.cfg.AIKey = true, "sk-test"
+	a.panelWidth = 380
+	a.ai.msgs = append(a.ai.msgs, chatMsg{role: "user", text: "总结这个画布的进展和风险"}, chatMsg{role: "assistant", text: src})
+	tt.Frame()
+	if tt.HasText("**进展**") || !tt.HasText("进展") {
+		t.Fatalf("texts %q", tt.Texts())
+	}
+	snapshot(t, tt, "ai-markdown")
 }

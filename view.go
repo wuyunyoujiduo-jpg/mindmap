@@ -41,7 +41,7 @@ func (a *app) view(c *ui.Context) {
 						a.agendaView(c)
 					}
 				})
-				ui.Box(c).Width(1).FillHeight().Background(t.Border)
+				a.panelResizer(c)
 				a.panel(c)
 			})
 		}).Fill()
@@ -53,6 +53,29 @@ func (a *app) view(c *ui.Context) {
 		a.runPending()
 		c.Invalidate()
 	}
+}
+
+// panelResizer is the line left of the panel, which the pointer drags to
+// make the panel wider or narrower.
+func (a *app) panelResizer(c *ui.Context) {
+	t := c.Theme()
+	line := ui.Box(c).Width(1).FillHeight().Background(t.Border)
+	line.Children(func() {
+		edge := ui.Box(c.Key("panel-resizer")).Absolute().Left(-3).Top(0).Width(7).FillHeight().
+			Cursor(ui.CursorResizeEW).Label("调整面板宽度")
+		if edge.Hovered() || a.resizingPanel {
+			edge.Background(t.Accent.Alpha(0.35))
+		}
+		if dx, _, ok := edge.Dragged(); ok {
+			a.resizingPanel = true
+			w, _ := c.Size()
+			a.panelWidth = max(min(a.panelWidth-dx, 720, w-a.sidebarWidth-360), panelMin)
+		} else if a.resizingPanel {
+			a.resizingPanel = false
+			a.cfg.PanelWidth = a.panelWidth
+			a.cfg.save()
+		}
+	})
 }
 
 func mapName(path string) string {

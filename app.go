@@ -20,6 +20,9 @@ type platform interface {
 	// PickFolder asks for a folder and calls done with it, "" when
 	// canceled, on the main thread.
 	PickFolder(done func(dir string))
+	// SaveFile asks where to save a file named name, of the extension,
+	// and calls done with the path, "" when canceled, on the main thread.
+	SaveFile(name, ext string, done func(path string))
 	ShowInFolder(path string)
 	Trash(path string) error
 	SetFullScreen(on bool)
@@ -121,6 +124,7 @@ type app struct {
 	tagFilter     string
 	sidebarWidth  float32
 	panelWidth    float32
+	resizingPanel bool
 	filesOpen     bool
 	tagsOpen      bool
 	favoritesOpen bool
@@ -128,6 +132,7 @@ type app struct {
 	renaming      string          // the map or folder renamed in the sidebar
 	renameText    string
 	tagQuery      string
+	exportCam     *camera // set while the canvas is drawn into an image
 	tagDraft      string // a tag being typed in the node panel
 	tagAdding     bool   // the sidebar's new-tag field is shown
 	tagNew        string
@@ -161,6 +166,9 @@ func newApp(plat platform, cfg config) *app {
 		},
 	}
 	a.syncTagColors()
+	if cfg.PanelWidth >= panelMin {
+		a.panelWidth = cfg.PanelWidth
+	}
 	a.openDir(cfg.Dir)
 	if cfg.File != "" && inside(cfg.File, a.dir) {
 		if err := a.open(cfg.File); err == nil {
@@ -651,6 +659,9 @@ type camera struct {
 func (a *app) cam() *camera {
 	if a.doc == nil {
 		return &camera{Zoom: 1}
+	}
+	if a.exportCam != nil {
+		return a.exportCam
 	}
 	c := a.cams[a.doc.ID]
 	if c == nil {

@@ -20,6 +20,9 @@ const (
 
 // panel is the right side: the selected node's details, or the shown
 // canvas's style.
+// panelMin is the narrowest the panel is dragged to.
+const panelMin = 260
+
 func (a *app) panel(c *ui.Context) {
 	t := c.Theme()
 	ui.Column(c).Width(a.panelWidth).FillHeight().Background(t.Surface).Children(func() {

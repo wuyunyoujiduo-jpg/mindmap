@@ -4,6 +4,7 @@ package main
 
 import (
 	"log"
+	"strings"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -24,6 +25,22 @@ func (d *desktop) PickFolder(done func(string)) {
 			dir = paths[0]
 		}
 		d.win.Update(func() { done(dir) })
+	}()
+}
+
+func (d *desktop) SaveFile(name, ext string, done func(string)) {
+	go func() {
+		path, err := mygo.Dialog.Save(mygo.SaveDialogOptions{
+			Parent:            d.win,
+			Title:             "导出",
+			DefaultPath:       name,
+			Filters:           []mygo.FileFilter{{Name: strings.ToUpper(ext), Extensions: []string{ext}}},
+			CreateDirectories: true,
+		})
+		if err != nil {
+			path = ""
+		}
+		d.win.Update(func() { done(path) })
 	}()
 }
 
@@ -90,6 +107,8 @@ func main() {
 				item("新建导图", "CmdOrCtrl+N", a.newMap),
 				item("打开文件夹…", "CmdOrCtrl+O", a.pickWorkspace),
 				item("保存", "CmdOrCtrl+S", a.save),
+				mygo.Separator(),
+				item("导出为图片…", "CmdOrCtrl+Shift+E", a.askExportImage),
 				mygo.Separator(),
 				{Role: mygo.RoleClose},
 			}},

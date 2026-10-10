@@ -768,7 +768,7 @@ func (a *app) chatBubble(c *ui.Context, i int) {
 	case "user":
 		ui.Row(c).Children(func() {
 			ui.Spacer(c)
-			ui.Box(c).Padding(8, 12).Radius(12).Background(t.Accent).MaxWidth(240).Children(func() {
+			ui.Box(c).Padding(8, 12).Radius(12).Background(t.Accent).MaxWidth(a.panelWidth*0.8).Children(func() {
 				ui.Text(c, m.text).FontSize(13).TextColor(t.AccentText).Wrap().Selectable()
 			})
 		})
@@ -777,7 +777,7 @@ func (a *app) chatBubble(c *ui.Context, i int) {
 	default:
 		ui.Column(c).Gap(8).Children(func() {
 			if m.text != "" {
-				ui.Text(c, m.text).FontSize(13).Wrap().Selectable()
+				markdownView(c, m.text, 13)
 			}
 			if m.proposal != nil {
 				a.proposalCard(c, i)

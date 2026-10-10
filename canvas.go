@@ -234,12 +234,18 @@ func (a *app) canvasArea(c *ui.Context) {
 	lk := lookOf(a.doc.Style)
 	r := layout.Compute(a.doc, a.measure(c), layoutOptions(a.doc.Structure))
 	a.boxes = r
-	a.vp = a.canvas.Bounds(c) // the canvas's box, as of the last frame
-	a.mods = c.Modifiers()    // held now; the view builds again as they change
+	exporting := a.exportCam != nil // drawn into an image, off screen
+	if exporting {
+		a.reveal = false
+	} else {
+		a.vp = a.canvas.Bounds(c) // the canvas's box, as of the last frame
+		a.mods = c.Modifiers()    // held now; the view builds again as they change
+	}
 
 	// Put the map at the left middle the first time, and keep the node
 	// selected by keys in view.
-	if a.vp.W > 0 {
+	if exporting {
+	} else if a.vp.W > 0 {
 		if root, ok := r.Boxes[a.doc.Root.ID]; ok && !cam.placed {
 			// The mind map centers its root; the one-sided structures
 			// center the whole map while it fits, else start at the left.
@@ -275,8 +281,12 @@ func (a *app) canvasArea(c *ui.Context) {
 		return true
 	})
 
-	cv := ui.Box(c.Key("canvas")).Grow(1).Clip().Background(t.Background).
-		Focusable().FocusRing(false).Bind(&a.canvas).Label("导图画布")
+	cv := ui.Box(c.Key("canvas")).Grow(1).Clip().Background(t.Background).Label("导图画布")
+	if exporting {
+		cv.Fill()
+	} else {
+		cv.Focusable().FocusRing(false).Bind(&a.canvas)
+	}
 	cv.HandleInput(a.canvasInput)
 	if cv.Pressed() && a.editing == "" {
 		a.canvas.Focus()
@@ -293,7 +303,7 @@ func (a *app) canvasArea(c *ui.Context) {
 		dot := t.Border
 		x0 := rect.X + mod(cam.X, step)
 		y0 := rect.Y + mod(cam.Y, step)
-		for y := y0; y < rect.Y+rect.H; y += step {
+		for y := y0; y < rect.Y+rect.H && !exporting; y += step {
 			for x := x0; x < rect.X+rect.W; x += step {
 				p.Fill(ui.Rect{X: x - 1, Y: y - 1, W: 2, H: 2}, dot, 1)
 			}
@@ -316,6 +326,9 @@ func (a *app) canvasArea(c *ui.Context) {
 			a.nodeView(c.Key(n.ID), n, depth, box, lk.branch(branch[n.ID]))
 			return true
 		})
+		if exporting {
+			return
+		}
 		a.structurePicker(c)
 		// Zoom and recenter, over the canvas's corner.
 		ui.Row(c).Absolute().Right(12).Bottom(12).Gap(2).Padding(3).Radius(8).
@@ -331,6 +344,9 @@ func (a *app) canvasArea(c *ui.Context) {
 			}
 			if ui.Button(c, "◎").Label("回到中心").Tooltip("回到中心 ⌘⇧0").Width(30).Clicked() {
 				a.recenter()
+			}
+			if ui.Button(c, "⤓").Label("导出为图片").Tooltip("导出为图片 ⌘⇧E").Width(30).Clicked() {
+				a.askExportImage()
 			}
 		})
 	})
