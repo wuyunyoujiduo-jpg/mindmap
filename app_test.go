@@ -539,3 +539,39 @@ func TestOpensVersion1File(t *testing.T) {
 		t.Fatalf("texts %q", tt.Texts())
 	}
 }
+
+func TestDragRootMovesMap(t *testing.T) {
+	a, tt := newTestApp(t)
+	cam := a.cam()
+	x0, y0 := cam.X, cam.Y
+	r, _ := tt.Find("我的项目") // the root's text, not its edge
+	px, py := r.X+r.W/2, r.Y+r.H/2
+	tt.Move(px, py)
+	if tt.Cursor() != ui.CursorGrab {
+		t.Fatalf("cursor over the root's text is %v", tt.Cursor())
+	}
+	tt.Press(px, py)
+	for i := 1; i <= 5; i++ {
+		tt.Move(px+float32(i)*20, py+float32(i)*12)
+	}
+	if tt.Cursor() != ui.CursorGrabbing {
+		t.Fatalf("cursor while dragging the root is %v", tt.Cursor())
+	}
+	tt.Release(px+100, py+60)
+	if dx, dy := cam.X-x0, cam.Y-y0; dx < 80 || dy < 50 {
+		t.Fatalf("dragging the root moved the map by %v, %v", dx, dy)
+	}
+	if after, _ := tt.Find("我的项目"); after.X-r.X < 80 {
+		t.Fatalf("root drawn at %v, was %v", after.X, r.X)
+	}
+	if n, _ := a.selectedNode(); n != a.doc.Root {
+		t.Fatalf("selected %q", n.Title)
+	}
+
+	// Other nodes show a hand, over their text too.
+	c, _ := tt.Find("功能")
+	tt.Move(c.X+c.W/2, c.Y+c.H/2)
+	if tt.Cursor() != ui.CursorPointer {
+		t.Fatalf("cursor over a node's text is %v", tt.Cursor())
+	}
+}

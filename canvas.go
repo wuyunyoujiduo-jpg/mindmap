@@ -447,8 +447,21 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 		if el.DoubleClicked() {
 			a.startEdit(n.ID)
 		}
-		if depth > 0 {
-			el.Drag(nodeDrag{n.ID})
+		if depth == 0 {
+			// The central node carries the whole map: dragging it moves
+			// the canvas.
+			if dx, dy, ok := el.Dragged(); ok {
+				cam.X += dx
+				cam.Y += dy
+			}
+			if el.Pressed() {
+				el.Cursor(ui.CursorGrabbing)
+			} else {
+				el.Cursor(ui.CursorGrab)
+			}
+		} else {
+			// Other nodes are dropped on a node to move under it.
+			el.Drag(nodeDrag{n.ID}).Cursor(ui.CursorPointer)
 		}
 		if d, over := ui.DragOver[nodeDrag](el); over && d.ID != n.ID {
 			el.Border(2*z, t.Accent).BorderStyle(ui.BorderDashed)
