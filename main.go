@@ -62,8 +62,9 @@ func main() {
 			{Role: mygo.RoleEditMenu},
 			{Label: "视图", Submenu: []*mygo.MenuItem{
 				item("思维导图", "CmdOrCtrl+1", func() { a.mode = viewMap }),
-				item("看板", "CmdOrCtrl+2", func() { a.mode = viewBoard }),
-				item("日程", "CmdOrCtrl+3", func() { a.mode = viewAgenda }),
+				item("大纲", "CmdOrCtrl+2", func() { a.mode = viewOutline }),
+				item("看板", "CmdOrCtrl+3", func() { a.mode = viewBoard }),
+				item("日程", "CmdOrCtrl+4", func() { a.mode = viewAgenda }),
 				mygo.Separator(),
 				item("放大", "CmdOrCtrl+=", func() { a.setZoom(a.cam().Zoom * 1.2) }),
 				item("缩小", "CmdOrCtrl+-", func() { a.setZoom(a.cam().Zoom / 1.2) }),

@@ -27,6 +27,7 @@ type platform interface {
 // Views of the main area.
 const (
 	viewMap = iota
+	viewOutline
 	viewBoard
 	viewAgenda
 )
@@ -83,6 +84,7 @@ type app struct {
 	confirmSheet  bool
 	structureOpen bool
 	panelTab      int
+	outlineFocus  string // the node whose line the outline focuses
 
 	// Chrome.
 	mode          int

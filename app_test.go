@@ -69,6 +69,11 @@ func clickNode(t *testing.T, tt *ui.Tester, a *app, title string) error {
 		return fmt.Errorf("node %q not shown", title)
 	}
 	cam := a.cam()
+	// Bring the node into view first, as fonts differ from machine to
+	// machine.
+	cam.X += keepIn(cam.X+b.X*cam.Zoom, b.W*cam.Zoom, a.vp.W)
+	cam.Y += keepIn(cam.Y+b.Y*cam.Zoom, b.H*cam.Zoom, a.vp.H)
+	tt.Frame()
 	tt.ClickAt(a.vp.X+cam.X+(b.X+b.W/2)*cam.Zoom, a.vp.Y+cam.Y+(b.Y+b.H/2)*cam.Zoom)
 	return nil
 }
@@ -918,5 +923,79 @@ func TestSidebarFoldersAndFavorites(t *testing.T) {
 	}
 	if got := filterTags(a.file.AllTags(), "标签1"); !slices.Equal(got, []string{"标签10", "标签11"}) {
 		t.Fatalf("filtered %v", got)
+	}
+}
+
+func TestOutline(t *testing.T) {
+	a, tt := newTestApp(t)
+	if err := tt.Click("大纲"); err != nil {
+		t.Fatal(err)
+	}
+	if a.mode != viewOutline {
+		t.Fatalf("mode %d", a.mode)
+	}
+	arch := find(t, a, "架构")
+	// Focus the 前端 line and type after it.
+	front := find(t, a, "前端")
+	a.outlineFocus = front.ID
+	tt.Frame()
+	if a.selected != front.ID {
+		t.Fatalf("selected %q", a.selected)
+	}
+	tt.Key(0, ui.KeyEnd)
+	tt.Type("界面")
+	if front.Title != "前端界面" {
+		t.Fatalf("title %q", front.Title)
+	}
+	// Enter adds a line after it, at its depth.
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if len(arch.Children) != 3 || arch.Children[1].ID != a.outlineFocus {
+		t.Fatalf("children %d, focus %q", len(arch.Children), a.outlineFocus)
+	}
+	tt.Type("网关")
+	added := arch.Children[1]
+	if added.Title != "网关" {
+		t.Fatalf("new line %q", added.Title)
+	}
+	// Tab indents it under 前端界面; Shift+Tab brings it back.
+	tt.Key(0, ui.KeyTab)
+	tt.Frame()
+	if len(front.Children) != 1 || front.Children[0] != added {
+		t.Fatalf("not indented: %d children", len(front.Children))
+	}
+	snapshot(t, tt, "outline")
+	tt.Key(ui.Shift, ui.KeyTab)
+	tt.Frame()
+	if _, p := a.doc.Find(added.ID); p != arch {
+		t.Fatalf("outdented under %q", p.Title)
+	}
+	// Up and Down move between lines.
+	tt.Key(0, ui.KeyUp)
+	tt.Frame()
+	if a.outlineFocus != front.ID {
+		t.Fatalf("focus %q after Up", a.outlineFocus)
+	}
+	tt.Key(0, ui.KeyDown)
+	tt.Frame()
+	// Backspace on an empty line deletes it.
+	tt.Key(ui.Cmd, ui.KeyA)
+	tt.Key(0, ui.KeyBackspace)
+	tt.Frame()
+	if added.Title != "" {
+		t.Fatalf("title %q after clearing", added.Title)
+	}
+	tt.Key(0, ui.KeyBackspace)
+	tt.Frame()
+	if n, _ := a.doc.Find(added.ID); n != nil {
+		t.Fatal("empty line not deleted")
+	}
+	if a.outlineFocus != front.ID {
+		t.Fatalf("focus %q after deleting", a.outlineFocus)
+	}
+	// Same tree as the map.
+	tt.Click("思维导图")
+	if !tt.HasText("前端界面") {
+		t.Fatal("map does not show the outline's edit")
 	}
 }

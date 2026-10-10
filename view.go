@@ -24,6 +24,12 @@ func (a *app) view(c *ui.Context) {
 						a.empty(c)
 					case a.mode == viewMap:
 						a.canvasView(c)
+					case a.mode == viewOutline:
+						ui.Column(c).Grow(1).Children(func() {
+							a.outlineView(c)
+							ui.Divider(c)
+							a.sheetTabs(c)
+						})
 					case a.mode == viewBoard:
 						a.boardView(c)
 					default:
@@ -101,8 +107,8 @@ func (a *app) toolbar(c *ui.Context) {
 		if a.doc == nil {
 			return
 		}
-		ui.Segmented(c, &a.mode, "思维导图", "看板", "日程")
-		search := ui.TextInput(c.Key("search"), &a.search).Placeholder("搜索（回车跳到下一个）").Label("搜索").Width(200)
+		ui.Segmented(c, &a.mode, "思维导图", "大纲", "看板", "日程")
+		search := ui.TextInput(c.Key("search"), &a.search).Placeholder("搜索…").Tooltip("搜索标题、备注、标签，回车跳到下一个").Label("搜索").Width(150)
 		if a.search != "" && search.Shortcut(0, ui.KeyEscape) {
 			a.search = ""
 		}
