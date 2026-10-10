@@ -937,7 +937,7 @@ func TestSidebarFoldersAndFavorites(t *testing.T) {
 	})
 	tt.Frame()
 	snapshot(t, tt, "sidebar")
-	if !tt.HasText("标签 12") {
+	if !tt.HasText("标签 17") { // the guide's 5 and these 12
 		t.Fatalf("texts %q", tt.Texts())
 	}
 	if got := filterTags(a.file.AllTags(), "标签1"); !slices.Equal(got, []string{"标签10", "标签11"}) {
@@ -1552,5 +1552,94 @@ func TestSwitchingMapsKeepsTheirState(t *testing.T) {
 	}
 	if b.doc.ID != plan {
 		t.Fatalf("after renaming, on %q", b.doc.Title)
+	}
+}
+
+func TestGlobalTags(t *testing.T) {
+	a, tt := newTestApp(t)
+	// The guide's tags join the library, shared by all maps.
+	if a.libraryIndex("核心") < 0 {
+		t.Fatalf("library %v", a.cfg.Tags)
+	}
+	// A tag made in the sidebar is in the library before any node has it.
+	if err := tt.Click("＋ 新建标签"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Type("待评审")
+	tt.Key(0, ui.KeyEnter)
+	if a.libraryIndex("待评审") < 0 {
+		t.Fatalf("library %v", a.cfg.Tags)
+	}
+	tt.Key(0, ui.KeyEscape)
+
+	// The node panel puts it on with a click, and takes it off.
+	if err := clickNode(t, tt, a, "支持导出图片"); err != nil {
+		t.Fatal(err)
+	}
+	n, _ := a.selectedNode()
+	if err := tt.Click("标签 待评审"); err != nil {
+		t.Fatal(err)
+	}
+	if !n.HasTag("待评审") {
+		t.Fatalf("tags %v", n.Tags)
+	}
+	snapshot(t, tt, "tags")
+	tt.Click("标签 待评审")
+	if n.HasTag("待评审") {
+		t.Fatalf("tags %v", n.Tags)
+	}
+	// So does the node's context menu.
+	tt.Frame()
+	cam := a.cam()
+	b := a.boxes.Boxes[n.ID]
+	tt.RightClickAt(a.vp.X+cam.X+(b.X+b.W/2)*cam.Zoom, a.vp.Y+cam.Y+(b.Y+b.H/2)*cam.Zoom)
+	if err := tt.ChooseMenuItem("标签", "待评审"); err != nil {
+		t.Fatalf("%v; menu %q", err, tt.Menu())
+	}
+	tt.Frame()
+	if !n.HasTag("待评审") {
+		t.Fatalf("tags %v", n.Tags)
+	}
+
+	// Another map with the tag, then a rename and a color in the sidebar.
+	other := filepath.Join(a.dir, model.FileName("其他"))
+	f := model.NewFile("其他")
+	f.Sheets[0].Root.Tags = []string{"待评审"}
+	if err := f.Save(other); err != nil {
+		t.Fatal(err)
+	}
+	a.refreshFiles()
+	a.setTagColor("待评审", "#dc2626")
+	if tagColor("待评审") != ui.Hex("#dc2626") {
+		t.Fatal("color not used")
+	}
+	a.renameTag("待评审", "评审中")
+	if !n.HasTag("评审中") || n.HasTag("待评审") || a.libraryIndex("评审中") < 0 || a.libraryIndex("待评审") >= 0 {
+		t.Fatalf("tags %v library %v", n.Tags, a.cfg.Tags)
+	}
+	if tagColor("评审中") != ui.Hex("#dc2626") {
+		t.Fatal("color lost in rename")
+	}
+	g, _ := model.Load(other)
+	if !slices.Equal(g.Sheets[0].Root.Tags, []string{"评审中"}) {
+		t.Fatalf("other map %v", g.Sheets[0].Root.Tags)
+	}
+	// A rename is undone in the open map.
+	a.undo()
+	if n = find(t, a, "支持导出图片"); !n.HasTag("待评审") {
+		t.Fatalf("after undo %v", n.Tags)
+	}
+	a.redo()
+	n = find(t, a, "支持导出图片")
+
+	// Deleting takes it off every map.
+	a.deleteTag("评审中")
+	g, _ = model.Load(other)
+	if n.HasTag("评审中") || len(g.Sheets[0].Root.Tags) != 0 || a.libraryIndex("评审中") >= 0 {
+		t.Fatalf("after delete %v %v", n.Tags, g.Sheets[0].Root.Tags)
+	}
+	// The library is kept with the settings.
+	if !slices.ContainsFunc(loadConfig().Tags, func(d tagDef) bool { return d.Name == "核心" }) {
+		t.Fatal("library not saved")
 	}
 }

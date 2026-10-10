@@ -128,6 +128,11 @@ type app struct {
 	renaming      string          // the map or folder renamed in the sidebar
 	renameText    string
 	tagQuery      string
+	tagDraft      string // a tag being typed in the node panel
+	tagAdding     bool   // the sidebar's new-tag field is shown
+	tagNew        string
+	tagRenaming   string // the tag renamed in the sidebar
+	tagRenameText string
 	confirmDelete bool
 	deletePath    string
 }
@@ -155,6 +160,7 @@ func newApp(plat platform, cfg config) *app {
 			done(v, err)
 		},
 	}
+	a.syncTagColors()
 	a.openDir(cfg.Dir)
 	if cfg.File != "" && inside(cfg.File, a.dir) {
 		if err := a.open(cfg.File); err == nil {
@@ -210,6 +216,7 @@ func (a *app) open(path string) error {
 		return err
 	}
 	a.path, a.file = path, f
+	a.learnTags(f)
 	a.modTime = modTime(path)
 	a.dirty, a.saveErr, a.lastEdit = false, "", ""
 	a.savedAt = time.Time{}

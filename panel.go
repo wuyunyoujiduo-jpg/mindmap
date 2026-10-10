@@ -78,12 +78,7 @@ func (a *app) nodePanel(c *ui.Context) {
 
 			a.imageSection(c, n)
 
-			tags := append([]string(nil), n.Tags...)
-			ui.Field(c, "标签", func() {
-				if ui.TokenField(c, &tags, a.file.AllTags()).Label("标签").Changed() {
-					a.mutate("", func() { n.Tags = cleanTags(tags) })
-				}
-			})
+			ui.Field(c, "标签", func() { a.tagPicker(c, n) })
 
 			ui.Divider(c)
 			a.taskEditor(c, n)

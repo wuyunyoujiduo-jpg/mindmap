@@ -87,6 +87,9 @@ func tagChip(c *ui.Context, tag, label string, active bool, size float32) ui.Ele
 var tagPalette = []string{"#2563eb", "#16a34a", "#d97706", "#db2777", "#7c3aed", "#0891b2", "#dc2626", "#4d7c0f"}
 
 func tagColor(tag string) ui.Color {
+	if hex, ok := tagColors[tag]; ok {
+		return ui.Hex(hex)
+	}
 	var h uint32 = 2166136261
 	for _, b := range []byte(tag) {
 		h = (h ^ uint32(b)) * 16777619

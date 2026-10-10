@@ -709,6 +709,7 @@ func (a *app) nodeMenu(m *ui.Menu, n *model.Node, depth int) {
 	if m.Item("编辑标题").Shortcut(0, ui.KeyF2).Chosen() {
 		a.later(func() { a.startEdit(n.ID) })
 	}
+	a.tagMenu(m, n)
 	if n.Image != nil {
 		if m.Item("查看大图").Chosen() {
 			a.lightbox = n.ID

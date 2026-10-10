@@ -24,6 +24,8 @@ type config struct {
 	DSKey      string `json:"deepseekKey,omitempty"`
 	DSModel    string `json:"deepseekModel,omitempty"`
 	DSBaseURL  string `json:"deepseekBaseURL,omitempty"`
+	// Tags is the library of tags shared by all maps, with their colors.
+	Tags []tagDef `json:"tags,omitempty"`
 }
 
 func configPath() string {

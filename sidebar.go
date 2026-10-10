@@ -355,12 +355,13 @@ func (a *app) toggleFavorite(path string) {
 	a.cfg.save()
 }
 
-// tagList is the section of the open map's tags, a row each with how many
-// nodes carry it; choosing one highlights its nodes and filters the tasks.
-// Past a few tags, a field filters the list.
+// tagList is the section of the tags, shared by all maps: a row each with
+// how many nodes of the open map carry it. Choosing one highlights its
+// nodes and filters the tasks; its context menu renames, recolors and
+// deletes it. Past a few tags, a field filters the list.
 func (a *app) tagList(c *ui.Context) {
 	t := c.Theme()
-	tags := a.file.AllTags()
+	tags := a.allTags()
 	counts := map[string]int{}
 	a.file.Walk(func(n *model.Node) {
 		for _, tag := range n.Tags {
@@ -372,10 +373,6 @@ func (a *app) tagList(c *ui.Context) {
 		title = fmt.Sprintf("标签 %d", len(tags))
 	}
 	a.section(c, title, &a.tagsOpen, "", func() {
-		if len(tags) == 0 {
-			ui.Text(c, "在节点详情中添加标签").FontSize(12).TextColor(t.TextMuted).Margin(2, 12)
-			return
-		}
 		if len(tags) > 8 {
 			ui.TextInput(c.Key("tag-query"), &a.tagQuery).Placeholder("筛选标签").Margin(2, 6, 4)
 		}
@@ -385,30 +382,91 @@ func (a *app) tagList(c *ui.Context) {
 			}
 		}
 		for _, tag := range filterTags(tags, a.tagQuery) {
-			active := a.tagFilter == tag
-			row := ui.Row(c.Key("tag:"+tag)).Padding(4, 8, 4, 12).Gap(8).Radius(6).AlignItems(ui.Center).
-				Cursor(ui.CursorPointer).Label(tag)
+			a.tagRow(c.Key("tag:"+tag), tag, counts[tag])
+		}
+		if a.tagAdding {
+			in := ui.TextInput(c.Key("tag-new"), &a.tagNew).Placeholder("标签名，回车创建").AutoFocus().Margin(2, 6, 4)
 			switch {
-			case active:
-				row.Background(tagColor(tag).Alpha(0.18))
-			case row.Hovered():
-				row.Background(t.SurfaceHover)
+			case in.Shortcut(0, ui.KeyEscape):
+				a.tagAdding, a.tagNew = false, ""
+			case in.Submitted():
+				a.addTag(a.tagNew)
+				a.tagNew = "" // stays open for the next
+			case in.PressedOutside():
+				a.addTag(a.tagNew)
+				a.tagAdding, a.tagNew = false, ""
 			}
-			if row.Clicked() {
-				if active {
-					a.tagFilter = ""
-				} else {
-					a.tagFilter = tag
+		} else if ui.Link(c, "＋ 新建标签", "").FontSize(12).Margin(2, 12, 4).Clicked() {
+			a.tagAdding = true
+		}
+		if len(tags) == 0 {
+			ui.Text(c, "标签在所有导图间共用。选中节点后，在右侧「节点」或右键菜单里打标签。").
+				FontSize(12).TextColor(t.TextMuted).Wrap().Margin(2, 12)
+		}
+	})
+}
+
+func (a *app) tagRow(c *ui.Context, tag string, count int) {
+	t := c.Theme()
+	if a.tagRenaming == tag {
+		in := ui.TextInput(c.Key("tag-rename"), &a.tagRenameText).AutoFocus().Margin(2, 6)
+		switch {
+		case in.Shortcut(0, ui.KeyEscape):
+			a.tagRenaming = ""
+		case in.Submitted(), in.PressedOutside():
+			to := a.tagRenameText
+			a.tagRenaming = ""
+			a.later(func() { a.renameTag(tag, to) })
+		}
+		return
+	}
+	active := a.tagFilter == tag
+	row := ui.Row(c).Padding(4, 8, 4, 12).Gap(8).Radius(6).AlignItems(ui.Center).
+		Cursor(ui.CursorPointer).Label(tag).Tooltip("点击筛选，右键重命名、改颜色或删除")
+	switch {
+	case active:
+		row.Background(tagColor(tag).Alpha(0.18))
+	case row.Hovered():
+		row.Background(t.SurfaceHover)
+	}
+	if row.Clicked() {
+		if active {
+			a.tagFilter = ""
+		} else {
+			a.tagFilter = tag
+		}
+	}
+	row.ContextMenu(func(m *ui.Menu) {
+		if m.Item("重命名").Chosen() {
+			a.tagRenaming, a.tagRenameText = tag, tag
+		}
+		m.Submenu("颜色", func(m *ui.Menu) {
+			cur := ""
+			if i := a.libraryIndex(tag); i >= 0 {
+				cur = a.cfg.Tags[i].Color
+			}
+			if m.Item("自动").Checked(cur == "").Chosen() {
+				a.setTagColor(tag, "")
+			}
+			for _, col := range tagColorChoices {
+				if m.Item(col.name).Checked(cur == col.hex).Chosen() {
+					a.setTagColor(tag, col.hex)
 				}
 			}
-			row.Children(func() {
-				ui.Box(c).Size(8, 8).Radius(999).Background(tagColor(tag))
-				text := ui.Text(c, tag).FontSize(13).Grow(1).NoWrap().Ellipsis("…")
-				if active {
-					text.Bold()
-				}
-				ui.Text(c, fmt.Sprint(counts[tag])).FontSize(11).TextColor(t.TextMuted)
-			})
+		})
+		m.Separator()
+		if m.Item("删除（从所有导图的节点上移除）").Chosen() {
+			a.later(func() { a.deleteTag(tag) })
+		}
+	})
+	row.Children(func() {
+		ui.Box(c).Size(8, 8).Radius(999).Background(tagColor(tag))
+		text := ui.Text(c, tag).FontSize(13).Grow(1).NoWrap().Ellipsis("…")
+		if active {
+			text.Bold()
+		}
+		if count > 0 {
+			ui.Text(c, fmt.Sprint(count)).FontSize(11).TextColor(t.TextMuted)
 		}
 	})
 }
