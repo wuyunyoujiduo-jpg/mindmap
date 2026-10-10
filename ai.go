@@ -275,6 +275,12 @@ func (a *app) snapshot(scope int) string {
 	sheet := func(d *model.Document) {
 		fmt.Fprintf(&b, "画布「%s」（结构：%s）\n", d.Title, d.Structure.Label())
 		write(d.Root, 0)
+		if len(d.Floating) > 0 {
+			b.WriteString("自由主题（不在树上）：\n")
+			for _, f := range d.Floating {
+				write(f, 0)
+			}
+		}
 	}
 	fmt.Fprintf(&b, "今天是 %s。\n", a.now().Format("2006-01-02"))
 	switch scope {

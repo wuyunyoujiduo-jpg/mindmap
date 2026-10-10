@@ -107,7 +107,9 @@ func (a *app) nodePanel(c *ui.Context) {
 			})
 
 			a.imageSection(c, n)
+			a.filesSection(c, n)
 			a.linksSection(c, n)
+			a.annotationsSection(c, n)
 
 			ui.Field(c, "标签", func() { a.tagPicker(c, n) })
 

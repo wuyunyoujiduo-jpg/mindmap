@@ -30,9 +30,15 @@ func (a *app) sidebar(c *ui.Context) {
 			}
 		})
 		ui.Row(c).Padding(0, 12, 6).Gap(6).Children(func() {
-			if ui.Button(c, "+ 导图").Tooltip("在当前文件夹新建导图").Grow(1).Clicked() {
+			newMap := ui.Button(c, "+ 导图").Tooltip("在当前文件夹新建导图（右键：从模板新建）").Grow(1)
+			if newMap.Clicked() {
 				a.newMap()
 			}
+			newMap.ContextMenu(func(m *ui.Menu) {
+				if m.Item("从模板新建…").Chosen() {
+					a.templatesOpen = true
+				}
+			})
 			if ui.Button(c, "+ 文件夹").Tooltip("在当前文件夹新建文件夹").Grow(1).Clicked() {
 				a.newFolder(a.currentFolder())
 			}

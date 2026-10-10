@@ -263,6 +263,7 @@ func main() {
 			}},
 			{Label: "文件", Submenu: []*mygo.MenuItem{
 				item("新建导图", "CmdOrCtrl+N", a.newMap),
+				item("从模板新建…", "CmdOrCtrl+Shift+N", func() { a.templatesOpen = true }),
 				item("打开文件夹…", "CmdOrCtrl+O", a.pickWorkspace),
 				item("保存", "CmdOrCtrl+S", a.save),
 				item("历史版本…", "CmdOrCtrl+Shift+H", a.openHistory),

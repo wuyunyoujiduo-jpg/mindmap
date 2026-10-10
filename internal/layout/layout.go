@@ -23,6 +23,9 @@ type Options struct {
 	GapY   float32 // between sibling subtrees
 	// OneSided puts every branch on the root's right.
 	OneSided bool
+	// Mode lays the map out otherwise: ModeDown, ModeTimeline or
+	// ModeFishbone.
+	Mode string
 }
 
 // DefaultOptions are the spacing the app uses.
@@ -33,6 +36,7 @@ type Result struct {
 	Boxes  map[string]Rect
 	Edges  []Edge
 	Left   map[string]bool // the nodes on the root's left
+	Up     map[string]bool // the main branches above the line of a timeline or fishbone
 	Width  float32
 	Height float32
 }
@@ -43,9 +47,17 @@ type Measure func(n *model.Node, depth int) (w, h float32)
 // Compute lays out the visible nodes of the document: those under a
 // collapsed node are left out.
 func Compute(d *model.Document, measure Measure, o Options) Result {
-	r := Result{Boxes: map[string]Rect{}, Left: map[string]bool{}}
+	r := Result{Boxes: map[string]Rect{}, Left: map[string]bool{}, Up: map[string]bool{}}
 	if d.Root == nil {
 		return r
+	}
+	switch o.Mode {
+	case ModeDown:
+		return computeDown(d, measure, o)
+	case ModeTimeline:
+		return computeLine(d, measure, o, false)
+	case ModeFishbone:
+		return computeLine(d, measure, o, true)
 	}
 	type sized struct {
 		w, h    float32 // the node's box

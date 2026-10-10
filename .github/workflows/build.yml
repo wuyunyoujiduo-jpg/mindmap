@@ -58,3 +58,29 @@ jobs:
           gh release create "$tag" build/*/*.dmg --target "$GITHUB_SHA" \
             --repo "$GITHUB_REPOSITORY" --title "MindMap $tag" \
             --notes-file .github/release-notes.md --generate-notes
+
+  # The Windows app and its installer, made on Windows (NSIS), added to the
+  # release the macOS job publishes.
+  windows:
+    needs: macos
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Build MindMap.exe and the installer
+        run: go tool mygo build -platform windows/amd64
+      - uses: actions/upload-artifact@v7
+        with:
+          name: MindMap-Windows
+          path: build/windows-amd64/*.exe
+      - name: Add the installer to the release
+        if: startsWith(github.ref, 'refs/tags/') || inputs.release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v$(jq -r .version mygo.json)"
+          gh release upload "$tag" build/windows-amd64/*Setup*.exe --repo "$GITHUB_REPOSITORY" --clobber

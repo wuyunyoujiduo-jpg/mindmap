@@ -154,6 +154,7 @@ type app struct {
 	ghBusy          bool   // the issues are being synced
 	ghResult        string // how the last sync went
 	ghTokenDraft    string
+	templatesOpen   bool // the window of templates
 	fromTextOpen    bool // the window to paste text to make nodes of
 	fromText        string
 	trayAt          time.Time // when the menu bar icon was last brought up to date
@@ -164,6 +165,8 @@ type app struct {
 	remindedDay     time.Time
 	remindedAt      time.Time
 	linkFrom        string // the node a link to a node is being chosen for
+	relFrom         string // the node a relation line is being drawn from
+	justFloated     bool   // a double click just made a floating topic, whose release should not end its editing
 	backlinkFor     string // the node backlinkList is of, as of backlinkMod
 	backlinkMod     time.Time
 	backlinkList    []backlink

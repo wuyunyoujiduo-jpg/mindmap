@@ -34,7 +34,7 @@ func (a *app) shownDoc() *model.Document {
 		return a.doc
 	}
 	d := *a.doc
-	d.Root = f
+	d.Root, d.Floating = f, nil
 	return &d
 }
 
@@ -348,6 +348,11 @@ func (a *app) paste() bool {
 func copyAssets(n *model.Node, from, to string) {
 	var walk func(n *model.Node)
 	walk = func(n *model.Node) {
+		if from != to {
+			for _, f := range n.Files {
+				copyAsset(from, to, f.File)
+			}
+		}
 		if n.Image != nil && from != to {
 			src := filepath.Join(from, n.Image.File)
 			dst := filepath.Join(to, n.Image.File)
@@ -401,3 +406,15 @@ func (a *app) setCollapsedBelow(n *model.Node, collapsed bool) {
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }
+
+// copyAsset copies a file of one assets folder to another, unless there.
+func copyAsset(from, to, name string) {
+	dst := filepath.Join(to, name)
+	if _, err := os.Stat(dst); err == nil {
+		return
+	}
+	if data, err := os.ReadFile(filepath.Join(from, name)); err == nil {
+		_ = os.MkdirAll(to, 0o755)
+		_ = os.WriteFile(dst, data, 0o644)
+	}
+}

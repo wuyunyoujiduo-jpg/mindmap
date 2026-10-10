@@ -57,3 +57,43 @@ func TestParseOutline(t *testing.T) {
 		t.Fatalf("plain %d", len(plain))
 	}
 }
+
+func TestFloating(t *testing.T) {
+	d := New("根")
+	a, _ := d.AddChild(d.Root.ID, "A")
+	b, _ := d.AddChild(a.ID, "B")
+	f := d.AddFloating("浮", Point{X: 10, Y: 20})
+	c, err := d.AddChild(f.ID, "浮下")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n, p := d.Find(c.ID); n != c || p != f {
+		t.Fatal("find in a floating topic")
+	}
+	if path := d.Path(c.ID); len(path) != 2 || path[0] != f {
+		t.Fatalf("path %v", path)
+	}
+	d.Relations = []Relation{{ID: "r", From: b.ID, To: c.ID}}
+	cl := d.Clone()
+	if len(cl.Floating) != 1 || cl.Floating[0] == f || cl.Floating[0].Pos.X != 10 || len(cl.Relations) != 1 {
+		t.Fatal("clone")
+	}
+	// Into the tree and out again.
+	if err := d.Move(f.ID, a.ID, -1); err != nil || len(d.Floating) != 0 || f.Pos != nil || a.Children[1] != f {
+		t.Fatalf("move in: %v", err)
+	}
+	if err := d.Float(b.ID, Point{X: 5}); err != nil || len(d.Floating) != 1 || d.Floating[0] != b || b.Pos == nil {
+		t.Fatalf("float: %v", err)
+	}
+	// Deleting a floating topic drops its relations.
+	if _, err := d.Delete(b.ID); err != nil || len(d.Floating) != 0 || len(d.Relations) != 0 {
+		t.Fatalf("delete: %v %v", err, d.Relations)
+	}
+	// WalkShown skips what is folded.
+	a.Collapsed = true
+	var seen []string
+	d.WalkShown(func(n, _ *Node, _ int) { seen = append(seen, n.Title) })
+	if len(seen) != 2 {
+		t.Fatalf("shown %v", seen)
+	}
+}

@@ -67,10 +67,24 @@ func (a *app) exportImage() (data []byte, err error) {
 		}
 	}()
 	tt := ui.NewTester(func(c *ui.Context) { a.canvasArea(c) }, 200, 200)
-	w, h := a.boxes.Width, a.boxes.Height // laid out in the first frame
-	if w <= 0 || h <= 0 {
+	// The bounds of every box laid out in the first frame, floating topics
+	// too, wherever they are, with a margin.
+	const margin = 40
+	first := true
+	var minX, minY, maxX, maxY float32
+	for _, b := range a.boxes.Boxes {
+		if first {
+			minX, minY, maxX, maxY, first = b.X, b.Y, b.X+b.W, b.Y+b.H, false
+			continue
+		}
+		minX, minY = min(minX, b.X), min(minY, b.Y)
+		maxX, maxY = max(maxX, b.X+b.W), max(maxY, b.Y+b.H)
+	}
+	if first {
 		return nil, fmt.Errorf("导图是空的")
 	}
+	a.exportCam.X, a.exportCam.Y = margin-minX, margin-minY
+	w, h := maxX-minX+2*margin, maxY-minY+2*margin
 	tt.SetSize(int(w+0.5), int(h+0.5))
 	tt.SetScale(exportScale)
 	tt.Frame()

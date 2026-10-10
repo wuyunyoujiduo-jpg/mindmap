@@ -127,7 +127,7 @@ func (a *app) canvasPanel(c *ui.Context) {
 	}
 	ui.Column(c.Key("canvas-style")).Padding(16).Gap(12).Children(func() {
 		section("结构")
-		ui.Row(c).Gap(6).Children(func() {
+		ui.Grid(c).Columns(3).Gap(6).Children(func() {
 			for _, s := range model.Structures {
 				card := ui.Column(c.Key(string(s))).Grow(1).Basis(0).Gap(4).Padding(6).Radius(8).
 					Background(t.Background).Border(1, t.Border).Cursor(ui.CursorPointer).Label(s.Label())

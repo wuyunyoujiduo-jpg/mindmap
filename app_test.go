@@ -789,21 +789,15 @@ func TestCanvasStyle(t *testing.T) {
 		t.Fatalf("tab %d: %q", a.panelTab, tt.Texts())
 	}
 	snapshot(t, tt, "style-panel")
-	if err := tt.Click("海洋"); err != nil {
-		t.Fatal(err)
-	}
+	clickInPanel(t, tt, "海洋")
 	if a.doc.Style.Scheme != "ocean" {
 		t.Fatalf("scheme %q", a.doc.Style.Scheme)
 	}
-	if err := tt.Click("彩虹分支"); err != nil {
-		t.Fatal(err)
-	}
+	clickInPanel(t, tt, "彩虹分支")
 	if !a.doc.Style.SingleColor {
 		t.Fatal("rainbow still on")
 	}
-	if err := tt.Click("#7C5CE0"); err != nil {
-		t.Fatal(err)
-	}
+	clickInPanel(t, tt, "#7C5CE0")
 	if a.doc.Style.Color != "#7C5CE0" || lookOf(a.doc.Style).branch(3) != ui.Hex("#7C5CE0") {
 		t.Fatalf("color %q", a.doc.Style.Color)
 	}
@@ -2694,4 +2688,220 @@ func TestGitHubIssues(t *testing.T) {
 	a.panelTab = tabCanvas
 	tt.Frame()
 	snapshot(t, tt, "github")
+}
+
+func TestMoreStructures(t *testing.T) {
+	a, tt := newTestApp(t)
+	for _, s := range []model.Structure{model.StructureOrg, model.StructureTimeline, model.StructureFishbone} {
+		a.setStructure(s)
+		a.cam().placed = false
+		tt.Frame()
+		root := a.boxes.Boxes[a.doc.Root.ID]
+		arch := a.boxes.Boxes[find(t, a, "架构").ID]
+		front := a.boxes.Boxes[find(t, a, "前端").ID]
+		switch s {
+		case model.StructureOrg:
+			if arch.Y <= root.Y+root.H || front.Y <= arch.Y+arch.H {
+				t.Fatalf("org: root %v arch %v front %v", root, arch, front)
+			}
+		case model.StructureTimeline:
+			if arch.X <= root.X+root.W {
+				t.Fatalf("timeline: branch left of the root: %v %v", root, arch)
+			}
+		case model.StructureFishbone:
+			if arch.X+arch.W >= root.X {
+				t.Fatalf("fishbone: branch right of the head: %v %v", root, arch)
+			}
+		}
+		// No two boxes overlap.
+		var ids []string
+		for id := range a.boxes.Boxes {
+			ids = append(ids, id)
+		}
+		for i, x := range ids {
+			for _, y := range ids[i+1:] {
+				p, q := a.boxes.Boxes[x], a.boxes.Boxes[y]
+				if p.X < q.X+q.W && q.X < p.X+p.W && p.Y < q.Y+q.H && q.Y < p.Y+p.H {
+					n1, _ := a.doc.Find(x)
+					n2, _ := a.doc.Find(y)
+					t.Fatalf("%s: %q and %q overlap", s, n1.Title, n2.Title)
+				}
+			}
+		}
+		snapshot(t, tt, "structure-"+string(s))
+	}
+}
+
+func TestAnnotations(t *testing.T) {
+	a, tt := newTestApp(t)
+	// A relation line: from the menu's start, ended by a click.
+	front, login := find(t, a, "前端"), find(t, a, "登录")
+	a.startRelation(front)
+	clickNode(t, tt, a, "登录")
+	tt.Frame()
+	if len(a.doc.Relations) != 1 || a.doc.Relations[0].From != front.ID || a.doc.Relations[0].To != login.ID || a.relFrom != "" {
+		t.Fatalf("relations %+v", a.doc.Relations)
+	}
+	// Its label, in the panel of either end.
+	tt.Frame()
+	clickInPanel(t, tt, "关联线标签")
+	tt.Type("调用")
+	if a.doc.Relations[0].Label != "调用" {
+		t.Fatalf("label %q", a.doc.Relations[0].Label)
+	}
+	// A summary and a boundary.
+	arch := find(t, a, "架构")
+	a.mutate("", func() {
+		arch.Summary = &model.Mark{Label: "两层"}
+		find(t, a, "功能").Boundary = &model.Mark{Label: "MVP"}
+	})
+	// A floating topic, by a double click on the canvas.
+	tt.Frame()
+	x, y := a.vp.X+40, a.vp.Y+a.vp.H-80
+	tt.Move(x, y)
+	tt.ClickAt(x, y)
+	tt.ClickAt(x, y)
+	tt.Frame()
+	if len(a.doc.Floating) != 1 || a.editing != a.doc.Floating[0].ID {
+		t.Fatalf("floating %+v editing %q", a.doc.Floating, a.editing)
+	}
+	tt.Type("灵感")
+	tt.Key(0, ui.KeyEnter)
+	fl := a.doc.Floating[0]
+	if fl.Title != "灵感" {
+		t.Fatalf("title %q", fl.Title)
+	}
+	tt.Frame()
+	snapshot(t, tt, "annotations")
+	// Dragged, it goes there.
+	pos := *fl.Pos
+	b := a.boxes.Boxes[fl.ID]
+	cam := a.cam()
+	sx, sy := a.vp.X+cam.X+(b.X+b.W/2)*cam.Zoom, a.vp.Y+cam.Y+(b.Y+b.H/2)*cam.Zoom
+	tt.Press(sx, sy)
+	tt.Move(sx+20, sy-10)
+	tt.Move(sx+40, sy-20)
+	tt.Release(sx+40, sy-20)
+	if fl.Pos.X <= pos.X || fl.Pos.Y >= pos.Y {
+		t.Fatalf("pos %v → %v", pos, *fl.Pos)
+	}
+	// The picture has them all, the floating topic too.
+	data, err := a.exportImage()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dir := os.Getenv("MINDMAP_SNAPSHOTS"); dir != "" {
+		os.WriteFile(filepath.Join(dir, "annotations-export.png"), data, 0o644)
+	}
+	// Folding a branch keeps the others shown.
+	a.mutate("", func() { find(t, a, "使用指南").Collapsed = true })
+	tt.Frame()
+	for _, title := range []string{"前端", "登录", "待优化", "灵感"} {
+		if _, ok := a.boxes.Boxes[find(t, a, title).ID]; !ok {
+			t.Errorf("%s not laid out", title)
+		}
+		if !tt.HasText(title) {
+			t.Errorf("%s not shown after a folded branch", title)
+		}
+	}
+}
+
+func TestAttachments(t *testing.T) {
+	a, tt := newTestApp(t)
+	fp := a.plat.(*fakePlatform)
+	dir := t.TempDir()
+	doc := filepath.Join(dir, "设计稿.pdf")
+	os.WriteFile(doc, []byte("%PDF-1.4"), 0o644)
+	pic := filepath.Join(dir, "截图.png")
+	os.WriteFile(pic, testPNG(t, 40, 30), 0o644)
+	n := find(t, a, "前端")
+	a.dropFiles(n, []string{doc, pic})
+	if len(n.Files) != 1 || n.Files[0].Name != "设计稿.pdf" || n.Image == nil {
+		t.Fatalf("files %+v image %v", n.Files, n.Image)
+	}
+	if _, err := os.Stat(filepath.Join(model.AssetsDir(a.path), n.Files[0].File)); err != nil {
+		t.Fatal(err)
+	}
+	// A second picture, the node having one, attaches as a file.
+	a.dropFiles(n, []string{pic})
+	if len(n.Files) != 2 {
+		t.Fatalf("files %+v", n.Files)
+	}
+	tt.Frame()
+	if err := tt.Click("打开附件"); err != nil {
+		t.Fatal(err)
+	}
+	if last := fp.opened[len(fp.opened)-1]; !strings.HasPrefix(last, "path:") || !strings.HasSuffix(last, ".pdf") {
+		t.Fatalf("opened %v", fp.opened)
+	}
+	// Copied into another map, its files go along.
+	a.lightbox = ""
+	a.selected, a.multi = n.ID, nil
+	a.copyNodes(false)
+	a.newMap()
+	a.commitEdit()
+	tt.Frame()
+	a.paste()
+	got := a.doc.Root.Children[0]
+	if _, err := os.Stat(filepath.Join(model.AssetsDir(a.path), got.Files[0].File)); err != nil {
+		t.Fatalf("not copied: %v", err)
+	}
+	snapshot(t, tt, "attachments")
+}
+
+func TestHighlight(t *testing.T) {
+	th := ui.LightTheme()
+	spans := highlight("func main() { // 入口\n\ts := \"你好\" + 42\n}", "go", 12, th)
+	var kinds []string
+	for _, s := range spans {
+		if strings.TrimSpace(s.Text) == "" {
+			continue
+		}
+		kinds = append(kinds, s.Text)
+	}
+	joined := strings.Join(kinds, "|")
+	for _, want := range []string{"func", "// 入口", `"你好"`, "42"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("no %q in %q", want, joined)
+		}
+	}
+	for _, s := range spans {
+		if s.Text == "func" && s.Color == th.Text {
+			t.Error("keyword not colored")
+		}
+	}
+	if py := highlight("# 注释\nx = 1", "python", 12, th); py[0].Text != "# 注释" {
+		t.Errorf("python comment %q", py[0].Text)
+	}
+}
+
+func TestTemplates(t *testing.T) {
+	a, tt := newTestApp(t)
+	a.templatesOpen = true
+	tt.Frame()
+	snapshot(t, tt, "templates")
+	if err := tt.Click("模板 AI 开发管理"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if mapName(a.path) != "AI 开发管理" || a.doc.Root.Title != "项目名称" || find(t, a, "功能 1").Task == nil {
+		t.Fatalf("made %q %q", a.path, a.doc.Root.Title)
+	}
+	// The map, as a template of one's own, and a map from it.
+	a.commitEdit()
+	a.mutate("", func() { a.doc.Root.Title = "我的项目模板" })
+	a.saveAsTemplate()
+	var mine *template
+	for _, tp := range a.templates() {
+		if tp.path != "" {
+			mine = &tp
+		}
+	}
+	if mine == nil {
+		t.Fatal("not saved")
+	}
+	a.newFromTemplate(*mine)
+	if a.doc.Root.Title != "我的项目模板" || mapName(a.path) != "AI 开发管理 2" {
+		t.Fatalf("from mine %q %q", a.path, a.doc.Root.Title)
+	}
 }

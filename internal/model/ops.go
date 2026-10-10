@@ -51,8 +51,14 @@ func (d *Document) Delete(id string) (next string, err error) {
 		return "", ErrNotFound
 	}
 	if p == nil {
+		if i := slices.Index(d.Floating, n); i >= 0 { // a floating topic
+			d.Floating = slices.Delete(d.Floating, i, i+1)
+			d.dropRelations(n)
+			return d.Root.ID, nil
+		}
 		return "", ErrRoot
 	}
+	d.dropRelations(n)
 	i := slices.Index(p.Children, n)
 	p.Children = slices.Delete(p.Children, i, i+1)
 	switch {
@@ -71,7 +77,8 @@ func (d *Document) Move(id, newParentID string, index int) error {
 	if n == nil {
 		return ErrNotFound
 	}
-	if p == nil {
+	floating := p == nil && d.IsFloating(id)
+	if p == nil && !floating {
 		return ErrRoot
 	}
 	if n.Contains(newParentID) {
@@ -81,9 +88,15 @@ func (d *Document) Move(id, newParentID string, index int) error {
 	if np == nil {
 		return ErrNotFound
 	}
-	i := slices.Index(p.Children, n)
-	p.Children = slices.Delete(p.Children, i, i+1)
-	if np == p && index > i {
+	i := -1
+	if floating { // a floating topic joins the tree
+		d.Floating = slices.DeleteFunc(d.Floating, func(f *Node) bool { return f == n })
+		n.Pos = nil
+	} else {
+		i = slices.Index(p.Children, n)
+		p.Children = slices.Delete(p.Children, i, i+1)
+	}
+	if np == p && i >= 0 && index > i {
 		index-- // the node itself no longer comes before the index
 	}
 	if index < 0 || index > len(np.Children) {
@@ -171,4 +184,49 @@ func (d *Document) Tasks() []TaskNode {
 		walk(d.Root, nil)
 	}
 	return out
+}
+
+// dropRelations removes the relations of a node and of all below it.
+func (d *Document) dropRelations(n *Node) {
+	if len(d.Relations) == 0 {
+		return
+	}
+	gone := map[string]bool{}
+	var walk func(m *Node)
+	walk = func(m *Node) {
+		gone[m.ID] = true
+		for _, c := range m.Children {
+			walk(c)
+		}
+	}
+	walk(n)
+	d.Relations = slices.DeleteFunc(d.Relations, func(r Relation) bool { return gone[r.From] || gone[r.To] })
+	if len(d.Relations) == 0 {
+		d.Relations = nil
+	}
+}
+
+// Float takes a node, with all below it, out of the tree as a floating
+// topic at a place.
+func (d *Document) Float(id string, at Point) error {
+	n, p := d.Find(id)
+	if n == nil {
+		return ErrNotFound
+	}
+	if p == nil {
+		return ErrRoot
+	}
+	i := slices.Index(p.Children, n)
+	p.Children = slices.Delete(p.Children, i, i+1)
+	n.Pos = &at
+	d.Floating = append(d.Floating, n)
+	return nil
+}
+
+// AddFloating adds a floating topic at a place.
+func (d *Document) AddFloating(title string, at Point) *Node {
+	n := NewNode(title)
+	n.Pos = &at
+	d.Floating = append(d.Floating, n)
+	return n
 }

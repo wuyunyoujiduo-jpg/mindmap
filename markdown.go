@@ -46,11 +46,12 @@ func parseMarkdown(src string) []mdBlock {
 		case trimmed == "":
 			blocks = append(blocks, mdBlock{kind: "gap"})
 		case strings.HasPrefix(trimmed, "```"):
+			lang := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(trimmed, "```")))
 			var code []string
 			for i++; i < len(lines) && !strings.HasPrefix(strings.TrimSpace(lines[i]), "```"); i++ {
 				code = append(code, lines[i])
 			}
-			blocks = append(blocks, mdBlock{kind: "code", text: strings.Join(code, "\n")})
+			blocks = append(blocks, mdBlock{kind: "code", mark: lang, text: strings.Join(code, "\n")})
 		case mdRule.MatchString(line):
 			blocks = append(blocks, mdBlock{kind: "hr"})
 		case mdHeading.MatchString(trimmed):
@@ -187,7 +188,7 @@ func markdownView(c *ui.Context, src string, size float32) {
 				})
 			case "code":
 				ui.Box(c).Padding(8, 10).Radius(6).Background(codeBg).FillWidth().Children(func() {
-					ui.Text(c, b.text).Font("monospace").FontSize(size - 1).Wrap().Selectable()
+					ui.RichText(c, highlight(b.text, b.mark, size-1, t)...).Font("monospace").Wrap().Selectable()
 				})
 			case "hr":
 				ui.Divider(c)

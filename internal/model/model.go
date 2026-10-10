@@ -138,8 +138,16 @@ type Node struct {
 	// Links are what the node refers to: web addresses, files of the
 	// project's code ("path" or "path:line", relative to the map's
 	// project folder or absolute), or other nodes ("mindmap:map#id").
-	Links    []string `json:"links,omitempty"`
-	Children []*Node  `json:"children,omitempty"`
+	Links []string `json:"links,omitempty"`
+	// Files are attached files, copied into the map's assets folder.
+	Files []Attachment `json:"files,omitempty"`
+	// Summary draws a brace beside the node's children, with a label;
+	// Boundary a frame around the node and all below it.
+	Summary  *Mark `json:"summary,omitempty"`
+	Boundary *Mark `json:"boundary,omitempty"`
+	// Pos is where a floating topic is (Document.Floating).
+	Pos      *Point  `json:"pos,omitempty"`
+	Children []*Node `json:"children,omitempty"`
 }
 
 // Image is a picture shown in a node. Its file is in the map's assets
@@ -207,6 +215,42 @@ type Document struct {
 	Style     CanvasStyle `json:"style,omitzero"`
 	Present   Present     `json:"present,omitzero"`
 	Root      *Node       `json:"root"`
+	// Floating are topics outside the tree, placed where the user put
+	// them (Node.Pos), each with its own children.
+	Floating []*Node `json:"floating,omitempty"`
+	// Relations are lines between any two nodes, with a label.
+	Relations []Relation `json:"relations,omitempty"`
+}
+
+// Relation is a line from one node to another, across the tree.
+type Relation struct {
+	ID    string `json:"id"`
+	From  string `json:"from"`
+	To    string `json:"to"`
+	Label string `json:"label,omitempty"`
+}
+
+// Attachment is a file attached to a node: its copy in the assets folder,
+// and its name as it was.
+type Attachment struct {
+	File string `json:"file"`
+	Name string `json:"name"`
+}
+
+// Point is a place on a canvas, from the top left of the root's box.
+type Point struct {
+	X float32 `json:"x"`
+	Y float32 `json:"y"`
+}
+
+// Mark is a summary or a boundary of a node's branch, with its label.
+type Mark struct {
+	Label string `json:"label,omitempty"`
+}
+
+// IsFloating reports whether the node is one of the floating topics.
+func (d *Document) IsFloating(id string) bool {
+	return slices.ContainsFunc(d.Floating, func(n *Node) bool { return n.ID == id })
 }
 
 // Present is how a canvas shows as slides.
@@ -243,10 +287,18 @@ const (
 	// StructureBracket grows the map to the right, each node's children
 	// held by a curly bracket.
 	StructureBracket Structure = "bracket"
+	// StructureOrg grows the map down, as an org chart.
+	StructureOrg Structure = "org"
+	// StructureTimeline puts the main branches along a line, above and
+	// below it by turns.
+	StructureTimeline Structure = "timeline"
+	// StructureFishbone runs the main branches as bones from a spine
+	// back from the root, the head, as a cause-and-effect diagram.
+	StructureFishbone Structure = "fishbone"
 )
 
 // Structures lists the structures in the order the app offers them.
-var Structures = []Structure{StructureMindMap, StructureLogic, StructureBracket}
+var Structures = []Structure{StructureMindMap, StructureLogic, StructureBracket, StructureOrg, StructureTimeline, StructureFishbone}
 
 // Label is the structure's name in the UI.
 func (s Structure) Label() string {
@@ -255,6 +307,12 @@ func (s Structure) Label() string {
 		return "逻辑图"
 	case StructureBracket:
 		return "括号图"
+	case StructureOrg:
+		return "组织结构图"
+	case StructureTimeline:
+		return "时间轴"
+	case StructureFishbone:
+		return "鱼骨图"
 	}
 	return "思维导图"
 }
@@ -292,8 +350,13 @@ func (d *Document) Walk(fn func(n, parent *Node, depth int) bool) {
 		}
 		return true
 	}
-	if d.Root != nil {
-		walk(d.Root, nil, 0)
+	if d.Root != nil && !walk(d.Root, nil, 0) {
+		return
+	}
+	for _, f := range d.Floating {
+		if !walk(f, nil, 0) {
+			return
+		}
 	}
 }
 
@@ -327,7 +390,15 @@ func (d *Document) Path(id string) []*Node {
 		path = path[:len(path)-1]
 		return false
 	}
-	if d.Root == nil || !walk(d.Root) {
+	found := d.Root != nil && walk(d.Root)
+	for _, f := range d.Floating {
+		if found {
+			break
+		}
+		path = path[:0]
+		found = walk(f)
+	}
+	if !found {
 		return nil
 	}
 	return path
@@ -388,7 +459,12 @@ func (n *Node) Matches(query string) bool {
 
 // Clone returns a deep copy of the canvas.
 func (d *Document) Clone() *Document {
-	return &Document{ID: d.ID, Title: d.Title, Structure: d.Structure, Style: d.Style, Present: d.Present, Root: d.Root.clone()}
+	c := &Document{ID: d.ID, Title: d.Title, Structure: d.Structure, Style: d.Style, Present: d.Present, Root: d.Root.clone(),
+		Relations: slices.Clone(d.Relations)}
+	for _, f := range d.Floating {
+		c.Floating = append(c.Floating, f.clone())
+	}
+	return c
 }
 
 // renew gives the node and everything below it new IDs.
@@ -407,6 +483,19 @@ func (n *Node) clone() *Node {
 	c.Tags = slices.Clone(n.Tags)
 	c.Markers = slices.Clone(n.Markers)
 	c.Links = slices.Clone(n.Links)
+	c.Files = slices.Clone(n.Files)
+	if n.Summary != nil {
+		m := *n.Summary
+		c.Summary = &m
+	}
+	if n.Boundary != nil {
+		m := *n.Boundary
+		c.Boundary = &m
+	}
+	if n.Pos != nil {
+		p := *n.Pos
+		c.Pos = &p
+	}
 	if n.Style != nil {
 		st := *n.Style
 		c.Style = &st

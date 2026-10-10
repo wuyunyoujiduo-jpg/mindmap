@@ -53,6 +53,9 @@ func TestRoundTrip(t *testing.T) {
 	b.Task = &model.Task{Status: model.StatusDoing, Priority: model.PriorityHigh, Due: &due}
 	b.Style = &model.NodeStyle{Bold: true}
 	a.Collapsed = true
+	d.Relations = []model.Relation{{ID: "r1", From: a.ID, To: b.ID, Label: "依赖"}}
+	fl := d.AddFloating("备忘", model.Point{X: 300, Y: -80})
+	a.Summary = &model.Mark{Label: "核心功能"}
 	f := &model.File{Version: model.FormatVersion, Sheets: []*model.Document{d, model.New("第二")}}
 
 	var buf bytes.Buffer
@@ -104,6 +107,16 @@ func TestRoundTrip(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(assets, ga.Image.File)); err != nil {
 		t.Fatal(err)
 	}
+	gd := g.Sheets[0]
+	if len(gd.Floating) != 1 || gd.Floating[0].Title != "备忘" || gd.Floating[0].Pos.X != 300 || fl.ID == gd.Floating[0].ID {
+		t.Fatalf("floating %+v", gd.Floating)
+	}
+	if len(gd.Relations) != 1 || gd.Relations[0].Label != "依赖" || gd.Relations[0].From != ga.ID || gd.Relations[0].To != ga.Children[0].ID {
+		t.Fatalf("relations %+v", gd.Relations)
+	}
+	if ga.Summary == nil || ga.Summary.Label != "核心功能" {
+		t.Fatalf("summary %+v", ga.Summary)
+	}
 	gb := ga.Children[0]
 	if gb.Task == nil || gb.Task.Status != model.StatusDoing || !gb.Task.Due.Equal(due) || gb.Style == nil || !gb.Style.Bold {
 		t.Fatalf("task %+v style %+v", gb.Task, gb.Style)
@@ -141,7 +154,8 @@ func TestImportXMindZen(t *testing.T) {
 	for _, c := range root.Children {
 		titles = append(titles, c.Title)
 	}
-	if root.Title != "中心主题" || !slices.Equal(titles, []string{"分支 1", "分支 2", "自由主题"}) {
+	if root.Title != "中心主题" || !slices.Equal(titles, []string{"分支 1", "分支 2"}) ||
+		len(f.Sheets[0].Floating) != 1 || f.Sheets[0].Floating[0].Title != "自由主题" {
 		t.Fatalf("root %q children %v", root.Title, titles)
 	}
 	a := root.Children[0]

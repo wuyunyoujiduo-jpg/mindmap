@@ -46,6 +46,8 @@ func (a *app) commands() []command {
 	view := func(m int) func() { return func() { a.mode = m } }
 	cmds := []command{
 		{"新建导图", "⌘N", a.newMap, nil},
+		{"从模板新建…", "⌘⇧N", func() { a.templatesOpen = true }, nil},
+		{"把当前导图存为模板", "", a.saveAsTemplate, hasDoc},
 		{"新建画布", "⌘T", func() { a.mode = viewMap; a.addSheet() }, hasDoc},
 		{"切换到思维导图", "⌘1", view(viewMap), hasDoc},
 		{"切换到大纲", "⌘2", view(viewOutline), hasDoc},

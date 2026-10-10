@@ -104,6 +104,10 @@ func (a *app) measure(c *ui.Context) layout.Measure {
 			mw, _ := c.MeasureText(0, ui.Span{Text: "↗", Size: markSize + 1})
 			w += nodeGap + mw
 		}
+		if m := filesMark(n); m != "" {
+			mw, _ := c.MeasureText(0, ui.Span{Text: m, Size: markSize})
+			w += nodeGap + mw
+		}
 		h := float32(nodeHeight)
 		if depth == 0 {
 			h = rootHeight
@@ -253,11 +257,14 @@ func (a *app) canvasArea(c *ui.Context) {
 	z := cam.Zoom
 	lk := lookOf(a.doc.Style)
 	shown := a.shownDoc()
-	if !shown.Root.Contains(a.selected) && a.editing == "" { // left outside the branch focused on
+	if shown.Path(a.selected) == nil && a.editing == "" { // left outside the branch focused on
 		a.selected, a.multi = shown.Root.ID, nil
 	}
 	a.progress = progressOf(shown.Root)
 	r := layout.Compute(shown, a.measure(c), layoutOptions(a.doc.Structure))
+	if shown == a.doc {
+		r = a.layoutFloating(r, a.measure(c), layoutOptions(a.doc.Structure))
+	}
 	a.boxes = r
 	exporting := a.exportCam != nil // drawn into an image, off screen
 	if exporting {
@@ -275,10 +282,17 @@ func (a *app) canvasArea(c *ui.Context) {
 			// The mind map centers its root; the one-sided structures
 			// center the whole map while it fits, else start at the left.
 			cam.X = a.vp.W/2 - (root.X+root.W/2)*z
-			if a.doc.Structure != model.StructureMindMap {
+			cam.Y = a.vp.H/2 - (root.Y+root.H/2)*z
+			switch a.doc.Structure {
+			case model.StructureMindMap, model.StructureOrg:
+			case model.StructureFishbone: // the head on the right
+				cam.X = min((a.vp.W-r.Width*z)/2, a.vp.W-20-r.Width*z)
+			default:
 				cam.X = max((a.vp.W-r.Width*z)/2, 20)
 			}
-			cam.Y = a.vp.H/2 - (root.Y+root.H/2)*z
+			if a.doc.Structure == model.StructureOrg {
+				cam.Y = max((a.vp.H-r.Height*z)/2, 60) // from the top
+			}
 			cam.placed = true
 		}
 		target := a.selected
@@ -297,6 +311,8 @@ func (a *app) canvasArea(c *ui.Context) {
 	branch := map[string]int{}
 	shown.Walk(func(n, p *model.Node, _ int) bool {
 		switch {
+		case p == nil && n != shown.Root: // a floating topic: a color after the branches'
+			branch[n.ID] = len(shown.Root.Children) + slices.Index(shown.Floating, n)
 		case p == nil:
 		case p == shown.Root:
 			branch[n.ID] = slices.Index(p.Children, n)
@@ -317,8 +333,15 @@ func (a *app) canvasArea(c *ui.Context) {
 		a.canvas.Focus()
 	}
 	if cv.Clicked() {
-		a.commitEditIfAny()
+		if !a.justFloated { // not the end of the double click that made one
+			a.commitEditIfAny()
+		}
+		a.justFloated = false
 		a.multi = nil
+	}
+	if cv.DoubleClicked() && !exporting && shown == a.doc && !a.overNode() {
+		x, y := a.pointer[0], a.pointer[1]
+		a.later(func() { a.addFloatingAt(x, y) }) // a floating topic where it was double-clicked
 	}
 	cv.Draw(func(p *ui.Painter, rect ui.Rect) {
 		// A grid of dots, which moves with the map.
@@ -341,17 +364,23 @@ func (a *app) canvasArea(c *ui.Context) {
 			}
 			return col
 		}
+		a.drawBoundaries(p, r, shown, rect.X+cam.X, rect.Y+cam.Y, z, color)
 		drawEdges(p, r, a.doc.Structure, rect.X+cam.X, rect.Y+cam.Y, z, lk.line, color)
+		a.drawSummaries(p, r, shown, rect.X+cam.X, rect.Y+cam.Y, z, color)
 		a.drawDependencies(p, r, rect.X+cam.X, rect.Y+cam.Y, z)
+		a.drawRelations(p, r, rect.X+cam.X, rect.Y+cam.Y, z, ui.Hex("#6366f1"))
 	})
 	cv.Children(func() {
-		shown.Walk(func(n, _ *model.Node, depth int) bool {
+		floating := a.floatingTree()
+		shown.WalkShown(func(n, _ *model.Node, depth int) {
 			box, ok := r.Boxes[n.ID]
 			if !ok {
-				return false // under a collapsed node
+				return
+			}
+			if floating[n.ID] != nil {
+				depth++ // floating topics look as main topics
 			}
 			a.nodeView(c.Key(n.ID), n, depth, box, lk.branch(branch[n.ID]))
-			return true
 		})
 		if exporting {
 			return
@@ -607,7 +636,13 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 	// Selecting, editing, dragging.
 	if !editing {
 		adding := a.mods&(ui.Shift|ui.Cmd) != 0 // adds to the selection, or takes out
-		if el.Pressed() && !adding && (n.ID != a.selected || len(a.multi) > 0) {
+		if a.relFrom != "" {                    // drawing a relation line: this node ends it
+			if el.Pressed() {
+				id := n.ID
+				a.later(func() { a.endRelation(id) })
+			}
+			el.Cursor(ui.CursorCrosshair)
+		} else if el.Pressed() && !adding && (n.ID != a.selected || len(a.multi) > 0) {
 			a.commitEditIfAny()
 			a.selected, a.multi = n.ID, nil
 		}
@@ -630,6 +665,12 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 			} else {
 				el.Cursor(ui.CursorGrab)
 			}
+		} else if n.Pos != nil && a.doc.IsFloating(n.ID) {
+			// A floating topic goes where it is dragged.
+			if dx, dy, ok := el.Dragged(); ok {
+				a.mutate("float:"+n.ID, func() { n.Pos.X += dx / z; n.Pos.Y += dy / z })
+			}
+			el.Cursor(ui.CursorGrab)
 		} else {
 			// Other nodes are dropped on a node to move under it.
 			el.Drag(nodeDrag{n.ID}).Cursor(ui.CursorPointer)
@@ -643,17 +684,7 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 		}
 		el.ContextMenu(func(m *ui.Menu) { a.nodeMenu(m, n, depth) })
 		if files := el.DroppedFiles(); len(files) > 0 {
-			a.later(func() {
-				for _, f := range files {
-					if isImageFile(f) {
-						a.selected = n.ID
-						if err := a.attachImageFile(n, f); err != nil {
-							a.saveErr = err.Error()
-						}
-						return
-					}
-				}
-			})
+			a.later(func() { a.dropFiles(n, files) })
 		}
 	}
 
@@ -777,6 +808,19 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 		if p.note {
 			ui.Text(c, "✎").FontSize((markSize + 1) * z).TextColor(muted).NoWrap().Tooltip(snippet(n.Note, ""))
 		}
+		if m := filesMark(n); m != "" {
+			var names []string
+			for _, f := range n.Files {
+				names = append(names, f.Name)
+			}
+			clip := ui.Box(c.Key("files")).Cursor(ui.CursorPointer).Label("打开附件").
+				Tooltip("附件：" + strings.Join(names, "、") + "（点击打开第一个）")
+			if clip.Clicked() {
+				f := n.Files[0]
+				a.later(func() { a.openAttachment(f) })
+			}
+			clip.Children(func() { ui.Text(c, m).FontSize(markSize * z).TextColor(muted).NoWrap() })
+		}
 		if len(n.Links) > 0 {
 			var tips []string
 			for _, l := range n.Links {
@@ -837,6 +881,7 @@ func (a *app) nodeMenu(m *ui.Menu, n *model.Node, depth int) {
 		a.later(func() { a.startEdit(n.ID) })
 	}
 	a.tagMenu(m, n)
+	a.annotationMenu(m, n, depth)
 	m.Separator()
 	if m.Item("复制").Shortcut(ui.Cmd, ui.KeyC).Chosen() {
 		a.later(func() { a.copyNodes(false) })
@@ -1010,6 +1055,8 @@ func (a *app) canvasKey(ev ui.InputEvent) bool {
 		a.deleteSelection()
 	case ev.Mods == 0 && ev.Key == ui.KeyEscape:
 		switch {
+		case a.relFrom != "":
+			a.relFrom = ""
 		case len(a.multi) > 0:
 			a.multi = nil
 		case a.focusNode() != nil:
@@ -1066,6 +1113,12 @@ func layoutOptions(s model.Structure) layout.Options {
 		o.OneSided = true
 	case model.StructureBracket:
 		o.OneSided, o.GapX, o.GapY = true, 40, 10
+	case model.StructureOrg:
+		o.Mode, o.GapX, o.GapY = layout.ModeDown, 44, 12
+	case model.StructureTimeline:
+		o.Mode, o.GapX, o.GapY = layout.ModeTimeline, 36, 10
+	case model.StructureFishbone:
+		o.Mode, o.GapX, o.GapY = layout.ModeFishbone, 36, 10
 	}
 	return o
 }
@@ -1076,6 +1129,14 @@ func layoutOptions(s model.Structure) layout.Options {
 // the children for the bracket chart.
 func drawEdges(p *ui.Painter, r layout.Result, s model.Structure, ox, oy, z, line float32, color func(to string) ui.Color) {
 	width := max(line*z, 1)
+	switch s {
+	case model.StructureOrg:
+		drawOrgEdges(p, r, ox, oy, z, width, color)
+		return
+	case model.StructureTimeline, model.StructureFishbone:
+		drawLineEdges(p, r, s == model.StructureFishbone, ox, oy, z, width, color)
+		return
+	}
 	if s == model.StructureMindMap {
 		for _, e := range r.Edges {
 			from, to := r.Boxes[e.From], r.Boxes[e.To]
@@ -1160,6 +1221,109 @@ func drawEdges(p *ui.Painter, r layout.Result, s model.Structure, ox, oy, z, lin
 	}
 }
 
+// drawOrgEdges joins each node to the row of its children: down from its
+// bottom, along a bar over them, and down into each.
+func drawOrgEdges(p *ui.Painter, r layout.Result, ox, oy, z, width float32, color func(string) ui.Color) {
+	kids := map[string][]string{}
+	var order []string
+	for _, e := range r.Edges {
+		if kids[e.From] == nil {
+			order = append(order, e.From)
+		}
+		kids[e.From] = append(kids[e.From], e.To)
+	}
+	for _, id := range order {
+		from := r.Boxes[id]
+		px, py := ox+(from.X+from.W/2)*z, oy+(from.Y+from.H)*z
+		top := float32(1e9)
+		left, right := px, px
+		for _, k := range kids[id] {
+			b := r.Boxes[k]
+			top = min(top, oy+b.Y*z)
+			left, right = min(left, ox+(b.X+b.W/2)*z), max(right, ox+(b.X+b.W/2)*z)
+		}
+		bar := py + (top-py)/2
+		col := color(kids[id][0])
+		p.StrokePath(new(ui.Path).MoveTo(px, py).LineTo(px, bar), width, col)
+		p.StrokePath(new(ui.Path).MoveTo(left, bar).LineTo(right, bar), width, col)
+		for _, k := range kids[id] {
+			b := r.Boxes[k]
+			x := ox + (b.X+b.W/2)*z
+			p.StrokePath(new(ui.Path).MoveTo(x, bar).LineTo(x, oy+b.Y*z), width, color(k))
+		}
+	}
+}
+
+// drawLineEdges draws a timeline's or a fishbone's line from the root, the
+// main branches' links to it, and within each branch's column the lines
+// from a node down (or up) its side to each child.
+func drawLineEdges(p *ui.Painter, r layout.Result, fishbone bool, ox, oy, z, width float32, color func(string) ui.Color) {
+	to := map[string]bool{}
+	for _, e := range r.Edges {
+		to[e.To] = true
+	}
+	root := ""
+	for _, e := range r.Edges {
+		if !to[e.From] {
+			root = e.From
+			break
+		}
+	}
+	rb := r.Boxes[root]
+	spineY := oy + (rb.Y+rb.H/2)*z
+	start, end := ox+(rb.X+rb.W)*z, ox+(rb.X+rb.W)*z
+	if fishbone {
+		start, end = ox+rb.X*z, ox+rb.X*z
+	}
+	for _, e := range r.Edges {
+		if e.From != root {
+			continue
+		}
+		b := r.Boxes[e.To]
+		up := r.Up[e.To]
+		edgeY := oy + (b.Y+b.H)*z // the box's side toward the line
+		if !up {
+			edgeY = oy + b.Y*z
+		}
+		col := color(e.To)
+		if fishbone {
+			// A bone, leaning back from the spine to the branch's near end.
+			x := ox + (b.X+b.W)*z
+			at := x + 40*z
+			end = min(end, ox+b.X*z-12*z)
+			p.StrokePath(new(ui.Path).MoveTo(at, spineY).LineTo(x-8*z, edgeY), width*1.4, col)
+			continue
+		}
+		x := ox + (b.X+14)*z
+		end = max(end, ox+(b.X+b.W)*z+12*z)
+		p.StrokePath(new(ui.Path).MoveTo(x, spineY).LineTo(x, edgeY), width, col)
+		p.FillPath(new(ui.Path).Circle(x, spineY, 3.5*z), col)
+	}
+	if fishbone && end < start { // the spine ends in a tail
+		p.StrokePath(new(ui.Path).MoveTo(start, spineY).LineTo(end, spineY), width*2, color(root))
+		p.StrokePath(new(ui.Path).MoveTo(end, spineY).LineTo(end-10*z, spineY-8*z), width*2, color(root))
+		p.StrokePath(new(ui.Path).MoveTo(end, spineY).LineTo(end-10*z, spineY+8*z), width*2, color(root))
+	} else if !fishbone && end > start {
+		p.StrokePath(new(ui.Path).MoveTo(start, spineY).LineTo(end, spineY), width*2, color(root))
+		p.StrokePath(new(ui.Path).MoveTo(end, spineY).LineTo(end-8*z, spineY-6*z), width*2, color(root))
+		p.StrokePath(new(ui.Path).MoveTo(end, spineY).LineTo(end-8*z, spineY+6*z), width*2, color(root))
+	}
+	// Within a column: down (or up) the parent's left side, into each child.
+	for _, e := range r.Edges {
+		if e.From == root {
+			continue
+		}
+		pb, cb := r.Boxes[e.From], r.Boxes[e.To]
+		x := ox + (pb.X+12)*z
+		y0 := oy + (pb.Y+pb.H)*z
+		if cb.Y < pb.Y { // the column goes up
+			y0 = oy + pb.Y*z
+		}
+		y1 := oy + (cb.Y+cb.H/2)*z
+		p.StrokePath(new(ui.Path).MoveTo(x, y0).LineTo(x, y1).LineTo(ox+cb.X*z, y1), width, color(e.To))
+	}
+}
+
 // structurePicker is the button over the canvas's top left corner that
 // chooses the canvas's structure, from pictures of each.
 func (a *app) structurePicker(c *ui.Context) {
@@ -1170,7 +1334,7 @@ func (a *app) structurePicker(c *ui.Context) {
 		a.structureOpen = !a.structureOpen
 	}
 	ui.Popover(c, btn, &a.structureOpen, func() {
-		ui.Row(c).Gap(8).Padding(4).Children(func() {
+		ui.Grid(c).Columns(3).Gap(8).Padding(4).Children(func() {
 			for _, st := range model.Structures {
 				card := ui.Column(c.Key(string(st))).Gap(6).Padding(8).Radius(8).
 					Border(1, t.Border).Cursor(ui.CursorPointer).Label(st.Label())

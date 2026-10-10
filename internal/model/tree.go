@@ -101,3 +101,24 @@ func ParseOutline(text string) []*Node {
 	}
 	return roots
 }
+
+// WalkShown calls fn for the nodes shown: the root, the floating topics
+// and all below them, but not what is under a folded node.
+func (d *Document) WalkShown(fn func(n, parent *Node, depth int)) {
+	var walk func(n, parent *Node, depth int)
+	walk = func(n, parent *Node, depth int) {
+		fn(n, parent, depth)
+		if n.Collapsed {
+			return
+		}
+		for _, c := range n.Children {
+			walk(c, n, depth+1)
+		}
+	}
+	if d.Root != nil {
+		walk(d.Root, nil, 0)
+	}
+	for _, f := range d.Floating {
+		walk(f, nil, 0)
+	}
+}

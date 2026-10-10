@@ -43,11 +43,24 @@ const provider = "com.wuyunyoujiduo.mindmap"
 
 // sheet and topic are XMind's content.json.
 type sheet struct {
-	ID         string      `json:"id"`
-	Class      string      `json:"class"`
-	Title      string      `json:"title"`
-	RootTopic  *topic      `json:"rootTopic"`
-	Extensions []extension `json:"extensions,omitempty"`
+	ID            string         `json:"id"`
+	Class         string         `json:"class"`
+	Title         string         `json:"title"`
+	RootTopic     *topic         `json:"rootTopic"`
+	Relationships []relationship `json:"relationships,omitempty"`
+	Extensions    []extension    `json:"extensions,omitempty"`
+}
+
+type relationship struct {
+	ID     string `json:"id"`
+	End1ID string `json:"end1Id"`
+	End2ID string `json:"end2Id"`
+	Title  string `json:"title,omitempty"`
+}
+
+type position struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
 }
 
 type topic struct {
@@ -61,6 +74,7 @@ type topic struct {
 	Markers        []marker    `json:"markers,omitempty"`
 	Image          *topicImage `json:"image,omitempty"`
 	Href           string      `json:"href,omitempty"`
+	Position       *position   `json:"position,omitempty"`
 	Children       *children   `json:"children,omitempty"`
 	Extensions     []extension `json:"extensions,omitempty"`
 }
@@ -93,10 +107,12 @@ type extension struct {
 
 // topicExtra is what a topic carries that XMind has no place for.
 type topicExtra struct {
-	Task    *model.Task      `json:"task,omitempty"`
-	Markers []string         `json:"markers,omitempty"`
-	Style   *model.NodeStyle `json:"style,omitempty"`
-	Links   []string         `json:"links,omitempty"`
+	Task     *model.Task      `json:"task,omitempty"`
+	Markers  []string         `json:"markers,omitempty"`
+	Style    *model.NodeStyle `json:"style,omitempty"`
+	Links    []string         `json:"links,omitempty"`
+	Summary  *model.Mark      `json:"summary,omitempty"`
+	Boundary *model.Mark      `json:"boundary,omitempty"`
 }
 
 // sheetExtra is what a sheet carries that XMind has no place for.
@@ -221,7 +237,21 @@ func Export(w io.Writer, f *model.File, assetsDir string) error {
 		if title == "" {
 			title = d.Root.Title
 		}
-		sheets = append(sheets, sheet{ID: d.ID, Class: "sheet", Title: title, RootTopic: root,
+		for _, f := range d.Floating {
+			ft := exportTopic(f, pictures)
+			if f.Pos != nil {
+				ft.Position = &position{X: float64(f.Pos.X), Y: float64(f.Pos.Y)}
+			}
+			if root.Children == nil {
+				root.Children = &children{}
+			}
+			root.Children.Detached = append(root.Children.Detached, ft)
+		}
+		var rels []relationship
+		for _, r := range d.Relations {
+			rels = append(rels, relationship{ID: r.ID, End1ID: r.From, End2ID: r.To, Title: r.Label})
+		}
+		sheets = append(sheets, sheet{ID: d.ID, Class: "sheet", Title: title, RootTopic: root, Relationships: rels,
 			Extensions: []extension{{Provider: provider, Content: extra}}})
 	}
 	for name := range pictures {
@@ -300,8 +330,9 @@ func exportTopic(n *model.Node, pictures map[string]bool) *topic {
 		}
 		t.Children.Attached = append(t.Children.Attached, exportTopic(c, pictures))
 	}
-	if n.Task != nil || len(n.Markers) > 0 || n.Style != nil || len(n.Links) > 0 {
-		extra, _ := json.Marshal(topicExtra{Task: n.Task, Markers: n.Markers, Style: n.Style, Links: n.Links})
+	if n.Task != nil || len(n.Markers) > 0 || n.Style != nil || len(n.Links) > 0 || n.Summary != nil || n.Boundary != nil {
+		extra, _ := json.Marshal(topicExtra{Task: n.Task, Markers: n.Markers, Style: n.Style, Links: n.Links,
+			Summary: n.Summary, Boundary: n.Boundary})
 		t.Extensions = []extension{{Provider: provider, Content: extra}}
 	}
 	return t
@@ -333,7 +364,7 @@ func Import(r io.ReaderAt, size int64, assetsDir string) (*model.File, error) {
 		defer rc.Close()
 		return io.ReadAll(io.LimitReader(rc, 256<<20))
 	}
-	im := importer{read: read, assetsDir: assetsDir, saved: map[string]*model.Image{}}
+	im := importer{read: read, assetsDir: assetsDir, saved: map[string]*model.Image{}, ids: map[string]string{}}
 	var out *model.File
 	if b, err := read("content.json"); err == nil {
 		out, err = im.fromJSON(b)
@@ -359,6 +390,7 @@ type importer struct {
 	read      func(name string) ([]byte, error)
 	assetsDir string
 	saved     map[string]*model.Image // by the picture's path in the archive
+	ids       map[string]string       // the new IDs of topics, by XMind's
 }
 
 func (im *importer) fromJSON(b []byte) (*model.File, error) {
@@ -372,6 +404,22 @@ func (im *importer) fromJSON(b []byte) (*model.File, error) {
 			continue
 		}
 		d := &model.Document{ID: model.NewID(), Title: s.Title, Root: im.topic(s.RootTopic)}
+		if s.RootTopic.Children != nil { // floating topics where they were
+			for _, t := range s.RootTopic.Children.Detached {
+				f := im.topic(t)
+				f.Pos = &model.Point{X: 220, Y: -120}
+				if t.Position != nil {
+					f.Pos = &model.Point{X: float32(t.Position.X), Y: float32(t.Position.Y)}
+				}
+				d.Floating = append(d.Floating, f)
+			}
+		}
+		for _, r := range s.Relationships {
+			from, to := im.ids[r.End1ID], im.ids[r.End2ID]
+			if from != "" && to != "" {
+				d.Relations = append(d.Relations, model.Relation{ID: model.NewID(), From: from, To: to, Label: r.Title})
+			}
+		}
 		d.Structure = structureOf(s.RootTopic.StructureClass)
 		for _, e := range s.Extensions {
 			var extra sheetExtra
@@ -386,6 +434,7 @@ func (im *importer) fromJSON(b []byte) (*model.File, error) {
 
 func (im *importer) topic(t *topic) *model.Node {
 	n := &model.Node{ID: model.NewID(), Title: t.Title, Tags: t.Labels, Collapsed: t.Branch == "folded"}
+	im.ids[t.ID] = n.ID
 	if t.Notes != nil && t.Notes.Plain != nil {
 		n.Note = strings.TrimSpace(t.Notes.Plain.Content)
 	}
@@ -404,15 +453,11 @@ func (im *importer) topic(t *topic) *model.Node {
 		for _, c := range t.Children.Attached {
 			n.Children = append(n.Children, im.topic(c))
 		}
-		// Floating topics join the root's.
-		for _, c := range t.Children.Detached {
-			n.Children = append(n.Children, im.topic(c))
-		}
 	}
 	for _, e := range t.Extensions {
 		var extra topicExtra
 		if e.Provider == provider && json.Unmarshal(e.Content, &extra) == nil {
-			n.Task, n.Style = extra.Task, extra.Style
+			n.Task, n.Style, n.Summary, n.Boundary = extra.Task, extra.Style, extra.Summary, extra.Boundary
 			if extra.Links != nil {
 				n.Links = extra.Links
 			}

@@ -9,6 +9,10 @@
 
 3. 双击打开。Intel 和 Apple 芯片的 Mac 都可以使用。
 
+## 安装（Windows）
+
+下载下面的 `MindMap Setup x.y.z.exe` 安装。应用没有代码签名，Windows 可能提示「已保护你的电脑」，点「更多信息 → 仍要运行」。快捷键里的 ⌘ 在 Windows 上对应 Ctrl。
+
 ## 一键更新
 
 装好 `gh`（`brew install gh && gh auth login`）后，用仓库里的 `update.sh` 更新，不会弹安全提示：
