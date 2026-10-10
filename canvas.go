@@ -132,8 +132,8 @@ func branchColor(i int) ui.Color {
 	return ui.Hex([]string{"#3b82f6", "#10b981", "#f59e0b", "#ec4899", "#8b5cf6", "#06b6d4", "#ef4444", "#84cc16"}[i%8])
 }
 
-// canvasView is the map on an endless canvas: dragging its empty part, the
-// wheel or the touchpad move it, and Cmd with the wheel zooms. Below it are
+// canvasView is the map on an endless canvas: dragging the central node,
+// the wheel or the touchpad move it, and Cmd with the wheel zooms. Below it are
 // the tabs of the file's canvases.
 func (a *app) canvasView(c *ui.Context) {
 	ui.Column(c).Grow(1).Children(func() {
@@ -186,16 +186,6 @@ func (a *app) canvasArea(c *ui.Context) {
 	cv.HandleInput(a.canvasInput)
 	if cv.Pressed() && a.editing == "" {
 		a.canvas.Focus()
-	}
-	if dx, dy, ok := cv.Dragged(); ok {
-		cam.X += dx
-		cam.Y += dy
-	}
-	a.panning = cv.Pressed()
-	if a.panning {
-		cv.Cursor(ui.CursorGrabbing)
-	} else {
-		cv.Cursor(ui.CursorGrab)
 	}
 	if cv.Clicked() {
 		a.commitEditIfAny()

@@ -67,7 +67,6 @@ type app struct {
 	cams    map[string]*camera
 	canvas  ui.Handle
 	boxes   layout.Result // the layout of the last frame, in map coordinates
-	panning bool          // the canvas is being dragged
 	vp      ui.Rect       // the canvas's box in the last frame
 	pointer [2]float32    // where the pointer is over the canvas
 	mods    ui.Modifiers  // the modifier keys held, as of the last frame

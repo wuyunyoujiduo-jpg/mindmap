@@ -399,19 +399,21 @@ func TestPanCanvas(t *testing.T) {
 		t.Fatal("map not placed")
 	}
 	x0, y0 := cam.X, cam.Y
-	// Drag the empty part of the canvas.
+	// Dragging the empty part of the canvas does not move the map: only
+	// the central node does.
 	r, _ := tt.Find("我的项目")
 	px, py := r.X, r.Y+250 // below the map
+	tt.Move(px, py)
+	if tt.Cursor() != ui.CursorDefault {
+		t.Fatalf("cursor over the empty canvas is %v", tt.Cursor())
+	}
 	tt.Press(px, py)
 	for i := 1; i <= 5; i++ {
 		tt.Move(px+float32(i)*20, py+float32(i)*10)
 	}
 	tt.Release(px+100, py+50)
-	if dx, dy := cam.X-x0, cam.Y-y0; dx < 80 || dy < 40 {
-		t.Fatalf("dragging moved the map by %v, %v", dx, dy)
-	}
-	if after, _ := tt.Find("我的项目"); after.X-r.X < 80 {
-		t.Fatalf("root moved from %v to %v", r.X, after.X)
+	if cam.X != x0 || cam.Y != y0 {
+		t.Fatalf("dragging the empty canvas moved the map by %v, %v", cam.X-x0, cam.Y-y0)
 	}
 	// The wheel moves it too, and Cmd with the wheel zooms.
 	x1 := cam.X
