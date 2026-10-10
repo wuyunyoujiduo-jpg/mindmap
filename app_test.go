@@ -21,6 +21,7 @@ import (
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/versions"
 )
 
 type fakePlatform struct {
@@ -33,6 +34,7 @@ type fakePlatform struct {
 	savePath   string
 	openPath   string
 	copied     string
+	opened     []string
 }
 
 func (f *fakePlatform) SaveFile(name, ext string, done func(string)) { done(f.savePath) }
@@ -41,6 +43,8 @@ func (f *fakePlatform) OpenFile(title string, exts []string, done func(string)) 
 }
 func (f *fakePlatform) CopyText(s string)     { f.copied = s }
 func (f *fakePlatform) ClipboardText() string { return f.copied }
+func (f *fakePlatform) OpenURL(url string)    { f.opened = append(f.opened, url) }
+func (f *fakePlatform) OpenPath(path string)  { f.opened = append(f.opened, "path:"+path) }
 
 func (f *fakePlatform) ClipboardImage() []byte      { return f.clipImage }
 func (f *fakePlatform) ClipboardFiles() []string    { return f.clipFiles }
@@ -110,6 +114,25 @@ func clickNodeMods(t *testing.T, tt *ui.Tester, a *app, mods ui.Modifiers, title
 	tt.Frame()
 	tt.ClickAtWith(mods, a.vp.X+cam.X+(b.X+b.W/2)*cam.Zoom, a.vp.Y+cam.Y+(b.Y+b.H/2)*cam.Zoom)
 	return nil
+}
+
+// clickInPanel clicks an element of the right panel, scrolling it into the
+// window first.
+func clickInPanel(t *testing.T, tt *ui.Tester, label string) {
+	t.Helper()
+	for range 10 {
+		r, ok := tt.Find(label)
+		if !ok {
+			t.Fatalf("no %q", label)
+		}
+		if r.Y+r.H < 780 {
+			break
+		}
+		tt.Scroll(1100, 400, 0, 200)
+	}
+	if err := tt.Click(label); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // clickNodeWith clicks a node holding modifier keys.
@@ -247,9 +270,7 @@ func TestPanelEditsNode(t *testing.T) {
 	if n.Task.Status != model.StatusDoing {
 		t.Fatalf("status %v", n.Task.Status)
 	}
-	if err := tt.Click("截止日期"); err != nil {
-		t.Fatal(err)
-	}
+	clickInPanel(t, tt, "截止日期")
 	if n.Task.Due == nil || !n.Task.Due.Equal(today(testNow)) {
 		t.Fatalf("due %v", n.Task.Due)
 	}
@@ -2071,4 +2092,175 @@ func TestNotePreview(t *testing.T) {
 		t.Fatalf("texts %q", tt.Texts())
 	}
 	snapshot(t, tt, "note-preview")
+}
+
+// changeOnDisk changes the open map's file as another program would.
+func changeOnDisk(t *testing.T, a *app, fn func(f *model.File), after time.Duration) {
+	t.Helper()
+	f, err := model.Load(a.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fn(f)
+	if err := f.Save(a.path); err != nil {
+		t.Fatal(err)
+	}
+	when := testNow.Add(after)
+	os.Chtimes(a.path, when, when)
+	a.now = func() time.Time { return when }
+	a.checked = time.Time{}
+}
+
+func TestHistoryAndConflict(t *testing.T) {
+	a, tt := newTestApp(t)
+	os.RemoveAll(a.versions.Dir) // kept as opened, on the clock of the test
+	a.lastSnap = nil
+	a.keepVersion(versions.Open)
+	if vs := a.versions.List(a.path); len(vs) != 1 || vs[0].Reason != versions.Open {
+		t.Fatalf("versions %+v", vs)
+	}
+	// Another program adds a node: the versions before and after are kept,
+	// and the history shows what changed.
+	changeOnDisk(t, a, func(f *model.File) {
+		d := f.Sheets[0]
+		d.AddChild(d.Root.ID, "AI 加的模块")
+		n, _ := findIn(d, "登录")
+		n.Task.Status = model.StatusDoing
+	}, time.Minute)
+	tt.Frame()
+	find(t, a, "AI 加的模块")
+	vs := a.versions.List(a.path)
+	if len(vs) != 2 || vs[0].Reason != versions.External {
+		t.Fatalf("versions %+v", vs)
+	}
+	a.openHistory()
+	a.historyPick(1)
+	tt.Frame()
+	if sum := model.Summary(a.historyDiff); sum != "新增 1 · 状态 1" {
+		t.Fatalf("summary %q", sum)
+	}
+	if !tt.HasText("AI 加的模块") || !tt.HasText("外部修改") {
+		t.Fatalf("texts %q", tt.Texts())
+	}
+	snapshot(t, tt, "history")
+	// Restoring the version before brings the map back, as a step undo
+	// takes back.
+	if err := tt.Click("恢复到这个版本"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if _, err := findIn(a.doc, "AI 加的模块"); err == nil {
+		t.Fatal("not restored")
+	}
+	a.undo()
+	find(t, a, "AI 加的模块")
+
+	// A change outside while the map has unsaved changes: nothing is saved
+	// over it until a version is chosen.
+	a.mutate("", func() { find(t, a, "前端").Title = "界面层" })
+	changeOnDisk(t, a, func(f *model.File) { f.Sheets[0].Root.Title = "外部改名" }, 2*time.Minute)
+	tt.Frame()
+	if !a.conflict {
+		t.Fatal("no conflict")
+	}
+	a.now = func() time.Time { return testNow.Add(3 * time.Minute) }
+	tt.Frame()
+	if f, _ := model.Load(a.path); f.Sheets[0].Root.Title != "外部改名" {
+		t.Fatal("saved over the outside change")
+	}
+	snapshot(t, tt, "conflict")
+	if err := tt.Click("保留我的版本"); err != nil {
+		t.Fatal(err)
+	}
+	f, _ := model.Load(a.path)
+	if _, err := findIn(f.Sheets[0], "界面层"); err != nil || a.conflict {
+		t.Fatal("mine not kept")
+	}
+	if vs := a.versions.List(a.path); vs[0].Reason != versions.Conflict && vs[1].Reason != versions.Conflict {
+		t.Fatalf("the outside version not kept: %+v", vs[:2])
+	}
+}
+
+func TestLinks(t *testing.T) {
+	a, tt := newTestApp(t)
+	fp := a.plat.(*fakePlatform)
+	proj := t.TempDir()
+	os.MkdirAll(filepath.Join(proj, "src"), 0o755)
+	os.WriteFile(filepath.Join(proj, "src", "login.go"), []byte("package x"), 0o644)
+	a.mutate("", func() { a.file.Project = proj })
+
+	// What links are.
+	for link, want := range map[string]int{
+		"https://github.com/o/r/pull/12": linkWeb, "src/login.go:42": linkFile, "/abs/x.go": linkFile,
+		"mindmap:#abc": linkNode, "mindmap:工作/后台#abc": linkNode,
+	} {
+		if kind, _, _ := a.parseLink(link); kind != want {
+			t.Errorf("%s: kind %d", link, kind)
+		}
+	}
+	if _, target, line := a.parseLink("src/login.go:42:7"); target != filepath.Join(proj, "src", "login.go") || line != 42 {
+		t.Errorf("target %q line %d", target, line)
+	}
+	if _, l := a.linkLabel("https://github.com/o/r/pull/12"); l != "r PR #12" {
+		t.Errorf("label %q", l)
+	}
+
+	// Adding links in the panel; the code opens in the editor at its line.
+	clickNode(t, tt, a, "登录")
+	clickInPanel(t, tt, "添加链接")
+	tt.Type("src/login.go:42")
+	tt.Key(0, ui.KeyEnter)
+	n := find(t, a, "登录")
+	if len(n.Links) != 1 {
+		t.Fatalf("links %v", n.Links)
+	}
+	tt.Frame()
+	if !tt.HasText("src/login.go:42") {
+		t.Fatalf("texts %q", tt.Texts())
+	}
+	a.openLink(n.Links[0])
+	if want := "vscode://file" + filepath.ToSlash(filepath.Join(proj, "src", "login.go")) + ":42"; fp.opened[len(fp.opened)-1] != want {
+		t.Fatalf("opened %v, want %s", fp.opened, want)
+	}
+	a.cfg.Editor = "cursor"
+	a.openLink(n.Links[0])
+	if !strings.HasPrefix(fp.opened[len(fp.opened)-1], "cursor://file/") {
+		t.Fatalf("opened %v", fp.opened)
+	}
+	// The mark on the canvas opens it too.
+	tt.Frame()
+	if err := tt.Click("打开链接"); err != nil {
+		t.Fatal(err)
+	}
+	snapshot(t, tt, "links")
+
+	// Linking to another node, through the palette, and back.
+	clickInPanel(t, tt, "链接到节点…")
+	if a.paletteMode != paletteLink {
+		t.Fatal("not choosing a node")
+	}
+	tt.Type("后端")
+	tt.Key(0, ui.KeyEnter)
+	back := find(t, a, "后端")
+	if len(n.Links) != 2 || n.Links[1] != "mindmap:#"+back.ID {
+		t.Fatalf("links %v", n.Links)
+	}
+	if bl := a.backlinks(back.ID); len(bl) != 1 || bl[0].id != n.ID {
+		t.Fatalf("backlinks %+v", bl)
+	}
+	a.openLink(n.Links[1])
+	if a.selected != back.ID {
+		t.Fatal("did not go to the node")
+	}
+	tt.Frame()
+	if !tt.HasText("被 1 个节点链接") {
+		t.Fatalf("no backlinks shown: %q", tt.Texts())
+	}
+	// The MCP window explains how to connect agents.
+	a.mcpOpen = true
+	tt.Frame()
+	if !tt.HasText("连接 AI 编程工具（MCP）") {
+		t.Fatal("no MCP window")
+	}
+	snapshot(t, tt, "mcp")
 }

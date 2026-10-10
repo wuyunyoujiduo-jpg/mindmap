@@ -47,6 +47,10 @@ func (a *app) panel(c *ui.Context) {
 				a.presentPanel(c)
 			default:
 				a.canvasPanel(c)
+				ui.Column(c).Padding(0, 16, 16).Gap(12).Children(func() {
+					ui.Divider(c)
+					a.projectSection(c)
+				})
 			}
 		})
 	})
@@ -102,6 +106,7 @@ func (a *app) nodePanel(c *ui.Context) {
 			})
 
 			a.imageSection(c, n)
+			a.linksSection(c, n)
 
 			ui.Field(c, "标签", func() { a.tagPicker(c, n) })
 

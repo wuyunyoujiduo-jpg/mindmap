@@ -10,6 +10,9 @@ import (
 type File struct {
 	Version int         `json:"version"`
 	Sheets  []*Document `json:"sheets"`
+	// Project is the folder of the project's code, which relative links
+	// of nodes are in.
+	Project string `json:"project,omitempty"`
 }
 
 // NewFile returns a file with one canvas whose root has the given title.
@@ -95,7 +98,7 @@ func (f *File) MoveSheet(from, to int) {
 
 // Clone returns a deep copy of the file.
 func (f *File) Clone() *File {
-	c := &File{Version: f.Version, Sheets: make([]*Document, len(f.Sheets))}
+	c := &File{Version: f.Version, Project: f.Project, Sheets: make([]*Document, len(f.Sheets))}
 	for i, d := range f.Sheets {
 		c.Sheets[i] = d.Clone()
 	}

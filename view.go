@@ -24,6 +24,7 @@ func (a *app) view(c *ui.Context) {
 				ui.Column(c).Grow(1).Children(func() {
 					a.toolbar(c)
 					ui.Divider(c)
+					a.conflictBar(c)
 					switch {
 					case a.doc == nil:
 						a.empty(c)
@@ -50,6 +51,8 @@ func (a *app) view(c *ui.Context) {
 		}
 		a.paletteView(c)
 		a.cheatSheet(c)
+		a.historyView(c)
+		a.mcpView(c)
 	})
 	if len(a.pending) > 0 {
 		a.runPending()

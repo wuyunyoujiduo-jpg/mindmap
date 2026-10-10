@@ -60,6 +60,7 @@ type topic struct {
 	Labels         []string    `json:"labels,omitempty"`
 	Markers        []marker    `json:"markers,omitempty"`
 	Image          *topicImage `json:"image,omitempty"`
+	Href           string      `json:"href,omitempty"`
 	Children       *children   `json:"children,omitempty"`
 	Extensions     []extension `json:"extensions,omitempty"`
 }
@@ -95,6 +96,7 @@ type topicExtra struct {
 	Task    *model.Task      `json:"task,omitempty"`
 	Markers []string         `json:"markers,omitempty"`
 	Style   *model.NodeStyle `json:"style,omitempty"`
+	Links   []string         `json:"links,omitempty"`
 }
 
 // sheetExtra is what a sheet carries that XMind has no place for.
@@ -286,14 +288,20 @@ func exportTopic(n *model.Node, pictures map[string]bool) *topic {
 	if n.Collapsed && len(n.Children) > 0 {
 		t.Branch = "folded"
 	}
+	for _, l := range n.Links { // XMind takes one link: the first page's
+		if strings.HasPrefix(l, "http://") || strings.HasPrefix(l, "https://") {
+			t.Href = l
+			break
+		}
+	}
 	for _, c := range n.Children {
 		if t.Children == nil {
 			t.Children = &children{}
 		}
 		t.Children.Attached = append(t.Children.Attached, exportTopic(c, pictures))
 	}
-	if n.Task != nil || len(n.Markers) > 0 || n.Style != nil {
-		extra, _ := json.Marshal(topicExtra{Task: n.Task, Markers: n.Markers, Style: n.Style})
+	if n.Task != nil || len(n.Markers) > 0 || n.Style != nil || len(n.Links) > 0 {
+		extra, _ := json.Marshal(topicExtra{Task: n.Task, Markers: n.Markers, Style: n.Style, Links: n.Links})
 		t.Extensions = []extension{{Provider: provider, Content: extra}}
 	}
 	return t
@@ -389,6 +397,9 @@ func (im *importer) topic(t *topic) *model.Node {
 	if t.Image != nil {
 		n.Image = im.picture(t.Image.Src, t.Image.Width, t.Image.Height)
 	}
+	if t.Href != "" && !strings.HasPrefix(t.Href, "xap:") && !strings.HasPrefix(t.Href, "xmind:") {
+		n.Links = []string{t.Href}
+	}
 	if t.Children != nil {
 		for _, c := range t.Children.Attached {
 			n.Children = append(n.Children, im.topic(c))
@@ -402,6 +413,9 @@ func (im *importer) topic(t *topic) *model.Node {
 		var extra topicExtra
 		if e.Provider == provider && json.Unmarshal(e.Content, &extra) == nil {
 			n.Task, n.Style = extra.Task, extra.Style
+			if extra.Links != nil {
+				n.Links = extra.Links
+			}
 			if extra.Markers != nil {
 				n.Markers = extra.Markers
 			}

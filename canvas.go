@@ -96,6 +96,10 @@ func (a *app) measure(c *ui.Context) layout.Measure {
 			mw, _ := c.MeasureText(0, ui.Span{Text: "✎", Size: markSize + 1})
 			w += nodeGap + mw
 		}
+		if len(n.Links) > 0 {
+			mw, _ := c.MeasureText(0, ui.Span{Text: "↗", Size: markSize + 1})
+			w += nodeGap + mw
+		}
 		h := float32(nodeHeight)
 		if depth == 0 {
 			h = rootHeight
@@ -753,6 +757,22 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 		if p.note {
 			ui.Text(c, "✎").FontSize((markSize + 1) * z).TextColor(muted).NoWrap().Tooltip(snippet(n.Note, ""))
 		}
+		if len(n.Links) > 0 {
+			var tips []string
+			for _, l := range n.Links {
+				_, label := a.linkLabel(l)
+				tips = append(tips, label)
+			}
+			mark := ui.Box(c.Key("links")).Cursor(ui.CursorPointer).Label("打开链接").
+				Tooltip("点击打开：" + strings.Join(tips, "、"))
+			if mark.Clicked() {
+				link := n.Links[0]
+				a.later(func() { a.openLink(link) })
+			}
+			mark.Children(func() {
+				ui.Text(c, "↗").FontSize((markSize + 1) * z).TextColor(accentOn(filled, onFill, t.Accent)).NoWrap()
+			})
+		}
 	})
 
 	// The button opening and closing the children, just right of the box.
@@ -862,6 +882,15 @@ func (a *app) nodeMenu(m *ui.Menu, n *model.Node, depth int) {
 	if m.Item(label).Shortcut(0, ui.KeyDelete).Disabled(depth == 0 && len(a.multi) == 0).Chosen() {
 		a.later(a.deleteSelection)
 	}
+}
+
+// accentOn is the color of a link's mark on a node: the node's text on a
+// fill, else the accent.
+func accentOn(filled bool, onFill, accent ui.Color) ui.Color {
+	if filled {
+		return onFill
+	}
+	return accent
 }
 
 // progressOf counts the tasks under every node below root: done and all.

@@ -28,6 +28,9 @@ type config struct {
 	Tags []tagDef `json:"tags,omitempty"`
 	// Recent are the maps opened last, the last first.
 	Recent []string `json:"recent,omitempty"`
+	// Editor opens the project's files linked from nodes: "vscode" (or
+	// ""), "cursor", "default" or "finder".
+	Editor string `json:"editor,omitempty"`
 	// PanelWidth is the width the right panel was dragged to.
 	PanelWidth float32 `json:"panelWidth,omitempty"`
 }

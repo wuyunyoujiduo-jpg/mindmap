@@ -117,7 +117,11 @@ type Node struct {
 	Collapsed bool       `json:"collapsed,omitempty"`
 	Style     *NodeStyle `json:"style,omitempty"`
 	Image     *Image     `json:"image,omitempty"`
-	Children  []*Node    `json:"children,omitempty"`
+	// Links are what the node refers to: web addresses, files of the
+	// project's code ("path" or "path:line", relative to the map's
+	// project folder or absolute), or other nodes ("mindmap:map#id").
+	Links    []string `json:"links,omitempty"`
+	Children []*Node  `json:"children,omitempty"`
 }
 
 // Image is a picture shown in a node. Its file is in the map's assets
@@ -384,6 +388,7 @@ func (n *Node) clone() *Node {
 	c := *n
 	c.Tags = slices.Clone(n.Tags)
 	c.Markers = slices.Clone(n.Markers)
+	c.Links = slices.Clone(n.Links)
 	if n.Style != nil {
 		st := *n.Style
 		c.Style = &st

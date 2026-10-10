@@ -248,3 +248,16 @@ func MoveAssets(from, to string) {
 		_ = os.Rename(AssetsDir(from), AssetsDir(to))
 	}
 }
+
+// AllFilesIn returns the paths of every map in dir and the folders in it.
+func AllFilesIn(dir string) ([]string, error) {
+	f, err := ScanFolder(dir)
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	for _, info := range f.AllFiles() {
+		paths = append(paths, info.Path)
+	}
+	return paths, nil
+}

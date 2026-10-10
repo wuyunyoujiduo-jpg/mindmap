@@ -3,7 +3,11 @@
 package main
 
 import (
+	_ "embed"
+	"encoding/json"
+	"fmt"
 	"log"
+	"os"
 	"strings"
 
 	"github.com/egoist/mygo"
@@ -47,11 +51,11 @@ func (d *desktop) SaveFile(name, ext string, done func(string)) {
 
 func (d *desktop) OpenFile(title string, exts []string, done func(string)) {
 	go func() {
-		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
-			Parent:  d.win,
-			Title:   title,
-			Filters: []mygo.FileFilter{{Name: strings.ToUpper(exts[0]), Extensions: exts}},
-		})
+		opts := mygo.OpenDialogOptions{Parent: d.win, Title: title}
+		if len(exts) > 0 {
+			opts.Filters = []mygo.FileFilter{{Name: strings.ToUpper(exts[0]), Extensions: exts}}
+		}
+		paths, err := mygo.Dialog.Open(opts)
 		path := ""
 		if err == nil && len(paths) > 0 {
 			path = paths[0]
@@ -66,6 +70,9 @@ func (d *desktop) ClipboardText() string {
 	b, _ := mygo.Clipboard.ReadFormat(transfer.Text)
 	return string(b)
 }
+
+func (d *desktop) OpenURL(url string)   { _ = mygo.Shell.OpenExternal(url) }
+func (d *desktop) OpenPath(path string) { _ = mygo.Shell.OpenPath(path) }
 
 func (d *desktop) ShowInFolder(path string) { mygo.Shell.ShowItemInFolder(path) }
 
@@ -99,7 +106,26 @@ func (d *desktop) SetFullScreen(on bool) {
 	}
 }
 
+//go:embed mygo.json
+var mygoJSON []byte
+
+// version is the app's, from mygo.json.
+var version = func() string {
+	var c struct{ Version string }
+	_ = json.Unmarshal(mygoJSON, &c)
+	return c.Version
+}()
+
 func main() {
+	// "MindMap mcp" serves the maps to AI coding agents on stdin and
+	// stdout, without a window (see internal/mcp).
+	if len(os.Args) > 1 && os.Args[1] == "mcp" {
+		if err := serveMCP(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	plat := &desktop{}
 	a := newApp(plat, loadConfig())
 	mygo.App.WhenReady(func() {
@@ -130,6 +156,7 @@ func main() {
 				item("新建导图", "CmdOrCtrl+N", a.newMap),
 				item("打开文件夹…", "CmdOrCtrl+O", a.pickWorkspace),
 				item("保存", "CmdOrCtrl+S", a.save),
+				item("历史版本…", "CmdOrCtrl+Shift+H", a.openHistory),
 				mygo.Separator(),
 				item("导入 XMind…", "CmdOrCtrl+Shift+I", a.askImportXMind),
 				mygo.Separator(),
@@ -178,6 +205,7 @@ func main() {
 			{Role: mygo.RoleWindowMenu},
 			{Label: "帮助", Submenu: []*mygo.MenuItem{
 				item("快捷键", "CmdOrCtrl+Shift+/", func() { a.cheatsOpen = true }),
+				item("连接 AI 编程工具（MCP）…", "", func() { a.mcpOpen = true }),
 			}},
 		}))
 	})

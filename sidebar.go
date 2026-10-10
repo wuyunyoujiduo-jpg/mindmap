@@ -316,6 +316,11 @@ func (a *app) moved(from, to string) {
 		}
 		return p
 	}
+	for _, f := range a.files { // the versions of the maps follow them
+		if to := follow(f.Path); to != f.Path {
+			a.versions.Rename(f.Path, to)
+		}
+	}
 	a.path = follow(a.path)
 	a.renameViews(follow)
 	if a.path != "" {

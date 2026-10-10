@@ -12,6 +12,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/layout"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/versions"
 )
 
 // platform is what the app asks of the desktop. main.go implements it with
@@ -29,6 +30,10 @@ type platform interface {
 	// CopyText puts text on the clipboard, and ClipboardText reads it.
 	CopyText(s string)
 	ClipboardText() string
+	// OpenURL opens a web page or an app's link (vscode://…); OpenPath
+	// opens a file in its default app.
+	OpenURL(url string)
+	OpenPath(path string)
 	ShowInFolder(path string)
 	Trash(path string) error
 	SetFullScreen(on bool)
@@ -80,6 +85,9 @@ type app struct {
 	hist     *model.History
 	hists    map[string]*model.History // of the maps opened, while the app runs
 	views    map[string]*fileView      // how each map was left
+	versions versions.Store            // past versions of the maps
+	lastSnap map[string]time.Time      // when each map was last kept as a version
+	conflict bool                      // the file changed outside while the map had unsaved changes
 	lastEdit string                    // the key of the last coalesced edit (see mutate)
 
 	// Selection and in-place editing.
@@ -123,6 +131,18 @@ type app struct {
 	paletteIndex int
 	paletteShown int // the line last scrolled into view
 	cheatsOpen   bool
+	// The window of past versions.
+	historyOpen  bool
+	mcpOpen      bool // the window on connecting AI agents
+	linkDraft    string
+	linkFrom     string // the node a link to a node is being chosen for
+	backlinkFor  string // the node backlinkList is of, as of backlinkMod
+	backlinkMod  time.Time
+	backlinkList []backlink
+	historyList  []versions.Version
+	historySel   int
+	historyFile  *model.File           // the version chosen
+	historyDiff  []model.Change        // from it to now
 	index        map[string]indexEntry // maps read for the search, by path
 	outlineFocus string                // the node whose line the outline focuses
 
@@ -175,6 +195,7 @@ func newApp(plat platform, cfg config) *app {
 		hist:          model.NewHistory(200),
 		hists:         map[string]*model.History{},
 		views:         loadViews(),
+		versions:      versions.Store{Dir: versionsDir()},
 		cams:          map[string]*camera{},
 		sidebarWidth:  220,
 		panelWidth:    300,
@@ -249,8 +270,10 @@ func (a *app) open(path string) error {
 		return err
 	}
 	a.path, a.file = path, f
+	a.conflict = false
 	a.remember(path)
 	a.learnTags(f)
+	a.keepVersion(versions.Open)
 	a.modTime = modTime(path)
 	a.dirty, a.saveErr, a.lastEdit = false, "", ""
 	a.savedAt = time.Time{}
@@ -331,6 +354,12 @@ func (a *app) save() {
 	if a.doc == nil || a.path == "" {
 		return
 	}
+	// Another program changed the file since it was read: saving would
+	// lose that, so the user chooses first (conflictBar).
+	if mt := modTime(a.path); !mt.IsZero() && !a.modTime.IsZero() && !mt.Equal(a.modTime) {
+		a.conflict = true
+		return
+	}
 	if err := a.file.Save(a.path); err != nil {
 		a.saveErr = "保存失败: " + err.Error()
 		return
@@ -339,10 +368,17 @@ func (a *app) save() {
 	a.savedAt = a.now()
 	a.modTime = modTime(a.path)
 	a.refreshFiles()
+	a.keepVersionIfDue()
 }
 
 // flush saves unsaved changes, and how the map is left.
 func (a *app) flush() {
+	if a.conflict {
+		// Leaving a map in conflict: the file's version stays, and the
+		// changes made here are kept as a version to restore.
+		a.keepVersion(versions.Conflict)
+		a.conflict, a.dirty = false, false
+	}
 	if a.dirty {
 		a.save()
 	}
@@ -354,7 +390,7 @@ func (a *app) flush() {
 // program, as an AI agent, changed it. It runs every frame.
 func (a *app) tick(c *ui.Context) {
 	now := a.now()
-	if a.dirty {
+	if a.dirty && !a.conflict { // a conflict waits for a choice
 		if wait := autosaveDelay - now.Sub(a.changed); wait > 0 {
 			c.After(wait)
 		} else {
@@ -371,17 +407,22 @@ func (a *app) tick(c *ui.Context) {
 }
 
 // reloadFromDisk takes the file as changed outside the app.
+// Both versions are kept: the app's before, and the file's after.
 func (a *app) reloadFromDisk(c *ui.Context) {
+	a.modTime = modTime(a.path) // ask once
 	if a.dirty {
-		a.modTime = modTime(a.path) // ask once
-		c.ToastAction("文件已被其他程序修改", "载入磁盘版本", func() {
-			a.dirty = false
-			a.reload()
-		})
+		a.conflict = true // conflictBar asks which to keep
 		return
 	}
+	a.keepVersion(versions.BeforeExternal)
 	a.reload()
-	c.Toast("已载入外部修改")
+	a.keepVersion(versions.External)
+	c.ToastAction("已载入外部修改", "查看改动", func() {
+		a.openHistory()
+		if len(a.historyList) > 1 {
+			a.historyPick(1) // the version before it
+		}
+	})
 }
 
 func (a *app) reload() {

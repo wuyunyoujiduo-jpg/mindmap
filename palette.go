@@ -21,6 +21,7 @@ const (
 	paletteAll = iota
 	paletteMaps
 	paletteSearch
+	paletteLink // a node to link the node a.linkFrom to
 )
 
 // paletteItem is a line of the palette.
@@ -69,6 +70,8 @@ func (a *app) commands() []command {
 		{"导出为 XMind", "", a.askExportXMind, hasDoc},
 		{"复制当前画布为 Markdown", "⌘⇧C", a.copyMarkdown, hasDoc},
 		{"导入 XMind", "⌘⇧I", a.askImportXMind, nil},
+		{"历史版本", "⌘⇧H", a.openHistory, hasDoc},
+		{"连接 AI 编程工具（MCP）", "", func() { a.mcpOpen = true }, nil},
 		{"撤销", "⌘Z", a.undo, hasDoc},
 		{"重做", "⌘⇧Z", a.redo, hasDoc},
 	}
@@ -96,7 +99,7 @@ func (a *app) paletteItems() []paletteItem {
 			}
 		}
 		if q != "" && a.file != nil {
-			items = append(items, a.nodeItems(a.path, a.file, q, 30)...)
+			items = append(items, a.nodeItems(a.path, a.file, q, 30, a.goToNode)...)
 		}
 	}
 	if a.paletteMode == paletteAll && q != "" || a.paletteMode == paletteMaps {
@@ -108,14 +111,22 @@ func (a *app) paletteItems() []paletteItem {
 			}
 		}
 	}
-	if a.paletteMode == paletteSearch && q != "" {
+	if (a.paletteMode == paletteSearch || a.paletteMode == paletteLink) && q != "" {
+		act := a.goToNode
+		if a.paletteMode == paletteLink {
+			act = func(path, _, id string) {
+				if n, _ := a.doc.Find(a.linkFrom); n != nil && id != n.ID {
+					a.addLink(n, a.nodeLinkTo(path, id))
+				}
+			}
+		}
 		for _, f := range a.files {
 			file := a.file
 			if f.Path != a.path {
 				file = a.indexed(f.Path)
 			}
 			if file != nil {
-				items = append(items, a.nodeItems(f.Path, file, q, 200-len(items))...)
+				items = append(items, a.nodeItems(f.Path, file, q, 200-len(items), act)...)
 			}
 			if len(items) >= 200 {
 				break
@@ -127,7 +138,7 @@ func (a *app) paletteItems() []paletteItem {
 
 // nodeItems are the nodes of a map matching the query: their title, note
 // or tags.
-func (a *app) nodeItems(path string, f *model.File, q string, limit int) []paletteItem {
+func (a *app) nodeItems(path string, f *model.File, q string, limit int, act func(path, sheet, id string)) []paletteItem {
 	var items []paletteItem
 	for _, d := range f.Sheets {
 		d.Walk(func(n, _ *model.Node, _ int) bool {
@@ -152,7 +163,7 @@ func (a *app) nodeItems(path string, f *model.File, q string, limit int) []palet
 				title += "　— " + snippet(n.Note, q)
 			}
 			sheet, id := d.ID, n.ID
-			items = append(items, paletteItem{"节点", title, where, func() { a.goToNode(path, sheet, id) }})
+			items = append(items, paletteItem{"节点", title, where, func() { act(path, sheet, id) }})
 			return true
 		})
 	}
@@ -269,6 +280,7 @@ func (a *app) paletteView(c *ui.Context) {
 			paletteAll:    "输入命令、节点或导图名…",
 			paletteMaps:   "切换到导图…",
 			paletteSearch: "搜索所有导图里的节点、备注和标签…",
+			paletteLink:   "输入关键词，选择要链接到的节点…",
 		}[a.paletteMode]
 		w, _ := c.Size()
 		ui.Column(c).Width(min(640, w-80)).Gap(8).Children(func() {
