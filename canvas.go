@@ -103,7 +103,7 @@ func (a *app) measure(c *ui.Context) layout.Measure {
 // and longer titles wrapped onto more lines at that width. A title being
 // edited stays on one line.
 func (a *app) titleBox(c *ui.Context, n *model.Node, depth int) (w, h float32) {
-	span := ui.Span{Text: a.parts(n).title, Size: titleSize(depth), Weight: weight(depth)}
+	span := ui.Span{Text: a.parts(n).title, Size: titleSize(depth), Weight: weight(depth), Font: a.doc.Style.Font}
 	w, h = c.MeasureText(0, span)
 	if a.editing == n.ID {
 		return max(min(w, titleMax)+20, editMinWidth), h
@@ -139,11 +139,6 @@ func statusColor(s model.Status) ui.Color {
 	return ui.Hex("#9ca3af")
 }
 
-// branchColor colors the lines and accents of each top-level branch.
-func branchColor(i int) ui.Color {
-	return ui.Hex([]string{"#3b82f6", "#10b981", "#f59e0b", "#ec4899", "#8b5cf6", "#06b6d4", "#ef4444", "#84cc16"}[i%8])
-}
-
 // canvasView is the map on an endless canvas: dragging the central node,
 // the wheel or the touchpad move it, and Cmd with the wheel zooms. Below it are
 // the tabs of the file's canvases.
@@ -159,6 +154,7 @@ func (a *app) canvasArea(c *ui.Context) {
 	t := c.Theme()
 	cam := a.cam()
 	z := cam.Zoom
+	lk := lookOf(a.doc.Style)
 	r := layout.Compute(a.doc, a.measure(c), layoutOptions(a.doc.Structure))
 	a.boxes = r
 	a.vp = a.canvas.Bounds(c) // the canvas's box, as of the last frame
@@ -199,7 +195,7 @@ func (a *app) canvasArea(c *ui.Context) {
 	})
 
 	cv := ui.Box(c.Key("canvas")).Grow(1).Clip().Background(t.Background).
-		Focusable().FocusRing(false).Bind(&a.canvas).Label("画布")
+		Focusable().FocusRing(false).Bind(&a.canvas).Label("导图画布")
 	cv.HandleInput(a.canvasInput)
 	if cv.Pressed() && a.editing == "" {
 		a.canvas.Focus()
@@ -222,13 +218,13 @@ func (a *app) canvasArea(c *ui.Context) {
 			}
 		}
 		color := func(id string) ui.Color {
-			col := branchColor(branch[id])
+			col := lk.branch(branch[id])
 			if a.filtering() {
 				col = col.Alpha(0.3)
 			}
 			return col
 		}
-		drawEdges(p, r, a.doc.Structure, rect.X+cam.X, rect.Y+cam.Y, z, color)
+		drawEdges(p, r, a.doc.Structure, rect.X+cam.X, rect.Y+cam.Y, z, lk.line, color)
 	})
 	cv.Children(func() {
 		a.doc.Walk(func(n, _ *model.Node, depth int) bool {
@@ -236,7 +232,7 @@ func (a *app) canvasArea(c *ui.Context) {
 			if !ok {
 				return false // under a collapsed node
 			}
-			a.nodeView(c.Key(n.ID), n, depth, box, branchColor(branch[n.ID]))
+			a.nodeView(c.Key(n.ID), n, depth, box, lk.branch(branch[n.ID]))
 			return true
 		})
 		a.structurePicker(c)
@@ -412,14 +408,22 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 
 	el := ui.Row(c).Absolute().Left(cam.X+box.X*z).Top(cam.Y+box.Y*z).Size(box.W*z, box.H*z).
 		Padding(0, nodePadX*z).Gap(nodeGap * z).AlignItems(ui.Center).Radius(8 * z)
+	// As XMind draws them: a dark central topic, main topics filled with
+	// their branch's color, and subtopics tinted with it.
 	switch depth {
 	case 0:
-		el.Background(t.Text).TextColor(t.Background)
+		fill := lookOf(a.doc.Style).root(t)
+		el.Background(fill).TextColor(textOn(fill)).Radius(10 * z)
 	case 1:
-		el.Background(accent.Alpha(0.14)).Border(1, accent.Alpha(0.5))
+		el.Background(accent).TextColor(textOn(accent))
 	default:
-		el.Background(t.Surface).Border(1, t.Border)
+		tint := float32(0.12)
+		if t.Dark {
+			tint = 0.24
+		}
+		el.Background(accent.Alpha(tint)).Radius(6 * z)
 	}
+	el.Font(a.doc.Style.Font)
 	if selected {
 		el.Border(2*z, t.Accent)
 	}
@@ -472,6 +476,19 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 		el.ContextMenu(func(m *ui.Menu) { a.nodeMenu(m, n, depth) })
 	}
 
+	// Marks read on the node's fill: on filled topics, in the fill's text
+	// color.
+	muted := t.TextMuted
+	var onFill ui.Color
+	filled := depth <= 1
+	if filled {
+		fill := accent
+		if depth == 0 {
+			fill = lookOf(a.doc.Style).root(t)
+		}
+		onFill = textOn(fill)
+		muted = onFill.Alpha(0.75)
+	}
 	el.Children(func() {
 		if n.Task != nil {
 			ui.Box(c).Size(dotSize*z, dotSize*z).Radius(999).Background(statusColor(n.Task.Status)).Shrink(0)
@@ -500,20 +517,28 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 			title.Strikethrough()
 		}
 		for _, tag := range p.tags {
+			if filled {
+				size := markSize * z
+				ui.Box(c.Key("tag:"+tag)).Padding(size*0.15, size*0.55).Radius(999).Background(onFill.Alpha(0.22)).
+					PassThrough().Children(func() {
+					ui.Text(c, tag).FontSize(size).TextColor(onFill).NoWrap()
+				})
+				continue
+			}
 			tagChip(c.Key("tag:"+tag), tag, tag, false, markSize*z).PassThrough()
 		}
 		if p.more > 0 {
-			ui.Text(c, "+"+strconv.Itoa(p.more)).FontSize(markSize * z).TextColor(t.TextMuted).NoWrap()
+			ui.Text(c, "+"+strconv.Itoa(p.more)).FontSize(markSize * z).TextColor(muted).NoWrap()
 		}
 		if p.due != "" {
-			col := t.TextMuted
-			if n.Task.Overdue(a.now()) {
+			col := muted
+			if n.Task.Overdue(a.now()) && !filled {
 				col = t.Danger
 			}
 			ui.Text(c, p.due).FontSize(markSize * z).TextColor(col).NoWrap()
 		}
 		if p.note {
-			ui.Text(c, "✎").FontSize((markSize + 1) * z).TextColor(t.TextMuted).NoWrap()
+			ui.Text(c, "✎").FontSize((markSize + 1) * z).TextColor(muted).NoWrap()
 		}
 	})
 
@@ -654,8 +679,8 @@ func layoutOptions(s model.Structure) layout.Options {
 // with the map's origin at (ox, oy) and zoom z: curves for the mind map, a
 // trunk of straight lines for the logic chart, and a curly bracket around
 // the children for the bracket chart.
-func drawEdges(p *ui.Painter, r layout.Result, s model.Structure, ox, oy, z float32, color func(to string) ui.Color) {
-	width := max(1.5*z, 1)
+func drawEdges(p *ui.Painter, r layout.Result, s model.Structure, ox, oy, z, line float32, color func(to string) ui.Color) {
+	width := max(line*z, 1)
 	if s == model.StructureMindMap {
 		for _, e := range r.Edges {
 			from, to := r.Boxes[e.From], r.Boxes[e.To]
@@ -793,7 +818,7 @@ func drawStructureIcon(p *ui.Painter, r ui.Rect, s model.Structure, col ui.Color
 	z := min(r.W/lr.Width, r.H/lr.Height)
 	ox := r.X + (r.W-lr.Width*z)/2
 	oy := r.Y + (r.H-lr.Height*z)/2
-	drawEdges(p, lr, s, ox, oy, z, func(string) ui.Color { return col })
+	drawEdges(p, lr, s, ox, oy, z, 1.5, func(string) ui.Color { return col })
 	for id, b := range lr.Boxes {
 		box := ui.Rect{X: ox + b.X*z, Y: oy + b.Y*z, W: b.W * z, H: b.H * z}
 		if id == d.Root.ID {

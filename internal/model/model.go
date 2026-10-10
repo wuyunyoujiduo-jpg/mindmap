@@ -119,10 +119,23 @@ type Node struct {
 
 // Document is one canvas of a file: a tree of nodes under its root.
 type Document struct {
-	ID        string    `json:"id"`
-	Title     string    `json:"title"`
-	Structure Structure `json:"structure,omitempty"`
-	Root      *Node     `json:"root"`
+	ID        string      `json:"id"`
+	Title     string      `json:"title"`
+	Structure Structure   `json:"structure,omitempty"`
+	Style     CanvasStyle `json:"style,omitzero"`
+	Root      *Node       `json:"root"`
+}
+
+// CanvasStyle is how a canvas looks: its color scheme, font and lines.
+// The zero value is the default look.
+type CanvasStyle struct {
+	Scheme string `json:"scheme,omitempty"` // a color scheme's ID; "" is the default
+	Font   string `json:"font,omitempty"`   // a font family; "" is the system's
+	Line   string `json:"line,omitempty"`   // the branches' width: "thin", "" (normal), "thick" or "bolder"
+	// SingleColor draws every branch in Color instead of a color of the
+	// scheme for each (rainbow branches).
+	SingleColor bool   `json:"singleColor,omitempty"`
+	Color       string `json:"color,omitempty"` // #rrggbb
 }
 
 // Structure is how a canvas lays out its map.
@@ -283,7 +296,7 @@ func (n *Node) Matches(query string) bool {
 
 // Clone returns a deep copy of the canvas.
 func (d *Document) Clone() *Document {
-	return &Document{ID: d.ID, Title: d.Title, Structure: d.Structure, Root: d.Root.clone()}
+	return &Document{ID: d.ID, Title: d.Title, Structure: d.Structure, Style: d.Style, Root: d.Root.clone()}
 }
 
 // renew gives the node and everything below it new IDs.

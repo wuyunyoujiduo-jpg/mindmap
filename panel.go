@@ -9,10 +9,35 @@ import (
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
 
-// panel shows and edits the selected node: its title, note, tags and task.
+// Tabs of the panel.
+const (
+	tabNode = iota
+	tabCanvas
+)
+
+// panel is the right side: the selected node's details, or the shown
+// canvas's style.
 func (a *app) panel(c *ui.Context) {
 	t := c.Theme()
-	ui.Scroll(c.Key("panel")).Width(a.panelWidth).FillHeight().Background(t.Surface).Children(func() {
+	ui.Column(c).Width(a.panelWidth).FillHeight().Background(t.Surface).Children(func() {
+		ui.Box(c).Padding(10, 16, 4).Children(func() {
+			ui.Segmented(c, &a.panelTab, "节点", "画布").FillWidth()
+		})
+		ui.Scroll(c.Key(fmt.Sprint("panel", a.panelTab))).Grow(1).Children(func() {
+			if a.panelTab == tabCanvas && a.doc != nil {
+				a.canvasPanel(c)
+			} else {
+				a.nodePanel(c)
+			}
+		})
+	})
+}
+
+// nodePanel shows and edits the selected node: its title, note, tags and
+// task.
+func (a *app) nodePanel(c *ui.Context) {
+	t := c.Theme()
+	func() {
 		n, _ := a.selectedNode()
 		if n == nil {
 			ui.Column(c).Padding(20).Children(func() {
@@ -56,7 +81,7 @@ func (a *app) panel(c *ui.Context) {
 				}
 			}
 		})
-	})
+	}()
 }
 
 func cleanTags(tags []string) []string {

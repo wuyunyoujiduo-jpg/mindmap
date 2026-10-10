@@ -81,6 +81,7 @@ type app struct {
 	sheetTitle    string
 	confirmSheet  bool
 	structureOpen bool
+	panelTab      int
 
 	// Chrome.
 	mode          int

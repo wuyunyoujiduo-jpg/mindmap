@@ -682,3 +682,53 @@ func TestStructures(t *testing.T) {
 		t.Fatalf("after undo %q", a.doc.Structure)
 	}
 }
+
+func TestCanvasStyle(t *testing.T) {
+	a, tt := newTestApp(t)
+	snapshot(t, tt, "style-default")
+	if err := tt.Click("画布"); err != nil {
+		t.Fatal(err)
+	}
+	if a.panelTab != tabCanvas || !tt.HasText("配色方案") {
+		t.Fatalf("tab %d: %q", a.panelTab, tt.Texts())
+	}
+	snapshot(t, tt, "style-panel")
+	if err := tt.Click("海洋"); err != nil {
+		t.Fatal(err)
+	}
+	if a.doc.Style.Scheme != "ocean" {
+		t.Fatalf("scheme %q", a.doc.Style.Scheme)
+	}
+	if err := tt.Click("彩虹分支"); err != nil {
+		t.Fatal(err)
+	}
+	if !a.doc.Style.SingleColor {
+		t.Fatal("rainbow still on")
+	}
+	if err := tt.Click("#7C5CE0"); err != nil {
+		t.Fatal(err)
+	}
+	if a.doc.Style.Color != "#7C5CE0" || lookOf(a.doc.Style).branch(3) != ui.Hex("#7C5CE0") {
+		t.Fatalf("color %q", a.doc.Style.Color)
+	}
+	a.setStyle("line", func(s *model.CanvasStyle) { s.Line = "thick" })
+	a.setStyle("font", func(s *model.CanvasStyle) { s.Font = "Kaiti SC" })
+	tt.Frame()
+	snapshot(t, tt, "style-single")
+	a.save()
+	f, _ := model.Load(a.path)
+	if got := f.Sheets[0].Style; got.Scheme != "ocean" || !got.SingleColor || got.Line != "thick" || got.Font != "Kaiti SC" {
+		t.Fatalf("saved %+v", got)
+	}
+	if f.Sheets[1].Style != (model.CanvasStyle{}) {
+		t.Fatal("the other canvas changed too")
+	}
+	a.undo()
+	if a.doc.Style.Font != "" {
+		t.Fatal("undo did not take back the font")
+	}
+	// Text stays readable on fills.
+	if textOn(ui.Hex("#1F1F1F")) != ui.Hex("#FFFFFF") || textOn(ui.Hex("#FFE08A")) != ui.Hex("#1F2329") {
+		t.Fatal("text color on fills")
+	}
+}
