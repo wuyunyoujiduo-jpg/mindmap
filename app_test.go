@@ -2314,7 +2314,12 @@ func TestDependenciesAndIterations(t *testing.T) {
 		t.Fatalf("iterations %+v", a.file.Iterations)
 	}
 	it := a.file.Iterations[0]
-	a.mutate("", func() { login.Task.Iteration = it.ID; login.Task.Estimate = 3; search.Task.Iteration = it.ID; search.Task.Estimate = 5 })
+	a.mutate("", func() {
+		login.Task.Iteration = it.ID
+		login.Task.Estimate = 3
+		search.Task.Iteration = it.ID
+		search.Task.Estimate = 5
+	})
 	if done, total, hours := a.iterationProgress(it.ID); done != 1 || total != 2 || hours != "5" {
 		t.Fatalf("progress %d/%d %s", done, total, hours)
 	}
