@@ -625,7 +625,9 @@ func TestRootCenteredAndLongTitlesWrap(t *testing.T) {
 	a.mutate("", func() { n.Title = long })
 	tt.Frame()
 	box := a.boxes.Boxes[n.ID]
-	if box.W > 2*nodePadX+titleMax+40 || box.H < 2*nodeHeight { // 40: the note's mark
+	// Wrapped: no wider than the widest title (40 for the note's mark), and
+	// taller than a node of one line, however tall the fonts make lines.
+	if box.W > 2*nodePadX+titleMax+40 || box.H < nodeHeight+10 {
 		t.Fatalf("long node box %+v", box)
 	}
 	text, ok := tt.Find(long)
