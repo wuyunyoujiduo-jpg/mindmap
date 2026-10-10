@@ -640,3 +640,45 @@ func TestRootCenteredAndLongTitlesWrap(t *testing.T) {
 	}
 	snapshot(t, tt, "balanced")
 }
+
+func TestStructures(t *testing.T) {
+	a, tt := newTestApp(t)
+	if err := tt.Click("结构：思维导图 ▾"); err != nil {
+		t.Fatal(err)
+	}
+	snapshot(t, tt, "structure-picker")
+	if err := tt.Click("逻辑图"); err != nil {
+		t.Fatal(err)
+	}
+	if a.doc.Structure != model.StructureLogic || a.structureOpen {
+		t.Fatalf("structure %q, open %v", a.doc.Structure, a.structureOpen)
+	}
+	tt.Frame()
+	if len(a.boxes.Left) != 0 {
+		t.Fatal("logic chart has branches on the left")
+	}
+	root := a.boxes.Boxes[a.doc.Root.ID]
+	for _, c := range a.doc.Root.Children {
+		if a.boxes.Boxes[c.ID].X <= root.X {
+			t.Fatalf("%s left of the root", c.Title)
+		}
+	}
+	snapshot(t, tt, "logic")
+	tt.Click("结构：逻辑图 ▾")
+	tt.Click("括号图")
+	if a.doc.Structure != model.StructureBracket {
+		t.Fatalf("structure %q", a.doc.Structure)
+	}
+	tt.Frame()
+	snapshot(t, tt, "bracket")
+	// Saved with the canvas, and undone like any edit.
+	a.save()
+	f, _ := model.Load(a.path)
+	if f.Sheets[0].Structure != model.StructureBracket || f.Sheets[1].Structure != model.StructureMindMap {
+		t.Fatalf("saved %q %q", f.Sheets[0].Structure, f.Sheets[1].Structure)
+	}
+	a.undo()
+	if a.doc.Structure != model.StructureLogic {
+		t.Fatalf("after undo %q", a.doc.Structure)
+	}
+}

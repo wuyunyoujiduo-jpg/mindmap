@@ -119,9 +119,39 @@ type Node struct {
 
 // Document is one canvas of a file: a tree of nodes under its root.
 type Document struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
-	Root  *Node  `json:"root"`
+	ID        string    `json:"id"`
+	Title     string    `json:"title"`
+	Structure Structure `json:"structure,omitempty"`
+	Root      *Node     `json:"root"`
+}
+
+// Structure is how a canvas lays out its map.
+type Structure string
+
+const (
+	// StructureMindMap puts the root in the middle and its branches on
+	// both sides, joined by curves. It is the default, "".
+	StructureMindMap Structure = ""
+	// StructureLogic grows the map to the right, each node's children
+	// joined to it by a trunk of straight lines.
+	StructureLogic Structure = "logic"
+	// StructureBracket grows the map to the right, each node's children
+	// held by a curly bracket.
+	StructureBracket Structure = "bracket"
+)
+
+// Structures lists the structures in the order the app offers them.
+var Structures = []Structure{StructureMindMap, StructureLogic, StructureBracket}
+
+// Label is the structure's name in the UI.
+func (s Structure) Label() string {
+	switch s {
+	case StructureLogic:
+		return "逻辑图"
+	case StructureBracket:
+		return "括号图"
+	}
+	return "思维导图"
 }
 
 // NewID returns a new random node ID.
@@ -253,7 +283,7 @@ func (n *Node) Matches(query string) bool {
 
 // Clone returns a deep copy of the canvas.
 func (d *Document) Clone() *Document {
-	return &Document{ID: d.ID, Title: d.Title, Root: d.Root.clone()}
+	return &Document{ID: d.ID, Title: d.Title, Structure: d.Structure, Root: d.Root.clone()}
 }
 
 // renew gives the node and everything below it new IDs.

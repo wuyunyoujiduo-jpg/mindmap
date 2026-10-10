@@ -80,6 +80,7 @@ type app struct {
 	renamingSheet string
 	sheetTitle    string
 	confirmSheet  bool
+	structureOpen bool
 
 	// Chrome.
 	mode          int
@@ -652,6 +653,17 @@ func (a *app) deleteSheet(id string) {
 		a.doc = nil
 		a.showSheet(a.file.Sheets[max(i-1, 0)].ID)
 	}
+}
+
+// setStructure lays the canvas shown out another way, placing it anew.
+func (a *app) setStructure(st model.Structure) {
+	if a.doc == nil || a.doc.Structure == st {
+		return
+	}
+	d := a.doc
+	a.mutate("", func() { d.Structure = st })
+	c := a.cam()
+	c.placed = false
 }
 
 func (a *app) moveSheet(id string, delta int) {

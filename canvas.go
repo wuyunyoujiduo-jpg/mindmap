@@ -159,7 +159,7 @@ func (a *app) canvasArea(c *ui.Context) {
 	t := c.Theme()
 	cam := a.cam()
 	z := cam.Zoom
-	r := layout.Compute(a.doc, a.measure(c), layout.DefaultOptions)
+	r := layout.Compute(a.doc, a.measure(c), layoutOptions(a.doc.Structure))
 	a.boxes = r
 	a.vp = a.canvas.Bounds(c) // the canvas's box, as of the last frame
 	a.mods = c.Modifiers()    // held now; the view builds again as they change
@@ -168,7 +168,12 @@ func (a *app) canvasArea(c *ui.Context) {
 	// selected by keys in view.
 	if a.vp.W > 0 {
 		if root, ok := r.Boxes[a.doc.Root.ID]; ok && !cam.placed {
+			// The mind map centers its root; the one-sided structures
+			// center the whole map while it fits, else start at the left.
 			cam.X = a.vp.W/2 - (root.X+root.W/2)*z
+			if a.doc.Structure != model.StructureMindMap {
+				cam.X = max((a.vp.W-r.Width*z)/2, 20)
+			}
 			cam.Y = a.vp.H/2 - (root.Y+root.H/2)*z
 			cam.placed = true
 		}
@@ -216,26 +221,14 @@ func (a *app) canvasArea(c *ui.Context) {
 				p.Fill(ui.Rect{X: x - 1, Y: y - 1, W: 2, H: 2}, dot, 1)
 			}
 		}
-		ox, oy := rect.X+cam.X, rect.Y+cam.Y
-		for _, e := range r.Edges {
-			from, to := r.Boxes[e.From], r.Boxes[e.To]
-			x0 := ox + (from.X+from.W)*z
-			y0 := oy + (from.Y+from.H/2)*z
-			x1 := ox + to.X*z
-			y1 := oy + (to.Y+to.H/2)*z
-			if e.Left {
-				x0, x1 = ox+from.X*z, ox+(to.X+to.W)*z
-			}
-			var path ui.Path
-			path.MoveTo(x0, y0)
-			mid := (x1 - x0) / 2
-			path.CubeTo(x0+mid, y0, x1-mid, y1, x1, y1)
-			col := branchColor(branch[e.To])
+		color := func(id string) ui.Color {
+			col := branchColor(branch[id])
 			if a.filtering() {
 				col = col.Alpha(0.3)
 			}
-			p.StrokePath(&path, max(1.5*z, 1), col)
+			return col
 		}
+		drawEdges(p, r, a.doc.Structure, rect.X+cam.X, rect.Y+cam.Y, z, color)
 	})
 	cv.Children(func() {
 		a.doc.Walk(func(n, _ *model.Node, depth int) bool {
@@ -246,6 +239,7 @@ func (a *app) canvasArea(c *ui.Context) {
 			a.nodeView(c.Key(n.ID), n, depth, box, branchColor(branch[n.ID]))
 			return true
 		})
+		a.structurePicker(c)
 		// Zoom and recenter, over the canvas's corner.
 		ui.Row(c).Absolute().Right(12).Bottom(12).Gap(2).Padding(3).Radius(8).
 			Background(t.Surface).Border(1, t.Border).Children(func() {
@@ -641,4 +635,171 @@ func (a *app) canvasKey(ev ui.InputEvent) bool {
 		return false
 	}
 	return true
+}
+
+// layoutOptions are the layout's spacing for a structure: the logic chart
+// and the bracket chart grow to the right only.
+func layoutOptions(s model.Structure) layout.Options {
+	o := layout.DefaultOptions
+	switch s {
+	case model.StructureLogic:
+		o.OneSided = true
+	case model.StructureBracket:
+		o.OneSided, o.GapX, o.GapY = true, 40, 10
+	}
+	return o
+}
+
+// drawEdges joins each node to its children, as the structure draws them,
+// with the map's origin at (ox, oy) and zoom z: curves for the mind map, a
+// trunk of straight lines for the logic chart, and a curly bracket around
+// the children for the bracket chart.
+func drawEdges(p *ui.Painter, r layout.Result, s model.Structure, ox, oy, z float32, color func(to string) ui.Color) {
+	width := max(1.5*z, 1)
+	if s == model.StructureMindMap {
+		for _, e := range r.Edges {
+			from, to := r.Boxes[e.From], r.Boxes[e.To]
+			x0, y0 := ox+(from.X+from.W)*z, oy+(from.Y+from.H/2)*z
+			x1, y1 := ox+to.X*z, oy+(to.Y+to.H/2)*z
+			if e.Left {
+				x0, x1 = ox+from.X*z, ox+(to.X+to.W)*z
+			}
+			var path ui.Path
+			path.MoveTo(x0, y0)
+			mid := (x1 - x0) / 2
+			path.CubeTo(x0+mid, y0, x1-mid, y1, x1, y1)
+			p.StrokePath(&path, width, color(e.To))
+		}
+		return
+	}
+
+	// The other structures draw each node's children together.
+	var order []string
+	children := map[string][]string{}
+	for _, e := range r.Edges {
+		if children[e.From] == nil {
+			order = append(order, e.From)
+		}
+		children[e.From] = append(children[e.From], e.To)
+	}
+	for _, id := range order {
+		from, kids := r.Boxes[id], children[id]
+		px, py := ox+(from.X+from.W)*z, oy+(from.Y+from.H/2)*z
+		cx := ox + r.Boxes[kids[0]].X*z // the children's column
+		top, bottom := float32(1e9), float32(-1e9)
+		for _, k := range kids {
+			b := r.Boxes[k]
+			if s == model.StructureBracket {
+				top, bottom = min(top, oy+b.Y*z), max(bottom, oy+(b.Y+b.H)*z)
+			} else {
+				top, bottom = min(top, oy+(b.Y+b.H/2)*z), max(bottom, oy+(b.Y+b.H/2)*z)
+			}
+		}
+		col := color(kids[0])
+		if s == model.StructureLogic {
+			// Out from the parent to the trunk, along it, and into each child.
+			tx := px + (cx-px)/2
+			var path ui.Path
+			path.MoveTo(px, py)
+			path.LineTo(tx, py)
+			p.StrokePath(&path, width, col)
+			if len(kids) > 1 {
+				var trunk ui.Path
+				trunk.MoveTo(tx, min(top, py))
+				trunk.LineTo(tx, max(bottom, py))
+				p.StrokePath(&trunk, width, col)
+			}
+			for _, k := range kids {
+				b := r.Boxes[k]
+				y := oy + (b.Y+b.H/2)*z
+				var branch ui.Path
+				branch.MoveTo(tx, y)
+				branch.LineTo(cx, y)
+				p.StrokePath(&branch, width, color(k))
+			}
+			continue
+		}
+		// A bracket: its point toward the parent, its arms around the
+		// children.
+		bx := cx - 10*z // the bracket's spine
+		rad := min(8*z, (bottom-top)/4)
+		mid := min(max(py, top+2*rad), bottom-2*rad)
+		var brace ui.Path
+		brace.MoveTo(bx+rad, top)
+		brace.QuadTo(bx, top, bx, top+rad)
+		brace.LineTo(bx, mid-rad)
+		brace.QuadTo(bx, mid, bx-rad, mid)
+		brace.QuadTo(bx, mid, bx, mid+rad)
+		brace.LineTo(bx, bottom-rad)
+		brace.QuadTo(bx, bottom, bx+rad, bottom)
+		p.StrokePath(&brace, width, col)
+		var stem ui.Path
+		stem.MoveTo(px, py)
+		stem.LineTo(bx-rad, mid)
+		p.StrokePath(&stem, width, col)
+	}
+}
+
+// structurePicker is the button over the canvas's top left corner that
+// chooses the canvas's structure, from pictures of each.
+func (a *app) structurePicker(c *ui.Context) {
+	t := c.Theme()
+	btn := ui.Button(c.Key("structure"), "结构："+a.doc.Structure.Label()+" ▾").
+		Absolute().Left(12).Top(12).Tooltip("选择这个画布的结构")
+	if btn.Clicked() {
+		a.structureOpen = !a.structureOpen
+	}
+	ui.Popover(c, btn, &a.structureOpen, func() {
+		ui.Row(c).Gap(8).Padding(4).Children(func() {
+			for _, st := range model.Structures {
+				card := ui.Column(c.Key(string(st))).Gap(6).Padding(8).Radius(8).
+					Border(1, t.Border).Cursor(ui.CursorPointer).Label(st.Label())
+				if st == a.doc.Structure {
+					card.Border(2, t.Accent)
+				} else if card.Hovered() {
+					card.Background(t.SurfaceHover)
+				}
+				if card.Clicked() {
+					a.structureOpen = false
+					a.setStructure(st)
+				}
+				card.Children(func() {
+					ui.Box(c).Size(120, 72).Draw(func(p *ui.Painter, r ui.Rect) {
+						drawStructureIcon(p, r, st, t.TextMuted)
+					})
+					ui.Text(c, st.Label()).FontSize(12).TextAlign(ui.Center)
+				})
+			}
+		})
+	})
+}
+
+// drawStructureIcon draws a small picture of a structure: a root and four
+// branches, joined as the structure joins them.
+func drawStructureIcon(p *ui.Painter, r ui.Rect, s model.Structure, col ui.Color) {
+	d := model.New("")
+	for range 4 {
+		d.AddChild(d.Root.ID, "")
+	}
+	measure := func(_ *model.Node, depth int) (float32, float32) {
+		if depth == 0 {
+			return 30, 12
+		}
+		return 22, 8
+	}
+	o := layoutOptions(s)
+	o.Margin, o.GapX, o.GapY = 0, 14, 5
+	lr := layout.Compute(d, measure, o)
+	z := min(r.W/lr.Width, r.H/lr.Height)
+	ox := r.X + (r.W-lr.Width*z)/2
+	oy := r.Y + (r.H-lr.Height*z)/2
+	drawEdges(p, lr, s, ox, oy, z, func(string) ui.Color { return col })
+	for id, b := range lr.Boxes {
+		box := ui.Rect{X: ox + b.X*z, Y: oy + b.Y*z, W: b.W * z, H: b.H * z}
+		if id == d.Root.ID {
+			p.Fill(box, col, 3)
+		} else {
+			p.Stroke(box, col, 3, 1)
+		}
+	}
 }

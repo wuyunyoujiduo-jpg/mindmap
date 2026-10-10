@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -55,6 +56,9 @@ func Parse(b []byte) (*File, error) {
 		sheets[d.ID] = true
 		if d.Title == "" {
 			d.Title = fmt.Sprintf("画布 %d", i+1)
+		}
+		if !slices.Contains(Structures, d.Structure) {
+			d.Structure = StructureMindMap // one a newer version added
 		}
 		d.Walk(func(n, _ *Node, _ int) bool {
 			if n.ID == "" || nodes[n.ID] {
