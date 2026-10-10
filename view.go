@@ -13,6 +13,11 @@ import (
 func (a *app) view(c *ui.Context) {
 	a.tick(c)
 	t := c.Theme()
+	if a.presenting && a.doc != nil {
+		a.presentView(c)
+		a.runPending()
+		return
+	}
 	ui.Row(c).Fill().AlignItems(ui.Stretch).Background(t.Background).Children(func() {
 		ui.Split(c, &a.sidebarWidth, func() { a.sidebar(c) }, func() {
 			ui.Row(c).Fill().AlignItems(ui.Stretch).Children(func() {
@@ -108,6 +113,9 @@ func (a *app) toolbar(c *ui.Context) {
 			return
 		}
 		ui.Segmented(c, &a.mode, "思维导图", "大纲", "看板", "日程")
+		if ui.Button(c, "▶").Label("开始演说").Tooltip("开始演说 ⌘↩").Width(32).Clicked() {
+			a.later(func() { a.startPresenting("") })
+		}
 		search := ui.TextInput(c.Key("search"), &a.search).Placeholder("搜索…").Tooltip("搜索标题、备注、标签，回车跳到下一个").Label("搜索").Width(150)
 		if a.search != "" && search.Shortcut(0, ui.KeyEscape) {
 			a.search = ""

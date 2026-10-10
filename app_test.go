@@ -14,12 +14,14 @@ import (
 )
 
 type fakePlatform struct {
-	folder  string
-	trashed []string
+	folder     string
+	trashed    []string
+	fullScreen bool
 }
 
 func (f *fakePlatform) PickFolder(done func(string)) { done(f.folder) }
 func (f *fakePlatform) ShowInFolder(string)          {}
+func (f *fakePlatform) SetFullScreen(on bool)        { f.fullScreen = on }
 func (f *fakePlatform) Trash(path string) error {
 	f.trashed = append(f.trashed, path)
 	return os.Remove(path)
@@ -997,5 +999,77 @@ func TestOutline(t *testing.T) {
 	tt.Click("思维导图")
 	if !tt.HasText("前端界面") {
 		t.Fatal("map does not show the outline's edit")
+	}
+}
+
+func TestPresentation(t *testing.T) {
+	a, tt := newTestApp(t)
+	slides := slidesOf(a.doc)
+	// Title, the main topics, then each topic with subtopics, and the
+	// leaves with notes.
+	if slides[0].kind != slideTitle || slides[1].kind != slideList || len(slides[1].items) != 4 {
+		t.Fatalf("first slides %+v", slides[:2])
+	}
+	var titles []string
+	for _, s := range slides {
+		titles = append(titles, s.node.Title)
+	}
+	for _, want := range []string{"使用指南", "右侧面板写备注、打标签", "架构", "前端", "功能", "待优化", "列表加载慢"} {
+		if !slices.Contains(titles, want) {
+			t.Fatalf("no slide for %q in %v", want, titles)
+		}
+	}
+	if slices.Contains(titles, "支持导出图片") {
+		t.Fatal("a leaf without a note got a slide")
+	}
+
+	tt.Click("演说")
+	if a.panelTab != tabPresent || !tt.HasText("演说模式预览") {
+		t.Fatalf("tab %d", a.panelTab)
+	}
+	snapshot(t, tt, "present-panel")
+	plat := a.plat.(*fakePlatform)
+	if err := tt.Click("▶ 从头开始演说"); err != nil {
+		t.Fatal(err)
+	}
+	if !a.presenting || !plat.fullScreen || a.slideIndex != 0 {
+		t.Fatalf("presenting %v, full screen %v, slide %d", a.presenting, plat.fullScreen, a.slideIndex)
+	}
+	snapshot(t, tt, "present-title")
+	tt.Key(0, ui.KeyRight)
+	if a.slideIndex != 1 || !tt.HasText("待优化") {
+		t.Fatalf("slide %d: %q", a.slideIndex, tt.Texts())
+	}
+	snapshot(t, tt, "present-list")
+	tt.Key(0, ui.KeyLeft)
+	if a.slideIndex != 0 {
+		t.Fatalf("slide %d after Left", a.slideIndex)
+	}
+	tt.Key(0, ui.KeyEscape)
+	if a.presenting || plat.fullScreen {
+		t.Fatal("Escape did not end")
+	}
+
+	// Revealed one item at a time, as cards, in the light theme.
+	a.mutate("", func() { a.doc.Present = model.Present{Reveal: true, Layout: "cards", Theme: "light", Aspect: "16:9"} })
+	a.startPresenting(find(t, a, "架构").ID)
+	tt.Frame()
+	if a.slides[a.slideIndex].node.Title != "架构" || a.slideStep != 0 {
+		t.Fatalf("started at %q step %d", a.slides[a.slideIndex].node.Title, a.slideStep)
+	}
+	tt.Key(0, ui.KeySpace)
+	tt.Frame()
+	snapshot(t, tt, "present-cards")
+	if a.slideStep != 1 {
+		t.Fatalf("step %d", a.slideStep)
+	}
+	tt.Key(0, ui.KeySpace)
+	tt.Key(0, ui.KeySpace) // past both items: the next slide
+	if a.slides[a.slideIndex].node.Title == "架构" || a.slideStep != 0 {
+		t.Fatalf("at %q step %d", a.slides[a.slideIndex].node.Title, a.slideStep)
+	}
+	tt.Key(0, ui.KeyLeft) // back to 架构, every item shown
+	if a.slides[a.slideIndex].node.Title != "架构" || a.slideStep != 2 {
+		t.Fatalf("back at %q step %d", a.slides[a.slideIndex].node.Title, a.slideStep)
 	}
 }

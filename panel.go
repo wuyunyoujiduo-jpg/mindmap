@@ -15,6 +15,7 @@ const (
 	tabStyle
 	tabMarkers
 	tabCanvas
+	tabPresent
 )
 
 // panel is the right side: the selected node's details, or the shown
@@ -23,7 +24,7 @@ func (a *app) panel(c *ui.Context) {
 	t := c.Theme()
 	ui.Column(c).Width(a.panelWidth).FillHeight().Background(t.Surface).Children(func() {
 		ui.Box(c).Padding(10, 16, 4).Children(func() {
-			ui.Segmented(c, &a.panelTab, "节点", "样式", "标记", "画布").FillWidth()
+			ui.Segmented(c, &a.panelTab, "节点", "样式", "标记", "画布", "演说").FillWidth()
 		})
 		ui.Scroll(c.Key(fmt.Sprint("panel", a.panelTab))).Grow(1).Children(func() {
 			switch {
@@ -33,6 +34,8 @@ func (a *app) panel(c *ui.Context) {
 				a.nodeStylePanel(c)
 			case a.panelTab == tabMarkers:
 				a.markerPanel(c)
+			case a.panelTab == tabPresent:
+				a.presentPanel(c)
 			default:
 				a.canvasPanel(c)
 			}

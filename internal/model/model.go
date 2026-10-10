@@ -174,7 +174,17 @@ type Document struct {
 	Title     string      `json:"title"`
 	Structure Structure   `json:"structure,omitempty"`
 	Style     CanvasStyle `json:"style,omitzero"`
+	Present   Present     `json:"present,omitzero"`
 	Root      *Node       `json:"root"`
+}
+
+// Present is how a canvas shows as slides.
+type Present struct {
+	Theme  string `json:"theme,omitempty"`  // "" (dark), "light" or "color"
+	Aspect string `json:"aspect,omitempty"` // "" (fills the screen), "16:9" or "4:3"
+	Layout string `json:"layout,omitempty"` // of list slides: "" (list) or "cards"
+	// Reveal shows a list slide's items one at a time.
+	Reveal bool `json:"reveal,omitempty"`
 }
 
 // CanvasStyle is how a canvas looks: its color scheme, font and lines.
@@ -347,7 +357,7 @@ func (n *Node) Matches(query string) bool {
 
 // Clone returns a deep copy of the canvas.
 func (d *Document) Clone() *Document {
-	return &Document{ID: d.ID, Title: d.Title, Structure: d.Structure, Style: d.Style, Root: d.Root.clone()}
+	return &Document{ID: d.ID, Title: d.Title, Structure: d.Structure, Style: d.Style, Present: d.Present, Root: d.Root.clone()}
 }
 
 // renew gives the node and everything below it new IDs.

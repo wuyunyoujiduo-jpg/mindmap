@@ -22,6 +22,7 @@ type platform interface {
 	PickFolder(done func(dir string))
 	ShowInFolder(path string)
 	Trash(path string) error
+	SetFullScreen(on bool)
 }
 
 // Views of the main area.
@@ -85,6 +86,12 @@ type app struct {
 	structureOpen bool
 	panelTab      int
 	outlineFocus  string // the node whose line the outline focuses
+
+	// The presentation.
+	presenting bool
+	slides     []slide
+	slideIndex int
+	slideStep  int // items of the slide shown
 
 	// Chrome.
 	mode          int

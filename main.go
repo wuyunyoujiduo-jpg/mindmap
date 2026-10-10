@@ -31,6 +31,12 @@ func (d *desktop) ShowInFolder(path string) { mygo.Shell.ShowItemInFolder(path) 
 
 func (d *desktop) Trash(path string) error { return mygo.Shell.TrashItem(path) }
 
+func (d *desktop) SetFullScreen(on bool) {
+	if d.win != nil && d.win.IsFullScreen() != on {
+		d.win.SetFullScreen(on)
+	}
+}
+
 func main() {
 	plat := &desktop{}
 	a := newApp(plat, loadConfig())
@@ -71,6 +77,7 @@ func main() {
 				item("实际大小", "CmdOrCtrl+0", func() { a.setZoom(1) }),
 				item("回到中心", "CmdOrCtrl+Shift+0", a.recenter),
 				mygo.Separator(),
+				item("开始演说", "CmdOrCtrl+Enter", func() { a.startPresenting("") }),
 				item("新建画布", "CmdOrCtrl+T", func() {
 					if a.file != nil {
 						a.mode = viewMap
