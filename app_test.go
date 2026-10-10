@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
+	"image/color"
 	"image/png"
 	"net/http"
 	"net/http/httptest"
@@ -24,14 +27,21 @@ type fakePlatform struct {
 	folder     string
 	trashed    []string
 	fullScreen bool
+	clipImage  []byte
+	clipFiles  []string
+	picked     string
 }
+
+func (f *fakePlatform) ClipboardImage() []byte      { return f.clipImage }
+func (f *fakePlatform) ClipboardFiles() []string    { return f.clipFiles }
+func (f *fakePlatform) PickImage(done func(string)) { done(f.picked) }
 
 func (f *fakePlatform) PickFolder(done func(string)) { done(f.folder) }
 func (f *fakePlatform) ShowInFolder(string)          {}
 func (f *fakePlatform) SetFullScreen(on bool)        { f.fullScreen = on }
 func (f *fakePlatform) Trash(path string) error {
 	f.trashed = append(f.trashed, path)
-	return os.Remove(path)
+	return os.RemoveAll(path)
 }
 
 var testNow = time.Date(2026, 10, 10, 9, 0, 0, 0, time.Local)
@@ -1343,5 +1353,141 @@ func TestDeepSeekErrors(t *testing.T) {
 	}
 	if len(a.ai.ds) != 0 {
 		t.Fatal("a failed turn stayed in the conversation")
+	}
+}
+
+func TestEditingKeepsNodeWidth(t *testing.T) {
+	a, tt := newTestApp(t)
+	n := find(t, a, "前端")
+	clickNode(t, tt, a, "前端")
+	before := a.boxes.Boxes[n.ID]
+	clickNode(t, tt, a, "前端") // the second click of a double click edits
+	if a.editing != n.ID {
+		t.Fatal("not editing")
+	}
+	tt.Frame()
+	during := a.boxes.Boxes[n.ID]
+	if d := during.W - before.W; d < 0 || d > 6 {
+		t.Fatalf("width %v before editing, %v while editing", before.W, during.W)
+	}
+	tt.Type("和移动端界面")
+	tt.Frame()
+	if a.boxes.Boxes[n.ID].W <= during.W {
+		t.Fatal("does not grow as the title does")
+	}
+	// A new node is as wide as its placeholder, not wider.
+	tt.Key(0, ui.KeyEnter)
+	tt.Key(0, ui.KeyTab)
+	tt.Frame()
+	added := a.boxes.Boxes[a.editing]
+	if added.W > 2*nodePadX+80 {
+		t.Fatalf("new node %v wide", added.W)
+	}
+}
+
+// testPNG is a w×h picture, half red and half blue.
+func testPNG(t *testing.T, w, h int) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for y := range h {
+		for x := range w {
+			c := color.RGBA{220, 60, 60, 255}
+			if x > w/2 {
+				c = color.RGBA{60, 90, 220, 255}
+			}
+			img.Set(x, y, c)
+		}
+	}
+	var b bytes.Buffer
+	if err := png.Encode(&b, img); err != nil {
+		t.Fatal(err)
+	}
+	return b.Bytes()
+}
+
+func TestPasteImage(t *testing.T) {
+	a, tt := newTestApp(t)
+	plat := a.plat.(*fakePlatform)
+	plat.clipImage = testPNG(t, 400, 300)
+	n := find(t, a, "前端")
+	clickNode(t, tt, a, "前端")
+	before := a.boxes.Boxes[n.ID]
+	tt.Key(ui.Cmd, ui.KeyV)
+	tt.Frame()
+	if n.Image == nil || n.Image.W != 400 || n.Image.H != 300 {
+		t.Fatalf("image %+v", n.Image)
+	}
+	file := filepath.Join(model.AssetsDir(a.path), n.Image.File)
+	if _, err := os.Stat(file); err != nil {
+		t.Fatalf("no file: %v", err)
+	}
+	after := a.boxes.Boxes[n.ID]
+	if after.H < before.H+150 || after.W < 200 {
+		t.Fatalf("box %+v with a picture, %+v without", after, before)
+	}
+	snapshot(t, tt, "image-node")
+
+	// A click on the picture shows it large; Escape closes it.
+	if err := tt.Click("图片：前端"); err != nil {
+		t.Fatal(err)
+	}
+	if a.lightbox != n.ID {
+		t.Fatal("no lightbox")
+	}
+	snapshot(t, tt, "image-lightbox")
+	tt.Key(0, ui.KeyEscape)
+	if a.lightbox != "" {
+		t.Fatal("Escape did not close it")
+	}
+
+	// Saved with the map; undo takes it off.
+	a.save()
+	f, _ := model.Load(a.path)
+	saved, _ := f.Sheets[0].Find(n.ID)
+	if saved.Image == nil || saved.Image.File != n.Image.File {
+		t.Fatalf("saved %+v", saved.Image)
+	}
+	a.undo()
+	if find(t, a, "前端").Image != nil {
+		t.Fatal("undo kept the picture")
+	}
+	a.redo()
+
+	// Renaming the map takes its pictures along; its folder is no folder
+	// of maps.
+	a.rename(a.path, "带图片的导图")
+	tt.Frame()
+	if _, err := os.Stat(filepath.Join(model.AssetsDir(a.path), n.Image.File)); err != nil {
+		t.Fatalf("pictures left behind: %v", err)
+	}
+	if len(a.tree.Folders) != 0 {
+		t.Fatalf("assets folder listed: %+v", a.tree.Folders)
+	}
+	if a.bitmap(find(t, a, "前端").Image) == nil {
+		t.Fatal("picture not found after renaming")
+	}
+}
+
+func TestPickImage(t *testing.T) {
+	a, tt := newTestApp(t)
+	path := filepath.Join(t.TempDir(), "照片.png")
+	os.WriteFile(path, testPNG(t, 120, 200), 0o644)
+	a.plat.(*fakePlatform).picked = path
+	clickNode(t, tt, a, "后端")
+	if err := tt.Click("添加图片…"); err != nil {
+		t.Fatal(err)
+	}
+	n := find(t, a, "后端")
+	if n.Image == nil || n.Image.H != 200 {
+		t.Fatalf("image %+v", n.Image)
+	}
+	if err := tt.Click("删除图片"); err != nil {
+		t.Fatal(err)
+	}
+	if n.Image != nil {
+		t.Fatal("not removed")
+	}
+	if err := a.attachImageFile(n, filepath.Join(t.TempDir(), "notes.txt")); err == nil {
+		t.Fatal("took a text file")
 	}
 }

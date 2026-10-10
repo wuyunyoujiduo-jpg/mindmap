@@ -116,7 +116,16 @@ type Node struct {
 	Task      *Task      `json:"task,omitempty"`
 	Collapsed bool       `json:"collapsed,omitempty"`
 	Style     *NodeStyle `json:"style,omitempty"`
+	Image     *Image     `json:"image,omitempty"`
 	Children  []*Node    `json:"children,omitempty"`
+}
+
+// Image is a picture shown in a node. Its file is in the map's assets
+// folder (AssetsDir), so the map's JSON stays small and diffs well.
+type Image struct {
+	File string `json:"file"` // the file's name in the assets folder
+	W    int    `json:"w"`    // its size in pixels
+	H    int    `json:"h"`
 }
 
 // NodeStyle overrides how one node looks. What it leaves zero follows the
@@ -378,6 +387,10 @@ func (n *Node) clone() *Node {
 	if n.Style != nil {
 		st := *n.Style
 		c.Style = &st
+	}
+	if n.Image != nil {
+		img := *n.Image
+		c.Image = &img
 	}
 	if n.Task != nil {
 		t := *n.Task

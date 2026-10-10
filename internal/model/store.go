@@ -15,6 +15,15 @@ import (
 // Ext is the extension of mind map files.
 const Ext = ".mindmap.json"
 
+// AssetsExt ends the name of the folder of a map's images, beside it:
+// "计划.mindmap.json" keeps them in "计划.assets".
+const AssetsExt = ".assets"
+
+// AssetsDir is the folder of the images of the map in path.
+func AssetsDir(path string) string {
+	return strings.TrimSuffix(path, Ext) + AssetsExt
+}
+
 // Load reads a mind map file.
 func Load(path string) (*File, error) {
 	b, err := os.ReadFile(path)
@@ -185,7 +194,7 @@ func scanFolder(dir string, depth int) (Folder, error) {
 		return f, err
 	}
 	for _, e := range entries {
-		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") || strings.HasSuffix(e.Name(), AssetsExt) {
 			continue
 		}
 		sub, err := scanFolder(filepath.Join(dir, e.Name()), depth+1)
@@ -228,5 +237,14 @@ func MoveFile(path, dir string) (string, error) {
 	if err := os.Rename(path, to); err != nil {
 		return "", err
 	}
+	MoveAssets(path, to)
 	return to, nil
+}
+
+// MoveAssets moves the images of the map at from with it to to, when it
+// has any.
+func MoveAssets(from, to string) {
+	if _, err := os.Stat(AssetsDir(from)); err == nil {
+		_ = os.Rename(AssetsDir(from), AssetsDir(to))
+	}
 }

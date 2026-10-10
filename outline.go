@@ -98,6 +98,11 @@ func (a *app) outlineLine(c *ui.Context, rows []outlineRow, i int) {
 		for _, m := range n.Markers {
 			markerView(c, m, 16)
 		}
+		if n.Image != nil {
+			if ui.Text(c, "🖼").FontSize(14).Cursor(ui.CursorPointer).Tooltip("查看图片").Clicked() {
+				a.lightbox = n.ID
+			}
+		}
 		size := float32(16)
 		if depth == 0 {
 			size = 18

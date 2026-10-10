@@ -253,6 +253,9 @@ func (a *app) snapshot(scope int) string {
 			}
 			b.WriteString("）")
 		}
+		if n.Image != nil {
+			b.WriteString("（附图片）")
+		}
 		if n.Collapsed {
 			b.WriteString("（已折叠）")
 		}

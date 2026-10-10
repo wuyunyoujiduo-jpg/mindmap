@@ -45,6 +45,9 @@ func (a *app) view(c *ui.Context) {
 				a.panel(c)
 			})
 		}).Fill()
+		if a.lightbox != "" && a.doc != nil {
+			a.lightboxView(c)
+		}
 	})
 	if len(a.pending) > 0 {
 		a.runPending()

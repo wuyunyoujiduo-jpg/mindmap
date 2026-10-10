@@ -278,6 +278,9 @@ func (a *app) rename(path, name string) {
 		a.saveErr = err.Error()
 		return
 	}
+	if strings.HasSuffix(path, model.Ext) {
+		model.MoveAssets(path, to) // its pictures go with it
+	}
 	a.moved(path, to)
 }
 

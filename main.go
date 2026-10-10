@@ -31,6 +31,28 @@ func (d *desktop) ShowInFolder(path string) { mygo.Shell.ShowItemInFolder(path) 
 
 func (d *desktop) Trash(path string) error { return mygo.Shell.TrashItem(path) }
 
+func (d *desktop) ClipboardImage() []byte { return mygo.Clipboard.ReadImage() }
+
+func (d *desktop) ClipboardFiles() []string {
+	files, _ := mygo.Clipboard.ReadFiles()
+	return files
+}
+
+func (d *desktop) PickImage(done func(string)) {
+	go func() {
+		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
+			Parent:  d.win,
+			Title:   "选择图片",
+			Filters: []mygo.FileFilter{{Name: "图片", Extensions: []string{"png", "jpg", "jpeg", "gif", "webp", "bmp"}}},
+		})
+		path := ""
+		if err == nil && len(paths) > 0 {
+			path = paths[0]
+		}
+		d.win.Update(func() { done(path) })
+	}()
+}
+
 func (d *desktop) SetFullScreen(on bool) {
 	if d.win != nil && d.win.IsFullScreen() != on {
 		d.win.SetFullScreen(on)

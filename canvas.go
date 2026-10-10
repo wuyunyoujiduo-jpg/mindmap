@@ -17,16 +17,15 @@ type nodeDrag struct{ ID string }
 
 // Sizes of a node's box at zoom 1.
 const (
-	nodePadX     = 14
-	nodePadY     = 8
-	nodeGap      = 6
-	nodeHeight   = 34
-	rootHeight   = 46
-	titleMax     = 260
-	titleMin     = 24
-	editMinWidth = 120
-	markSize     = 11
-	dotSize      = 8
+	nodePadX   = 14
+	nodePadY   = 8
+	nodeGap    = 6
+	nodeHeight = 34
+	rootHeight = 46
+	titleMax   = 260
+	titleMin   = 24
+	markSize   = 11
+	dotSize    = 8
 )
 
 func titleSize(depth int) float32 {
@@ -96,7 +95,12 @@ func (a *app) measure(c *ui.Context) layout.Measure {
 		if depth == 0 {
 			h = rootHeight
 		}
-		return w, max(h, th+2*nodePadY)
+		h = max(h, th+2*nodePadY)
+		if iw, ih := thumbSize(n.Image); iw > 0 { // the picture above the title
+			w = max(w, iw+2*nodePadX)
+			h += ih + thumbGap
+		}
+		return w, h
 	}
 }
 
@@ -107,10 +111,17 @@ func (a *app) titleBox(c *ui.Context, n *model.Node, depth int) (w, h float32) {
 	st := styleOf(n)
 	span := ui.Span{Text: a.parts(n).title, Size: fontSize(n, depth), Weight: fontWeight(n, depth),
 		Italic: st.Italic, Font: a.doc.Style.Font}
-	w, h = c.MeasureText(0, span)
 	if a.editing == n.ID {
-		return max(min(w, titleMax)+20, editMinWidth), h
+		// As wide as what is typed (or the placeholder), with room for the
+		// caret: the node keeps its size as editing starts, and grows as
+		// the title does.
+		if a.editText == "" {
+			span.Text = "新主题"
+		}
+		w, h = c.MeasureText(0, span)
+		return min(max(w, titleMin), titleMax) + 4, h
 	}
+	w, h = c.MeasureText(0, span)
 	if st.Width > 0 { // a width of its own, at which the title wraps
 		_, h = c.MeasureText(st.Width, span)
 		return st.Width, h
@@ -445,6 +456,10 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 
 	el := ui.Row(c).Absolute().Left(cam.X+box.X*z).Top(cam.Y+box.Y*z).Size(box.W*z, box.H*z).
 		Padding(0, nodePadX*z).Gap(nodeGap * z).AlignItems(ui.Center).Radius(8 * z)
+	iw, ih := thumbSize(n.Image)
+	if iw > 0 { // the title's row goes below the picture
+		el.Padding((nodePadY+ih+thumbGap)*z, nodePadX*z, nodePadY*z)
+	}
 	// As XMind draws them: a dark central topic, main topics filled with
 	// their branch's color, and subtopics tinted with it; then the node's
 	// own style.
@@ -547,6 +562,19 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 			a.later(func() { a.moveNode(d.ID, id) })
 		}
 		el.ContextMenu(func(m *ui.Menu) { a.nodeMenu(m, n, depth) })
+		if files := el.DroppedFiles(); len(files) > 0 {
+			a.later(func() {
+				for _, f := range files {
+					if isImageFile(f) {
+						a.selected = n.ID
+						if err := a.attachImageFile(n, f); err != nil {
+							a.saveErr = err.Error()
+						}
+						return
+					}
+				}
+			})
+		}
 	}
 
 	// Marks read on the node's fill: on filled topics, in the fill's text
@@ -556,6 +584,9 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 		muted = onFill.Alpha(0.75)
 	}
 	el.Children(func() {
+		if iw > 0 {
+			a.thumbnail(c, n, iw*z, ih*z).Absolute().Left((box.W - iw) / 2 * z).Top(nodePadY * z)
+		}
 		if n.Task != nil {
 			ui.Box(c).Size(dotSize*z, dotSize*z).Radius(999).Background(statusColor(n.Task.Status)).Shrink(0)
 		}
@@ -678,6 +709,16 @@ func (a *app) nodeMenu(m *ui.Menu, n *model.Node, depth int) {
 	if m.Item("编辑标题").Shortcut(0, ui.KeyF2).Chosen() {
 		a.later(func() { a.startEdit(n.ID) })
 	}
+	if n.Image != nil {
+		if m.Item("查看大图").Chosen() {
+			a.lightbox = n.ID
+		}
+		if m.Item("删除图片").Chosen() {
+			a.later(func() { a.removeImage(n) })
+		}
+	} else if m.Item("粘贴图片").Shortcut(ui.Cmd, ui.KeyV).Chosen() {
+		a.later(func() { a.pasteImage() })
+	}
 	m.Separator()
 	if m.Item("作为任务").Checked(n.Task != nil).Chosen() {
 		a.later(func() { a.toggleTask(n) })
@@ -720,6 +761,8 @@ func (a *app) canvasKey(ev ui.InputEvent) bool {
 		case "delete":
 			a.deleteSelected()
 			return true
+		case "paste":
+			return a.pasteImage()
 		}
 		return false
 	}
@@ -749,6 +792,8 @@ func (a *app) canvasKey(ev ui.InputEvent) bool {
 		a.shiftSelected(1)
 	case ev.Mods == ui.Cmd && ev.Key == ui.KeySlash:
 		a.toggleCollapse(a.selected)
+	case ev.Mods == ui.Cmd && ev.Key == ui.KeyV:
+		return a.pasteImage()
 	case ev.Mods == ui.Cmd && ev.Key == ui.KeyZ:
 		a.undo()
 	case ev.Mods == ui.Cmd|ui.Shift && ev.Key == ui.KeyZ:

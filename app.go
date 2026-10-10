@@ -23,6 +23,13 @@ type platform interface {
 	ShowInFolder(path string)
 	Trash(path string) error
 	SetFullScreen(on bool)
+	// ClipboardImage returns the picture on the clipboard as PNG, nil when
+	// there is none, and ClipboardFiles the files copied, as in Finder.
+	ClipboardImage() []byte
+	ClipboardFiles() []string
+	// PickImage asks for a picture file and calls done with it, "" when
+	// canceled, on the main thread.
+	PickImage(done func(path string))
 }
 
 // asyncRunner runs work off the main thread and then done on it, with what
@@ -98,6 +105,8 @@ type app struct {
 	slideStep  int // items of the slide shown
 
 	// The AI assistant.
+	bitmaps      map[string]*ui.Bitmap // pictures of nodes, by file, decoded once
+	lightbox     string                // the node whose picture shows large
 	ai           aiState
 	aiOpen       bool // the panel shows the assistant
 	sendAI       aiSender
@@ -134,6 +143,7 @@ func newApp(plat platform, cfg config) *app {
 		tagsOpen:      true,
 		favoritesOpen: true,
 		folderClosed:  map[string]bool{},
+		bitmaps:       map[string]*ui.Bitmap{},
 		sendAI:        sendToClaude,
 		sendDeepSeek:  sendToDeepSeek,
 		async: func(work func() (any, error), done func(any, error)) {
@@ -246,6 +256,9 @@ func (a *app) deleteMap(path string) {
 	if err := a.plat.Trash(path); err != nil {
 		a.saveErr = err.Error()
 		return
+	}
+	if _, err := os.Stat(model.AssetsDir(path)); err == nil {
+		_ = a.plat.Trash(model.AssetsDir(path)) // its pictures go with it
 	}
 	a.refreshFiles()
 	if path == a.path {
