@@ -31,6 +31,10 @@ type config struct {
 	// Editor opens the project's files linked from nodes: "vscode" (or
 	// ""), "cursor", "default" or "finder".
 	Editor string `json:"editor,omitempty"`
+	// CaptureKey opens the capture window from any app; "" is the default.
+	CaptureKey string `json:"captureKey,omitempty"`
+	// NoTray hides the menu bar icon.
+	NoTray bool `json:"noTray,omitempty"`
 	// NoReminders turns off the notifications of tasks due.
 	NoReminders bool `json:"noReminders,omitempty"`
 	// PanelWidth is the width the right panel was dragged to.

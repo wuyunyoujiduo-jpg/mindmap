@@ -23,6 +23,7 @@ const (
 	paletteSearch
 	paletteLink  // a node to link the node a.linkFrom to
 	paletteAfter // a task for the task a.linkFrom to wait on
+	paletteMove  // a node to move the nodes selected under
 )
 
 // paletteItem is a line of the palette.
@@ -74,6 +75,10 @@ func (a *app) commands() []command {
 		{"复制当前画布为 Markdown", "⌘⇧C", a.copyMarkdown, hasDoc},
 		{"导入 XMind", "⌘⇧I", a.askImportXMind, nil},
 		{"历史版本", "⌘⇧H", a.openHistory, hasDoc},
+		{"快速记录", a.captureKey(), a.plat.ShowCapture, nil},
+		{"打开收件箱", "", func() { _ = a.open(a.inboxPath()) }, func() bool { _, err := os.Stat(a.inboxPath()); return err == nil }},
+		{"移到其他导图…", "", func() { a.openPalette(paletteMove) }, hasDoc},
+		{"设置", "⌘,", func() { a.settingsOpen = true; a.captureKeyDraft = a.cfg.CaptureKey }, nil},
 		{"连接 AI 编程工具（MCP）", "", func() { a.mcpOpen = true }, nil},
 		{"撤销", "⌘Z", a.undo, hasDoc},
 		{"重做", "⌘⇧Z", a.redo, hasDoc},
@@ -129,8 +134,30 @@ func (a *app) paletteItems() []paletteItem {
 			}
 		}
 	}
-	if (a.paletteMode == paletteSearch || a.paletteMode == paletteLink) && q != "" {
+	if a.paletteMode == paletteMove && q == "" { // the maps' roots
+		for _, f := range a.recentFiles() {
+			file := a.file
+			if f.Path != a.path {
+				file = a.indexed(f.Path)
+			}
+			if file == nil {
+				continue
+			}
+			for _, d := range file.Sheets {
+				path, sheet, id := f.Path, d.ID, d.Root.ID
+				where := mapName(path)
+				if len(file.Sheets) > 1 {
+					where += " · " + d.Title
+				}
+				items = append(items, paletteItem{"导图", d.Root.Title, where, func() { a.moveToMap(path, sheet, id) }})
+			}
+		}
+	}
+	if (a.paletteMode == paletteSearch || a.paletteMode == paletteLink || a.paletteMode == paletteMove) && q != "" {
 		act := a.goToNode
+		if a.paletteMode == paletteMove {
+			act = a.moveToMap
+		}
 		if a.paletteMode == paletteLink {
 			act = func(path, _, id string) {
 				if n, _ := a.doc.Find(a.linkFrom); n != nil && id != n.ID {
@@ -300,6 +327,7 @@ func (a *app) paletteView(c *ui.Context) {
 			paletteSearch: "搜索所有导图里的节点、备注和标签…",
 			paletteLink:   "输入关键词，选择要链接到的节点…",
 			paletteAfter:  "选择要先完成的任务…",
+			paletteMove:   "移到哪个节点下？输入关键词查找，或选择导图的中心主题…",
 		}[a.paletteMode]
 		w, _ := c.Size()
 		ui.Column(c).Width(min(640, w-80)).Gap(8).Children(func() {

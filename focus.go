@@ -319,7 +319,7 @@ func (a *app) paste() bool {
 	case a.clip != nil && text == a.clipText:
 		for _, n := range a.clip {
 			c := n.Copy()
-			a.copyAssets(c)
+			copyAssets(c, a.clipAssets, model.AssetsDir(a.path))
 			nodes = append(nodes, c)
 		}
 	case a.pasteImage():
@@ -343,14 +343,13 @@ func (a *app) paste() bool {
 	return true
 }
 
-// copyAssets copies the pictures of nodes pasted from another map into
-// this map's assets folder.
-func (a *app) copyAssets(n *model.Node) {
-	to := model.AssetsDir(a.path)
+// copyAssets copies the pictures of nodes from one map's assets folder to
+// another's, as they are pasted or moved there.
+func copyAssets(n *model.Node, from, to string) {
 	var walk func(n *model.Node)
 	walk = func(n *model.Node) {
-		if n.Image != nil && a.clipAssets != to {
-			src := filepath.Join(a.clipAssets, n.Image.File)
+		if n.Image != nil && from != to {
+			src := filepath.Join(from, n.Image.File)
 			dst := filepath.Join(to, n.Image.File)
 			if data, err := os.ReadFile(src); err == nil {
 				if _, err := os.Stat(dst); err != nil {

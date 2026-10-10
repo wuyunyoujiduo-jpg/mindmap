@@ -16,7 +16,96 @@ import (
 )
 
 // desktop implements platform with MyGo's dialogs and shell.
-type desktop struct{ win *mygo.Window }
+type desktop struct {
+	win     *mygo.Window
+	app     *app
+	capture *mygo.Window // the capture window, made the first time
+	tray    *mygo.Tray
+	key     string // the capture shortcut registered
+}
+
+func (d *desktop) ShowCapture() {
+	if d.capture == nil {
+		d.capture = mygo.NewWindow(mygo.WindowOptions{
+			Title:       "快速记录",
+			Width:       560,
+			Height:      170,
+			MinWidth:    420,
+			MinHeight:   150,
+			AlwaysOnTop: true,
+			Hidden:      true,
+			Content:     ui.View(d.app.captureView),
+		})
+		d.capture.Center()
+	}
+	d.capture.Show()
+	d.capture.Focus()
+}
+
+func (d *desktop) HideCapture() {
+	if d.capture != nil {
+		d.capture.Hide()
+	}
+	d.win.Update(func() {}) // the map may have changed
+	d.UpdateTray()
+}
+
+func (d *desktop) ShowMain() {
+	d.win.Show()
+	d.win.Focus()
+}
+
+func (d *desktop) SetCaptureKey(key string) error {
+	if d.key != "" {
+		mygo.GlobalShortcut.Unregister(d.key)
+	}
+	d.key = ""
+	if err := mygo.GlobalShortcut.Register(key, d.ShowCapture); err != nil {
+		return err
+	}
+	d.key = key
+	return nil
+}
+
+func (d *desktop) SetTray(on bool) {
+	if !on {
+		if d.tray != nil {
+			d.tray.Destroy()
+			d.tray = nil
+		}
+		return
+	}
+	if d.tray == nil {
+		t, err := mygo.NewTray(mygo.TrayOptions{Icon: trayIcon(), IconIsTemplate: true, ToolTip: "MindMap"})
+		if err != nil {
+			return
+		}
+		d.tray = t
+	}
+	d.UpdateTray()
+}
+
+// UpdateTray brings the menu bar icon's count and menu up to date.
+func (d *desktop) UpdateTray() {
+	if d.tray == nil {
+		return
+	}
+	var items []*mygo.MenuItem
+	for _, e := range d.app.trayMenu() {
+		if e.sep {
+			items = append(items, mygo.Separator())
+			continue
+		}
+		run := e.run
+		item := &mygo.MenuItem{Label: e.label, Disabled: run == nil}
+		if run != nil {
+			item.Click = func(*mygo.MenuItem, *mygo.Window) { d.win.Update(run) }
+		}
+		items = append(items, item)
+	}
+	d.tray.SetMenu(mygo.NewMenu(items))
+	d.tray.SetTitle(d.app.trayTitle())
+}
 
 func (d *desktop) PickFolder(done func(string)) {
 	go func() {
@@ -133,6 +222,7 @@ func main() {
 	}
 	plat := &desktop{}
 	a := newApp(plat, loadConfig())
+	plat.app = a
 	mygo.App.WhenReady(func() {
 		win := mygo.NewWindow(mygo.WindowOptions{
 			Title:     "MindMap",
@@ -144,6 +234,10 @@ func main() {
 			Content:   ui.View(a.view),
 		})
 		plat.win = win
+		if err := plat.SetCaptureKey(a.captureKey()); err != nil {
+			log.Printf("快速记录快捷键 %s: %v", a.captureKey(), err)
+		}
+		plat.SetTray(!a.cfg.NoTray)
 		a.async = func(work func() (any, error), done func(any, error)) {
 			go func() {
 				v, err := work()
@@ -156,12 +250,25 @@ func main() {
 			}}
 		}
 		mygo.App.SetMenu(mygo.NewMenu([]*mygo.MenuItem{
-			{Role: mygo.RoleAppMenu},
+			{Label: "MindMap", Submenu: []*mygo.MenuItem{
+				{Role: mygo.RoleAbout},
+				mygo.Separator(),
+				item("设置…", "CmdOrCtrl+,", func() { a.settingsOpen = true; a.captureKeyDraft = a.cfg.CaptureKey }),
+				mygo.Separator(),
+				{Role: mygo.RoleHide},
+				{Role: mygo.RoleHideOthers},
+				{Role: mygo.RoleUnhide},
+				mygo.Separator(),
+				{Role: mygo.RoleQuit},
+			}},
 			{Label: "文件", Submenu: []*mygo.MenuItem{
 				item("新建导图", "CmdOrCtrl+N", a.newMap),
 				item("打开文件夹…", "CmdOrCtrl+O", a.pickWorkspace),
 				item("保存", "CmdOrCtrl+S", a.save),
 				item("历史版本…", "CmdOrCtrl+Shift+H", a.openHistory),
+				mygo.Separator(),
+				item("快速记录…", "", plat.ShowCapture),
+				item("打开收件箱", "", func() { _ = a.open(a.inboxPath()) }),
 				mygo.Separator(),
 				item("导入 XMind…", "CmdOrCtrl+Shift+I", a.askImportXMind),
 				mygo.Separator(),

@@ -25,27 +25,36 @@ import (
 )
 
 type fakePlatform struct {
-	folder     string
-	trashed    []string
-	fullScreen bool
-	clipImage  []byte
-	clipFiles  []string
-	picked     string
-	savePath   string
-	openPath   string
-	copied     string
-	opened     []string
-	notes      []string
+	folder      string
+	trashed     []string
+	fullScreen  bool
+	clipImage   []byte
+	clipFiles   []string
+	picked      string
+	savePath    string
+	openPath    string
+	copied      string
+	opened      []string
+	notes       []string
+	capture     bool
+	captureKey  string
+	trayUpdates int
 }
 
 func (f *fakePlatform) SaveFile(name, ext string, done func(string)) { done(f.savePath) }
 func (f *fakePlatform) OpenFile(title string, exts []string, done func(string)) {
 	done(f.openPath)
 }
-func (f *fakePlatform) CopyText(s string)     { f.copied = s }
-func (f *fakePlatform) ClipboardText() string { return f.copied }
-func (f *fakePlatform) OpenURL(url string)    { f.opened = append(f.opened, url) }
-func (f *fakePlatform) OpenPath(path string)  { f.opened = append(f.opened, "path:"+path) }
+func (f *fakePlatform) CopyText(s string)              { f.copied = s }
+func (f *fakePlatform) ClipboardText() string          { return f.copied }
+func (f *fakePlatform) OpenURL(url string)             { f.opened = append(f.opened, url) }
+func (f *fakePlatform) OpenPath(path string)           { f.opened = append(f.opened, "path:"+path) }
+func (f *fakePlatform) ShowCapture()                   { f.capture = true }
+func (f *fakePlatform) HideCapture()                   { f.capture = false }
+func (f *fakePlatform) ShowMain()                      {}
+func (f *fakePlatform) SetCaptureKey(key string) error { f.captureKey = key; return nil }
+func (f *fakePlatform) SetTray(on bool)                {}
+func (f *fakePlatform) UpdateTray()                    { f.trayUpdates++ }
 func (f *fakePlatform) Notify(title, body string) {
 	f.notes = append(f.notes, title+"："+body)
 }
@@ -2400,4 +2409,103 @@ func TestReminders(t *testing.T) {
 	if len(fp.notes) != 1 {
 		t.Fatalf("notes %q", fp.notes)
 	}
+}
+
+func TestQuickCaptureAndInbox(t *testing.T) {
+	a, tt := newTestApp(t)
+	fp := a.plat.(*fakePlatform)
+	guide := a.path
+	// The capture window, a window of its own.
+	ct := ui.NewTester(a.captureView, 560, 170)
+	fp.capture = true
+	ct.Type("调研竞品\n  - [ ] 看 XMind 的导出")
+	ct.Key(0, ui.KeyEnter)
+	if fp.capture {
+		t.Fatal("window not hidden")
+	}
+	f, err := model.Load(a.inboxPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := f.Sheets[0].Root
+	if len(root.Children) != 1 || root.Children[0].Title != "调研竞品" || root.Children[0].Children[0].Task == nil {
+		t.Fatalf("inbox %+v", root.Children)
+	}
+	tt.Frame()
+	if !tt.HasText("收件箱") || a.inboxCount() != 1 {
+		t.Fatalf("no inbox row: %q", tt.Texts())
+	}
+	snapshot(t, tt, "inbox-row")
+	// Under the node selected, as a step undo takes back.
+	clickNode(t, tt, a, "架构")
+	if err := a.capture("缓存层", captureHere); err != nil {
+		t.Fatal(err)
+	}
+	find(t, a, "缓存层")
+	a.undo()
+	if _, err := findIn(a.doc, "缓存层"); err == nil {
+		t.Fatal("not undone")
+	}
+	// Sorting out the inbox: its node moves to a node of the guide.
+	if err := tt.Click("收件箱"); err != nil {
+		t.Fatal(err)
+	}
+	if a.path != a.inboxPath() {
+		t.Fatalf("open %q", a.path)
+	}
+	clickNode(t, tt, a, "调研竞品")
+	a.openPalette(paletteMove)
+	tt.Frame()
+	tt.Type("待优化")
+	tt.Key(0, ui.KeyEnter)
+	if len(a.doc.Root.Children) != 0 {
+		t.Fatal("not moved out of the inbox")
+	}
+	g, _ := model.Load(guide)
+	opt, err := findIn(g.Sheets[0], "待优化")
+	if err != nil || opt.Children[len(opt.Children)-1].Title != "调研竞品" {
+		t.Fatalf("not moved in: %v", err)
+	}
+}
+
+func TestTrayAndSettings(t *testing.T) {
+	a, tt := newTestApp(t)
+	fp := a.plat.(*fakePlatform)
+	day := today(testNow)
+	yesterday := day.AddDate(0, 0, -1)
+	a.mutate("", func() {
+		find(t, a, "搜索").Task.Due = &day
+		find(t, a, "列表加载慢").Task.Due = &yesterday
+	})
+	var labels []string
+	for _, e := range a.trayMenu() {
+		labels = append(labels, e.label)
+	}
+	all := strings.Join(labels, "|")
+	if !strings.Contains(all, "今天到期和已逾期 2") || !strings.Contains(all, "⚠ 列表加载慢") || !strings.Contains(all, "○ 搜索") {
+		t.Fatalf("menu %q", labels)
+	}
+	if a.trayTitle() != "2" {
+		t.Fatalf("title %q", a.trayTitle())
+	}
+	if _, err := png.Decode(bytes.NewReader(trayIcon())); err != nil {
+		t.Fatal(err)
+	}
+	a.trayAt = time.Time{}
+	tt.Frame()
+	if fp.trayUpdates == 0 {
+		t.Fatal("tray not updated")
+	}
+	// Settings: the capture shortcut.
+	a.settingsOpen = true
+	tt.Frame()
+	if err := tt.Click("快速记录快捷键"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Type("CmdOrCtrl+Shift+M")
+	tt.Key(0, ui.KeyEnter)
+	if fp.captureKey != "CmdOrCtrl+Shift+M" || a.cfg.CaptureKey != "CmdOrCtrl+Shift+M" {
+		t.Fatalf("key %q", fp.captureKey)
+	}
+	snapshot(t, tt, "settings")
 }

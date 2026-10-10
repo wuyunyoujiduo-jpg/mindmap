@@ -36,6 +36,13 @@ type platform interface {
 	OpenPath(path string)
 	// Notify shows a system notification.
 	Notify(title, body string)
+	// The capture window, the main window and the menu bar icon.
+	ShowCapture()
+	HideCapture()
+	ShowMain()
+	SetCaptureKey(accelerator string) error
+	SetTray(on bool)
+	UpdateTray()
 	ShowInFolder(path string)
 	Trash(path string) error
 	SetFullScreen(on bool)
@@ -136,25 +143,31 @@ type app struct {
 	paletteShown int // the line last scrolled into view
 	cheatsOpen   bool
 	// The window of past versions.
-	historyOpen  bool
-	mcpOpen      bool // the window on connecting AI agents
-	linkDraft    string
-	iterFilter   string // the iteration the board and timeline show: "" all, "-" none
-	tlWeeks      bool   // the timeline shows weeks rather than days
-	tlDrag       tlDrag
-	reminded     map[string]bool // tasks reminded of on remindedDay
-	remindedDay  time.Time
-	remindedAt   time.Time
-	linkFrom     string // the node a link to a node is being chosen for
-	backlinkFor  string // the node backlinkList is of, as of backlinkMod
-	backlinkMod  time.Time
-	backlinkList []backlink
-	historyList  []versions.Version
-	historySel   int
-	historyFile  *model.File           // the version chosen
-	historyDiff  []model.Change        // from it to now
-	index        map[string]indexEntry // maps read for the search, by path
-	outlineFocus string                // the node whose line the outline focuses
+	historyOpen     bool
+	mcpOpen         bool // the window on connecting AI agents
+	linkDraft       string
+	captureText     string
+	captureWhere    int
+	captureErr      string
+	captureKeyDraft string
+	settingsOpen    bool
+	trayAt          time.Time // when the menu bar icon was last brought up to date
+	iterFilter      string    // the iteration the board and timeline show: "" all, "-" none
+	tlWeeks         bool      // the timeline shows weeks rather than days
+	tlDrag          tlDrag
+	reminded        map[string]bool // tasks reminded of on remindedDay
+	remindedDay     time.Time
+	remindedAt      time.Time
+	linkFrom        string // the node a link to a node is being chosen for
+	backlinkFor     string // the node backlinkList is of, as of backlinkMod
+	backlinkMod     time.Time
+	backlinkList    []backlink
+	historyList     []versions.Version
+	historySel      int
+	historyFile     *model.File           // the version chosen
+	historyDiff     []model.Change        // from it to now
+	index           map[string]indexEntry // maps read for the search, by path
+	outlineFocus    string                // the node whose line the outline focuses
 
 	// The presentation.
 	presenting bool
@@ -408,6 +421,10 @@ func (a *app) tick(c *ui.Context) {
 		}
 	}
 	a.reminderCheck()
+	if now.Sub(a.trayAt) >= time.Minute || a.trayAt.IsZero() {
+		a.trayAt = now
+		a.plat.UpdateTray()
+	}
 	if a.path != "" && now.Sub(a.checked) >= 2*time.Second {
 		a.checked = now
 		if mt := modTime(a.path); !mt.IsZero() && !mt.Equal(a.modTime) {

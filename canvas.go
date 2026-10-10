@@ -847,6 +847,9 @@ func (a *app) nodeMenu(m *ui.Menu, n *model.Node, depth int) {
 	if m.Item("粘贴为子节点").Chosen() {
 		a.later(func() { a.paste() })
 	}
+	if depth > 0 && m.Item("移到其他导图…").Chosen() {
+		a.later(func() { a.openPalette(paletteMove) })
+	}
 	m.Separator()
 	if a.shownRoot() == n && a.focusNode() != nil {
 		if m.Item("退出聚焦").Shortcut(0, ui.KeyEscape).Chosen() {

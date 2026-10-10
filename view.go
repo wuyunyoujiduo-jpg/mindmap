@@ -57,6 +57,7 @@ func (a *app) view(c *ui.Context) {
 		a.cheatSheet(c)
 		a.historyView(c)
 		a.mcpView(c)
+		a.settingsView(c)
 	})
 	if len(a.pending) > 0 {
 		a.runPending()
