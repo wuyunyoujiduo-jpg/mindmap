@@ -133,8 +133,8 @@ type app struct {
 	renameText    string
 	tagQuery      string
 	exportCam     *camera // set while the canvas is drawn into an image
-	tagDraft      string // a tag being typed in the node panel
-	tagAdding     bool   // the sidebar's new-tag field is shown
+	tagDraft      string  // a tag being typed in the node panel
+	tagAdding     bool    // the sidebar's new-tag field is shown
 	tagNew        string
 	tagRenaming   string // the tag renamed in the sidebar
 	tagRenameText string
