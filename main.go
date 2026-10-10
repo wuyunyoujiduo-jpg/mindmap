@@ -1,0 +1,93 @@
+// MindMap is a desktop mind map for managing projects: nodes carry notes,
+// tags and tasks with dates, shown as a map, a board and an agenda.
+package main
+
+import (
+	"log"
+
+	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/ui"
+)
+
+// desktop implements platform with MyGo's dialogs and shell.
+type desktop struct{ win *mygo.Window }
+
+func (d *desktop) PickFolder(done func(string)) {
+	go func() {
+		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
+			Parent:    d.win,
+			Title:     "选择存放导图的文件夹",
+			Directory: true,
+		})
+		dir := ""
+		if err == nil && len(paths) > 0 {
+			dir = paths[0]
+		}
+		d.win.Update(func() { done(dir) })
+	}()
+}
+
+func (d *desktop) ShowInFolder(path string) { mygo.Shell.ShowItemInFolder(path) }
+
+func (d *desktop) Trash(path string) error { return mygo.Shell.TrashItem(path) }
+
+func main() {
+	plat := &desktop{}
+	a := newApp(plat, loadConfig())
+	mygo.App.WhenReady(func() {
+		win := mygo.NewWindow(mygo.WindowOptions{
+			Title:     "MindMap",
+			Width:     1280,
+			Height:    800,
+			MinWidth:  900,
+			MinHeight: 560,
+			StateKey:  "main",
+			Content:   ui.View(a.view),
+		})
+		plat.win = win
+		item := func(label, accel string, fn func()) *mygo.MenuItem {
+			return &mygo.MenuItem{Label: label, Accelerator: accel, Click: func(*mygo.MenuItem, *mygo.Window) {
+				win.Update(fn)
+			}}
+		}
+		mygo.App.SetMenu(mygo.NewMenu([]*mygo.MenuItem{
+			{Role: mygo.RoleAppMenu},
+			{Label: "文件", Submenu: []*mygo.MenuItem{
+				item("新建导图", "CmdOrCtrl+N", a.newMap),
+				item("打开文件夹…", "CmdOrCtrl+O", func() {
+					plat.PickFolder(func(dir string) {
+						if dir != "" {
+							a.flush()
+							a.openDir(dir)
+							a.cfg.save()
+							if len(a.files) > 0 {
+								_ = a.open(a.files[0].Path)
+							}
+						}
+					})
+				}),
+				item("保存", "CmdOrCtrl+S", a.save),
+				mygo.Separator(),
+				{Role: mygo.RoleClose},
+			}},
+			{Role: mygo.RoleEditMenu},
+			{Label: "视图", Submenu: []*mygo.MenuItem{
+				item("思维导图", "CmdOrCtrl+1", func() { a.mode = viewMap }),
+				item("看板", "CmdOrCtrl+2", func() { a.mode = viewBoard }),
+				item("日程", "CmdOrCtrl+3", func() { a.mode = viewAgenda }),
+				mygo.Separator(),
+				item("放大", "CmdOrCtrl+=", func() { a.setZoom(a.zoom + 0.1) }),
+				item("缩小", "CmdOrCtrl+-", func() { a.setZoom(a.zoom - 0.1) }),
+				item("实际大小", "CmdOrCtrl+0", func() { a.setZoom(1) }),
+				mygo.Separator(),
+				{Role: mygo.RoleToggleFullScreen},
+			}},
+			{Role: mygo.RoleWindowMenu},
+		}))
+	})
+	mygo.App.OnWillQuit(func(*mygo.QuitEvent) { a.flush() })
+	if err := mygo.App.Run(); err != nil {
+		log.Fatal(err)
+	}
+	a.flush()
+}
