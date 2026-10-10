@@ -12,6 +12,7 @@ import (
 // Tabs of the panel.
 const (
 	tabNode = iota
+	tabStyle
 	tabCanvas
 )
 
@@ -21,13 +22,16 @@ func (a *app) panel(c *ui.Context) {
 	t := c.Theme()
 	ui.Column(c).Width(a.panelWidth).FillHeight().Background(t.Surface).Children(func() {
 		ui.Box(c).Padding(10, 16, 4).Children(func() {
-			ui.Segmented(c, &a.panelTab, "节点", "画布").FillWidth()
+			ui.Segmented(c, &a.panelTab, "节点", "样式", "画布").FillWidth()
 		})
 		ui.Scroll(c.Key(fmt.Sprint("panel", a.panelTab))).Grow(1).Children(func() {
-			if a.panelTab == tabCanvas && a.doc != nil {
-				a.canvasPanel(c)
-			} else {
+			switch {
+			case a.doc == nil || a.panelTab == tabNode:
 				a.nodePanel(c)
+			case a.panelTab == tabStyle:
+				a.nodeStylePanel(c)
+			default:
+				a.canvasPanel(c)
 			}
 		})
 	})

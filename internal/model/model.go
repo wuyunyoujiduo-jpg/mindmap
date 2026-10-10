@@ -108,13 +108,63 @@ func (t *Task) Overdue(now time.Time) bool {
 
 // Node is one topic of the map.
 type Node struct {
-	ID        string   `json:"id"`
-	Title     string   `json:"title"`
-	Note      string   `json:"note,omitempty"`
-	Tags      []string `json:"tags,omitempty"`
-	Task      *Task    `json:"task,omitempty"`
-	Collapsed bool     `json:"collapsed,omitempty"`
-	Children  []*Node  `json:"children,omitempty"`
+	ID        string     `json:"id"`
+	Title     string     `json:"title"`
+	Note      string     `json:"note,omitempty"`
+	Tags      []string   `json:"tags,omitempty"`
+	Task      *Task      `json:"task,omitempty"`
+	Collapsed bool       `json:"collapsed,omitempty"`
+	Style     *NodeStyle `json:"style,omitempty"`
+	Children  []*Node    `json:"children,omitempty"`
+}
+
+// NodeStyle overrides how one node looks. What it leaves zero follows the
+// canvas's style.
+type NodeStyle struct {
+	Shape       Shape   `json:"shape,omitempty"`
+	Fill        string  `json:"fill,omitempty"`   // #rrggbb
+	Border      string  `json:"border,omitempty"` // #rrggbb
+	BorderWidth float32 `json:"borderWidth,omitempty"`
+	Width       float32 `json:"width,omitempty"` // of the title, which wraps at it; 0 fits the text
+	FontSize    float32 `json:"fontSize,omitempty"`
+	Color       string  `json:"color,omitempty"` // of the text, #rrggbb
+	Bold        bool    `json:"bold,omitempty"`
+	Italic      bool    `json:"italic,omitempty"`
+	Strike      bool    `json:"strike,omitempty"`
+	Underline   bool    `json:"underline,omitempty"`
+	Align       string  `json:"align,omitempty"` // "left", "center" or "right"; "" is left
+}
+
+// Shape is the outline of a node.
+type Shape string
+
+const (
+	ShapeAuto      Shape = ""          // the canvas's: rounded
+	ShapeRect      Shape = "rect"      // square corners
+	ShapeRounded   Shape = "rounded"   // rounded corners
+	ShapePill      Shape = "pill"      // round ends
+	ShapeUnderline Shape = "underline" // no box, a line under the text
+	ShapeNone      Shape = "none"      // the text alone
+)
+
+// Shapes lists the shapes in the order the app offers them.
+var Shapes = []Shape{ShapeAuto, ShapeRect, ShapeRounded, ShapePill, ShapeUnderline, ShapeNone}
+
+// Label is the shape's name in the UI.
+func (s Shape) Label() string {
+	switch s {
+	case ShapeRect:
+		return "矩形"
+	case ShapeRounded:
+		return "圆角"
+	case ShapePill:
+		return "胶囊"
+	case ShapeUnderline:
+		return "下划线"
+	case ShapeNone:
+		return "无边框"
+	}
+	return "自动"
 }
 
 // Document is one canvas of a file: a tree of nodes under its root.
@@ -313,6 +363,10 @@ func (n *Node) clone() *Node {
 	}
 	c := *n
 	c.Tags = slices.Clone(n.Tags)
+	if n.Style != nil {
+		st := *n.Style
+		c.Style = &st
+	}
 	if n.Task != nil {
 		t := *n.Task
 		if n.Task.Start != nil {

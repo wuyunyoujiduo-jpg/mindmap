@@ -732,3 +732,65 @@ func TestCanvasStyle(t *testing.T) {
 		t.Fatal("text color on fills")
 	}
 }
+
+func TestNodeStyle(t *testing.T) {
+	a, tt := newTestApp(t)
+	tt.Click("后端")
+	if err := tt.Click("样式"); err != nil {
+		t.Fatal(err)
+	}
+	if a.panelTab != tabStyle || !tt.HasText("形状") {
+		t.Fatalf("tab %d", a.panelTab)
+	}
+	n := find(t, a, "后端")
+	if err := tt.Click("胶囊"); err != nil {
+		t.Fatal(err)
+	}
+	if n.Style == nil || n.Style.Shape != model.ShapePill {
+		t.Fatalf("style %+v", n.Style)
+	}
+	tt.Click("B")
+	tt.Click("I")
+	if !n.Style.Bold || !n.Style.Italic {
+		t.Fatalf("style %+v", n.Style)
+	}
+	tt.Click("居中")
+	if n.Style.Align != "center" {
+		t.Fatalf("align %q", n.Style.Align)
+	}
+	a.setNodeStyle(n, "fill", func(s *model.NodeStyle) { s.Fill = "#FFE08A" })
+	a.setNodeStyle(n, "size", func(s *model.NodeStyle) { s.FontSize = 24 })
+	tt.Frame()
+	big := a.boxes.Boxes[n.ID]
+	if big.H <= nodeHeight {
+		t.Fatalf("24px text in a box %v high", big.H)
+	}
+	if err := tt.Click("固定宽度"); err != nil {
+		t.Fatal(err)
+	}
+	if n.Style.Width <= 0 {
+		t.Fatal("width not fixed")
+	}
+	a.setNodeStyle(n, "width", func(s *model.NodeStyle) { s.Width = 200 })
+	tt.Frame()
+	if w := a.boxes.Boxes[n.ID].W; w < 200 {
+		t.Fatalf("box %v wide for a 200 title", w)
+	}
+	snapshot(t, tt, "node-style")
+	a.save()
+	f, _ := model.Load(a.path)
+	got, _ := f.Sheets[0].Find(n.ID)
+	if got.Style == nil || got.Style.Shape != model.ShapePill || got.Style.Fill != "#FFE08A" || got.Style.Width != 200 {
+		t.Fatalf("saved %+v", got.Style)
+	}
+	if err := tt.Click("清除样式"); err != nil {
+		t.Fatal(err)
+	}
+	if n = find(t, a, "后端"); n.Style != nil {
+		t.Fatalf("style %+v after clearing", n.Style)
+	}
+	a.undo()
+	if n = find(t, a, "后端"); n.Style == nil || n.Style.Width != 200 {
+		t.Fatal("undo did not bring the style back")
+	}
+}

@@ -1,6 +1,9 @@
 package main
 
 import (
+	"fmt"
+	"strconv"
+
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
@@ -262,4 +265,171 @@ func drawSchemePreview(p *ui.Painter, r ui.Rect, sc scheme, t *ui.Theme) {
 		p.Fill(box, l.branch(i), 2)
 	}
 	p.Fill(root, l.root(t), 3)
+}
+
+// setNodeStyle changes the selected node's own style, as one step of the
+// history for each control.
+func (a *app) setNodeStyle(n *model.Node, key string, fn func(s *model.NodeStyle)) {
+	a.mutate("node-style:"+key+":"+n.ID, func() {
+		st := styleOf(n)
+		fn(&st)
+		if st == (model.NodeStyle{}) {
+			n.Style = nil
+		} else {
+			n.Style = &st
+		}
+	})
+}
+
+func hexOf(c ui.Color) string {
+	c = c.SRGB()
+	return fmt.Sprintf("#%02X%02X%02X", c.R, c.G, c.B)
+}
+
+// nodeStylePanel is the panel's 样式 tab: the selected node's shape, fill,
+// border, width and text.
+func (a *app) nodeStylePanel(c *ui.Context) {
+	t := c.Theme()
+	n, _ := a.selectedNode()
+	if n == nil {
+		ui.Column(c).Padding(20).Children(func() {
+			ui.Text(c, "选择一个节点设置样式").TextColor(t.TextMuted)
+		})
+		return
+	}
+	st := styleOf(n)
+	section := func(title string) {
+		ui.Text(c, title).FontSize(12).Bold().TextColor(t.TextMuted)
+	}
+	ui.Column(c.Key("node-style:" + n.ID)).Padding(16).Gap(12).Children(func() {
+		section("形状")
+		ui.Grid(c).Columns(3).Gap(6).Children(func() {
+			for _, sh := range model.Shapes {
+				b := ui.Box(c.Key(string(sh))).Height(44).Radius(8).Background(t.Background).
+					Border(1, t.Border).Cursor(ui.CursorPointer).Label(sh.Label())
+				if sh == st.Shape {
+					b.Border(2, t.Accent)
+				}
+				if b.Clicked() {
+					shape := sh
+					a.setNodeStyle(n, "shape", func(s *model.NodeStyle) { s.Shape = shape })
+				}
+				b.Draw(func(p *ui.Painter, r ui.Rect) {
+					drawShapeIcon(p, r, sh, t.TextMuted)
+				})
+			}
+		})
+
+		colorField := func(label, key string, value string, set func(s *model.NodeStyle, hex string)) {
+			ui.Row(c.Key(key)).Gap(8).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, label).Grow(1)
+				col := ui.Hex("#888888")
+				if value != "" {
+					col = ui.Hex(value)
+				}
+				if ui.ColorWell(c, &col).Label(label).Changed() {
+					hex := hexOf(col)
+					a.setNodeStyle(n, key, func(s *model.NodeStyle) { set(s, hex) })
+				}
+				auto := ui.Button(c, "自动").Disabled(value == "")
+				if auto.Clicked() {
+					a.setNodeStyle(n, key, func(s *model.NodeStyle) { set(s, "") })
+				}
+			})
+		}
+		colorField("填充", "fill", st.Fill, func(s *model.NodeStyle, hex string) { s.Fill = hex })
+		colorField("边框", "border", st.Border, func(s *model.NodeStyle, hex string) { s.Border = hex })
+		if st.Border != "" {
+			bw := float64(max(st.BorderWidth, 1))
+			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, "边框粗细").Grow(1)
+				if ui.Stepper(c, &bw, 1, 6, 1).Label("边框粗细").Changed() {
+					a.setNodeStyle(n, "border-width", func(s *model.NodeStyle) { s.BorderWidth = float32(bw) })
+				}
+				ui.Textf(c, "%.0f px", bw).FontSize(12).TextColor(t.TextMuted)
+			})
+		}
+
+		ui.Divider(c)
+		width := float64(st.Width)
+		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, "宽度").Grow(1)
+			if st.Width == 0 {
+				ui.Text(c, "适应文字").FontSize(12).TextColor(t.TextMuted)
+				if ui.Button(c, "固定宽度").Clicked() {
+					w, _ := a.titleBox(c, n, len(a.doc.Path(n.ID))-1)
+					a.setNodeStyle(n, "width", func(s *model.NodeStyle) { s.Width = w })
+				}
+				return
+			}
+			if ui.NumberInput(c.Key(n.ID), &width, 40, 600, 10).Label("宽度").Width(120).Changed() {
+				a.setNodeStyle(n, "width", func(s *model.NodeStyle) { s.Width = float32(width) })
+			}
+			if ui.Button(c, "适应").Clicked() {
+				a.setNodeStyle(n, "width", func(s *model.NodeStyle) { s.Width = 0 })
+			}
+		})
+
+		ui.Divider(c)
+		section("文本")
+		sizes := []string{"自动", "12", "14", "16", "18", "20", "24", "28", "32", "40"}
+		size := "自动"
+		if st.FontSize > 0 {
+			size = fmt.Sprint(st.FontSize)
+		}
+		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, "字号").Grow(1)
+			if ui.Select(c, &size, sizes).Label("字号").Width(100).Changed() {
+				v, _ := strconv.ParseFloat(size, 32)
+				a.setNodeStyle(n, "font-size", func(s *model.NodeStyle) { s.FontSize = float32(v) })
+			}
+		})
+		ui.Row(c).Gap(4).Children(func() {
+			toggle := func(label, key string, on bool, set func(s *model.NodeStyle, on bool)) {
+				v := on
+				tg := ui.Toggle(c.Key(key), &v, label).Grow(1)
+				if key == "bold" {
+					tg.Bold()
+				}
+				if tg.Changed() {
+					a.setNodeStyle(n, key, func(s *model.NodeStyle) { set(s, v) })
+				}
+			}
+			toggle("B", "bold", st.Bold, func(s *model.NodeStyle, on bool) { s.Bold = on })
+			toggle("I", "italic", st.Italic, func(s *model.NodeStyle, on bool) { s.Italic = on })
+			toggle("S", "strike", st.Strike, func(s *model.NodeStyle, on bool) { s.Strike = on })
+			toggle("U", "underline", st.Underline, func(s *model.NodeStyle, on bool) { s.Underline = on })
+		})
+		align := map[string]int{"": 0, "left": 0, "center": 1, "right": 2}[st.Align]
+		if ui.Segmented(c, &align, "左对齐", "居中", "右对齐").FillWidth().Changed() {
+			v := []string{"", "center", "right"}[align]
+			a.setNodeStyle(n, "align", func(s *model.NodeStyle) { s.Align = v })
+		}
+		colorField("文字颜色", "color", st.Color, func(s *model.NodeStyle, hex string) { s.Color = hex })
+
+		ui.Divider(c)
+		if ui.Button(c, "清除样式").Disabled(n.Style == nil).Clicked() {
+			a.mutate("", func() { n.Style = nil })
+		}
+	})
+}
+
+// drawShapeIcon draws a small box in a shape, with its name.
+func drawShapeIcon(p *ui.Painter, r ui.Rect, sh model.Shape, col ui.Color) {
+	box := ui.Rect{X: r.X + r.W/2 - 18, Y: r.Y + 7, W: 36, H: 16}
+	switch sh {
+	case model.ShapeAuto, model.ShapeRounded:
+		p.Stroke(box, col, 5, 1.5)
+	case model.ShapeRect:
+		p.Stroke(box, col, 0, 1.5)
+	case model.ShapePill:
+		p.Stroke(box, col, 8, 1.5)
+	case model.ShapeUnderline:
+		p.Line(box.X, box.Y+box.H, box.X+box.W, box.Y+box.H, 1.5, col)
+	case model.ShapeNone:
+		p.StrokeDashed(box, col, 3, 1)
+	}
+	label := ui.Span{Text: sh.Label(), Size: 10, Color: col}
+	w, _ := p.MeasureText(0, label)
+	p.RichText(r.X+(r.W-w)/2, box.Y+box.H+3, 0, label)
 }

@@ -103,16 +103,44 @@ func (a *app) measure(c *ui.Context) layout.Measure {
 // and longer titles wrapped onto more lines at that width. A title being
 // edited stays on one line.
 func (a *app) titleBox(c *ui.Context, n *model.Node, depth int) (w, h float32) {
-	span := ui.Span{Text: a.parts(n).title, Size: titleSize(depth), Weight: weight(depth), Font: a.doc.Style.Font}
+	st := styleOf(n)
+	span := ui.Span{Text: a.parts(n).title, Size: fontSize(n, depth), Weight: fontWeight(n, depth),
+		Italic: st.Italic, Font: a.doc.Style.Font}
 	w, h = c.MeasureText(0, span)
 	if a.editing == n.ID {
 		return max(min(w, titleMax)+20, editMinWidth), h
+	}
+	if st.Width > 0 { // a width of its own, at which the title wraps
+		_, h = c.MeasureText(st.Width, span)
+		return st.Width, h
 	}
 	if w > titleMax {
 		w, h = c.MeasureText(titleMax, span)
 		w = titleMax
 	}
 	return max(w, titleMin), h
+}
+
+// styleOf is the node's own style, zero where it follows the canvas.
+func styleOf(n *model.Node) model.NodeStyle {
+	if n.Style == nil {
+		return model.NodeStyle{}
+	}
+	return *n.Style
+}
+
+func fontSize(n *model.Node, depth int) float32 {
+	if s := styleOf(n).FontSize; s > 0 {
+		return s
+	}
+	return titleSize(depth)
+}
+
+func fontWeight(n *model.Node, depth int) int {
+	if styleOf(n).Bold {
+		return 700
+	}
+	return weight(depth)
 }
 
 func weight(depth int) int {
@@ -409,19 +437,55 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 	el := ui.Row(c).Absolute().Left(cam.X+box.X*z).Top(cam.Y+box.Y*z).Size(box.W*z, box.H*z).
 		Padding(0, nodePadX*z).Gap(nodeGap * z).AlignItems(ui.Center).Radius(8 * z)
 	// As XMind draws them: a dark central topic, main topics filled with
-	// their branch's color, and subtopics tinted with it.
+	// their branch's color, and subtopics tinted with it; then the node's
+	// own style.
+	st := styleOf(n)
+	var fill ui.Color
+	filled := false // with a fill whose text color differs from the canvas's
 	switch depth {
 	case 0:
-		fill := lookOf(a.doc.Style).root(t)
-		el.Background(fill).TextColor(textOn(fill)).Radius(10 * z)
+		fill, filled = lookOf(a.doc.Style).root(t), true
+		el.Radius(10 * z)
 	case 1:
-		el.Background(accent).TextColor(textOn(accent))
+		fill, filled = accent, true
 	default:
 		tint := float32(0.12)
 		if t.Dark {
 			tint = 0.24
 		}
-		el.Background(accent.Alpha(tint)).Radius(6 * z)
+		fill = accent.Alpha(tint)
+		el.Radius(6 * z)
+	}
+	if st.Fill != "" {
+		fill, filled = ui.Hex(st.Fill), true
+	}
+	switch st.Shape {
+	case model.ShapeRect:
+		el.Radius(2 * z)
+	case model.ShapeRounded:
+		el.Radius(8 * z)
+	case model.ShapePill:
+		el.Radius(999)
+	case model.ShapeUnderline, model.ShapeNone:
+		el.Radius(0)
+		if st.Fill == "" {
+			fill, filled = ui.Color{}, false
+		}
+		if st.Shape == model.ShapeUnderline {
+			el.BorderWidth(0, 0, 2*z, 0).BorderColor(accent)
+		}
+	}
+	el.Background(fill)
+	onFill := t.Text
+	if filled {
+		onFill = textOn(fill)
+	}
+	if st.Color != "" {
+		onFill = ui.Hex(st.Color)
+	}
+	el.TextColor(onFill)
+	if st.Border != "" {
+		el.Border(max(st.BorderWidth, 1)*z, ui.Hex(st.Border))
 	}
 	el.Font(a.doc.Style.Font)
 	if selected {
@@ -479,24 +543,17 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 	// Marks read on the node's fill: on filled topics, in the fill's text
 	// color.
 	muted := t.TextMuted
-	var onFill ui.Color
-	filled := depth <= 1
 	if filled {
-		fill := accent
-		if depth == 0 {
-			fill = lookOf(a.doc.Style).root(t)
-		}
-		onFill = textOn(fill)
 		muted = onFill.Alpha(0.75)
 	}
 	el.Children(func() {
 		if n.Task != nil {
 			ui.Box(c).Size(dotSize*z, dotSize*z).Radius(999).Background(statusColor(n.Task.Status)).Shrink(0)
 		}
-		size := titleSize(depth) * z
+		size := fontSize(n, depth) * z
 		tw, _ := a.titleBox(c, n, depth)
 		if editing {
-			in := ui.TextInputBase(c.Key("edit"), &a.editText).FontSize(size).FontWeight(weight(depth)).
+			in := ui.TextInputBase(c.Key("edit"), &a.editText).FontSize(size).FontWeight(fontWeight(n, depth)).
 				Placeholder("新主题").Width(tw * z).AutoFocus()
 			if in.Shortcut(0, ui.KeyEscape) {
 				a.cancelEdit()
@@ -512,9 +569,21 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 			}
 			return
 		}
-		title := ui.Text(c, n.Title).FontSize(size).FontWeight(weight(depth)).Width(tw * z).Shrink(0)
-		if n.Task != nil && n.Task.Status == model.StatusDone {
+		title := ui.Text(c, n.Title).FontSize(size).FontWeight(fontWeight(n, depth)).Width(tw * z).Shrink(0)
+		if n.Task != nil && n.Task.Status == model.StatusDone || st.Strike {
 			title.Strikethrough()
+		}
+		if st.Italic {
+			title.Italic()
+		}
+		if st.Underline {
+			title.Underline()
+		}
+		switch st.Align {
+		case "center":
+			title.TextAlign(ui.Center)
+		case "right":
+			title.TextAlign(ui.End)
 		}
 		for _, tag := range p.tags {
 			if filled {
