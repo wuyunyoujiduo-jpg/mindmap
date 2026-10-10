@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"image/png"
 	"os"
 	"path/filepath"
@@ -57,6 +58,21 @@ func snapshot(t *testing.T, tt *ui.Tester, name string) {
 	}
 }
 
+// clickNode clicks the middle of a node's box on the canvas, which the
+// sidebar's rows of the same text cannot take.
+func clickNode(t *testing.T, tt *ui.Tester, a *app, title string) error {
+	t.Helper()
+	tt.Frame()
+	n := find(t, a, title)
+	b, ok := a.boxes.Boxes[n.ID]
+	if !ok {
+		return fmt.Errorf("node %q not shown", title)
+	}
+	cam := a.cam()
+	tt.ClickAt(a.vp.X+cam.X+(b.X+b.W/2)*cam.Zoom, a.vp.Y+cam.Y+(b.Y+b.H/2)*cam.Zoom)
+	return nil
+}
+
 func find(t *testing.T, a *app, title string) *model.Node {
 	t.Helper()
 	var found *model.Node
@@ -88,7 +104,7 @@ func TestGuideMapShows(t *testing.T) {
 
 func TestKeyboardEditing(t *testing.T) {
 	a, tt := newTestApp(t)
-	if err := tt.Click("架构"); err != nil {
+	if err := clickNode(t, tt, a, "架构"); err != nil {
 		t.Fatal(err)
 	}
 	if n, _ := a.selectedNode(); n.Title != "架构" {
@@ -140,12 +156,8 @@ func TestKeyboardEditing(t *testing.T) {
 
 func TestEscapeCancelsEdit(t *testing.T) {
 	a, tt := newTestApp(t)
-	r, ok := tt.Find("架构")
-	if !ok {
-		t.Fatal("no 架构")
-	}
-	tt.ClickAt(r.X+2, r.Y+2)
-	tt.ClickAt(r.X+2, r.Y+2)
+	clickNode(t, tt, a, "架构")
+	clickNode(t, tt, a, "架构")
 	if a.editing == "" {
 		t.Fatal("double click did not edit")
 	}
@@ -158,7 +170,7 @@ func TestEscapeCancelsEdit(t *testing.T) {
 
 func TestPanelEditsNode(t *testing.T) {
 	a, tt := newTestApp(t)
-	if err := tt.Click("支持导出图片"); err != nil {
+	if err := clickNode(t, tt, a, "支持导出图片"); err != nil {
 		t.Fatal(err)
 	}
 	n, _ := a.selectedNode()
@@ -279,7 +291,7 @@ func TestBoardAndAgenda(t *testing.T) {
 
 func TestTagFilterAndSearch(t *testing.T) {
 	a, tt := newTestApp(t)
-	if err := tt.Click("核心 2"); err != nil {
+	if err := tt.Click("核心"); err != nil { // the sidebar's row comes first
 		t.Fatal(err)
 	}
 	if a.tagFilter != "核心" {
@@ -296,7 +308,7 @@ func TestTagFilterAndSearch(t *testing.T) {
 
 func TestCollapse(t *testing.T) {
 	a, tt := newTestApp(t)
-	tt.Click("功能")
+	clickNode(t, tt, a, "功能")
 	if err := tt.Click("折叠"); err != nil {
 		t.Fatal(err)
 	}
@@ -321,7 +333,7 @@ func TestCollapse(t *testing.T) {
 
 func TestNewMapAndDelete(t *testing.T) {
 	a, tt := newTestApp(t)
-	if err := tt.Click("+ 新建导图"); err != nil {
+	if err := tt.Click("+ 导图"); err != nil {
 		t.Fatal(err)
 	}
 	if len(a.files) != 2 || mapName(a.path) != "新导图" || a.editing != a.doc.Root.ID {
@@ -389,7 +401,7 @@ func TestZoomAndDark(t *testing.T) {
 	tt.SetDark(true)
 	a.setZoom(1.3)
 	tt.Frame()
-	if err := tt.Click("架构"); err != nil {
+	if err := clickNode(t, tt, a, "架构"); err != nil {
 		t.Fatal(err)
 	}
 	if n, p := a.selectedNode(); n.Title != "架构" || p != a.doc.Root {
@@ -471,7 +483,7 @@ func TestSheets(t *testing.T) {
 	if len(a.file.Sheets) != 2 || !tt.HasText("项目结构") || !tt.HasText("迭代计划") {
 		t.Fatalf("tabs %q", tt.Texts())
 	}
-	tt.Click("架构")
+	clickNode(t, tt, a, "架构")
 	if err := tt.Click("迭代计划"); err != nil {
 		t.Fatal(err)
 	}
@@ -735,7 +747,7 @@ func TestCanvasStyle(t *testing.T) {
 
 func TestNodeStyle(t *testing.T) {
 	a, tt := newTestApp(t)
-	tt.Click("后端")
+	clickNode(t, tt, a, "后端")
 	if err := tt.Click("样式"); err != nil {
 		t.Fatal(err)
 	}
@@ -797,7 +809,7 @@ func TestNodeStyle(t *testing.T) {
 
 func TestMarkers(t *testing.T) {
 	a, tt := newTestApp(t)
-	tt.Click("后端")
+	clickNode(t, tt, a, "后端")
 	if err := tt.Click("标记"); err != nil {
 		t.Fatal(err)
 	}
@@ -844,5 +856,67 @@ func TestMarkers(t *testing.T) {
 	got, _ := f.Sheets[0].Find(n.ID)
 	if !slices.Equal(got.Markers, n.Markers) {
 		t.Fatalf("saved %v", got.Markers)
+	}
+}
+
+func TestSidebarFoldersAndFavorites(t *testing.T) {
+	a, tt := newTestApp(t)
+	guide := a.path
+	// A folder, renamed as it is made.
+	if err := tt.Click("+ 文件夹"); err != nil {
+		t.Fatal(err)
+	}
+	if a.renaming == "" {
+		t.Fatal("new folder not being renamed")
+	}
+	tt.Key(ui.Cmd, ui.KeyA)
+	tt.Type("工作")
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	work := filepath.Join(a.dir, "工作")
+	if info, err := os.Stat(work); err != nil || !info.IsDir() {
+		t.Fatalf("folder: %v", err)
+	}
+	// A map moved into it follows: the open map keeps its new path.
+	a.moveMap(guide, work)
+	tt.Frame()
+	if a.path != filepath.Join(work, filepath.Base(guide)) {
+		t.Fatalf("open map at %q", a.path)
+	}
+	if len(a.tree.Folders) != 1 || len(a.tree.Folders[0].Files) != 1 {
+		t.Fatalf("tree %+v", a.tree)
+	}
+	// Starred maps show first.
+	a.toggleFavorite(a.path)
+	tt.Frame()
+	if !tt.HasText("★ 收藏") || !slices.Contains(a.cfg.Favorites, a.path) {
+		t.Fatalf("favorites %v", a.cfg.Favorites)
+	}
+	// Renaming keeps the favorite and the open map.
+	a.rename(a.path, "指南")
+	tt.Frame()
+	if mapName(a.path) != "指南" || a.cfg.Favorites[0] != a.path {
+		t.Fatalf("path %q, favorites %v", a.path, a.cfg.Favorites)
+	}
+	// A map made in a folder goes there.
+	a.newMapIn(work)
+	if filepath.Dir(a.path) != work {
+		t.Fatalf("new map at %q", a.path)
+	}
+	tt.Key(0, ui.KeyEscape)
+	// Many tags make a list with a filter field.
+	a.mutate("", func() {
+		for i := range 12 {
+			n, _ := a.doc.AddChild(a.doc.Root.ID, fmt.Sprint("n", i))
+			n.Tags = []string{fmt.Sprintf("标签%02d", i)}
+		}
+	})
+	tt.Frame()
+	snapshot(t, tt, "sidebar")
+	if !tt.HasText("标签 12") {
+		t.Fatalf("texts %q", tt.Texts())
+	}
+	if got := filterTags(a.file.AllTags(), "标签1"); !slices.Equal(got, []string{"标签10", "标签11"}) {
+		t.Fatalf("filtered %v", got)
 	}
 }

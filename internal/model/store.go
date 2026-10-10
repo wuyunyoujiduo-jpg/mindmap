@@ -151,3 +151,82 @@ func FileName(name string) string {
 	}
 	return name + Ext
 }
+
+// Folder is a folder of mind map files, with the folders in it.
+type Folder struct {
+	Path    string
+	Name    string
+	Folders []Folder
+	Files   []FileInfo
+}
+
+// MaxFolderDepth is how deep ScanFolder looks for folders.
+const MaxFolderDepth = 4
+
+// ScanFolder returns dir's mind maps and those of the folders in it, down
+// to MaxFolderDepth, leaving out hidden folders. Folders are sorted by
+// name, files most recently modified first.
+func ScanFolder(dir string) (Folder, error) {
+	return scanFolder(dir, 0)
+}
+
+func scanFolder(dir string, depth int) (Folder, error) {
+	f := Folder{Path: dir, Name: filepath.Base(dir)}
+	files, err := ListFiles(dir)
+	if err != nil {
+		return f, err
+	}
+	f.Files = files
+	if depth >= MaxFolderDepth {
+		return f, nil
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return f, err
+	}
+	for _, e := range entries {
+		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		sub, err := scanFolder(filepath.Join(dir, e.Name()), depth+1)
+		if err == nil {
+			f.Folders = append(f.Folders, sub)
+		}
+	}
+	sort.SliceStable(f.Folders, func(i, j int) bool { return f.Folders[i].Name < f.Folders[j].Name })
+	return f, nil
+}
+
+// AllFiles returns the files of the folder and of every folder in it.
+func (f Folder) AllFiles() []FileInfo {
+	files := append([]FileInfo(nil), f.Files...)
+	for _, sub := range f.Folders {
+		files = append(files, sub.AllFiles()...)
+	}
+	return files
+}
+
+// FolderPaths returns the paths of the folder and every folder in it.
+func (f Folder) FolderPaths() []string {
+	paths := []string{f.Path}
+	for _, sub := range f.Folders {
+		paths = append(paths, sub.FolderPaths()...)
+	}
+	return paths
+}
+
+// MoveFile moves a mind map file into the folder dir, keeping its name,
+// and returns its new path. It does not replace a file of that name.
+func MoveFile(path, dir string) (string, error) {
+	to := filepath.Join(dir, filepath.Base(path))
+	if to == path {
+		return path, nil
+	}
+	if _, err := os.Stat(to); err == nil {
+		return "", fmt.Errorf("「%s」中已有同名导图", filepath.Base(dir))
+	}
+	if err := os.Rename(path, to); err != nil {
+		return "", err
+	}
+	return to, nil
+}

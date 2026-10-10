@@ -2,6 +2,7 @@ package model
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -255,5 +256,45 @@ func TestTasksAndTags(t *testing.T) {
 	today := time.Now()
 	if (&Task{Status: StatusTodo, Due: &today}).Overdue(time.Now()) {
 		t.Fatal("due today is overdue")
+	}
+}
+
+func TestScanFolder(t *testing.T) {
+	dir := t.TempDir()
+	mk := func(rel string) string {
+		p := filepath.Join(dir, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := NewFile("x").Save(p); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	top := mk("a" + Ext)
+	inner := mk("工作/项目A/b" + Ext)
+	mk(".hidden/c" + Ext)
+	os.WriteFile(filepath.Join(dir, "notes.txt"), nil, 0o644)
+
+	f, err := ScanFolder(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(f.Files) != 1 || len(f.Folders) != 1 || f.Folders[0].Name != "工作" {
+		t.Fatalf("scanned %+v", f)
+	}
+	if got := f.Folders[0].Folders[0].Files; len(got) != 1 || got[0].Path != inner {
+		t.Fatalf("inner %+v", got)
+	}
+	if len(f.AllFiles()) != 2 || len(f.FolderPaths()) != 3 {
+		t.Fatalf("%d files, %d folders", len(f.AllFiles()), len(f.FolderPaths()))
+	}
+	moved, err := MoveFile(top, filepath.Join(dir, "工作"))
+	if err != nil || filepath.Dir(moved) != filepath.Join(dir, "工作") {
+		t.Fatalf("moved to %q: %v", moved, err)
+	}
+	mk("a" + Ext)
+	if _, err := MoveFile(filepath.Join(dir, "a"+Ext), filepath.Join(dir, "工作")); err == nil {
+		t.Fatal("replaced a file of the same name")
 	}
 }

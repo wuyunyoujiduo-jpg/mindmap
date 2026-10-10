@@ -10,6 +10,9 @@ import (
 type config struct {
 	Dir  string `json:"dir"`  // the folder of mind maps shown in the sidebar
 	File string `json:"file"` // the map open last
+	// Favorites are the maps shown first in the sidebar, in the order they
+	// were starred.
+	Favorites []string `json:"favorites,omitempty"`
 }
 
 func configPath() string {

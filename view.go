@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -40,10 +39,6 @@ func (a *app) view(c *ui.Context) {
 		a.runPending()
 		c.Invalidate()
 	}
-	switch ui.AlertDialog(c, &a.confirmDelete, "把「"+mapName(a.deletePath)+"」移到废纸篓？", "可以在废纸篓中找回。", "取消", "移到废纸篓") {
-	case 1:
-		a.deleteMap(a.deletePath)
-	}
 }
 
 func mapName(path string) string {
@@ -56,95 +51,6 @@ func (a *app) empty(c *ui.Context) {
 		if ui.PrimaryButton(c, "新建导图").Clicked() {
 			a.newMap()
 		}
-	})
-}
-
-func (a *app) sidebar(c *ui.Context) {
-	t := c.Theme()
-	ui.Column(c).Fill().Background(t.Surface).Children(func() {
-		ui.Row(c).Padding(10, 12).Gap(6).Children(func() {
-			ui.Text(c, filepath.Base(a.dir)).Bold().Grow(1).NoWrap().Ellipsis("…").Tooltip(a.dir)
-			if ui.Button(c, "打开…").Tooltip("选择存放导图的文件夹").Clicked() {
-				a.plat.PickFolder(func(dir string) {
-					if dir != "" {
-						a.flush()
-						a.openDir(dir)
-						a.cfg.save()
-						if len(a.files) > 0 {
-							_ = a.open(a.files[0].Path)
-						}
-					}
-				})
-			}
-		})
-		sel := a.path
-		ui.Sidebar(c, &sel, func() {
-			ui.SidebarSection(c, "导图", &a.filesOpen, func() {
-				for _, f := range a.files {
-					item := ui.SidebarItem(c.Key(f.Path), f.Path, nil, f.Name)
-					path := f.Path
-					item.ContextMenu(func(m *ui.Menu) {
-						if m.Item("在 Finder 中显示").Chosen() {
-							a.plat.ShowInFolder(path)
-						}
-						m.Separator()
-						if m.Item("移到废纸篓…").Chosen() {
-							a.deletePath, a.confirmDelete = path, true
-						}
-					})
-				}
-			})
-		}).Grow(1).OnChange(func() {
-			if sel != a.path {
-				_ = a.open(sel)
-			}
-		})
-		if ui.Button(c, "+ 新建导图").Margin(0, 12, 8).Clicked() {
-			a.newMap()
-		}
-		if a.doc != nil {
-			a.tagList(c)
-		}
-	})
-}
-
-// tagList shows the tags of the map; choosing one highlights its nodes and
-// filters the tasks.
-func (a *app) tagList(c *ui.Context) {
-	t := c.Theme()
-	tags := a.file.AllTags()
-	counts := map[string]int{}
-	a.file.Walk(func(n *model.Node) {
-		for _, tag := range n.Tags {
-			counts[tag]++
-		}
-	})
-	ui.Divider(c)
-	ui.Column(c).Padding(8, 12, 12).Gap(6).MaxHeightPercent(40).Children(func() {
-		ui.Row(c).Children(func() {
-			ui.Text(c, "按标签筛选").FontSize(12).Bold().TextColor(t.TextMuted).Grow(1)
-			if a.tagFilter != "" && ui.Link(c, "清除筛选", "").FontSize(12).Clicked() {
-				a.tagFilter = ""
-			}
-		})
-		if len(tags) == 0 {
-			ui.Text(c, "还没有标签").FontSize(12).TextColor(t.TextMuted)
-			return
-		}
-		ui.Scroll(c).Children(func() {
-			ui.Row(c).Wrap().Gap(6).Children(func() {
-				for _, tag := range tags {
-					chip := tagChip(c.Key(tag), tag, fmt.Sprintf("%s %d", tag, counts[tag]), a.tagFilter == tag, 12)
-					if chip.Clicked() {
-						if a.tagFilter == tag {
-							a.tagFilter = ""
-						} else {
-							a.tagFilter = tag
-						}
-					}
-				}
-			})
-		})
 	})
 }
 

@@ -42,7 +42,8 @@ type app struct {
 
 	// The folder and its maps.
 	dir   string
-	files []model.FileInfo
+	tree  model.Folder     // the folder and the folders in it
+	files []model.FileInfo // every map of the tree
 
 	// The open map: a file of canvases, one of them shown.
 	path     string
@@ -91,24 +92,31 @@ type app struct {
 	panelWidth    float32
 	filesOpen     bool
 	tagsOpen      bool
+	favoritesOpen bool
+	folderClosed  map[string]bool // folders of the sidebar shown closed
+	renaming      string          // the map or folder renamed in the sidebar
+	renameText    string
+	tagQuery      string
 	confirmDelete bool
 	deletePath    string
 }
 
 func newApp(plat platform, cfg config) *app {
 	a := &app{
-		plat:         plat,
-		cfg:          cfg,
-		now:          time.Now,
-		hist:         model.NewHistory(200),
-		cams:         map[string]*camera{},
-		sidebarWidth: 220,
-		panelWidth:   300,
-		filesOpen:    true,
-		tagsOpen:     true,
+		plat:          plat,
+		cfg:           cfg,
+		now:           time.Now,
+		hist:          model.NewHistory(200),
+		cams:          map[string]*camera{},
+		sidebarWidth:  220,
+		panelWidth:    300,
+		filesOpen:     true,
+		tagsOpen:      true,
+		favoritesOpen: true,
+		folderClosed:  map[string]bool{},
 	}
 	a.openDir(cfg.Dir)
-	if cfg.File != "" && filepath.Dir(cfg.File) == a.dir {
+	if cfg.File != "" && inside(cfg.File, a.dir) {
 		if err := a.open(cfg.File); err == nil {
 			return a
 		}
@@ -137,12 +145,18 @@ func (a *app) openDir(dir string) {
 }
 
 func (a *app) refreshFiles() {
-	files, err := model.ListFiles(a.dir)
+	tree, err := model.ScanFolder(a.dir)
 	if err != nil {
-		a.files = nil
+		a.tree, a.files = model.Folder{Path: a.dir, Name: filepath.Base(a.dir)}, nil
 		return
 	}
-	a.files = files
+	a.tree, a.files = tree, tree.AllFiles()
+}
+
+// inside reports whether path is dir or in it, at any depth.
+func inside(path, dir string) bool {
+	rel, err := filepath.Rel(dir, path)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 // open shows the map in path, saving the one open first.
@@ -166,16 +180,28 @@ func (a *app) open(path string) error {
 	return nil
 }
 
-// newMap creates a map in the folder and opens it, editing its root.
-func (a *app) newMap() {
+// newMap creates a map in the folder of the open map and opens it, editing
+// its root.
+func (a *app) newMap() { a.newMapIn(a.currentFolder()) }
+
+// currentFolder is the folder of the open map, else the workspace.
+func (a *app) currentFolder() string {
+	if a.path != "" && inside(a.path, a.dir) {
+		return filepath.Dir(a.path)
+	}
+	return a.dir
+}
+
+// newMapIn creates a map in dir and opens it, editing its root.
+func (a *app) newMapIn(dir string) {
 	name := "新导图"
 	for i := 2; ; i++ {
-		if _, err := os.Stat(filepath.Join(a.dir, model.FileName(name))); errors.Is(err, os.ErrNotExist) {
+		if _, err := os.Stat(filepath.Join(dir, model.FileName(name))); errors.Is(err, os.ErrNotExist) {
 			break
 		}
 		name = fmt.Sprintf("新导图 %d", i)
 	}
-	path := filepath.Join(a.dir, model.FileName(name))
+	path := filepath.Join(dir, model.FileName(name))
 	if err := model.NewFile(name).Save(path); err != nil {
 		a.saveErr = err.Error()
 		return

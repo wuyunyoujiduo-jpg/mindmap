@@ -54,18 +54,7 @@ func main() {
 			{Role: mygo.RoleAppMenu},
 			{Label: "文件", Submenu: []*mygo.MenuItem{
 				item("新建导图", "CmdOrCtrl+N", a.newMap),
-				item("打开文件夹…", "CmdOrCtrl+O", func() {
-					plat.PickFolder(func(dir string) {
-						if dir != "" {
-							a.flush()
-							a.openDir(dir)
-							a.cfg.save()
-							if len(a.files) > 0 {
-								_ = a.open(a.files[0].Path)
-							}
-						}
-					})
-				}),
+				item("打开文件夹…", "CmdOrCtrl+O", a.pickWorkspace),
 				item("保存", "CmdOrCtrl+S", a.save),
 				mygo.Separator(),
 				{Role: mygo.RoleClose},
