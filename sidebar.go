@@ -314,6 +314,7 @@ func (a *app) moved(from, to string) {
 		return p
 	}
 	a.path = follow(a.path)
+	a.renameViews(follow)
 	if a.path != "" {
 		a.modTime = modTime(a.path)
 	}

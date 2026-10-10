@@ -1491,3 +1491,66 @@ func TestPickImage(t *testing.T) {
 		t.Fatal("took a text file")
 	}
 }
+
+func TestSwitchingMapsKeepsTheirState(t *testing.T) {
+	a, tt := newTestApp(t)
+	guide := a.path
+	// Leave the guide on its second canvas, in the outline, zoomed, with a
+	// node selected and an edit to undo.
+	if err := tt.Click("迭代计划"); err != nil {
+		t.Fatal(err)
+	}
+	plan := a.doc.ID
+	clickNode(t, tt, a, "发布 0.2")
+	ship := a.selected
+	a.setZoom(1.5)
+	zx := a.cam().X
+	a.mutate("", func() { a.doc.Root.Title = "改过的版本" })
+	tt.Frame()
+
+	// Another map, then back.
+	a.newMap()
+	tt.Key(0, ui.KeyEscape)
+	tt.Frame()
+	if a.doc.ID == plan || a.hist.CanUndo() && a.doc.Root.Title == "改过的版本" {
+		t.Fatal("the new map shows the guide's state")
+	}
+	if err := a.open(guide); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.doc.ID != plan || a.selected != ship {
+		t.Fatalf("back on %q, selected %q", a.doc.Title, a.selected)
+	}
+	if c := a.cam(); c.Zoom != 1.5 || c.X != zx {
+		t.Fatalf("camera %+v", *c)
+	}
+	if !a.hist.CanUndo() {
+		t.Fatal("history lost")
+	}
+	a.undo()
+	if a.doc.Root.Title != "下一个版本" {
+		t.Fatalf("undo gave %q", a.doc.Root.Title)
+	}
+
+	// Leave it in the outline; a new run of the app opens it so.
+	a.mode = viewOutline
+	a.flush()
+	b := newApp(&fakePlatform{}, a.cfg)
+	if b.path != guide || b.doc.ID != plan || b.mode != viewOutline || b.selected != ship {
+		t.Fatalf("new run: %q on %q, mode %d, selected %q", b.path, b.doc.Title, b.mode, b.selected)
+	}
+	if c := b.cam(); c.Zoom != 1.5 {
+		t.Fatalf("new run camera %+v", *c)
+	}
+
+	// Renaming the map keeps its state.
+	b.rename(b.path, "指南改名")
+	b.newMap()
+	if err := b.open(filepath.Join(b.dir, model.FileName("指南改名"))); err != nil {
+		t.Fatal(err)
+	}
+	if b.doc.ID != plan {
+		t.Fatalf("after renaming, on %q", b.doc.Title)
+	}
+}

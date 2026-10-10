@@ -69,7 +69,9 @@ type app struct {
 	saveErr  string
 	savedAt  time.Time // when this run last saved the map
 	hist     *model.History
-	lastEdit string // the key of the last coalesced edit (see mutate)
+	hists    map[string]*model.History // of the maps opened, while the app runs
+	views    map[string]*fileView      // how each map was left
+	lastEdit string                    // the key of the last coalesced edit (see mutate)
 
 	// Selection and in-place editing.
 	selected  string
@@ -136,6 +138,8 @@ func newApp(plat platform, cfg config) *app {
 		cfg:           cfg,
 		now:           time.Now,
 		hist:          model.NewHistory(200),
+		hists:         map[string]*model.History{},
+		views:         loadViews(),
 		cams:          map[string]*camera{},
 		sidebarWidth:  220,
 		panelWidth:    300,
@@ -195,9 +199,11 @@ func inside(path, dir string) bool {
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-// open shows the map in path, saving the one open first.
+// open shows the map in path, saving the one open first, as it was left.
 func (a *app) open(path string) error {
+	a.commitEditIfAny()
 	a.flush()
+	a.lightbox, a.presenting = "", false
 	f, err := model.Load(path)
 	if err != nil {
 		a.saveErr = fmt.Sprintf("无法打开 %s: %v", filepath.Base(path), err)
@@ -207,10 +213,7 @@ func (a *app) open(path string) error {
 	a.modTime = modTime(path)
 	a.dirty, a.saveErr, a.lastEdit = false, "", ""
 	a.savedAt = time.Time{}
-	a.hist.Clear()
-	a.cams = map[string]*camera{}
-	a.doc = nil
-	a.showSheet(f.Sheets[0].ID)
+	a.restoreView(f)
 	a.cfg.File = path
 	a.cfg.save()
 	return nil
@@ -284,11 +287,13 @@ func (a *app) save() {
 	a.refreshFiles()
 }
 
-// flush saves unsaved changes.
+// flush saves unsaved changes, and how the map is left.
 func (a *app) flush() {
 	if a.dirty {
 		a.save()
 	}
+	a.rememberView()
+	a.saveViews()
 }
 
 // tick saves after a pause in editing and reloads the file when another
