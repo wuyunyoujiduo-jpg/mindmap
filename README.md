@@ -46,6 +46,30 @@
 xattr -cr /Applications/MindMap.app
 ```
 
+### 一键更新（推荐）
+
+用命令行下载的文件不会被 macOS 隔离，所以不会再弹安全提示，也不用去系统设置里放行。先装好并登录 GitHub 命令行工具（仓库是私有的，需要登录）：
+
+```bash
+brew install gh && gh auth login
+```
+
+第一次把脚本取到本机：
+
+```bash
+gh api repos/wuyunyoujiduo-jpg/mindmap/contents/update.sh -H "Accept: application/vnd.github.raw" > ~/mindmap-update.sh && chmod +x ~/mindmap-update.sh
+```
+
+以后每次更新只要运行：
+
+```bash
+~/mindmap-update.sh          # 更新到最新版本（已是最新则跳过）
+~/mindmap-update.sh 0.6.0    # 安装指定版本
+~/mindmap-update.sh -f       # 强制重新安装
+```
+
+脚本会先让正在运行的 MindMap 退出（退出时会自动保存），再下载 .dmg，替换 /Applications 里的应用，最后重新打开。
+
 ## 发布新版本
 
 每次推送代码，GitHub Actions 只运行测试。macOS 应用只在两种情况下打包：发布版本时；或者在 Actions 页面选择 Build 工作流，点「Run workflow」手动运行（打好的包在运行记录里下载）。发布正式版本的步骤：
