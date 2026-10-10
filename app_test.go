@@ -217,17 +217,18 @@ func TestAutosaveAndReload(t *testing.T) {
 	if a.dirty {
 		t.Fatal("not saved after the delay")
 	}
-	d, err := model.Load(a.path)
+	f, err := model.Load(a.path)
 	if err != nil {
 		t.Fatal(err)
 	}
+	d := f.Sheets[0]
 	if _, err := findIn(d, "界面"); err != nil {
 		t.Fatal(err)
 	}
 
 	// Another program changes the file.
 	d.Root.Title = "AI 改过的项目"
-	if err := d.Save(a.path); err != nil {
+	if err := f.Save(a.path); err != nil {
 		t.Fatal(err)
 	}
 	future := testNow.Add(time.Minute)
@@ -388,5 +389,153 @@ func TestZoomAndDark(t *testing.T) {
 	snapshot(t, tt, "dark-zoom")
 	if !tt.HasText("130%") {
 		t.Fatalf("zoom label missing: %q", tt.Texts())
+	}
+}
+
+func TestPanCanvas(t *testing.T) {
+	a, tt := newTestApp(t)
+	cam := a.cam()
+	if !cam.placed {
+		t.Fatal("map not placed")
+	}
+	x0, y0 := cam.X, cam.Y
+	// Drag the empty part of the canvas.
+	r, _ := tt.Find("我的项目")
+	px, py := r.X, r.Y+250 // below the map
+	tt.Press(px, py)
+	for i := 1; i <= 5; i++ {
+		tt.Move(px+float32(i)*20, py+float32(i)*10)
+	}
+	tt.Release(px+100, py+50)
+	if dx, dy := cam.X-x0, cam.Y-y0; dx < 80 || dy < 40 {
+		t.Fatalf("dragging moved the map by %v, %v", dx, dy)
+	}
+	if after, _ := tt.Find("我的项目"); after.X-r.X < 80 {
+		t.Fatalf("root moved from %v to %v", r.X, after.X)
+	}
+	// The wheel moves it too, and Cmd with the wheel zooms.
+	x1 := cam.X
+	tt.Scroll(px, py, 30, 0)
+	if cam.X != x1-30 {
+		t.Fatalf("scrolling moved x from %v to %v", x1, cam.X)
+	}
+	tt.HoldModifiers(ui.Cmd)
+	tt.Scroll(px, py, 0, -40)
+	tt.HoldModifiers(0)
+	if cam.Zoom <= 1 {
+		t.Fatalf("zoom %v after Cmd+scroll", cam.Zoom)
+	}
+	snapshot(t, tt, "panned")
+	a.recenter()
+	tt.Frame()
+	if cam.Zoom != 1 || !cam.placed {
+		t.Fatal("not recentered")
+	}
+}
+
+func TestDraggingNodeDoesNotPan(t *testing.T) {
+	a, tt := newTestApp(t)
+	cam := a.cam()
+	x0 := cam.X
+	r, _ := tt.Find("前端")
+	tt.Press(r.X+5, r.Y+5)
+	tt.Move(r.X+40, r.Y+60)
+	tt.Release(r.X+40, r.Y+60)
+	if cam.X != x0 {
+		t.Fatal("dragging a node moved the canvas")
+	}
+}
+
+func TestSheets(t *testing.T) {
+	a, tt := newTestApp(t)
+	if len(a.file.Sheets) != 2 || !tt.HasText("项目结构") || !tt.HasText("迭代计划") {
+		t.Fatalf("tabs %q", tt.Texts())
+	}
+	tt.Click("架构")
+	if err := tt.Click("迭代计划"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := findIn(a.doc, "架构"); a.doc.Title != "迭代计划" || !tt.HasText("发布 0.2") || err == nil || tt.HasText("前端") {
+		t.Fatalf("showing %q: %q", a.doc.Title, tt.Texts())
+	}
+	// Each canvas keeps its selection.
+	tt.Click("项目结构")
+	if n, _ := a.selectedNode(); n.Title != "架构" {
+		t.Fatalf("selection %q after coming back", n.Title)
+	}
+	// + adds a canvas and edits its root.
+	if err := tt.Click("新建画布"); err != nil {
+		t.Fatal(err)
+	}
+	if len(a.file.Sheets) != 3 || a.doc.Title != "画布 3" || a.editing != a.doc.Root.ID {
+		t.Fatalf("sheets %d, shown %q", len(a.file.Sheets), a.doc.Title)
+	}
+	tt.Type("调研")
+	tt.Key(0, ui.KeyEnter)
+	// Rename by double click.
+	r, _ := tt.Find("画布 3")
+	tt.ClickAt(r.X+2, r.Y+2)
+	tt.ClickAt(r.X+2, r.Y+2)
+	if a.renamingSheet == "" {
+		t.Fatal("double click did not rename")
+	}
+	tt.Key(ui.Cmd, ui.KeyA)
+	tt.Type("技术调研")
+	tt.Key(0, ui.KeyEnter)
+	if a.doc.Title != "技术调研" {
+		t.Fatalf("title %q", a.doc.Title)
+	}
+	snapshot(t, tt, "sheets")
+	// Undo takes back the rename, then the root's title, then the canvas.
+	a.undo()
+	if a.doc.Title != "画布 3" {
+		t.Fatalf("after undo %q", a.doc.Title)
+	}
+	a.undo()
+	a.undo()
+	if len(a.file.Sheets) != 2 {
+		t.Fatalf("%d sheets after undo", len(a.file.Sheets))
+	}
+	// Saved with every canvas.
+	a.save()
+	f, err := model.Load(a.path)
+	if err != nil || len(f.Sheets) != 2 || f.Sheets[1].Title != "迭代计划" {
+		t.Fatalf("saved %v %v", f, err)
+	}
+	a.deleteSheet(a.file.Sheets[1].ID)
+	a.deleteSheet(a.file.Sheets[0].ID)
+	if len(a.file.Sheets) != 1 {
+		t.Fatal("deleted the last canvas")
+	}
+}
+
+func TestBoardShowsTasksOfEveryCanvas(t *testing.T) {
+	a, tt := newTestApp(t)
+	tt.Click("看板")
+	if !tt.HasText("发布 0.2") {
+		t.Fatalf("board misses the second canvas's task: %q", tt.Texts())
+	}
+	r, _ := tt.Find("发布 0.2")
+	tt.ClickAt(r.X+2, r.Y+2)
+	tt.ClickAt(r.X+2, r.Y+2)
+	if a.mode != viewMap || a.doc.Title != "迭代计划" {
+		t.Fatalf("double click shows %v %q", a.mode, a.doc.Title)
+	}
+	if n, _ := a.selectedNode(); n.Title != "发布 0.2" {
+		t.Fatalf("selected %q", n.Title)
+	}
+}
+
+func TestOpensVersion1File(t *testing.T) {
+	a, tt := newTestApp(t)
+	path := filepath.Join(a.dir, "旧"+model.Ext)
+	os.WriteFile(path, []byte(`{"version":1,"root":{"id":"r","title":"旧项目","children":[{"id":"a","title":"模块"}]}}`), 0o644)
+	a.refreshFiles()
+	if err := a.open(path); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !tt.HasText("旧项目") || !tt.HasText("画布 1") {
+		t.Fatalf("texts %q", tt.Texts())
 	}
 }

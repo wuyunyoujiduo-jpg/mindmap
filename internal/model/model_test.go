@@ -4,6 +4,7 @@ import (
 	"errors"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -119,13 +120,18 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	if filepath.Base(path) != "我的-项目"+Ext {
 		t.Fatalf("file name %q", filepath.Base(path))
 	}
-	if err := d.Save(path); err != nil {
+	f := &File{Sheets: []*Document{d, New("second")}}
+	if err := f.Save(path); err != nil {
 		t.Fatal(err)
 	}
-	got, err := Load(path)
+	loaded, err := Load(path)
 	if err != nil {
 		t.Fatal(err)
 	}
+	if len(loaded.Sheets) != 2 || loaded.Sheets[1].Root.Title != "second" || loaded.Sheets[1].Title != "画布 2" {
+		t.Fatalf("sheets %+v", loaded.Sheets)
+	}
+	got := loaded.Sheets[0]
 	n, _ := got.Find(m["a1"].ID)
 	if n == nil || n.Note != "备注\n第二行" || !n.HasTag("bug") || n.Task.Status != StatusDoing || !n.Task.Due.Equal(due) {
 		t.Fatalf("loaded %+v", n)
@@ -137,36 +143,95 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 }
 
 func TestParseRepairsIDs(t *testing.T) {
-	d, err := Parse([]byte(`{"version":1,"root":{"title":"r","children":[{"id":"x","title":"a"},{"id":"x","title":"b"}]}}`))
+	f, err := Parse([]byte(`{"version":2,"sheets":[{"title":"a","root":{"title":"r","children":[{"id":"x","title":"a"},{"id":"x","title":"b"}]}},{"root":{"id":"x","title":"r2"}}]}`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d.Root.ID == "" || d.Root.Children[0].ID == d.Root.Children[1].ID {
+	d := f.Sheets[0]
+	if d.ID == "" || d.Root.ID == "" || d.Root.Children[0].ID == d.Root.Children[1].ID {
 		t.Fatal("IDs not repaired")
 	}
-	if _, err := Parse([]byte(`{"version":99,"root":{"title":"r"}}`)); err == nil {
+	if f.Sheets[1].Root.ID == "x" || f.Sheets[1].ID == d.ID || f.Sheets[1].Title != "画布 2" {
+		t.Fatalf("second sheet %+v", f.Sheets[1])
+	}
+	if _, err := Parse([]byte(`{"version":99,"sheets":[]}`)); err == nil {
 		t.Fatal("newer version accepted")
+	}
+	if _, err := Parse([]byte(`{"version":2,"sheets":[]}`)); err == nil {
+		t.Fatal("file without sheets accepted")
+	}
+}
+
+func TestParseVersion1(t *testing.T) {
+	f, err := Parse([]byte(`{"version":1,"root":{"id":"r","title":"项目","children":[{"id":"a","title":"a"}]}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(f.Sheets) != 1 || f.Sheets[0].Title != "画布 1" || f.Sheets[0].Root.Title != "项目" {
+		t.Fatalf("sheets %+v", f.Sheets)
+	}
+	b, _ := f.Marshal()
+	if !strings.Contains(string(b), `"version": 2`) || !strings.Contains(string(b), `"sheets"`) {
+		t.Fatalf("saved as %s", b)
+	}
+}
+
+func TestSheets(t *testing.T) {
+	f := NewFile("项目")
+	if f.Sheets[0].Title != "画布 1" {
+		t.Fatal(f.Sheets[0].Title)
+	}
+	b := f.AddSheet(0)
+	if b.Title != "画布 2" || f.Sheets[1] != b {
+		t.Fatal("add")
+	}
+	child, _ := b.AddChild(b.Root.ID, "x")
+	child.Task = &Task{Status: StatusTodo}
+	child.Tags = []string{"t"}
+	c := f.DuplicateSheet(1)
+	if c.Title != "画布 2 副本" || c.Root.ID == b.Root.ID || c.Root.Children[0].ID == child.ID {
+		t.Fatal("duplicate shares IDs")
+	}
+	if got := f.SheetOf(child.ID); got != b {
+		t.Fatal("SheetOf")
+	}
+	tasks := f.Tasks()
+	if len(tasks) != 2 || tasks[0].Sheet != b || tasks[1].Sheet != c {
+		t.Fatalf("tasks %+v", tasks)
+	}
+	if got := f.AllTags(); !slices.Equal(got, []string{"t"}) {
+		t.Fatal(got)
+	}
+	f.MoveSheet(2, 0)
+	if f.Sheets[0] != c {
+		t.Fatal("move")
+	}
+	f.DeleteSheet(0)
+	f.DeleteSheet(0)
+	if err := f.DeleteSheet(0); !errors.Is(err, ErrLastSheet) || len(f.Sheets) != 1 {
+		t.Fatal("deleted the last sheet")
 	}
 }
 
 func TestHistory(t *testing.T) {
 	d, m := sample(t)
+	f := &File{Sheets: []*Document{d}}
 	h := NewHistory(10)
-	h.Record(d, m["a"].ID)
+	h.Record(State{File: f, Sheet: d.ID, Selected: m["a"].ID})
 	d.Delete(m["a"].ID)
-	d2, sel, ok := h.Undo(d, m["b"].ID)
-	if !ok || sel != m["a"].ID || len(d2.Root.Children) != 3 {
-		t.Fatalf("undo: ok %v sel %q children %d", ok, sel, len(d2.Root.Children))
+	s, ok := h.Undo(State{File: f, Sheet: d.ID, Selected: m["b"].ID})
+	if !ok || s.Selected != m["a"].ID || len(s.File.Sheets[0].Root.Children) != 3 {
+		t.Fatalf("undo: ok %v sel %q", ok, s.Selected)
 	}
-	d3, sel, ok := h.Redo(d2, sel)
-	if !ok || sel != m["b"].ID || len(d3.Root.Children) != 2 {
-		t.Fatalf("redo: ok %v sel %q children %d", ok, sel, len(d3.Root.Children))
+	s2, ok := h.Redo(s)
+	if !ok || s2.Selected != m["b"].ID || len(s2.File.Sheets[0].Root.Children) != 2 {
+		t.Fatalf("redo: ok %v sel %q", ok, s2.Selected)
 	}
 	// Snapshots are independent copies.
-	d3.Root.Title = "changed"
-	d4, _, _ := h.Undo(d3, "")
-	if d4.Root.Title != "root" {
-		t.Fatal("snapshot shares nodes with the document")
+	s2.File.Sheets[0].Root.Title = "changed"
+	s3, _ := h.Undo(s2)
+	if s3.File.Sheets[0].Root.Title != "root" {
+		t.Fatal("snapshot shares nodes with the file")
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -43,10 +44,11 @@ type app struct {
 	dir   string
 	files []model.FileInfo
 
-	// The open map.
+	// The open map: a file of canvases, one of them shown.
 	path     string
-	doc      *model.Document
-	modTime  time.Time // of the file as last read or written
+	file     *model.File
+	doc      *model.Document // the canvas shown, one of file.Sheets
+	modTime  time.Time       // of the file as last read or written
 	dirty    bool
 	changed  time.Time // of the last unsaved change
 	checked  time.Time // when the file was last checked for outside changes
@@ -61,11 +63,23 @@ type app struct {
 	editFocus bool // the title input has had the focus
 	reveal    bool // scroll the selected node into view in the next frame
 
-	// The canvas.
-	zoom   float32
-	scroll ui.ScrollState
-	canvas ui.Handle
-	boxes  layout.Result // the layout of the last frame, in map coordinates
+	// The canvas: where each canvas of the file is looked at from.
+	cams    map[string]*camera
+	canvas  ui.Handle
+	boxes   layout.Result // the layout of the last frame, in map coordinates
+	panning bool          // the canvas is being dragged
+	vp      ui.Rect       // the canvas's box in the last frame
+	pointer [2]float32    // where the pointer is over the canvas
+	mods    ui.Modifiers  // the modifier keys held, as of the last frame
+
+	// Actions that change the map, taken while it is built, wait for the
+	// end of the frame (see later).
+	pending []func()
+
+	// Canvas tabs.
+	renamingSheet string
+	sheetTitle    string
+	confirmSheet  bool
 
 	// Chrome.
 	mode          int
@@ -85,7 +99,7 @@ func newApp(plat platform, cfg config) *app {
 		cfg:          cfg,
 		now:          time.Now,
 		hist:         model.NewHistory(200),
-		zoom:         1,
+		cams:         map[string]*camera{},
 		sidebarWidth: 220,
 		panelWidth:   300,
 		filesOpen:    true,
@@ -113,7 +127,7 @@ func (a *app) openDir(dir string) {
 	a.refreshFiles()
 	if len(a.files) == 0 {
 		path := filepath.Join(dir, model.FileName("使用指南"))
-		if err := welcomeDoc(a.now()).Save(path); err == nil {
+		if err := welcomeFile(a.now()).Save(path); err == nil {
 			a.refreshFiles()
 		}
 	}
@@ -132,17 +146,18 @@ func (a *app) refreshFiles() {
 // open shows the map in path, saving the one open first.
 func (a *app) open(path string) error {
 	a.flush()
-	d, err := model.Load(path)
+	f, err := model.Load(path)
 	if err != nil {
 		a.saveErr = fmt.Sprintf("无法打开 %s: %v", filepath.Base(path), err)
 		return err
 	}
-	a.path, a.doc = path, d
+	a.path, a.file = path, f
 	a.modTime = modTime(path)
 	a.dirty, a.saveErr, a.lastEdit = false, "", ""
 	a.hist.Clear()
-	a.selected, a.editing = d.Root.ID, ""
-	a.scroll = ui.ScrollState{}
+	a.cams = map[string]*camera{}
+	a.doc = nil
+	a.showSheet(f.Sheets[0].ID)
 	a.cfg.File = path
 	a.cfg.save()
 	return nil
@@ -158,7 +173,7 @@ func (a *app) newMap() {
 		name = fmt.Sprintf("新导图 %d", i)
 	}
 	path := filepath.Join(a.dir, model.FileName(name))
-	if err := model.New(name).Save(path); err != nil {
+	if err := model.NewFile(name).Save(path); err != nil {
 		a.saveErr = err.Error()
 		return
 	}
@@ -179,7 +194,7 @@ func (a *app) deleteMap(path string) {
 	}
 	a.refreshFiles()
 	if path == a.path {
-		a.path, a.doc = "", nil
+		a.path, a.file, a.doc = "", nil, nil
 		if len(a.files) > 0 {
 			_ = a.open(a.files[0].Path)
 		}
@@ -191,7 +206,7 @@ func (a *app) save() {
 	if a.doc == nil || a.path == "" {
 		return
 	}
-	if err := a.doc.Save(a.path); err != nil {
+	if err := a.file.Save(a.path); err != nil {
 		a.saveErr = "保存失败: " + err.Error()
 		return
 	}
@@ -242,18 +257,14 @@ func (a *app) reloadFromDisk(c *ui.Context) {
 }
 
 func (a *app) reload() {
-	d, err := model.Load(a.path)
+	f, err := model.Load(a.path)
 	if err != nil {
 		a.saveErr = err.Error()
 		return
 	}
-	a.hist.Record(a.doc, a.selected)
-	a.doc = d
+	a.hist.Record(a.state())
+	a.restore(model.State{File: f, Sheet: a.doc.ID, Selected: a.selected})
 	a.modTime = modTime(a.path)
-	if n, _ := d.Find(a.selected); n == nil {
-		a.selected = d.Root.ID
-	}
-	a.editing = ""
 }
 
 func modTime(path string) time.Time {
@@ -272,7 +283,7 @@ func (a *app) mutate(key string, fn func()) {
 		return
 	}
 	if key == "" || key != a.lastEdit {
-		a.hist.Record(a.doc, a.selected)
+		a.hist.Record(a.state())
 	}
 	a.lastEdit = key
 	fn()
@@ -281,16 +292,33 @@ func (a *app) mutate(key string, fn func()) {
 }
 
 func (a *app) undo() {
-	if d, sel, ok := a.hist.Undo(a.doc, a.selected); ok {
-		a.doc, a.selected, a.editing, a.lastEdit = d, sel, "", ""
+	if s, ok := a.hist.Undo(a.state()); ok {
+		a.restore(s)
 		a.dirty, a.changed = true, a.now()
 	}
 }
 
 func (a *app) redo() {
-	if d, sel, ok := a.hist.Redo(a.doc, a.selected); ok {
-		a.doc, a.selected, a.editing, a.lastEdit = d, sel, "", ""
+	if s, ok := a.hist.Redo(a.state()); ok {
+		a.restore(s)
 		a.dirty, a.changed = true, a.now()
+	}
+}
+
+func (a *app) state() model.State {
+	return model.State{File: a.file, Sheet: a.doc.ID, Selected: a.selected}
+}
+
+// restore shows a state of the history, or a file read again.
+func (a *app) restore(s model.State) {
+	a.file, a.doc = s.File, nil
+	a.editing, a.lastEdit = "", ""
+	if d, _ := a.file.Sheet(s.Sheet); d == nil {
+		s.Sheet = a.file.Sheets[0].ID
+	}
+	a.showSheet(s.Sheet)
+	if n, _ := a.doc.Find(s.Selected); n != nil {
+		a.selected = s.Selected
 	}
 }
 
@@ -485,8 +513,139 @@ func (a *app) shiftSelected(delta int) {
 	a.reveal = true
 }
 
-func (a *app) setZoom(z float32) {
-	a.zoom = min(max(z, 0.4), 2.5)
+// later runs fn once the view is built, for actions taken while building
+// a collection that they change.
+func (a *app) later(fn func()) { a.pending = append(a.pending, fn) }
+
+func (a *app) runPending() {
+	for len(a.pending) > 0 {
+		fns := a.pending
+		a.pending = nil
+		for _, fn := range fns {
+			fn()
+		}
+	}
+}
+
+// camera is where a canvas is looked at from: the screen position of the
+// map's origin and the zoom, and the node selected on it.
+type camera struct {
+	X, Y     float32
+	Zoom     float32
+	placed   bool // X and Y were set for the canvas's size
+	selected string
+}
+
+// cam returns the camera of the canvas shown.
+func (a *app) cam() *camera {
+	if a.doc == nil {
+		return &camera{Zoom: 1}
+	}
+	c := a.cams[a.doc.ID]
+	if c == nil {
+		c = &camera{Zoom: 1}
+		a.cams[a.doc.ID] = c
+	}
+	return c
+}
+
+// setZoom zooms around the point (x, y) of the canvas, its center when
+// negative.
+func (a *app) setZoomAt(z, x, y float32) {
+	c := a.cam()
+	z = min(max(z, 0.3), 3)
+	if x < 0 {
+		x, y = a.vp.W/2, a.vp.H/2
+	}
+	c.X = x - (x-c.X)*z/c.Zoom
+	c.Y = y - (y-c.Y)*z/c.Zoom
+	c.Zoom = z
+}
+
+func (a *app) setZoom(z float32) { a.setZoomAt(z, -1, -1) }
+
+// recenter puts the map back at the left middle of the canvas, at zoom 1.
+func (a *app) recenter() {
+	c := a.cam()
+	c.Zoom, c.placed = 1, false
+	a.reveal = false
+}
+
+// showSheet shows a canvas of the file, keeping the selection of the one
+// shown before.
+func (a *app) showSheet(id string) {
+	d, _ := a.file.Sheet(id)
+	if d == nil {
+		return
+	}
+	if a.doc != nil {
+		a.cam().selected = a.selected
+	}
+	if a.editing != "" && a.doc != nil && a.doc.ID != id {
+		a.commitEdit()
+	}
+	a.doc = d
+	a.selected = a.cam().selected
+	if n, _ := d.Find(a.selected); n == nil {
+		a.selected = d.Root.ID
+	}
+}
+
+func (a *app) addSheet() {
+	_, i := a.file.Sheet(a.doc.ID)
+	var d *model.Document
+	a.mutate("", func() { d = a.file.AddSheet(i) })
+	a.showSheet(d.ID)
+	a.startEdit(d.Root.ID)
+}
+
+func (a *app) duplicateSheet(id string) {
+	_, i := a.file.Sheet(id)
+	if i < 0 {
+		return
+	}
+	var d *model.Document
+	a.mutate("", func() { d = a.file.DuplicateSheet(i) })
+	a.showSheet(d.ID)
+}
+
+func (a *app) deleteSheet(id string) {
+	_, i := a.file.Sheet(id)
+	if i < 0 || len(a.file.Sheets) <= 1 {
+		return
+	}
+	a.mutate("", func() { _ = a.file.DeleteSheet(i) })
+	delete(a.cams, id)
+	if a.doc.ID == id {
+		a.doc = nil
+		a.showSheet(a.file.Sheets[max(i-1, 0)].ID)
+	}
+}
+
+func (a *app) moveSheet(id string, delta int) {
+	_, i := a.file.Sheet(id)
+	if i < 0 {
+		return
+	}
+	a.mutate("", func() { a.file.MoveSheet(i, i+delta) })
+}
+
+func (a *app) renameSheet(id, title string) {
+	d, _ := a.file.Sheet(id)
+	title = strings.TrimSpace(title)
+	if d == nil || title == "" || title == d.Title {
+		return
+	}
+	a.mutate("", func() { d.Title = title })
+}
+
+// selectTask shows a task's canvas and selects it, from the board or the
+// agenda.
+func (a *app) selectTask(tn model.TaskNode) {
+	if tn.Sheet != nil && tn.Sheet != a.doc {
+		a.showSheet(tn.Sheet.ID)
+	}
+	a.selected = tn.Node.ID
 }
 
 // highlighted reports whether a node matches the search and tag filter;

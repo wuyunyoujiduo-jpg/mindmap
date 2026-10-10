@@ -10,8 +10,9 @@ import (
 	"time"
 )
 
-// FormatVersion is written into every saved file.
-const FormatVersion = 1
+// FormatVersion is written into every saved file. Version 1 held one map
+// (a root); version 2 holds several canvases (sheets).
+const FormatVersion = 2
 
 // Status is where a task stands.
 type Status string
@@ -116,10 +117,11 @@ type Node struct {
 	Children  []*Node  `json:"children,omitempty"`
 }
 
-// Document is a whole mind map, as saved in one file.
+// Document is one canvas of a file: a tree of nodes under its root.
 type Document struct {
-	Version int   `json:"version"`
-	Root    *Node `json:"root"`
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	Root  *Node  `json:"root"`
 }
 
 // NewID returns a new random node ID.
@@ -134,9 +136,9 @@ func NewNode(title string) *Node {
 	return &Node{ID: NewID(), Title: title}
 }
 
-// New returns a document whose root has the given title.
+// New returns a canvas whose root has the given title.
 func New(title string) *Document {
-	return &Document{Version: FormatVersion, Root: NewNode(title)}
+	return &Document{ID: NewID(), Root: NewNode(title)}
 }
 
 // Walk calls fn for every node depth first, parents before children, with
@@ -249,9 +251,17 @@ func (n *Node) Matches(query string) bool {
 	return false
 }
 
-// Clone returns a deep copy of the document.
+// Clone returns a deep copy of the canvas.
 func (d *Document) Clone() *Document {
-	return &Document{Version: d.Version, Root: d.Root.clone()}
+	return &Document{ID: d.ID, Title: d.Title, Root: d.Root.clone()}
+}
+
+// renew gives the node and everything below it new IDs.
+func (n *Node) renew() {
+	n.ID = NewID()
+	for _, c := range n.Children {
+		c.renew()
+	}
 }
 
 func (n *Node) clone() *Node {

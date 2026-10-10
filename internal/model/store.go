@@ -15,7 +15,7 @@ import (
 const Ext = ".mindmap.json"
 
 // Load reads a mind map file.
-func Load(path string) (*Document, error) {
+func Load(path string) (*File, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -23,43 +23,64 @@ func Load(path string) (*Document, error) {
 	return Parse(b)
 }
 
-// Parse decodes a mind map file's contents.
-func Parse(b []byte) (*Document, error) {
-	var d Document
-	if err := json.Unmarshal(b, &d); err != nil {
+// Parse decodes a mind map file's contents. A file of version 1, a single
+// map, becomes a file of one canvas.
+func Parse(b []byte) (*File, error) {
+	var raw struct {
+		Version int         `json:"version"`
+		Root    *Node       `json:"root"` // version 1
+		Sheets  []*Document `json:"sheets"`
+	}
+	if err := json.Unmarshal(b, &raw); err != nil {
 		return nil, fmt.Errorf("文件格式错误: %w", err)
 	}
-	if d.Root == nil {
-		return nil, errors.New("文件格式错误: 缺少根节点")
+	if raw.Version > FormatVersion {
+		return nil, fmt.Errorf("文件版本 %d 比本程序支持的 %d 新", raw.Version, FormatVersion)
 	}
-	if d.Version > FormatVersion {
-		return nil, fmt.Errorf("文件版本 %d 比本程序支持的 %d 新", d.Version, FormatVersion)
+	f := &File{Version: FormatVersion, Sheets: raw.Sheets}
+	if len(f.Sheets) == 0 && raw.Root != nil {
+		f.Sheets = []*Document{{Title: "画布 1", Root: raw.Root}}
 	}
-	d.Version = FormatVersion
-	seen := map[string]bool{}
-	d.Walk(func(n, _ *Node, _ int) bool {
-		if n.ID == "" || seen[n.ID] {
-			n.ID = NewID()
+	if len(f.Sheets) == 0 {
+		return nil, errors.New("文件格式错误: 没有画布")
+	}
+	sheets, nodes := map[string]bool{}, map[string]bool{}
+	for i, d := range f.Sheets {
+		if d == nil || d.Root == nil {
+			return nil, errors.New("文件格式错误: 画布缺少根节点")
 		}
-		seen[n.ID] = true
-		return true
-	})
-	return &d, nil
+		if d.ID == "" || sheets[d.ID] {
+			d.ID = NewID()
+		}
+		sheets[d.ID] = true
+		if d.Title == "" {
+			d.Title = fmt.Sprintf("画布 %d", i+1)
+		}
+		d.Walk(func(n, _ *Node, _ int) bool {
+			if n.ID == "" || nodes[n.ID] {
+				n.ID = NewID()
+			}
+			nodes[n.ID] = true
+			return true
+		})
+	}
+	return f, nil
 }
 
-// Marshal encodes the document as indented JSON, which diffs well in git.
-func (d *Document) Marshal() ([]byte, error) {
-	b, err := json.MarshalIndent(d, "", "  ")
+// Marshal encodes the file as indented JSON, which diffs well in git.
+func (f *File) Marshal() ([]byte, error) {
+	f.Version = FormatVersion
+	b, err := json.MarshalIndent(f, "", "  ")
 	if err != nil {
 		return nil, err
 	}
 	return append(b, '\n'), nil
 }
 
-// Save writes the document to path atomically: through a temporary file
+// Save writes the file to path atomically: through a temporary file
 // renamed over it, so a crash never leaves half a file.
-func (d *Document) Save(path string) error {
-	b, err := d.Marshal()
+func (f *File) Save(path string) error {
+	b, err := f.Marshal()
 	if err != nil {
 		return err
 	}

@@ -7,9 +7,10 @@ import (
 
 // Errors of the editing operations.
 var (
-	ErrNotFound = errors.New("节点不存在")
-	ErrRoot     = errors.New("不能对根节点执行此操作")
-	ErrCycle    = errors.New("不能把节点移动到它自己的下级")
+	ErrNotFound  = errors.New("节点不存在")
+	ErrRoot      = errors.New("不能对根节点执行此操作")
+	ErrCycle     = errors.New("不能把节点移动到它自己的下级")
+	ErrLastSheet = errors.New("至少要保留一个画布")
 )
 
 // AddChild appends a new child to the node with the ID, opening it, and
@@ -145,10 +146,12 @@ func (d *Document) Outdent(id string) error {
 	return d.Move(id, gp.ID, slices.Index(gp.Children, pp)+1)
 }
 
-// TaskNode is a node that is a task, with the path of titles above it.
+// TaskNode is a node that is a task, with the path of titles above it and,
+// from File.Tasks, its canvas.
 type TaskNode struct {
 	Node    *Node
 	Parents []string
+	Sheet   *Document
 }
 
 // Tasks returns every node that is a task, in map order.

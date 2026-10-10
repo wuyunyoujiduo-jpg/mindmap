@@ -39,7 +39,7 @@ func (a *app) panel(c *ui.Context) {
 
 			tags := append([]string(nil), n.Tags...)
 			ui.Field(c, "标签", func() {
-				if ui.TokenField(c, &tags, a.doc.AllTags()).Label("标签").Changed() {
+				if ui.TokenField(c, &tags, a.file.AllTags()).Label("标签").Changed() {
 					a.mutate("", func() { n.Tags = cleanTags(tags) })
 				}
 			})

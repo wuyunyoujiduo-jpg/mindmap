@@ -36,6 +36,10 @@ func (a *app) view(c *ui.Context) {
 			})
 		}).Fill()
 	})
+	if len(a.pending) > 0 {
+		a.runPending()
+		c.Invalidate()
+	}
 	switch ui.AlertDialog(c, &a.confirmDelete, "把「"+mapName(a.deletePath)+"」移到废纸篓？", "可以在废纸篓中找回。", "取消", "移到废纸篓") {
 	case 1:
 		a.deleteMap(a.deletePath)
@@ -108,13 +112,12 @@ func (a *app) sidebar(c *ui.Context) {
 // filters the tasks.
 func (a *app) tagList(c *ui.Context) {
 	t := c.Theme()
-	tags := a.doc.AllTags()
+	tags := a.file.AllTags()
 	counts := map[string]int{}
-	a.doc.Walk(func(n, _ *model.Node, _ int) bool {
+	a.file.Walk(func(n *model.Node) {
 		for _, tag := range n.Tags {
 			counts[tag]++
 		}
-		return true
 	})
 	ui.Divider(c)
 	ui.Column(c).Padding(8, 12, 12).Gap(6).MaxHeightPercent(40).Children(func() {
@@ -197,19 +200,6 @@ func (a *app) toolbar(c *ui.Context) {
 		if search.Submitted() {
 			a.mode = viewMap
 			a.nextMatch()
-		}
-		if a.mode == viewMap {
-			ui.Row(c).Gap(2).Children(func() {
-				if ui.Button(c, "−").Label("缩小").Width(30).Clicked() {
-					a.setZoom(a.zoom - 0.1)
-				}
-				if ui.Button(c, fmt.Sprintf("%d%%", int(a.zoom*100+0.5))).Label("实际大小").Tooltip("实际大小").Padding(0, 6).MinWidth(56).Clicked() {
-					a.setZoom(1)
-				}
-				if ui.Button(c, "+").Label("放大").Width(30).Clicked() {
-					a.setZoom(a.zoom + 0.1)
-				}
-			})
 		}
 		ui.Row(c).Gap(2).Children(func() {
 			if ui.Button(c, "↶").Label("撤销").Tooltip("撤销 ⌘Z").Width(32).Disabled(!a.hist.CanUndo()).Clicked() {

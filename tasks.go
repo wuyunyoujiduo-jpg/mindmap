@@ -13,7 +13,7 @@ import (
 // visibleTasks returns the tasks that pass the search and tag filter.
 func (a *app) visibleTasks() []model.TaskNode {
 	var out []model.TaskNode
-	for _, tn := range a.doc.Tasks() {
+	for _, tn := range a.file.Tasks() {
 		if a.highlighted(tn.Node) {
 			out = append(out, tn)
 		}
@@ -56,8 +56,10 @@ func (a *app) boardView(c *ui.Context) {
 				column.Border(2, statusColor(s))
 			}
 			if d, ok := ui.Drop[nodeDrag](column); ok {
-				if n, _ := a.doc.Find(d.ID); n != nil && n.Task != nil && n.Task.Status != s {
-					a.setStatus(n, s)
+				if sheet := a.file.SheetOf(d.ID); sheet != nil {
+					if n, _ := sheet.Find(d.ID); n != nil && n.Task != nil && n.Task.Status != s {
+						a.setStatus(n, s)
+					}
 				}
 			}
 			column.Children(func() {
@@ -91,10 +93,11 @@ func (a *app) taskCard(c *ui.Context, tn model.TaskNode, showStatus bool) {
 		card.Border(2, t.Accent)
 	}
 	if card.Pressed() {
-		a.selected = n.ID
+		a.selectTask(tn)
 	}
 	if card.DoubleClicked() {
 		a.mode = viewMap
+		a.selectTask(tn)
 		a.selectNode(n.ID)
 		a.canvas.Focus()
 	}
@@ -102,7 +105,7 @@ func (a *app) taskCard(c *ui.Context, tn model.TaskNode, showStatus bool) {
 		card.Opacity(0.4)
 	}
 	card.ContextMenu(func(m *ui.Menu) {
-		a.selected = n.ID
+		a.selectTask(tn)
 		if m.Item("在导图中显示").Chosen() {
 			a.mode = viewMap
 			a.selectNode(n.ID)
@@ -128,8 +131,15 @@ func (a *app) taskCard(c *ui.Context, tn model.TaskNode, showStatus bool) {
 				ui.Text(c, task.Priority.Label()).FontSize(11).TextColor(priorityColor(c, task.Priority)).NoWrap()
 			}
 		})
-		if len(tn.Parents) > 1 {
-			ui.Text(c, strings.Join(tn.Parents[1:], " › ")).FontSize(11).TextColor(t.TextMuted).NoWrap().Ellipsis("…")
+		where := tn.Parents
+		if len(where) > 0 {
+			where = where[1:] // the root says little
+		}
+		if len(a.file.Sheets) > 1 && tn.Sheet != nil {
+			where = append([]string{tn.Sheet.Title}, where...)
+		}
+		if len(where) > 0 {
+			ui.Text(c, strings.Join(where, " › ")).FontSize(11).TextColor(t.TextMuted).NoWrap().Ellipsis("…")
 		}
 		if len(n.Tags) > 0 || task.Start != nil || task.Due != nil {
 			ui.Row(c).Wrap().Gap(6).AlignItems(ui.Center).Children(func() {

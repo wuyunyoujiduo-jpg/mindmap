@@ -76,9 +76,17 @@ func main() {
 				item("看板", "CmdOrCtrl+2", func() { a.mode = viewBoard }),
 				item("日程", "CmdOrCtrl+3", func() { a.mode = viewAgenda }),
 				mygo.Separator(),
-				item("放大", "CmdOrCtrl+=", func() { a.setZoom(a.zoom + 0.1) }),
-				item("缩小", "CmdOrCtrl+-", func() { a.setZoom(a.zoom - 0.1) }),
+				item("放大", "CmdOrCtrl+=", func() { a.setZoom(a.cam().Zoom * 1.2) }),
+				item("缩小", "CmdOrCtrl+-", func() { a.setZoom(a.cam().Zoom / 1.2) }),
 				item("实际大小", "CmdOrCtrl+0", func() { a.setZoom(1) }),
+				item("回到中心", "CmdOrCtrl+Shift+0", a.recenter),
+				mygo.Separator(),
+				item("新建画布", "CmdOrCtrl+T", func() {
+					if a.file != nil {
+						a.mode = viewMap
+						a.addSheet()
+					}
+				}),
 				mygo.Separator(),
 				{Role: mygo.RoleToggleFullScreen},
 			}},
