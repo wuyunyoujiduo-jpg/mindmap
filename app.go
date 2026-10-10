@@ -53,6 +53,7 @@ type app struct {
 	changed  time.Time // of the last unsaved change
 	checked  time.Time // when the file was last checked for outside changes
 	saveErr  string
+	savedAt  time.Time // when this run last saved the map
 	hist     *model.History
 	lastEdit string // the key of the last coalesced edit (see mutate)
 
@@ -153,6 +154,7 @@ func (a *app) open(path string) error {
 	a.path, a.file = path, f
 	a.modTime = modTime(path)
 	a.dirty, a.saveErr, a.lastEdit = false, "", ""
+	a.savedAt = time.Time{}
 	a.hist.Clear()
 	a.cams = map[string]*camera{}
 	a.doc = nil
@@ -210,6 +212,7 @@ func (a *app) save() {
 		return
 	}
 	a.dirty, a.saveErr = false, ""
+	a.savedAt = a.now()
 	a.modTime = modTime(a.path)
 	a.refreshFiles()
 }
@@ -470,6 +473,33 @@ func (a *app) navChild() {
 	a.selectNode(n.Children[0].ID)
 }
 
+// navSide handles Left (left true) and Right: toward the root goes to the
+// parent, away from it to the first child. From the root, it goes to the
+// first branch on that side.
+func (a *app) navSide(left bool) {
+	n, p := a.selectedNode()
+	if n == nil {
+		return
+	}
+	if p == nil {
+		for _, c := range n.Children {
+			if a.boxes.Left[c.ID] == left {
+				a.selectNode(c.ID)
+				return
+			}
+		}
+		if n.Collapsed && !left {
+			a.navChild()
+		}
+		return
+	}
+	if a.boxes.Left[n.ID] == left {
+		a.navChild()
+	} else {
+		a.navParent()
+	}
+}
+
 // navSibling moves the selection by delta among the nodes shown at the
 // same depth, from top to bottom, so it goes on into cousins.
 func (a *app) navSibling(delta int) {
@@ -485,9 +515,12 @@ func (a *app) navSibling(delta int) {
 		return true
 	})
 	var walk func(n *model.Node, depth int)
+	left := a.boxes.Left[a.selected]
 	walk = func(n *model.Node, depth int) {
 		if depth == depthOf {
-			row = append(row, n.ID)
+			if a.boxes.Left[n.ID] == left { // stay on the selected node's side
+				row = append(row, n.ID)
+			}
 			return
 		}
 		if n.Collapsed {

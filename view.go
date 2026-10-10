@@ -179,14 +179,17 @@ func (a *app) toolbar(c *ui.Context) {
 	ui.Row(c).Padding(8, 12).Gap(10).Children(func() {
 		if a.doc != nil {
 			ui.Text(c, mapName(a.path)).Bold().FontSize(15).NoWrap().MaxWidth(220).Ellipsis("…")
-			status, col := "已保存", t.TextMuted
+			status, col := "已自动保存", t.TextMuted
 			switch {
 			case a.saveErr != "":
 				status, col = a.saveErr, t.Danger
 			case a.dirty:
-				status = "编辑中…"
+				status = "编辑中，稍后自动保存…"
+			case !a.savedAt.IsZero():
+				status = "已自动保存 " + a.savedAt.Format("15:04")
 			}
-			ui.Text(c, status).FontSize(12).TextColor(col).NoWrap().MaxWidth(240).Ellipsis("…")
+			ui.Text(c, status).FontSize(12).TextColor(col).NoWrap().MaxWidth(240).Ellipsis("…").
+				Tooltip("编辑停顿后自动保存到文件，无需手动保存")
 		}
 		ui.Spacer(c)
 		if a.doc == nil {

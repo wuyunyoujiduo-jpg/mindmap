@@ -18,6 +18,7 @@ type nodeDrag struct{ ID string }
 // Sizes of a node's box at zoom 1.
 const (
 	nodePadX     = 14
+	nodePadY     = 8
 	nodeGap      = 6
 	nodeHeight   = 34
 	rootHeight   = 46
@@ -69,12 +70,7 @@ func (a *app) parts(n *model.Node) nodeParts {
 func (a *app) measure(c *ui.Context) layout.Measure {
 	return func(n *model.Node, depth int) (float32, float32) {
 		p := a.parts(n)
-		size := titleSize(depth)
-		tw, _ := c.MeasureText(0, ui.Span{Text: p.title, Size: size, Weight: weight(depth)})
-		tw = min(max(tw, titleMin), titleMax)
-		if a.editing == n.ID {
-			tw = max(tw+20, editMinWidth)
-		}
+		tw, th := a.titleBox(c, n, depth)
 		w := 2*nodePadX + tw
 		if n.Task != nil {
 			w += dotSize + nodeGap
@@ -99,8 +95,24 @@ func (a *app) measure(c *ui.Context) layout.Measure {
 		if depth == 0 {
 			h = rootHeight
 		}
-		return w, h
+		return w, max(h, th+2*nodePadY)
 	}
+}
+
+// titleBox is the size of a node's title: one line up to titleMax wide,
+// and longer titles wrapped onto more lines at that width. A title being
+// edited stays on one line.
+func (a *app) titleBox(c *ui.Context, n *model.Node, depth int) (w, h float32) {
+	span := ui.Span{Text: a.parts(n).title, Size: titleSize(depth), Weight: weight(depth)}
+	w, h = c.MeasureText(0, span)
+	if a.editing == n.ID {
+		return max(min(w, titleMax)+20, editMinWidth), h
+	}
+	if w > titleMax {
+		w, h = c.MeasureText(titleMax, span)
+		w = titleMax
+	}
+	return max(w, titleMin), h
 }
 
 func weight(depth int) int {
@@ -156,7 +168,7 @@ func (a *app) canvasArea(c *ui.Context) {
 	// selected by keys in view.
 	if a.vp.W > 0 {
 		if root, ok := r.Boxes[a.doc.Root.ID]; ok && !cam.placed {
-			cam.X = 60 - root.X*z
+			cam.X = a.vp.W/2 - (root.X+root.W/2)*z
 			cam.Y = a.vp.H/2 - (root.Y+root.H/2)*z
 			cam.placed = true
 		}
@@ -211,6 +223,9 @@ func (a *app) canvasArea(c *ui.Context) {
 			y0 := oy + (from.Y+from.H/2)*z
 			x1 := ox + to.X*z
 			y1 := oy + (to.Y+to.H/2)*z
+			if e.Left {
+				x0, x1 = ox+from.X*z, ox+(to.X+to.W)*z
+			}
 			var path ui.Path
 			path.MoveTo(x0, y0)
 			mid := (x1 - x0) / 2
@@ -468,11 +483,10 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 			ui.Box(c).Size(dotSize*z, dotSize*z).Radius(999).Background(statusColor(n.Task.Status)).Shrink(0)
 		}
 		size := titleSize(depth) * z
-		tw, _ := c.MeasureText(0, ui.Span{Text: p.title, Size: titleSize(depth), Weight: weight(depth)})
-		tw = min(max(tw, titleMin), titleMax)
+		tw, _ := a.titleBox(c, n, depth)
 		if editing {
 			in := ui.TextInputBase(c.Key("edit"), &a.editText).FontSize(size).FontWeight(weight(depth)).
-				Placeholder("新主题").Width(max(tw+20, editMinWidth) * z).AutoFocus()
+				Placeholder("新主题").Width(tw * z).AutoFocus()
 			if in.Shortcut(0, ui.KeyEscape) {
 				a.cancelEdit()
 			} else if in.Submitted() {
@@ -487,7 +501,7 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 			}
 			return
 		}
-		title := ui.Text(c, n.Title).FontSize(size).FontWeight(weight(depth)).NoWrap().Ellipsis("…").Width(tw * z)
+		title := ui.Text(c, n.Title).FontSize(size).FontWeight(weight(depth)).Width(tw * z).Shrink(0)
 		if n.Task != nil && n.Task.Status == model.StatusDone {
 			title.Strikethrough()
 		}
@@ -512,7 +526,11 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 	// The button opening and closing the children, just right of the box.
 	if len(n.Children) > 0 && (n.Collapsed || selected) {
 		s := 18 * z
-		btn := ui.Box(c.Key("fold")).Absolute().Left(cam.X+(box.X+box.W)*z+3*z).Top(cam.Y+(box.Y+box.H/2)*z-s/2).
+		foldX := cam.X + (box.X+box.W)*z + 3*z
+		if a.boxes.Left[n.ID] {
+			foldX = cam.X + box.X*z - 3*z - s
+		}
+		btn := ui.Box(c.Key("fold:"+n.ID)).Absolute().Left(foldX).Top(cam.Y+(box.Y+box.H/2)*z-s/2).
 			Size(s, s).Radius(999).Center().Background(t.Background).Border(1, accent).Cursor(ui.CursorPointer)
 		text := "−"
 		if n.Collapsed {
@@ -602,9 +620,9 @@ func (a *app) canvasKey(ev ui.InputEvent) bool {
 	case ev.Mods == 0 && (ev.Key == ui.KeyF2 || ev.Key == ui.KeySpace):
 		a.startEdit(a.selected)
 	case ev.Mods == 0 && ev.Key == ui.KeyLeft:
-		a.navParent()
+		a.navSide(true)
 	case ev.Mods == 0 && ev.Key == ui.KeyRight:
-		a.navChild()
+		a.navSide(false)
 	case ev.Mods == 0 && ev.Key == ui.KeyUp:
 		a.navSibling(-1)
 	case ev.Mods == 0 && ev.Key == ui.KeyDown:

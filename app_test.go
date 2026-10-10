@@ -303,9 +303,19 @@ func TestCollapse(t *testing.T) {
 	if !find(t, a, "功能").Collapsed || tt.HasText("登录") {
 		t.Fatal("not collapsed")
 	}
-	tt.Key(0, ui.KeyRight) // opens and goes into it
+	if !a.boxes.Left[find(t, a, "功能").ID] {
+		t.Fatal("功能 is not on the left")
+	}
+	tt.Key(0, ui.KeyLeft) // away from the root: opens it and goes into it
 	if find(t, a, "功能").Collapsed {
-		t.Fatal("Right did not open")
+		t.Fatal("Left did not open")
+	}
+	if n, _ := a.selectedNode(); n.Title != "登录" {
+		t.Fatalf("selected %q", n.Title)
+	}
+	tt.Key(0, ui.KeyRight) // toward the root: the parent
+	if n, _ := a.selectedNode(); n.Title != "功能" {
+		t.Fatalf("selected %q", n.Title)
 	}
 }
 
@@ -379,11 +389,11 @@ func TestZoomAndDark(t *testing.T) {
 	tt.SetDark(true)
 	a.setZoom(1.3)
 	tt.Frame()
-	if err := tt.Click("列表加载慢"); err != nil {
+	if err := tt.Click("架构"); err != nil {
 		t.Fatal(err)
 	}
-	if _, p := a.selectedNode(); p.Title != "待优化" {
-		t.Fatalf("parent changed to %q", p.Title)
+	if n, p := a.selectedNode(); n.Title != "架构" || p != a.doc.Root {
+		t.Fatalf("selected %q", n.Title)
 	}
 	tt.Frame()
 	snapshot(t, tt, "dark-zoom")
@@ -440,11 +450,19 @@ func TestDraggingNodeDoesNotPan(t *testing.T) {
 	cam := a.cam()
 	x0 := cam.X
 	r, _ := tt.Find("前端")
+	root, _ := tt.Find("我的项目")
+	bx, by := root.X, root.Y+250 // empty canvas below the map
 	tt.Press(r.X+5, r.Y+5)
-	tt.Move(r.X+40, r.Y+60)
-	tt.Release(r.X+40, r.Y+60)
+	for i := 1; i <= 5; i++ {
+		f := float32(i) / 5
+		tt.Move(r.X+5+(bx-r.X-5)*f, r.Y+5+(by-r.Y-5)*f)
+	}
+	tt.Release(bx, by)
 	if cam.X != x0 {
 		t.Fatal("dragging a node moved the canvas")
+	}
+	if _, p := a.doc.Find(find(t, a, "前端").ID); p.Title != "架构" {
+		t.Fatalf("dropped on nothing, moved under %q", p.Title)
 	}
 }
 
@@ -576,4 +594,47 @@ func TestDragRootMovesMap(t *testing.T) {
 	if tt.Cursor() != ui.CursorPointer {
 		t.Fatalf("cursor over a node's text is %v", tt.Cursor())
 	}
+}
+
+func TestRootCenteredAndLongTitlesWrap(t *testing.T) {
+	a, tt := newTestApp(t)
+	root, _ := tt.Find("我的项目")
+	vp := a.vp
+	if cx := root.X + root.W/2; cx < vp.X+vp.W/2-20 || cx > vp.X+vp.W/2+20 {
+		t.Fatalf("root centered at x %v, canvas %v..%v", cx, vp.X, vp.X+vp.W)
+	}
+	if cy := root.Y + root.H/2; cy < vp.Y+vp.H/2-20 || cy > vp.Y+vp.H/2+20 {
+		t.Fatalf("root centered at y %v, canvas %v..%v", cy, vp.Y, vp.Y+vp.H)
+	}
+	// Branches on both sides.
+	left, right := 0, 0
+	for _, c := range a.doc.Root.Children {
+		if a.boxes.Left[c.ID] {
+			left++
+		} else {
+			right++
+		}
+	}
+	if left == 0 || right == 0 {
+		t.Fatalf("%d branches left, %d right", left, right)
+	}
+
+	// A long title wraps inside its node.
+	long := "支持配置接入 AI，右侧有对话框支持对文件修改，打开默认选择当前画布，AI 是否需要依赖本地工具"
+	n := find(t, a, "前端")
+	a.mutate("", func() { n.Title = long })
+	tt.Frame()
+	box := a.boxes.Boxes[n.ID]
+	if box.W > 2*nodePadX+titleMax+40 || box.H < 2*nodeHeight { // 40: the note's mark
+		t.Fatalf("long node box %+v", box)
+	}
+	text, ok := tt.Find(long)
+	if !ok {
+		t.Fatal("long title not shown")
+	}
+	cam := a.cam()
+	if right := cam.X + (box.X+box.W)*cam.Zoom; text.X+text.W > a.vp.X+right+1 {
+		t.Fatalf("text ends at %v, box at %v", text.X+text.W, a.vp.X+right)
+	}
+	snapshot(t, tt, "balanced")
 }
