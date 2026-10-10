@@ -74,6 +74,10 @@ func (a *app) measure(c *ui.Context) layout.Measure {
 		w := 2*nodePadX + tw
 		if n.Task != nil {
 			w += dotSize + nodeGap
+			if a.blocked(n) {
+				mw, _ := c.MeasureText(0, ui.Span{Text: "🔒", Size: markSize})
+				w += mw + nodeGap
+			}
 		}
 		w += float32(len(n.Markers)) * (markerSize(depth) + nodeGap)
 		for _, tag := range p.tags {
@@ -207,6 +211,14 @@ func (a *app) taskSummary(task *model.Task) string {
 		}
 		parts = append(parts, due)
 	}
+	if task.Estimate > 0 {
+		parts = append(parts, "估时 "+strconv.FormatFloat(task.Estimate, 'f', -1, 64)+" 小时")
+	}
+	if a.file != nil {
+		if it := a.file.Iteration(task.Iteration); it != nil {
+			parts = append(parts, it.Name)
+		}
+	}
 	return strings.Join(parts, " · ")
 }
 
@@ -330,6 +342,7 @@ func (a *app) canvasArea(c *ui.Context) {
 			return col
 		}
 		drawEdges(p, r, a.doc.Structure, rect.X+cam.X, rect.Y+cam.Y, z, lk.line, color)
+		a.drawDependencies(p, r, rect.X+cam.X, rect.Y+cam.Y, z)
 	})
 	cv.Children(func() {
 		shown.Walk(func(n, _ *model.Node, depth int) bool {
@@ -657,6 +670,13 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 		if n.Task != nil {
 			ui.Box(c.Key("task-dot")).Size(dotSize*z, dotSize*z).Radius(999).Background(statusColor(n.Task.Status)).Shrink(0).
 				Tooltip(a.taskSummary(n.Task))
+			if a.blocked(n) {
+				var names []string
+				for _, b := range a.file.Blockers(n) {
+					names = append(names, "「"+b.Title+"」")
+				}
+				ui.Text(c.Key("blocked"), "🔒").FontSize(markSize * z).NoWrap().Tooltip("等待 " + strings.Join(names, "、") + " 完成")
+			}
 		}
 		for _, m := range n.Markers {
 			// A click goes to the next marker of its group, as in XMind;

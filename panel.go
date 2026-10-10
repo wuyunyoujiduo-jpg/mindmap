@@ -201,6 +201,7 @@ func (a *app) taskEditor(c *ui.Context, n *model.Node) {
 	if task.Overdue(a.now()) {
 		ui.Text(c, "⚠ 已逾期").FontSize(12).TextColor(t.Danger)
 	}
+	a.planEditor(c, n)
 }
 
 // dateField edits an optional date: a switch sets or clears it.

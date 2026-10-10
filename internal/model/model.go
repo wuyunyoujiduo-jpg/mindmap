@@ -94,6 +94,24 @@ type Task struct {
 	Priority Priority   `json:"priority,omitempty"`
 	Start    *time.Time `json:"start,omitempty"`
 	Due      *time.Time `json:"due,omitempty"`
+	// Estimate is the work it takes, in hours.
+	Estimate float64 `json:"estimate,omitempty"`
+	// After are the IDs of the tasks to finish before this one.
+	After []string `json:"after,omitempty"`
+	// Iteration is the ID of the iteration it is planned in (File.Iterations).
+	Iteration string `json:"iteration,omitempty"`
+	// DoneAt is when it was marked done.
+	DoneAt *time.Time `json:"doneAt,omitempty"`
+}
+
+// SetStatus changes the status, noting when the task was done.
+func (t *Task) SetStatus(s Status, now time.Time) {
+	if s == StatusDone && t.Status != StatusDone {
+		t.DoneAt = &now
+	} else if s != StatusDone {
+		t.DoneAt = nil
+	}
+	t.Status = s
 }
 
 // Overdue reports whether the task is unfinished past its due day.
@@ -407,6 +425,11 @@ func (n *Node) clone() *Node {
 			due := *n.Task.Due
 			t.Due = &due
 		}
+		if n.Task.DoneAt != nil {
+			at := *n.Task.DoneAt
+			t.DoneAt = &at
+		}
+		t.After = slices.Clone(n.Task.After)
 		c.Task = &t
 	}
 	c.Children = make([]*Node, len(n.Children))

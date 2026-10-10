@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,7 +15,7 @@ import (
 func (a *app) visibleTasks() []model.TaskNode {
 	var out []model.TaskNode
 	for _, tn := range a.file.Tasks() {
-		if a.highlighted(tn.Node) {
+		if a.highlighted(tn.Node) && a.inIteration(tn.Node) {
 			out = append(out, tn)
 		}
 	}
@@ -43,6 +44,22 @@ func (a *app) boardView(c *ui.Context) {
 	t := c.Theme()
 	tasks := a.visibleTasks()
 	sortTasks(tasks)
+	ui.Column(c).Grow(1).Children(func() {
+		if a.file != nil && len(a.file.Iterations) > 0 {
+			ui.Row(c).Padding(10, 12, 0).Gap(8).AlignItems(ui.Center).Children(func() {
+				a.iterationPicker(c)
+				if a.iterFilter != "" && a.iterFilter != "-" {
+					done, total, hours := a.iterationProgress(a.iterFilter)
+					ui.Text(c, fmt.Sprintf("%d/%d 完成 · 剩余 %s 小时", done, total, hours)).FontSize(12).TextColor(t.TextMuted)
+				}
+			})
+		}
+		a.boardColumns(c, tasks)
+	})
+}
+
+func (a *app) boardColumns(c *ui.Context, tasks []model.TaskNode) {
+	t := c.Theme()
 	ui.Row(c).Grow(1).Padding(12).Gap(12).AlignItems(ui.Stretch).Children(func() {
 		for _, s := range model.Statuses {
 			var col []model.TaskNode
@@ -131,6 +148,13 @@ func (a *app) taskCard(c *ui.Context, tn model.TaskNode, showStatus bool) {
 				ui.Text(c, task.Priority.Label()).FontSize(11).TextColor(priorityColor(c, task.Priority)).NoWrap()
 			}
 		})
+		if bl := a.file.Blockers(n); len(bl) > 0 && task.Status != model.StatusDone {
+			more := ""
+			if len(bl) > 1 {
+				more = fmt.Sprintf(" 等 %d 项", len(bl))
+			}
+			ui.Text(c, "🔒 等待「"+bl[0].Title+"」"+more).FontSize(11).TextColor(ui.Hex("#d97706")).MaxLines(1)
+		}
 		where := tn.Parents
 		if len(where) > 0 {
 			where = where[1:] // the root says little
@@ -141,10 +165,16 @@ func (a *app) taskCard(c *ui.Context, tn model.TaskNode, showStatus bool) {
 		if len(where) > 0 {
 			ui.Text(c, strings.Join(where, " › ")).FontSize(11).TextColor(t.TextMuted).NoWrap().Ellipsis("…")
 		}
-		if len(n.Tags) > 0 || task.Start != nil || task.Due != nil {
+		if len(n.Tags) > 0 || task.Start != nil || task.Due != nil || task.Estimate > 0 || task.Iteration != "" {
 			ui.Row(c).Wrap().Gap(6).AlignItems(ui.Center).Children(func() {
 				for _, tag := range n.Tags {
 					tagChip(c.Key("tag:"+tag), tag, tag, false, 11).PassThrough()
+				}
+				if task.Estimate > 0 {
+					ui.Text(c, strconv.FormatFloat(task.Estimate, 'f', -1, 64)+"h").FontSize(11).TextColor(t.TextMuted).NoWrap()
+				}
+				if it := a.file.Iteration(task.Iteration); it != nil {
+					ui.Text(c, it.Name).FontSize(11).TextColor(t.Accent).NoWrap()
 				}
 				if d := dateRange(task); d != "" {
 					col := t.TextMuted

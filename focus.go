@@ -203,7 +203,7 @@ func (a *app) setStatusAll(s model.Status) {
 			if n.Task == nil {
 				n.Task = &model.Task{}
 			}
-			n.Task.Status = s
+			n.Task.SetStatus(s, a.now())
 		}
 	})
 }

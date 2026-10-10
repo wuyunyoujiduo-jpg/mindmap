@@ -31,6 +31,8 @@ type config struct {
 	// Editor opens the project's files linked from nodes: "vscode" (or
 	// ""), "cursor", "default" or "finder".
 	Editor string `json:"editor,omitempty"`
+	// NoReminders turns off the notifications of tasks due.
+	NoReminders bool `json:"noReminders,omitempty"`
 	// PanelWidth is the width the right panel was dragged to.
 	PanelWidth float32 `json:"panelWidth,omitempty"`
 }

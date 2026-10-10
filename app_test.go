@@ -35,6 +35,7 @@ type fakePlatform struct {
 	openPath   string
 	copied     string
 	opened     []string
+	notes      []string
 }
 
 func (f *fakePlatform) SaveFile(name, ext string, done func(string)) { done(f.savePath) }
@@ -45,6 +46,9 @@ func (f *fakePlatform) CopyText(s string)     { f.copied = s }
 func (f *fakePlatform) ClipboardText() string { return f.copied }
 func (f *fakePlatform) OpenURL(url string)    { f.opened = append(f.opened, url) }
 func (f *fakePlatform) OpenPath(path string)  { f.opened = append(f.opened, "path:"+path) }
+func (f *fakePlatform) Notify(title, body string) {
+	f.notes = append(f.notes, title+"："+body)
+}
 
 func (f *fakePlatform) ClipboardImage() []byte      { return f.clipImage }
 func (f *fakePlatform) ClipboardFiles() []string    { return f.clipFiles }
@@ -1059,7 +1063,8 @@ func TestOutline(t *testing.T) {
 		t.Fatalf("focus %q after deleting", a.outlineFocus)
 	}
 	// Same tree as the map.
-	tt.Click("思维导图")
+	a.mode = viewMap
+	tt.Frame()
 	if !tt.HasText("前端界面") {
 		t.Fatal("map does not show the outline's edit")
 	}
@@ -1182,7 +1187,7 @@ func TestAIProposesEdits(t *testing.T) {
 	}`}}
 	a.sendAI = fake.send
 	a.cfg.AIKey = "sk-ant-test"
-	if err := tt.Click("✦ AI"); err != nil {
+	if err := tt.Click("AI 助手"); err != nil {
 		t.Fatal(err)
 	}
 	a.ai.draft = "把待优化里的性能问题拆成任务"
@@ -1260,7 +1265,7 @@ func TestAINeedsKey(t *testing.T) {
 	a, tt := newTestApp(t)
 	t.Setenv("ANTHROPIC_API_KEY", "")
 	a.cfg.AIKey = ""
-	tt.Click("✦ AI")
+	tt.Click("AI 助手")
 	if !tt.HasText("API Key") {
 		t.Fatal("no settings without a key")
 	}
@@ -1326,7 +1331,7 @@ func TestDeepSeek(t *testing.T) {
 	defer srv.Close()
 	a.cfg.AIProvider, a.cfg.DSKey, a.cfg.DSBaseURL = providerDeepSeek, "sk-test", srv.URL
 
-	tt.Click("✦ AI")
+	tt.Click("AI 助手")
 	if !tt.HasText("DeepSeek V4.1 Flash（推荐）") {
 		t.Fatalf("model not shown: %q", tt.Texts())
 	}
@@ -1390,7 +1395,7 @@ func TestDeepSeekErrors(t *testing.T) {
 	}))
 	defer srv.Close()
 	a.cfg.AIProvider, a.cfg.DSKey, a.cfg.DSBaseURL = providerDeepSeek, "sk-test", srv.URL
-	tt.Click("✦ AI")
+	tt.Click("AI 助手")
 	a.ai.draft = "你好"
 	a.aiSend()
 	tt.Frame()
@@ -2263,4 +2268,131 @@ func TestLinks(t *testing.T) {
 		t.Fatal("no MCP window")
 	}
 	snapshot(t, tt, "mcp")
+}
+
+func TestDependenciesAndIterations(t *testing.T) {
+	a, tt := newTestApp(t)
+	search := find(t, a, "搜索")
+	login := find(t, a, "登录")
+	slow := find(t, a, "列表加载慢")
+	// 搜索 waits on 列表加载慢, through the palette.
+	clickNode(t, tt, a, "搜索")
+	clickInPanel(t, tt, "添加前置任务…")
+	if a.paletteMode != paletteAfter {
+		t.Fatal("not choosing")
+	}
+	tt.Type("列表")
+	tt.Key(0, ui.KeyEnter)
+	if !slices.Equal(search.Task.After, []string{slow.ID}) || !a.blocked(search) {
+		t.Fatalf("after %v", search.Task.After)
+	}
+	// No cycles.
+	a.addAfter(slow, search.ID)
+	if len(slow.Task.After) != 0 || !strings.Contains(a.saveErr, "循环") {
+		t.Fatalf("cycle allowed: %v", slow.Task.After)
+	}
+	tt.Frame()
+	snapshot(t, tt, "depends")
+	// Done unblocks, and notes when.
+	a.setStatus(slow, model.StatusDone)
+	if a.blocked(search) || slow.Task.DoneAt == nil {
+		t.Fatal("still blocked")
+	}
+	a.setStatus(slow, model.StatusTodo)
+	if slow.Task.DoneAt != nil {
+		t.Fatal("done time kept")
+	}
+
+	// Iterations, in the overview.
+	tt.Key(ui.Cmd, ui.Key6)
+	a.mode = viewOverview
+	tt.Frame()
+	if err := tt.Click("＋ 新建迭代"); err != nil {
+		t.Fatal(err)
+	}
+	if len(a.file.Iterations) != 1 || a.file.Iterations[0].Name != "迭代 1" {
+		t.Fatalf("iterations %+v", a.file.Iterations)
+	}
+	it := a.file.Iterations[0]
+	a.mutate("", func() { login.Task.Iteration = it.ID; login.Task.Estimate = 3; search.Task.Iteration = it.ID; search.Task.Estimate = 5 })
+	if done, total, hours := a.iterationProgress(it.ID); done != 1 || total != 2 || hours != "5" {
+		t.Fatalf("progress %d/%d %s", done, total, hours)
+	}
+	tt.Frame()
+	if !tt.HasText("1/2 完成 · 剩余 5 小时") {
+		t.Fatalf("texts %q", tt.Texts())
+	}
+	snapshot(t, tt, "overview")
+	// The board shows one iteration.
+	a.mode = viewBoard
+	a.iterFilter = it.ID
+	if got := len(a.visibleTasks()); got != 2 {
+		t.Fatalf("board shows %d", got)
+	}
+	tt.Frame()
+	snapshot(t, tt, "board-iteration")
+	a.iterFilter = ""
+}
+
+func TestTimeline(t *testing.T) {
+	a, tt := newTestApp(t)
+	search := find(t, a, "搜索")
+	day := today(testNow)
+	s, d := day, day.AddDate(0, 0, 3)
+	a.mutate("", func() { search.Task.Start, search.Task.Due = &s, &d })
+	a.mode = viewTimeline
+	tt.Frame()
+	r, ok := tt.Find("条 搜索")
+	if !ok {
+		t.Fatalf("no bar: %q", tt.Texts())
+	}
+	snapshot(t, tt, "timeline")
+	// Two days later.
+	tt.Press(r.X+r.W/2, r.Y+r.H/2)
+	tt.Move(r.X+r.W/2+30, r.Y+r.H/2)
+	tt.Move(r.X+r.W/2+56, r.Y+r.H/2)
+	tt.Release(r.X+r.W/2+56, r.Y+r.H/2)
+	tt.Frame()
+	if !search.Task.Start.Equal(day.AddDate(0, 0, 2)) || !search.Task.Due.Equal(day.AddDate(0, 0, 5)) {
+		t.Fatalf("dates %v – %v", search.Task.Start, search.Task.Due)
+	}
+	// Its end, a day longer.
+	e, _ := tt.Find("调整截止 搜索")
+	tt.Press(e.X+e.W/2, e.Y+e.H/2)
+	tt.Move(e.X+e.W/2+15, e.Y+e.H/2)
+	tt.Move(e.X+e.W/2+28, e.Y+e.H/2)
+	tt.Release(e.X+e.W/2+28, e.Y+e.H/2)
+	tt.Frame()
+	if !search.Task.Start.Equal(day.AddDate(0, 0, 2)) || !search.Task.Due.Equal(day.AddDate(0, 0, 6)) {
+		t.Fatalf("after the end: %v – %v", search.Task.Start, search.Task.Due)
+	}
+	// A task without dates is planned with a click.
+	if err := tt.Click("安排 支持导出图片"); err != nil {
+		t.Fatal(err)
+	}
+	if find(t, a, "支持导出图片").Task.Start == nil {
+		t.Fatal("not planned")
+	}
+}
+
+func TestReminders(t *testing.T) {
+	a, tt := newTestApp(t)
+	fp := a.plat.(*fakePlatform)
+	day := today(testNow)
+	yesterday := day.AddDate(0, 0, -1)
+	a.mutate("", func() {
+		find(t, a, "搜索").Task.Due = &day
+		find(t, a, "列表加载慢").Task.Due = &yesterday
+	})
+	a.remindedAt = time.Time{}
+	tt.Frame()
+	if len(fp.notes) != 1 || !strings.Contains(fp.notes[0], "已逾期：列表加载慢") || !strings.Contains(fp.notes[0], "今天到期：搜索") {
+		t.Fatalf("notes %q", fp.notes)
+	}
+	// Once a day.
+	a.remindedAt = time.Time{}
+	tt.Frame()
+	if len(fp.notes) != 1 {
+		t.Fatalf("notes %q", fp.notes)
+	}
 }

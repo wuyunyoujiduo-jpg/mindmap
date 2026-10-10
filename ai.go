@@ -615,7 +615,7 @@ func setFields(n *model.Node, op aiEdit) {
 		if n.Task == nil {
 			n.Task = &model.Task{}
 		}
-		n.Task.Status = model.Status(op.Status)
+		n.Task.SetStatus(model.Status(op.Status), time.Now())
 	}
 	switch op.Due {
 	case "":

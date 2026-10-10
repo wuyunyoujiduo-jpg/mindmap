@@ -34,6 +34,8 @@ type platform interface {
 	// opens a file in its default app.
 	OpenURL(url string)
 	OpenPath(path string)
+	// Notify shows a system notification.
+	Notify(title, body string)
 	ShowInFolder(path string)
 	Trash(path string) error
 	SetFullScreen(on bool)
@@ -56,6 +58,8 @@ const (
 	viewOutline
 	viewBoard
 	viewAgenda
+	viewTimeline
+	viewOverview
 )
 
 // autosaveDelay is how long after the last change the map is saved.
@@ -135,6 +139,12 @@ type app struct {
 	historyOpen  bool
 	mcpOpen      bool // the window on connecting AI agents
 	linkDraft    string
+	iterFilter   string // the iteration the board and timeline show: "" all, "-" none
+	tlWeeks      bool   // the timeline shows weeks rather than days
+	tlDrag       tlDrag
+	reminded     map[string]bool // tasks reminded of on remindedDay
+	remindedDay  time.Time
+	remindedAt   time.Time
 	linkFrom     string // the node a link to a node is being chosen for
 	backlinkFor  string // the node backlinkList is of, as of backlinkMod
 	backlinkMod  time.Time
@@ -397,6 +407,7 @@ func (a *app) tick(c *ui.Context) {
 			a.save()
 		}
 	}
+	a.reminderCheck()
 	if a.path != "" && now.Sub(a.checked) >= 2*time.Second {
 		a.checked = now
 		if mt := modTime(a.path); !mt.IsZero() && !mt.Equal(a.modTime) {
@@ -604,7 +615,7 @@ func (a *app) setStatus(n *model.Node, s model.Status) {
 		if n.Task == nil {
 			n.Task = &model.Task{}
 		}
-		n.Task.Status = s
+		n.Task.SetStatus(s, a.now())
 	})
 }
 

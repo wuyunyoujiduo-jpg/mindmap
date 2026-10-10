@@ -106,7 +106,7 @@ func (a *app) restoreView(f *model.File) {
 		if d, _ := f.Sheet(v.Sheet); d != nil {
 			sheet = v.Sheet
 		}
-		if v.Mode >= viewMap && v.Mode <= viewAgenda {
+		if v.Mode >= viewMap && v.Mode <= viewOverview {
 			a.mode = v.Mode
 		}
 	}

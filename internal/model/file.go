@@ -3,6 +3,7 @@ package model
 import (
 	"fmt"
 	"slices"
+	"time"
 )
 
 // File is what one mind map file holds: one or more canvases, each a map
@@ -13,6 +14,49 @@ type File struct {
 	// Project is the folder of the project's code, which relative links
 	// of nodes are in.
 	Project string `json:"project,omitempty"`
+	// Iterations are the periods tasks are planned in, as sprints.
+	Iterations []Iteration `json:"iterations,omitempty"`
+}
+
+// Iteration is a period of work, as a sprint or a milestone.
+type Iteration struct {
+	ID    string     `json:"id"`
+	Name  string     `json:"name"`
+	Start *time.Time `json:"start,omitempty"`
+	End   *time.Time `json:"end,omitempty"`
+}
+
+// Iteration returns the iteration with the ID, or nil.
+func (f *File) Iteration(id string) *Iteration {
+	for i := range f.Iterations {
+		if f.Iterations[i].ID == id {
+			return &f.Iterations[i]
+		}
+	}
+	return nil
+}
+
+// Node returns the node with the ID, of any canvas, or nil.
+func (f *File) Node(id string) *Node {
+	if d := f.SheetOf(id); d != nil {
+		n, _ := d.Find(id)
+		return n
+	}
+	return nil
+}
+
+// Blockers are the tasks a task waits on that are not done yet.
+func (f *File) Blockers(n *Node) []*Node {
+	if n.Task == nil {
+		return nil
+	}
+	var out []*Node
+	for _, id := range n.Task.After {
+		if b := f.Node(id); b != nil && b.Task != nil && b.Task.Status != StatusDone {
+			out = append(out, b)
+		}
+	}
+	return out
 }
 
 // NewFile returns a file with one canvas whose root has the given title.
@@ -99,6 +143,17 @@ func (f *File) MoveSheet(from, to int) {
 // Clone returns a deep copy of the file.
 func (f *File) Clone() *File {
 	c := &File{Version: f.Version, Project: f.Project, Sheets: make([]*Document, len(f.Sheets))}
+	for _, it := range f.Iterations {
+		if it.Start != nil {
+			s := *it.Start
+			it.Start = &s
+		}
+		if it.End != nil {
+			e := *it.End
+			it.End = &e
+		}
+		c.Iterations = append(c.Iterations, it)
+	}
 	for i, d := range f.Sheets {
 		c.Sheets[i] = d.Clone()
 	}

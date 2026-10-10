@@ -38,6 +38,10 @@ func (a *app) view(c *ui.Context) {
 						})
 					case a.mode == viewBoard:
 						a.boardView(c)
+					case a.mode == viewTimeline:
+						a.timelineView(c)
+					case a.mode == viewOverview:
+						a.overviewView(c)
 					default:
 						a.agendaView(c)
 					}
@@ -157,10 +161,10 @@ func (a *app) toolbar(c *ui.Context) {
 			return
 		}
 		mapLabel := "思维导图"
-		if room < 640 {
+		if room < 960 {
 			mapLabel = "导图"
 		}
-		ui.Segmented(c, &a.mode, mapLabel, "大纲", "看板", "日程").Shrink(0)
+		ui.Segmented(c, &a.mode, mapLabel, "大纲", "看板", "日程", "时间线", "总览").Shrink(0)
 		if ui.Button(c, "▶").Label("开始演说").Tooltip("开始演说 ⌘↩").Width(32).Shrink(0).Clicked() {
 			a.later(func() { a.startPresenting("") })
 		}
@@ -172,10 +176,14 @@ func (a *app) toolbar(c *ui.Context) {
 			a.mode = viewMap
 			a.nextMatch()
 		}
-		if room >= 700 && ui.Button(c, "⌘K").Label("命令面板").Tooltip("命令面板：查找命令、节点和导图 ⌘K").Shrink(0).Clicked() {
+		if room >= 1000 && ui.Button(c, "⌘K").Label("命令面板").Tooltip("命令面板：查找命令、节点和导图 ⌘K").Shrink(0).Clicked() {
 			a.openPalette(paletteAll)
 		}
-		ai := ui.Button(c, "✦ AI").Label("AI 助手").Tooltip("AI 助手").Shrink(0)
+		aiLabel := "✦ AI"
+		if room < 900 {
+			aiLabel = "✦"
+		}
+		ai := ui.Button(c, aiLabel).Label("AI 助手").Tooltip("AI 助手").Shrink(0)
 		if a.aiOpen {
 			ai.Background(t.Accent).TextColor(t.AccentText)
 		}

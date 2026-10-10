@@ -21,7 +21,8 @@ const (
 	paletteAll = iota
 	paletteMaps
 	paletteSearch
-	paletteLink // a node to link the node a.linkFrom to
+	paletteLink  // a node to link the node a.linkFrom to
+	paletteAfter // a task for the task a.linkFrom to wait on
 )
 
 // paletteItem is a line of the palette.
@@ -49,6 +50,8 @@ func (a *app) commands() []command {
 		{"切换到大纲", "⌘2", view(viewOutline), hasDoc},
 		{"切换到看板", "⌘3", view(viewBoard), hasDoc},
 		{"切换到日程", "⌘4", view(viewAgenda), hasDoc},
+		{"切换到时间线", "⌘5", view(viewTimeline), hasDoc},
+		{"切换到总览", "⌘6", view(viewOverview), hasDoc},
 		{"开始演说", "⌘↩", func() { a.startPresenting("") }, hasDoc},
 		{"搜索所有导图", "⌘⇧F", func() { a.openPalette(paletteSearch) }, nil},
 		{"快速切换导图", "⌘P", func() { a.openPalette(paletteMaps) }, nil},
@@ -100,6 +103,21 @@ func (a *app) paletteItems() []paletteItem {
 		}
 		if q != "" && a.file != nil {
 			items = append(items, a.nodeItems(a.path, a.file, q, 30, a.goToNode)...)
+		}
+	}
+	if a.paletteMode == paletteAfter && a.file != nil {
+		from := a.file.Node(a.linkFrom)
+		for _, tn := range a.file.Tasks() {
+			n := tn.Node
+			if from == nil || from.Task == nil || n.ID == from.ID || !match(n.Title) || slices.Contains(from.Task.After, n.ID) {
+				continue
+			}
+			id := n.ID
+			items = append(items, paletteItem{"任务", n.Title, strings.Join(tn.Parents, " › "), func() {
+				if f := a.file.Node(a.linkFrom); f != nil {
+					a.addAfter(f, id)
+				}
+			}})
 		}
 	}
 	if a.paletteMode == paletteAll && q != "" || a.paletteMode == paletteMaps {
@@ -281,6 +299,7 @@ func (a *app) paletteView(c *ui.Context) {
 			paletteMaps:   "切换到导图…",
 			paletteSearch: "搜索所有导图里的节点、备注和标签…",
 			paletteLink:   "输入关键词，选择要链接到的节点…",
+			paletteAfter:  "选择要先完成的任务…",
 		}[a.paletteMode]
 		w, _ := c.Size()
 		ui.Column(c).Width(min(640, w-80)).Gap(8).Children(func() {
@@ -353,7 +372,7 @@ var shortcuts = []struct {
 }{
 	{"全局", [][2]string{
 		{"⌘K", "命令面板"}, {"⌘P", "快速切换导图"}, {"⌘⇧F", "搜索所有导图"}, {"⌘N", "新建导图"},
-		{"⌘T", "新建画布"}, {"⌘1–4", "导图 / 大纲 / 看板 / 日程"}, {"⌘↩", "开始演说"}, {"⌘?", "快捷键速查"},
+		{"⌘T", "新建画布"}, {"⌘1–6", "导图 / 大纲 / 看板 / 日程 / 时间线 / 总览"}, {"⌘↩", "开始演说"}, {"⌘?", "快捷键速查"},
 	}},
 	{"编辑节点", [][2]string{
 		{"Tab", "添加子节点"}, {"↩", "添加同级节点"}, {"Space / F2", "编辑标题"}, {"Delete", "删除"},
