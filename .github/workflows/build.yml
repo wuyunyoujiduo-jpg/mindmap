@@ -3,13 +3,19 @@ name: Build
 # Every push runs the tests. The macOS app, which takes macOS runner
 # minutes, is built only for a tag such as v0.1.0, which publishes a
 # release with the disk image, or when run by hand from the Actions tab,
-# which keeps it as an artifact of the run.
+# which keeps it as an artifact of the run, or with "release" checked
+# publishes the release of mygo.json's version, creating its tag.
 on:
   push:
     branches: ["**"]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
+    inputs:
+      release:
+        description: "发布 Release（版本号取自 mygo.json，并创建同名标签）"
+        type: boolean
+        default: false
 
 permissions:
   contents: write # creating the release
@@ -44,10 +50,11 @@ jobs:
           name: MindMap-macOS
           path: build/*/*.dmg
       - name: Publish the release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || inputs.release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" build/*/*.dmg \
-            --repo "$GITHUB_REPOSITORY" --title "MindMap $GITHUB_REF_NAME" \
+          tag="v$(jq -r .version mygo.json)"
+          gh release create "$tag" build/*/*.dmg --target "$GITHUB_SHA" \
+            --repo "$GITHUB_REPOSITORY" --title "MindMap $tag" \
             --notes-file .github/release-notes.md --generate-notes
