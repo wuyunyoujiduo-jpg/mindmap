@@ -17,7 +17,24 @@
 - **外部修改自动载入**：文件被其他程序（例如 AI 编码助手）修改后，自动载入新内容
 - 浅色/深色主题跟随系统
 
-## 运行
+## 下载安装（macOS）
+
+在 [Releases](https://github.com/wuyunyoujiduo-jpg/mindmap/releases/latest) 下载 `.dmg`，打开后把 MindMap 拖进「应用程序」。应用没有经过苹果公证，第一次打开前在终端执行：
+
+```sh
+xattr -cr /Applications/MindMap.app
+```
+
+## 发布新版本
+
+每次推送代码，GitHub Actions 都会运行测试，并打包 macOS 应用（在 Actions 的运行记录里可以下载）。发布正式版本的步骤：
+
+1. 修改 `mygo.json` 里的 `version`，比如改成 `0.2.0`，然后提交
+2. 推送同名标签：`git tag v0.2.0 && git push origin v0.2.0`
+
+工作流会检查标签和版本号是否一致，打包后在 Releases 页面发布 `.dmg`。
+
+## 从源码运行
 
 需要 Go 1.27 或更高版本。如果本机 Go 版本更低，`go` 命令会自动下载所需的工具链。
 
