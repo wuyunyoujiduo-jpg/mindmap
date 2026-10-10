@@ -27,7 +27,7 @@ xattr -cr /Applications/MindMap.app
 
 ## 发布新版本
 
-每次推送代码，GitHub Actions 都会运行测试，并打包 macOS 应用（在 Actions 的运行记录里可以下载）。发布正式版本的步骤：
+每次推送代码，GitHub Actions 只运行测试。macOS 应用只在两种情况下打包：发布版本时；或者在 Actions 页面选择 Build 工作流，点「Run workflow」手动运行（打好的包在运行记录里下载）。发布正式版本的步骤：
 
 1. 修改 `mygo.json` 里的 `version`，比如改成 `0.2.0`，然后提交
 2. 推送同名标签：`git tag v0.2.0 && git push origin v0.2.0`

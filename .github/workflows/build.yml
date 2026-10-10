@@ -1,8 +1,9 @@
 name: Build
 
-# Every push runs the tests and builds the macOS app, kept as an artifact
-# of the run. Pushing a tag such as v0.1.0 also publishes a release with
-# the disk image, the download link to share.
+# Every push runs the tests. The macOS app, which takes macOS runner
+# minutes, is built only for a tag such as v0.1.0, which publishes a
+# release with the disk image, or when run by hand from the Actions tab,
+# which keeps it as an artifact of the run.
 on:
   push:
     branches: ["**"]
@@ -26,6 +27,7 @@ jobs:
 
   macos:
     needs: test
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
