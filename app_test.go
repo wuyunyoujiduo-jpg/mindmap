@@ -1,14 +1,19 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"image/png"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
@@ -1071,5 +1076,149 @@ func TestPresentation(t *testing.T) {
 	tt.Key(0, ui.KeyLeft) // back to 架构, every item shown
 	if a.slides[a.slideIndex].node.Title != "架构" || a.slideStep != 2 {
 		t.Fatalf("back at %q step %d", a.slides[a.slideIndex].node.Title, a.slideStep)
+	}
+}
+
+// fakeClaude answers with replies decoded from JSON, as the API sends them,
+// and keeps the requests.
+type fakeClaude struct {
+	replies  []string
+	requests []anthropic.BetaMessageNewParams
+}
+
+func (f *fakeClaude) send(_ context.Context, _ config, p anthropic.BetaMessageNewParams) (*anthropic.BetaMessage, error) {
+	f.requests = append(f.requests, p)
+	if len(f.replies) == 0 {
+		return nil, errors.New("no reply")
+	}
+	var m anthropic.BetaMessage
+	err := json.Unmarshal([]byte(f.replies[0]), &m)
+	f.replies = f.replies[1:]
+	return &m, err
+}
+
+func TestAIProposesEdits(t *testing.T) {
+	a, tt := newTestApp(t)
+	opt := find(t, a, "待优化")
+	slow := find(t, a, "列表加载慢")
+	fake := &fakeClaude{replies: []string{fmt.Sprintf(`{
+		"id": "msg_1", "type": "message", "role": "assistant", "model": "claude-opus-5-5",
+		"stop_reason": "tool_use",
+		"content": [
+			{"type": "text", "text": "我把性能问题拆成了两个任务。"},
+			{"type": "tool_use", "id": "toolu_1", "name": "propose_edits", "input": {
+				"summary": "拆分性能优化任务",
+				"operations": [
+					{"op": "add", "id": "", "parent": %[1]q, "ref": "r1", "title": "性能", "note": "", "tags": ["性能"], "status": "", "due": ""},
+					{"op": "move", "id": %[2]q, "parent": "r1", "ref": "", "title": "", "note": "", "tags": [], "status": "", "due": ""},
+					{"op": "add", "id": "", "parent": "r1", "ref": "", "title": "图片懒加载", "note": "先看首页", "tags": [], "status": "todo", "due": "2026-10-20"},
+					{"op": "update", "id": %[2]q, "parent": "", "ref": "", "title": "", "note": "", "tags": [], "status": "doing", "due": ""}
+				]}}
+		],
+		"usage": {"input_tokens": 10, "output_tokens": 10}
+	}`, opt.ID, slow.ID), `{
+		"id": "msg_2", "type": "message", "role": "assistant", "model": "claude-opus-5-5",
+		"stop_reason": "end_turn",
+		"content": [{"type": "text", "text": "好的。"}],
+		"usage": {"input_tokens": 10, "output_tokens": 2}
+	}`}}
+	a.sendAI = fake.send
+	a.cfg.AIKey = "sk-ant-test"
+	if err := tt.Click("✦ AI"); err != nil {
+		t.Fatal(err)
+	}
+	a.ai.draft = "把待优化里的性能问题拆成任务"
+	a.aiSend()
+	tt.Frame()
+
+	// The request: the model, the tool, and the map with its IDs.
+	req := fake.requests[0]
+	if req.Model != "claude-opus-5-5" || len(req.Tools) != 1 || req.Tools[0].OfTool.Name != "propose_edits" {
+		t.Fatalf("request %+v", req)
+	}
+	body, _ := json.Marshal(req)
+	if !strings.Contains(string(body), "["+slow.ID+"] 列表加载慢") || !strings.Contains(string(body), `"fallbacks":"default"`) {
+		t.Fatalf("request body %s", body)
+	}
+	if !tt.HasText("拆分性能优化任务") || !tt.HasText("应用") {
+		t.Fatalf("no proposal: %q", tt.Texts())
+	}
+	snapshot(t, tt, "ai-proposal")
+
+	// Applying makes every edit, as one step.
+	if err := tt.Click("应用"); err != nil {
+		t.Fatal(err)
+	}
+	perf := find(t, a, "性能")
+	if _, p := a.doc.Find(perf.ID); p != opt {
+		t.Fatal("性能 not under 待优化")
+	}
+	if len(perf.Children) != 2 || perf.Children[0] != slow || slow.Task.Status != model.StatusDoing {
+		t.Fatalf("性能's children %d, 列表加载慢 %v", len(perf.Children), slow.Task.Status)
+	}
+	lazy := perf.Children[1]
+	if lazy.Title != "图片懒加载" || lazy.Note != "先看首页" || lazy.Task == nil || lazy.Task.Due.Format("2006-01-02") != "2026-10-20" {
+		t.Fatalf("new task %+v %+v", lazy, lazy.Task)
+	}
+	if !tt.HasText("✓ 已应用 4 项修改（可撤销）") {
+		t.Fatalf("texts %q", tt.Texts())
+	}
+
+	// The next message answers the tool call first.
+	a.ai.draft = "谢谢"
+	a.aiSend()
+	second := fake.requests[1]
+	last := second.Messages[len(second.Messages)-1]
+	if len(second.Messages) != 3 || last.Content[0].OfToolResult == nil || last.Content[0].OfToolResult.ToolUseID != "toolu_1" {
+		t.Fatalf("second request %d messages, last %+v", len(second.Messages), last.Content[0])
+	}
+
+	// Undo takes back the whole proposal.
+	a.undo()
+	if _, err := findIn(a.doc, "性能"); err == nil {
+		t.Fatal("undo left the edits")
+	}
+}
+
+func TestAIEditsAllOrNone(t *testing.T) {
+	a, _ := newTestApp(t)
+	before, _ := a.file.Marshal()
+	_, err := a.applyEdits([]aiEdit{
+		{Op: "update", ID: a.doc.Root.ID, Title: "改了"},
+		{Op: "delete", ID: "no-such-node"},
+	})
+	if err == nil {
+		t.Fatal("bad edit applied")
+	}
+	if after, _ := a.file.Marshal(); string(after) != string(before) {
+		t.Fatal("a failed proposal changed the map")
+	}
+	if a.hist.CanUndo() {
+		t.Fatal("a failed proposal made a step")
+	}
+}
+
+func TestAINeedsKey(t *testing.T) {
+	a, tt := newTestApp(t)
+	t.Setenv("ANTHROPIC_API_KEY", "")
+	a.cfg.AIKey = ""
+	tt.Click("✦ AI")
+	if !tt.HasText("API Key") {
+		t.Fatal("no settings without a key")
+	}
+	a.ai.draft = "hi"
+	a.aiSend()
+	if len(a.ai.history) != 0 {
+		t.Fatal("sent without a key")
+	}
+	if !a.aiOpen {
+		t.Fatal("AI not open")
+	}
+	tt.Frame()
+	if err := tt.Click("关闭"); err != nil {
+		t.Fatal(err)
+	}
+	if a.aiOpen || !tt.HasText("样式") {
+		t.Fatalf("closing did not bring the tabs back: open %v, %q", a.aiOpen, tt.Texts())
 	}
 }

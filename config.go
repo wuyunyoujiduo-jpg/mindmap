@@ -13,6 +13,11 @@ type config struct {
 	// Favorites are the maps shown first in the sidebar, in the order they
 	// were starred.
 	Favorites []string `json:"favorites,omitempty"`
+	// The AI assistant: an Anthropic API key, the model, and the API's
+	// address when it goes through a proxy.
+	AIKey     string `json:"aiKey,omitempty"`
+	AIModel   string `json:"aiModel,omitempty"`
+	AIBaseURL string `json:"aiBaseURL,omitempty"`
 }
 
 func configPath() string {
@@ -45,7 +50,9 @@ func (c config) save() {
 		return
 	}
 	b, _ := json.MarshalIndent(c, "", "  ")
-	_ = os.WriteFile(p, b, 0o644)
+	// Only the user may read it: it holds the API key.
+	_ = os.WriteFile(p, b, 0o600)
+	_ = os.Chmod(p, 0o600)
 }
 
 // defaultDir is where maps go until the user picks a folder.

@@ -25,6 +25,10 @@ type platform interface {
 	SetFullScreen(on bool)
 }
 
+// asyncRunner runs work off the main thread and then done on it, with what
+// work returned.
+type asyncRunner func(work func() (any, error), done func(any, error))
+
 // Views of the main area.
 const (
 	viewMap = iota
@@ -93,6 +97,12 @@ type app struct {
 	slideIndex int
 	slideStep  int // items of the slide shown
 
+	// The AI assistant.
+	ai     aiState
+	aiOpen bool // the panel shows the assistant
+	sendAI aiSender
+	async  asyncRunner
+
 	// Chrome.
 	mode          int
 	search        string
@@ -123,6 +133,11 @@ func newApp(plat platform, cfg config) *app {
 		tagsOpen:      true,
 		favoritesOpen: true,
 		folderClosed:  map[string]bool{},
+		sendAI:        sendToClaude,
+		async: func(work func() (any, error), done func(any, error)) {
+			v, err := work()
+			done(v, err)
+		},
 	}
 	a.openDir(cfg.Dir)
 	if cfg.File != "" && inside(cfg.File, a.dir) {

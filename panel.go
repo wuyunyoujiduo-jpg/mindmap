@@ -23,6 +23,10 @@ const (
 func (a *app) panel(c *ui.Context) {
 	t := c.Theme()
 	ui.Column(c).Width(a.panelWidth).FillHeight().Background(t.Surface).Children(func() {
+		if a.aiOpen && a.doc != nil {
+			a.aiPanel(c) // scrolls its conversation itself
+			return
+		}
 		ui.Box(c).Padding(10, 16, 4).Children(func() {
 			ui.Segmented(c, &a.panelTab, "节点", "样式", "标记", "画布", "演说").FillWidth()
 		})

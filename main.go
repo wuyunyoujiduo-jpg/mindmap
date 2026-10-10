@@ -51,6 +51,12 @@ func main() {
 			Content:   ui.View(a.view),
 		})
 		plat.win = win
+		a.async = func(work func() (any, error), done func(any, error)) {
+			go func() {
+				v, err := work()
+				win.Update(func() { done(v, err) })
+			}()
+		}
 		item := func(label, accel string, fn func()) *mygo.MenuItem {
 			return &mygo.MenuItem{Label: label, Accelerator: accel, Click: func(*mygo.MenuItem, *mygo.Window) {
 				win.Update(fn)

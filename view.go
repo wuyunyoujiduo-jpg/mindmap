@@ -124,6 +124,13 @@ func (a *app) toolbar(c *ui.Context) {
 			a.mode = viewMap
 			a.nextMatch()
 		}
+		ai := ui.Button(c, "✦ AI").Label("AI 助手").Tooltip("AI 助手")
+		if a.aiOpen {
+			ai.Background(t.Accent).TextColor(t.AccentText)
+		}
+		if ai.Clicked() {
+			a.aiOpen = !a.aiOpen
+		}
 		ui.Row(c).Gap(2).Children(func() {
 			if ui.Button(c, "↶").Label("撤销").Tooltip("撤销 ⌘Z").Width(32).Disabled(!a.hist.CanUndo()).Clicked() {
 				a.undo()
