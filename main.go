@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/transfer"
 	"github.com/egoist/mygo/ui"
 )
 
@@ -43,6 +44,23 @@ func (d *desktop) SaveFile(name, ext string, done func(string)) {
 		d.win.Update(func() { done(path) })
 	}()
 }
+
+func (d *desktop) OpenFile(title string, exts []string, done func(string)) {
+	go func() {
+		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
+			Parent:  d.win,
+			Title:   title,
+			Filters: []mygo.FileFilter{{Name: strings.ToUpper(exts[0]), Extensions: exts}},
+		})
+		path := ""
+		if err == nil && len(paths) > 0 {
+			path = paths[0]
+		}
+		d.win.Update(func() { done(path) })
+	}()
+}
+
+func (d *desktop) CopyText(s string) { _ = mygo.Clipboard.Write(transfer.TextData(s)) }
 
 func (d *desktop) ShowInFolder(path string) { mygo.Shell.ShowItemInFolder(path) }
 
@@ -108,7 +126,12 @@ func main() {
 				item("打开文件夹…", "CmdOrCtrl+O", a.pickWorkspace),
 				item("保存", "CmdOrCtrl+S", a.save),
 				mygo.Separator(),
+				item("导入 XMind…", "CmdOrCtrl+Shift+I", a.askImportXMind),
+				mygo.Separator(),
 				item("导出为图片…", "CmdOrCtrl+Shift+E", a.askExportImage),
+				item("导出为 Markdown…", "", a.askExportMarkdown),
+				item("导出为 XMind…", "", a.askExportXMind),
+				item("复制当前画布为 Markdown", "CmdOrCtrl+Shift+C", a.copyMarkdown),
 				mygo.Separator(),
 				{Role: mygo.RoleClose},
 			}},

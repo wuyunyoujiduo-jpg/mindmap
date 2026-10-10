@@ -23,6 +23,11 @@ type platform interface {
 	// SaveFile asks where to save a file named name, of the extension,
 	// and calls done with the path, "" when canceled, on the main thread.
 	SaveFile(name, ext string, done func(path string))
+	// OpenFile asks for a file of one of the extensions and calls done with
+	// it, "" when canceled, on the main thread.
+	OpenFile(title string, exts []string, done func(path string))
+	// CopyText puts text on the clipboard.
+	CopyText(s string)
 	ShowInFolder(path string)
 	Trash(path string) error
 	SetFullScreen(on bool)
@@ -132,9 +137,11 @@ type app struct {
 	renaming      string          // the map or folder renamed in the sidebar
 	renameText    string
 	tagQuery      string
-	exportCam     *camera // set while the canvas is drawn into an image
-	tagDraft      string  // a tag being typed in the node panel
-	tagAdding     bool    // the sidebar's new-tag field is shown
+	notice        string    // a passing message in the toolbar, as "已复制"
+	noticeAt      time.Time // since when it shows, for noticeTime
+	exportCam     *camera   // set while the canvas is drawn into an image
+	tagDraft      string    // a tag being typed in the node panel
+	tagAdding     bool      // the sidebar's new-tag field is shown
 	tagNew        string
 	tagRenaming   string // the tag renamed in the sidebar
 	tagRenameText string
@@ -246,16 +253,29 @@ func (a *app) currentFolder() string {
 	return a.dir
 }
 
+// noticeTime is how long a notice shows.
+const noticeTime = 3 * time.Second
+
+// tell shows a passing message in the toolbar.
+func (a *app) tell(msg string) { a.notice, a.noticeAt = msg, a.now() }
+
+// freeMapPath is the path of a map named name in dir, numbered past the
+// maps there: "name", "name 2", "name 3"…
+func freeMapPath(dir, name string) string {
+	try := name
+	for i := 2; ; i++ {
+		path := filepath.Join(dir, model.FileName(try))
+		if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+			return path
+		}
+		try = fmt.Sprintf("%s %d", name, i)
+	}
+}
+
 // newMapIn creates a map in dir and opens it, editing its root.
 func (a *app) newMapIn(dir string) {
-	name := "新导图"
-	for i := 2; ; i++ {
-		if _, err := os.Stat(filepath.Join(dir, model.FileName(name))); errors.Is(err, os.ErrNotExist) {
-			break
-		}
-		name = fmt.Sprintf("新导图 %d", i)
-	}
-	path := filepath.Join(dir, model.FileName(name))
+	path := freeMapPath(dir, "新导图")
+	name := mapName(path)
 	if err := model.NewFile(name).Save(path); err != nil {
 		a.saveErr = err.Error()
 		return

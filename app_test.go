@@ -31,9 +31,15 @@ type fakePlatform struct {
 	clipFiles  []string
 	picked     string
 	savePath   string
+	openPath   string
+	copied     string
 }
 
 func (f *fakePlatform) SaveFile(name, ext string, done func(string)) { done(f.savePath) }
+func (f *fakePlatform) OpenFile(title string, exts []string, done func(string)) {
+	done(f.openPath)
+}
+func (f *fakePlatform) CopyText(s string) { f.copied = s }
 
 func (f *fakePlatform) ClipboardImage() []byte      { return f.clipImage }
 func (f *fakePlatform) ClipboardFiles() []string    { return f.clipFiles }
@@ -1785,4 +1791,51 @@ func TestMarkdownInChat(t *testing.T) {
 		t.Fatalf("texts %q", tt.Texts())
 	}
 	snapshot(t, tt, "ai-markdown")
+}
+
+func TestMarkdownAndXMindFromTheApp(t *testing.T) {
+	a, tt := newTestApp(t)
+	fp := a.plat.(*fakePlatform)
+	// Copy the canvas shown as Markdown.
+	a.copyMarkdown()
+	if !strings.HasPrefix(fp.copied, "# 我的项目\n") || !strings.Contains(fp.copied, "- 功能") {
+		t.Fatalf("copied %q", fp.copied)
+	}
+	tt.Frame()
+	if !tt.HasText("已复制为 Markdown，可以粘贴给 AI 或文档") {
+		t.Fatal("no notice")
+	}
+	// Export as Markdown and XMind.
+	out := t.TempDir()
+	fp.savePath = filepath.Join(out, "导出")
+	a.askExportMarkdown()
+	md, err := os.ReadFile(fp.savePath + ".md")
+	if err != nil || !strings.Contains(string(md), "---") { // both canvases
+		t.Fatalf("%v %q", err, md)
+	}
+	fp.savePath = filepath.Join(out, "导出.xmind")
+	a.askExportXMind()
+	// Import it back: a new map named after it, opened.
+	fp.openPath = fp.savePath
+	before := len(a.files)
+	a.askImportXMind()
+	if len(a.files) != before+1 || mapName(a.path) != "导出" {
+		t.Fatalf("files %d→%d, open %q (%s)", before, len(a.files), a.path, a.saveErr)
+	}
+	if len(a.file.Sheets) != 2 || a.doc.Root.Title != "我的项目" || len(a.allTags()) == 0 {
+		t.Fatalf("imported %+v", a.doc.Root)
+	}
+	// A second import does not overwrite the first.
+	a.askImportXMind()
+	if mapName(a.path) != "导出 2" {
+		t.Fatalf("open %q", a.path)
+	}
+	// A file that is not one reports it.
+	bad := filepath.Join(out, "坏.xmind")
+	os.WriteFile(bad, []byte("x"), 0o644)
+	fp.openPath = bad
+	a.askImportXMind()
+	if !strings.Contains(a.saveErr, "不是 XMind 文件") {
+		t.Fatalf("error %q", a.saveErr)
+	}
 }

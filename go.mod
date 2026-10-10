@@ -7,6 +7,7 @@ tool github.com/egoist/mygo/cmd/mygo
 require (
 	github.com/anthropics/anthropic-sdk-go v1.80.0
 	github.com/egoist/mygo v0.3.7
+	golang.org/x/image v0.46.0
 )
 
 require (
@@ -22,6 +23,5 @@ require (
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
-	golang.org/x/image v0.46.0 // indirect
 	golang.org/x/sync v0.16.0 // indirect
 )

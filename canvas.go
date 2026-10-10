@@ -345,9 +345,7 @@ func (a *app) canvasArea(c *ui.Context) {
 			if ui.Button(c, "◎").Label("回到中心").Tooltip("回到中心 ⌘⇧0").Width(30).Clicked() {
 				a.recenter()
 			}
-			if ui.Button(c, "⤓").Label("导出为图片").Tooltip("导出为图片 ⌘⇧E").Width(30).Clicked() {
-				a.askExportImage()
-			}
+			ui.Button(c, "⤓").Label("导出").Tooltip("导出").Width(30).Menu(a.exportMenu)
 		})
 	})
 }

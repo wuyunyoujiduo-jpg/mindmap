@@ -21,7 +21,10 @@ func (a *app) sidebar(c *ui.Context) {
 	t := c.Theme()
 	ui.Column(c).Fill().Background(t.Surface).Children(func() {
 		ui.Row(c).Padding(10, 12, 6).Gap(6).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, filepath.Base(a.dir)).Bold().Grow(1).NoWrap().Ellipsis("…").Tooltip(a.dir)
+			ui.Text(c, filepath.Base(a.dir)).Bold().Grow(1).Shrink(1).MinWidth(0).NoWrap().Ellipsis("…").Tooltip(a.dir)
+			if ui.Button(c, "导入").Tooltip("导入 XMind 文件 ⌘⇧I").Clicked() {
+				a.askImportXMind()
+			}
 			if ui.Button(c, "打开…").Tooltip("选择存放导图的文件夹").Clicked() {
 				a.pickWorkspace()
 			}

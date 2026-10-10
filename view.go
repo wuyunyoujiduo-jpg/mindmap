@@ -134,12 +134,15 @@ func (a *app) toolbar(c *ui.Context) {
 			switch {
 			case a.saveErr != "":
 				status, col = a.saveErr, t.Danger
+			case a.notice != "" && a.now().Sub(a.noticeAt) < noticeTime:
+				status, col = a.notice, t.Accent
+				c.After(noticeTime - a.now().Sub(a.noticeAt))
 			case a.dirty:
 				status = "编辑中，稍后自动保存…"
 			case !a.savedAt.IsZero():
 				status = "已自动保存 " + a.savedAt.Format("15:04")
 			}
-			if room >= 820 || a.saveErr != "" {
+			if room >= 820 || a.saveErr != "" || col == t.Accent {
 				ui.Text(c, status).FontSize(12).TextColor(col).NoWrap().MaxWidth(240).Ellipsis("…").Shrink(1).MinWidth(0).
 					Tooltip("编辑停顿后自动保存到文件，无需手动保存")
 			}
