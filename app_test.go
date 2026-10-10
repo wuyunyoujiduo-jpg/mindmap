@@ -1222,3 +1222,22 @@ func TestAINeedsKey(t *testing.T) {
 		t.Fatalf("closing did not bring the tabs back: open %v, %q", a.aiOpen, tt.Texts())
 	}
 }
+
+func TestToolbarFitsNarrowWindow(t *testing.T) {
+	a, tt := newTestApp(t)
+	for _, w := range []int{1280, 1100, 1000, 920} {
+		tt.SetSize(w, 760)
+		tt.Frame()
+		redo, ok := tt.Find("↷")
+		if !ok {
+			t.Fatalf("width %d: no redo", w)
+		}
+		right := float32(w) - a.panelWidth
+		if redo.X+redo.W > right {
+			t.Fatalf("width %d: redo ends at %v, past the toolbar's %v", w, redo.X+redo.W, right)
+		}
+		if w == 920 {
+			snapshot(t, tt, "toolbar-narrow")
+		}
+	}
+}
