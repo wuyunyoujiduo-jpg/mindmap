@@ -1643,3 +1643,48 @@ func TestGlobalTags(t *testing.T) {
 		t.Fatal("library not saved")
 	}
 }
+
+func TestLongTitleWrapsWhileEditing(t *testing.T) {
+	a, tt := newTestApp(t)
+	if err := clickNode(t, tt, a, "架构"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Key(0, ui.KeyTab)
+	tt.Type("短")
+	tt.Frame()
+	id := a.editing
+	short := a.boxes.Boxes[id]
+	long := strings.Repeat("一段很长的节点标题", 8)
+	tt.Type(long)
+	tt.Frame()
+	tt.Frame()
+	b := a.boxes.Boxes[id]
+	// It stops widening at the title's wrap width and grows in height
+	// instead, so the start of the title stays in view.
+	if b.W > 2*nodePadX+titleMax+4+1 || b.H <= short.H {
+		t.Fatalf("box while editing %v, short %v", b, short)
+	}
+	snapshot(t, tt, "edit-wrap")
+	// Shift+Enter does not add a line: Enter ends the edit either way.
+	tt.Key(ui.Shift, ui.KeyEnter)
+	if a.editing != "" {
+		t.Fatal("still editing")
+	}
+	n, _ := a.doc.Find(id)
+	if n.Title != "短"+long {
+		t.Fatalf("title %q", n.Title)
+	}
+}
+
+func TestTaskSummary(t *testing.T) {
+	a, _ := newTestApp(t)
+	due := testNow.AddDate(0, 0, -1)
+	got := a.taskSummary(&model.Task{Status: model.StatusDoing, Priority: model.PriorityHigh, Due: &due})
+	want := "任务：进行中 · 优先级 高 · 截止 " + due.Format("1/2") + "（已逾期）"
+	if got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+	if got := a.taskSummary(&model.Task{Status: model.StatusIdea}); got != "任务：想法" {
+		t.Fatalf("got %q", got)
+	}
+}

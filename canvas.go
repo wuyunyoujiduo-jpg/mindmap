@@ -5,6 +5,7 @@ import (
 	"math"
 	"slices"
 	"strconv"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/egoist/mygo/ui"
@@ -106,7 +107,7 @@ func (a *app) measure(c *ui.Context) layout.Measure {
 
 // titleBox is the size of a node's title: one line up to titleMax wide,
 // and longer titles wrapped onto more lines at that width. A title being
-// edited stays on one line.
+// edited wraps the same way, so what is typed first stays in view.
 func (a *app) titleBox(c *ui.Context, n *model.Node, depth int) (w, h float32) {
 	st := styleOf(n)
 	span := ui.Span{Text: a.parts(n).title, Size: fontSize(n, depth), Weight: fontWeight(n, depth),
@@ -118,8 +119,16 @@ func (a *app) titleBox(c *ui.Context, n *model.Node, depth int) (w, h float32) {
 		if a.editText == "" {
 			span.Text = "新主题"
 		}
+		wrap := float32(titleMax)
+		if st.Width > 0 {
+			wrap = st.Width
+		}
 		w, h = c.MeasureText(0, span)
-		return min(max(w, titleMin), titleMax) + 4, h
+		if w > wrap {
+			_, h = c.MeasureText(wrap, span)
+			w = wrap
+		}
+		return max(w, titleMin) + 4, h
 	}
 	w, h = c.MeasureText(0, span)
 	if st.Width > 0 { // a width of its own, at which the title wraps
@@ -173,6 +182,26 @@ func weight(depth int) int {
 	return 400
 }
 
+// taskSummary describes a task in a line, as the dot of its node shows it
+// on hover: "任务：进行中 · 优先级 高 · 截止 10/12（已逾期）".
+func (a *app) taskSummary(task *model.Task) string {
+	parts := []string{"任务：" + task.Status.Label()}
+	if task.Priority != model.PriorityNone {
+		parts = append(parts, "优先级 "+task.Priority.Label())
+	}
+	if task.Start != nil {
+		parts = append(parts, "开始 "+task.Start.Format("1/2"))
+	}
+	if task.Due != nil {
+		due := "截止 " + task.Due.Format("1/2")
+		if task.Overdue(a.now()) {
+			due += "（已逾期）"
+		}
+		parts = append(parts, due)
+	}
+	return strings.Join(parts, " · ")
+}
+
 func statusColor(s model.Status) ui.Color {
 	switch s {
 	case model.StatusIdea:
@@ -221,7 +250,11 @@ func (a *app) canvasArea(c *ui.Context) {
 			cam.Y = a.vp.H/2 - (root.Y+root.H/2)*z
 			cam.placed = true
 		}
-		if b, ok := r.Boxes[a.selected]; ok && a.reveal {
+		target := a.selected
+		if a.editing != "" {
+			target = a.editing
+		}
+		if b, ok := r.Boxes[target]; ok && a.reveal {
 			a.reveal = false
 			cam.X += keepIn(cam.X+b.X*z, b.W*z, a.vp.W)
 			cam.Y += keepIn(cam.Y+b.Y*z, b.H*z, a.vp.H)
@@ -588,7 +621,8 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 			a.thumbnail(c, n, iw*z, ih*z).Absolute().Left((box.W - iw) / 2 * z).Top(nodePadY * z)
 		}
 		if n.Task != nil {
-			ui.Box(c).Size(dotSize*z, dotSize*z).Radius(999).Background(statusColor(n.Task.Status)).Shrink(0)
+			ui.Box(c.Key("task-dot")).Size(dotSize*z, dotSize*z).Radius(999).Background(statusColor(n.Task.Status)).Shrink(0).
+				Tooltip(a.taskSummary(n.Task))
 		}
 		for _, m := range n.Markers {
 			// A click goes to the next marker of its group, as in XMind;
@@ -612,12 +646,26 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 		size := fontSize(n, depth) * z
 		tw, _ := a.titleBox(c, n, depth)
 		if editing {
-			in := ui.TextInputBase(c.Key("edit"), &a.editText).FontSize(size).FontWeight(fontWeight(n, depth)).
-				Placeholder("新主题").Width(tw * z).AutoFocus()
+			// A text area, wrapping as the title will, rather than a line
+			// that scrolls what was typed first out of view. Enter ends
+			// the edit; a title has no line breaks.
+			in := ui.TextAreaBase(c.Key("edit"), &a.editText).FontSize(size).FontWeight(fontWeight(n, depth)).
+				Placeholder("新主题").Width(tw*z).Lines(1, 50).AutoFocus()
+			in.HandleInput(func(ev ui.InputEvent) bool {
+				if ev.Kind != ui.InputKeyDown || ev.Key != ui.KeyEnter || ev.Mods&^ui.Shift != 0 || a.editing != n.ID {
+					return false
+				}
+				a.commitEdit()
+				return true
+			})
+			if strings.ContainsAny(a.editText, "\r\n\t") { // pasted lines join
+				a.editText = strings.Join(strings.Fields(strings.ReplaceAll(a.editText, "\r", "\n")), " ")
+			}
+			if in.Changed() {
+				a.reveal = true // the node grows as it is typed in: keep it in view
+			}
 			if in.Shortcut(0, ui.KeyEscape) {
 				a.cancelEdit()
-			} else if in.Submitted() {
-				a.commitEdit()
 			} else if in.Focused() {
 				if !a.editFocus {
 					in.SetTextSelection(0, utf8.RuneCountInString(a.editText)) // typing replaces the title
