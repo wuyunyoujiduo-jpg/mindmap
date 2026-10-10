@@ -18,6 +18,12 @@ type config struct {
 	AIKey     string `json:"aiKey,omitempty"`
 	AIModel   string `json:"aiModel,omitempty"`
 	AIBaseURL string `json:"aiBaseURL,omitempty"`
+	// AIProvider is "" for Claude or "deepseek", whose key, model and
+	// address are these.
+	AIProvider string `json:"aiProvider,omitempty"`
+	DSKey      string `json:"deepseekKey,omitempty"`
+	DSModel    string `json:"deepseekModel,omitempty"`
+	DSBaseURL  string `json:"deepseekBaseURL,omitempty"`
 }
 
 func configPath() string {

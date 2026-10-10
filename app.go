@@ -98,10 +98,11 @@ type app struct {
 	slideStep  int // items of the slide shown
 
 	// The AI assistant.
-	ai     aiState
-	aiOpen bool // the panel shows the assistant
-	sendAI aiSender
-	async  asyncRunner
+	ai           aiState
+	aiOpen       bool // the panel shows the assistant
+	sendAI       aiSender
+	sendDeepSeek deepseekSender
+	async        asyncRunner
 
 	// Chrome.
 	mode          int
@@ -134,6 +135,7 @@ func newApp(plat platform, cfg config) *app {
 		favoritesOpen: true,
 		folderClosed:  map[string]bool{},
 		sendAI:        sendToClaude,
+		sendDeepSeek:  sendToDeepSeek,
 		async: func(work func() (any, error), done func(any, error)) {
 			v, err := work()
 			done(v, err)

@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"image/png"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
@@ -1208,7 +1210,7 @@ func TestAINeedsKey(t *testing.T) {
 	}
 	a.ai.draft = "hi"
 	a.aiSend()
-	if len(a.ai.history) != 0 {
+	if len(a.ai.claude)+len(a.ai.ds) != 0 {
 		t.Fatal("sent without a key")
 	}
 	if !a.aiOpen {
@@ -1239,5 +1241,107 @@ func TestToolbarFitsNarrowWindow(t *testing.T) {
 		if w == 920 {
 			snapshot(t, tt, "toolbar-narrow")
 		}
+	}
+}
+
+func TestDeepSeek(t *testing.T) {
+	a, tt := newTestApp(t)
+	slow := find(t, a, "列表加载慢")
+	var requests []map[string]any
+	var auth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/chat/completions" {
+			http.NotFound(w, r)
+			return
+		}
+		auth = r.Header.Get("Authorization")
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		requests = append(requests, body)
+		if len(requests) == 1 {
+			args, _ := json.Marshal(map[string]any{"summary": "改为进行中", "operations": []map[string]any{
+				{"op": "update", "id": slow.ID, "parent": "", "ref": "", "title": "", "note": "", "tags": []string{}, "status": "doing", "due": ""},
+			}})
+			fmt.Fprintf(w, `{"choices":[{"finish_reason":"tool_calls","message":{"role":"assistant","content":"好的。","reasoning_content":"用户要改状态。","tool_calls":[{"id":"call_1","type":"function","function":{"name":"propose_edits","arguments":%q}}]}}]}`, args)
+			return
+		}
+		fmt.Fprint(w, `{"choices":[{"finish_reason":"stop","message":{"role":"assistant","content":"已经改好了。","reasoning_content":"无需工具。"}}]}`)
+	}))
+	defer srv.Close()
+	a.cfg.AIProvider, a.cfg.DSKey, a.cfg.DSBaseURL = providerDeepSeek, "sk-test", srv.URL
+
+	tt.Click("✦ AI")
+	if !tt.HasText("DeepSeek V4.1 Flash（推荐）") {
+		t.Fatalf("model not shown: %q", tt.Texts())
+	}
+	a.ai.draft = "把列表加载慢改成进行中"
+	a.aiSend()
+	tt.Frame()
+	if auth != "Bearer sk-test" {
+		t.Fatalf("auth %q", auth)
+	}
+	first := requests[0]
+	if first["model"] != "deepseek-flash" {
+		t.Fatalf("model %v", first["model"])
+	}
+	msgs := first["messages"].([]any)
+	if msgs[0].(map[string]any)["role"] != "system" || !strings.Contains(msgs[1].(map[string]any)["content"].(string), "["+slow.ID+"] 列表加载慢") {
+		t.Fatalf("messages %v", msgs)
+	}
+	tools := first["tools"].([]any)
+	if tools[0].(map[string]any)["function"].(map[string]any)["name"] != "propose_edits" {
+		t.Fatalf("tools %v", tools)
+	}
+	if !tt.HasText("改为进行中") {
+		t.Fatalf("no proposal: %q", tt.Texts())
+	}
+	snapshot(t, tt, "deepseek")
+	if err := tt.Click("应用"); err != nil {
+		t.Fatal(err)
+	}
+	if slow = find(t, a, "列表加载慢"); slow.Task.Status != model.StatusDoing {
+		t.Fatalf("status %v", slow.Task.Status)
+	}
+
+	// The next request sends back the reasoning of the turn with the tool
+	// call, then the tool's result, then the message.
+	a.ai.draft = "谢谢"
+	a.aiSend()
+	tt.Frame()
+	msgs = requests[1]["messages"].([]any)
+	assistant := msgs[2].(map[string]any)
+	tool := msgs[3].(map[string]any)
+	if assistant["reasoning_content"] != "用户要改状态。" || assistant["tool_calls"] == nil {
+		t.Fatalf("assistant %v", assistant)
+	}
+	if tool["role"] != "tool" || tool["tool_call_id"] != "call_1" || !strings.Contains(tool["content"].(string), "已应用") {
+		t.Fatalf("tool %v", tool)
+	}
+	if !tt.HasText("已经改好了。") {
+		t.Fatal("no answer")
+	}
+	// A turn without tools keeps no reasoning.
+	if last := a.ai.ds[len(a.ai.ds)-1]; last.ReasoningContent != "" {
+		t.Fatalf("kept reasoning %q", last.ReasoningContent)
+	}
+}
+
+func TestDeepSeekErrors(t *testing.T) {
+	a, tt := newTestApp(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(402)
+		fmt.Fprint(w, `{"error":{"message":"Insufficient Balance"}}`)
+	}))
+	defer srv.Close()
+	a.cfg.AIProvider, a.cfg.DSKey, a.cfg.DSBaseURL = providerDeepSeek, "sk-test", srv.URL
+	tt.Click("✦ AI")
+	a.ai.draft = "你好"
+	a.aiSend()
+	tt.Frame()
+	if !tt.HasText("DeepSeek 账户余额不足。") {
+		t.Fatalf("texts %q", tt.Texts())
+	}
+	if len(a.ai.ds) != 0 {
+		t.Fatal("a failed turn stayed in the conversation")
 	}
 }

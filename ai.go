@@ -17,12 +17,19 @@ import (
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
 
-// The AI panel chats with Claude about the map. Each message carries the
-// map as an outline with the nodes' IDs; Claude answers, and when asked to
-// change the map it proposes edits through the propose_edits tool, which
-// the user reviews and applies, as one step that undo takes back.
+// The AI panel chats with Claude or DeepSeek about the map. Each message
+// carries the map as an outline with the nodes' IDs; the model answers,
+// and when asked to change the map it proposes edits through the
+// propose_edits tool, which the user reviews and applies, as one step that
+// undo takes back.
 
-// aiModels are the models offered, the first being the default.
+// Providers of the assistant.
+const (
+	providerClaude   = ""
+	providerDeepSeek = "deepseek"
+)
+
+// aiModels are the Claude models offered, the first being the default.
 var aiModels = []struct{ id, name string }{
 	{"claude-opus-5-5", "Claude Opus 5.5（推荐）"},
 	{"claude-sonnet-5-5", "Claude Sonnet 5.5（更快）"},
@@ -63,6 +70,25 @@ const (
 	proposalFailed
 )
 
+// aiCall is a tool call of a reply.
+type aiCall struct{ id, name, input string }
+
+// aiReply is a reply of either provider, as the panel shows it.
+type aiReply struct {
+	texts     []string
+	calls     []aiCall
+	truncated bool
+	refusal   string
+	// commit adds the reply to the conversation sent to its provider.
+	commit func(ai *aiState)
+}
+
+// toolAnswer is what became of a proposal, sent with the next message.
+type toolAnswer struct {
+	id, text string
+	isError  bool
+}
+
 // chatMsg is a message shown in the panel.
 type chatMsg struct {
 	role      string // "user", "assistant" or "error"
@@ -75,23 +101,47 @@ type chatMsg struct {
 
 // aiState is the conversation of the AI panel.
 type aiState struct {
-	history  []anthropic.BetaMessageParam // as sent to the API
+	provider string                       // of the conversation, which stays with it
+	claude   []anthropic.BetaMessageParam // the conversation, as sent to Claude
+	ds       []dsMessage                  // or to DeepSeek
 	msgs     []chatMsg
 	draft    string
 	busy     bool
 	scope    int
 	settings bool // the settings form is shown
-	// toolResults answer the proposals of the last reply; they open the
-	// next user message, as the API requires.
-	toolResults []anthropic.BetaContentBlockParamUnion
-	cancel      context.CancelFunc
-	scroll      ui.ScrollState
-	keyDraft    string
-	baseDraft   string
+	// answers answer the proposals of the last reply; the next message
+	// sends them first, as the APIs require.
+	answers   []toolAnswer
+	cancel    context.CancelFunc
+	scroll    ui.ScrollState
+	keyDraft  string
+	baseDraft string
 }
 
 // aiSender sends a request to Claude; tests replace it.
 type aiSender func(ctx context.Context, cfg config, params anthropic.BetaMessageNewParams) (*anthropic.BetaMessage, error)
+
+// providerKey is the API key of the provider chosen, from the settings or
+// the environment.
+func providerKey(cfg config) string {
+	if cfg.AIProvider == providerDeepSeek {
+		return deepseekKey(cfg)
+	}
+	return aiKey(cfg)
+}
+
+func providerModelName(cfg config) string {
+	if cfg.AIProvider == providerDeepSeek {
+		id := deepseekModel(cfg)
+		for _, m := range deepseekModels {
+			if m.id == id {
+				return m.name
+			}
+		}
+		return id
+	}
+	return aiModelName(aiModel(cfg))
+}
 
 // sendToClaude calls the Messages API with the official SDK.
 func sendToClaude(ctx context.Context, cfg config, params anthropic.BetaMessageNewParams) (*anthropic.BetaMessage, error) {
@@ -134,9 +184,10 @@ const aiSystemPrompt = `你是「MindMap」思维导图项目管理工具里的�
 - 不需要修改的字段留空字符串（tags 留空数组）。
 - 不要删除用户没有要求删除的内容。`
 
-// proposeEditsTool is the tool Claude proposes edits with. Strict mode
-// keeps its input valid against the schema.
-func proposeEditsTool() anthropic.BetaToolUnionParam {
+const proposeEditsDescription = "向用户提出对导图的一组修改。用户确认后才会应用。一次请求的所有修改放在一次调用里。"
+
+// editsSchema is the JSON schema of propose_edits's input.
+func editsSchema() map[string]any {
 	str := func(desc string) map[string]any { return map[string]any{"type": "string", "description": desc} }
 	op := map[string]any{
 		"type": "object",
@@ -154,16 +205,28 @@ func proposeEditsTool() anthropic.BetaToolUnionParam {
 		"required":             []string{"op", "id", "parent", "ref", "title", "note", "tags", "status", "due"},
 		"additionalProperties": false,
 	}
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"summary":    str("一句话概括这组修改"),
+			"operations": map[string]any{"type": "array", "items": op},
+		},
+		"required":             []string{"summary", "operations"},
+		"additionalProperties": false,
+	}
+}
+
+// proposeEditsTool is the tool Claude proposes edits with. Strict mode
+// keeps its input valid against the schema.
+func proposeEditsTool() anthropic.BetaToolUnionParam {
+	schema := editsSchema()
 	tool := anthropic.BetaToolParam{
 		Name:        "propose_edits",
-		Description: anthropic.String("向用户提出对导图的一组修改。用户确认后才会应用。一次请求的所有修改放在一次调用里。"),
+		Description: anthropic.String(proposeEditsDescription),
 		Strict:      anthropic.Bool(true),
 		InputSchema: anthropic.BetaToolInputSchemaParam{
-			Properties: map[string]any{
-				"summary":    str("一句话概括这组修改"),
-				"operations": map[string]any{"type": "array", "items": op},
-			},
-			Required:    []string{"summary", "operations"},
+			Properties:  schema["properties"],
+			Required:    schema["required"].([]string),
 			ExtraFields: map[string]any{"additionalProperties": false},
 		},
 	}
@@ -235,37 +298,74 @@ func (a *app) aiSend() {
 	if text == "" || ai.busy || a.doc == nil {
 		return
 	}
-	if aiKey(a.cfg) == "" {
+	if providerKey(a.cfg) == "" {
 		ai.settings = true
-		ai.msgs = append(ai.msgs, chatMsg{role: "error", text: "请先在设置中填写 Anthropic API Key。"})
+		ai.msgs = append(ai.msgs, chatMsg{role: "error", text: "请先在设置中填写 API Key。"})
 		return
 	}
+	if ai.provider != a.cfg.AIProvider && len(ai.claude)+len(ai.ds) > 0 {
+		*ai = aiState{scope: ai.scope, draft: ai.draft} // another provider: a new conversation
+	}
+	ai.provider = a.cfg.AIProvider
 	// Proposals left unanswered are discarded by sending on.
 	for i := range ai.msgs {
 		if ai.msgs[i].proposal != nil && ai.msgs[i].state == proposalPending {
 			a.answerProposal(i, false)
 		}
 	}
-	blocks := append(ai.toolResults, anthropic.NewBetaTextBlock("导图快照：\n"+a.snapshot(ai.scope)), anthropic.NewBetaTextBlock(text))
-	ai.toolResults = nil
-	ai.history = append(ai.history, anthropic.NewBetaUserMessage(blocks...))
+	answers := ai.answers
+	ai.answers = nil
+	snapshot := "导图快照：\n" + a.snapshot(ai.scope)
 	ai.msgs = append(ai.msgs, chatMsg{role: "user", text: text})
 	ai.draft = ""
 	ai.busy = true
 	ai.scroll.Y = 1e9
 
-	params := a.aiParams()
-	cfg := a.cfg
 	ctx, cancel := context.WithCancel(context.Background())
 	ai.cancel = cancel
+	cfg := a.cfg
+	claudeLen, dsLen := len(ai.claude), len(ai.ds)
+	done := func(v any, err error) {
+		cancel()
+		r, _ := v.(aiReply)
+		if err != nil || r.refusal != "" {
+			// Take the turn back, so the next message sends it again.
+			ai.claude, ai.ds = ai.claude[:claudeLen], ai.ds[:dsLen]
+			ai.answers = append(answers, ai.answers...)
+		}
+		a.aiReceive(r, err)
+	}
+	if ai.provider == providerDeepSeek {
+		for _, an := range answers {
+			ai.ds = append(ai.ds, dsMessage{Role: "tool", ToolCallID: an.id, Content: an.text})
+		}
+		ai.ds = append(ai.ds, dsMessage{Role: "user", Content: snapshot + "\n\n" + text})
+		req := a.deepseekRequest()
+		send := a.sendDeepSeek
+		a.async(func() (any, error) {
+			resp, err := send(ctx, cfg, req)
+			if err != nil {
+				return nil, err
+			}
+			return deepseekReply(resp), nil
+		}, done)
+		return
+	}
+	var blocks []anthropic.BetaContentBlockParamUnion
+	for _, an := range answers {
+		blocks = append(blocks, anthropic.NewBetaToolResultBlock(an.id, an.text, an.isError))
+	}
+	blocks = append(blocks, anthropic.NewBetaTextBlock(snapshot), anthropic.NewBetaTextBlock(text))
+	ai.claude = append(ai.claude, anthropic.NewBetaUserMessage(blocks...))
+	params := a.aiParams()
 	send := a.sendAI
 	a.async(func() (any, error) {
-		return send(ctx, cfg, params)
-	}, func(v any, err error) {
-		cancel()
-		resp, _ := v.(*anthropic.BetaMessage)
-		a.aiReceive(resp, err)
-	})
+		resp, err := send(ctx, cfg, params)
+		if err != nil {
+			return nil, err
+		}
+		return claudeReply(resp), nil
+	}, done)
 }
 
 func (a *app) aiParams() anthropic.BetaMessageNewParams {
@@ -274,7 +374,7 @@ func (a *app) aiParams() anthropic.BetaMessageNewParams {
 		Model:     anthropic.Model(m),
 		MaxTokens: 16000,
 		System:    []anthropic.BetaTextBlockParam{{Text: aiSystemPrompt}},
-		Messages:  slices.Clone(a.ai.history),
+		Messages:  slices.Clone(a.ai.claude),
 		Tools:     []anthropic.BetaToolUnionParam{proposeEditsTool()},
 		OutputConfig: anthropic.BetaOutputConfigParam{
 			Effort: anthropic.BetaOutputConfigEffortMedium,
@@ -289,54 +389,68 @@ func (a *app) aiParams() anthropic.BetaMessageNewParams {
 	return p
 }
 
-// aiReceive shows Claude's reply: its text, and the edits it proposes.
-func (a *app) aiReceive(resp *anthropic.BetaMessage, err error) {
-	ai := &a.ai
-	ai.busy, ai.cancel = false, nil
-	ai.scroll.Y = 1e9
-	unanswered := func() { // the request failed: take its user message back
-		if n := len(ai.history); n > 0 {
-			ai.history = ai.history[:n-1]
-		}
-	}
-	if err != nil {
-		unanswered()
-		ai.msgs = append(ai.msgs, chatMsg{role: "error", text: aiError(err)})
-		return
-	}
+// claudeReply turns Claude's answer into what the panel shows.
+func claudeReply(resp *anthropic.BetaMessage) aiReply {
 	if resp.StopReason == anthropic.BetaStopReasonRefusal {
-		unanswered()
-		ai.msgs = append(ai.msgs, chatMsg{role: "error", text: "请求被模型拒绝：" + string(resp.StopDetails.Category)})
-		return
+		return aiReply{refusal: string(resp.StopDetails.Category)}
 	}
-	ai.history = append(ai.history, resp.ToParam())
-	var text []string
+	r := aiReply{truncated: resp.StopReason == anthropic.BetaStopReasonMaxTokens}
 	for _, block := range resp.Content {
 		switch b := block.AsAny().(type) {
 		case anthropic.BetaTextBlock:
 			if s := strings.TrimSpace(b.Text); s != "" {
-				text = append(text, s)
+				r.texts = append(r.texts, s)
 			}
 		case anthropic.BetaToolUseBlock:
-			var p aiProposal
-			if err := json.Unmarshal([]byte(b.JSON.Input.Raw()), &p); err != nil || b.Name != "propose_edits" {
-				ai.msgs = append(ai.msgs, chatMsg{role: "error", text: "无法读取 AI 提出的修改"})
-				ai.toolResults = append(ai.toolResults, anthropic.NewBetaToolResultBlock(b.ID, "无法解析修改，未应用。", true))
-				continue
-			}
-			ai.msgs = append(ai.msgs, chatMsg{role: "assistant", text: strings.Join(text, "\n\n"), proposal: &p, toolUseID: b.ID})
-			text = nil
+			r.calls = append(r.calls, aiCall{id: b.ID, name: b.Name, input: b.JSON.Input.Raw()})
 		}
 	}
-	if len(text) > 0 {
-		ai.msgs = append(ai.msgs, chatMsg{role: "assistant", text: strings.Join(text, "\n\n")})
+	param := resp.ToParam()
+	r.commit = func(ai *aiState) { ai.claude = append(ai.claude, param) }
+	return r
+}
+
+// aiReceive shows a reply: its text, and the edits it proposes.
+func (a *app) aiReceive(r aiReply, err error) {
+	ai := &a.ai
+	ai.busy, ai.cancel = false, nil
+	ai.scroll.Y = 1e9
+	switch {
+	case err != nil:
+		ai.msgs = append(ai.msgs, chatMsg{role: "error", text: aiError(err)})
+		return
+	case r.refusal != "":
+		ai.msgs = append(ai.msgs, chatMsg{role: "error", text: "请求被模型拒绝：" + r.refusal})
+		return
 	}
-	if resp.StopReason == anthropic.BetaStopReasonMaxTokens {
+	r.commit(ai)
+	text := strings.Join(r.texts, "\n\n")
+	shown := false
+	for _, call := range r.calls {
+		var p aiProposal
+		if call.name != "propose_edits" || json.Unmarshal([]byte(call.input), &p) != nil {
+			ai.msgs = append(ai.msgs, chatMsg{role: "error", text: "无法读取 AI 提出的修改"})
+			ai.answers = append(ai.answers, toolAnswer{id: call.id, text: "无法解析修改，未应用。", isError: true})
+			continue
+		}
+		msg := chatMsg{role: "assistant", proposal: &p, toolUseID: call.id}
+		if !shown {
+			msg.text, shown = text, true
+		}
+		ai.msgs = append(ai.msgs, msg)
+	}
+	if !shown && text != "" {
+		ai.msgs = append(ai.msgs, chatMsg{role: "assistant", text: text})
+	}
+	if r.truncated {
 		ai.msgs = append(ai.msgs, chatMsg{role: "error", text: "回复太长，被截断了。"})
 	}
 }
 
 func aiError(err error) string {
+	if s := deepseekError(err); s != "" {
+		return s
+	}
 	var apiErr *anthropic.Error
 	if errors.As(err, &apiErr) {
 		switch apiErr.StatusCode {
@@ -380,7 +494,7 @@ func (a *app) answerProposal(i int, apply bool) {
 	} else {
 		m.state = proposalDiscarded
 	}
-	ai.toolResults = append(ai.toolResults, anthropic.NewBetaToolResultBlock(m.toolUseID, result, false))
+	ai.answers = append(ai.answers, toolAnswer{id: m.toolUseID, text: result})
 }
 
 // applyEdits makes the proposed edits, all or none, as one step of the
@@ -582,13 +696,13 @@ func (a *app) aiPanel(c *ui.Context) {
 			}
 			if ui.Button(c, "设置").Clicked() {
 				ai.settings = !ai.settings
-				ai.keyDraft, ai.baseDraft = a.cfg.AIKey, a.cfg.AIBaseURL
+				a.loadKeyDrafts()
 			}
 			if ui.Button(c, "关闭").Clicked() {
 				a.aiOpen = false
 			}
 		})
-		if ai.settings || aiKey(a.cfg) == "" {
+		if ai.settings || providerKey(a.cfg) == "" {
 			a.aiSettings(c)
 			return
 		}
@@ -623,7 +737,7 @@ func (a *app) aiPanel(c *ui.Context) {
 				Padding(8).Radius(8).Border(1, t.Border).Background(t.Background).FontSize(13)
 			send := in.Shortcut(ui.Cmd, ui.KeyEnter)
 			ui.Row(c).Children(func() {
-				ui.Text(c, aiModelName(aiModel(a.cfg))).FontSize(11).TextColor(t.TextMuted).Grow(1)
+				ui.Text(c, providerModelName(a.cfg)).FontSize(11).TextColor(t.TextMuted).Grow(1)
 				if ui.PrimaryButton(c, "发送").Disabled(ai.busy || strings.TrimSpace(ai.draft) == "").Clicked() {
 					send = true
 				}
@@ -702,47 +816,90 @@ func (a *app) proposalCard(c *ui.Context, i int) {
 	})
 }
 
-// aiSettings is the form of the API key, the model and the API's address.
+// loadKeyDrafts fills the settings' fields from the provider chosen.
+func (a *app) loadKeyDrafts() {
+	if a.cfg.AIProvider == providerDeepSeek {
+		a.ai.keyDraft, a.ai.baseDraft = a.cfg.DSKey, a.cfg.DSBaseURL
+	} else {
+		a.ai.keyDraft, a.ai.baseDraft = a.cfg.AIKey, a.cfg.AIBaseURL
+	}
+}
+
+// aiSettings is the form of the provider, its API key, its model and the
+// API's address.
 func (a *app) aiSettings(c *ui.Context) {
 	t := c.Theme()
 	ai := &a.ai
+	deepseek := a.cfg.AIProvider == providerDeepSeek
 	ui.Scroll(c.Key("ai-settings")).Grow(1).Padding(8, 16, 16).Gap(12).Children(func() {
-		ui.Text(c, "使用 Anthropic 的 Claude 模型。在 console.anthropic.com 创建 API Key，按用量付费。").
-			FontSize(12).TextColor(t.TextMuted).Wrap()
-		ui.Field(c, "API Key", func() {
-			ui.TextInput(c.Key("key"), &ai.keyDraft).Password().Placeholder("sk-ant-…")
-		})
-		if a.cfg.AIKey == "" && os.Getenv("ANTHROPIC_API_KEY") != "" {
-			ui.Text(c, "未填写时使用环境变量 ANTHROPIC_API_KEY。").FontSize(12).TextColor(t.TextMuted)
+		provider := 0
+		if deepseek {
+			provider = 1
 		}
-		names := make([]string, len(aiModels))
-		for i, m := range aiModels {
+		ui.Field(c, "服务商", func() {
+			if ui.Segmented(c, &provider, "Claude", "DeepSeek").FillWidth().Changed() {
+				a.cfg.AIProvider = []string{providerClaude, providerDeepSeek}[provider]
+				a.cfg.save()
+				a.loadKeyDrafts()
+			}
+		})
+		models := aiModels
+		envKey, placeholder, base := "ANTHROPIC_API_KEY", "sk-ant-…", "https://api.anthropic.com"
+		if deepseek {
+			models = deepseekModels
+			envKey, placeholder, base = "DEEPSEEK_API_KEY", "sk-…", deepseekBaseURL
+			ui.Text(c, "使用深度求索的 DeepSeek 模型。在 platform.deepseek.com 创建 API Key，按用量付费。").
+				FontSize(12).TextColor(t.TextMuted).Wrap()
+		} else {
+			ui.Text(c, "使用 Anthropic 的 Claude 模型。在 console.anthropic.com 创建 API Key，按用量付费。").
+				FontSize(12).TextColor(t.TextMuted).Wrap()
+		}
+		ui.Field(c, "API Key", func() {
+			ui.TextInput(c.Key("key"+a.cfg.AIProvider), &ai.keyDraft).Password().Placeholder(placeholder)
+		})
+		if ai.keyDraft == "" && os.Getenv(envKey) != "" {
+			ui.Text(c, "未填写时使用环境变量 "+envKey+"。").FontSize(12).TextColor(t.TextMuted)
+		}
+		names := make([]string, len(models))
+		for i, m := range models {
 			names[i] = m.name
 		}
-		current := aiModelName(aiModel(a.cfg))
+		current := providerModelName(a.cfg)
 		ui.Field(c, "模型", func() {
-			if ui.Select(c, &current, names).Label("模型").Changed() {
-				for _, m := range aiModels {
+			if ui.Select(c.Key("model"+a.cfg.AIProvider), &current, names).Label("模型").Changed() {
+				for _, m := range models {
 					if m.name == current {
-						a.cfg.AIModel = m.id
+						if deepseek {
+							a.cfg.DSModel = m.id
+						} else {
+							a.cfg.AIModel = m.id
+						}
 						a.cfg.save()
 					}
 				}
 			}
 		})
 		ui.Field(c, "接口地址（可选）", func() {
-			ui.TextInput(c.Key("base"), &ai.baseDraft).Placeholder("https://api.anthropic.com")
+			ui.TextInput(c.Key("base"+a.cfg.AIProvider), &ai.baseDraft).Placeholder(base)
 		})
 		ui.Text(c, "使用代理或中转服务时填写，留空使用官方地址。").FontSize(12).TextColor(t.TextMuted)
 		ui.Text(c, "API Key 保存在本机的应用配置文件中（仅当前用户可读）。").FontSize(12).TextColor(t.TextMuted).Wrap()
+		if len(ai.msgs) > 0 && ai.provider != a.cfg.AIProvider {
+			ui.Text(c, "换了服务商，下一条消息会开始新的对话。").FontSize(12).TextColor(t.Warning).Wrap()
+		}
 		ui.Row(c).Gap(8).Children(func() {
 			if ui.PrimaryButton(c, "保存").Clicked() {
-				a.cfg.AIKey = strings.TrimSpace(ai.keyDraft)
-				a.cfg.AIBaseURL = strings.TrimRight(strings.TrimSpace(ai.baseDraft), "/")
+				key := strings.TrimSpace(ai.keyDraft)
+				url := strings.TrimRight(strings.TrimSpace(ai.baseDraft), "/")
+				if deepseek {
+					a.cfg.DSKey, a.cfg.DSBaseURL = key, url
+				} else {
+					a.cfg.AIKey, a.cfg.AIBaseURL = key, url
+				}
 				a.cfg.save()
 				ai.settings = false
 			}
-			if aiKey(a.cfg) != "" && ui.Button(c, "取消").Clicked() {
+			if providerKey(a.cfg) != "" && ui.Button(c, "取消").Clicked() {
 				ai.settings = false
 			}
 		})
