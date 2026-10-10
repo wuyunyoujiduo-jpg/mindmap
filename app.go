@@ -151,6 +151,9 @@ type app struct {
 	captureErr      string
 	captureKeyDraft string
 	settingsOpen    bool
+	ghBusy          bool   // the issues are being synced
+	ghResult        string // how the last sync went
+	ghTokenDraft    string
 	fromTextOpen    bool // the window to paste text to make nodes of
 	fromText        string
 	trayAt          time.Time // when the menu bar icon was last brought up to date

@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -2597,4 +2598,100 @@ func TestMapFromFoldersAndText(t *testing.T) {
 	if len(plan.Children) != 2 || plan.Children[0].Task == nil {
 		t.Fatalf("plan %+v", plan.Children)
 	}
+}
+
+func TestImportExportFormats(t *testing.T) {
+	a, _ := newTestApp(t)
+	fp := a.plat.(*fakePlatform)
+	dir := t.TempDir()
+	// Markdown in.
+	md := filepath.Join(dir, "需求.md")
+	os.WriteFile(md, []byte("# 新版本\n## 功能\n- [ ] 导出 PDF\n- 分享"), 0o644)
+	fp.openPath = md
+	a.askImportOutline()
+	if mapName(a.path) != "需求" || a.doc.Root.Title != "新版本" || find(t, a, "导出 PDF").Task == nil {
+		t.Fatalf("imported %q %q", a.path, a.doc.Root.Title)
+	}
+	// OPML out and in.
+	fp.savePath = filepath.Join(dir, "大纲")
+	a.askExportOPML()
+	fp.openPath = fp.savePath + ".opml"
+	a.askImportOutline()
+	if mapName(a.path) != "大纲" || find(t, a, "分享") == nil {
+		t.Fatalf("opml %q", a.path)
+	}
+	// The calendar.
+	_ = a.open(filepath.Join(a.dir, model.FileName("使用指南")))
+	fp.savePath = filepath.Join(dir, "日历")
+	a.askExportICS()
+	ics, _ := os.ReadFile(fp.savePath + ".ics")
+	if !strings.Contains(string(ics), "SUMMARY:搜索") || !strings.Contains(string(ics), "SUMMARY:列表加载慢") {
+		t.Fatalf("ics %s", ics)
+	}
+	// The slides as a PDF, which a PDF reader opens.
+	fp.savePath = filepath.Join(dir, "演说")
+	a.askExportSlides()
+	if a.saveErr != "" {
+		t.Fatal(a.saveErr)
+	}
+	pdf := fp.savePath + ".pdf"
+	if out, err := exec.Command("pdfinfo", pdf).CombinedOutput(); err == nil {
+		if !strings.Contains(strings.Join(strings.Fields(string(out)), " "), fmt.Sprintf("Pages: %d", len(slidesOf(a.doc)))) {
+			t.Fatalf("pdfinfo:\n%s", out)
+		}
+	} else if !errors.Is(err, exec.ErrNotFound) {
+		t.Fatalf("pdfinfo: %v\n%s", err, out)
+	}
+}
+
+func TestGitHubIssues(t *testing.T) {
+	a, tt := newTestApp(t)
+	issues := `[
+		{"number": 3, "title": "登录失败", "state": "open", "html_url": "https://github.com/o/r/issues/3", "body": "复现步骤…", "labels": [{"name": "bug"}]},
+		{"number": 2, "title": "一个 PR", "state": "open", "html_url": "https://github.com/o/r/pull/2", "pull_request": {"url": "x"}},
+		{"number": 1, "title": "旧的", "state": "closed", "html_url": "https://github.com/o/r/issues/1"}
+	]`
+	var auth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth = r.Header.Get("Authorization")
+		if r.URL.Path != "/repos/o/r/issues" {
+			http.NotFound(w, r)
+			return
+		}
+		fmt.Fprint(w, issues)
+	}))
+	defer srv.Close()
+	a.cfg.GitHubAPI, a.cfg.GitHubToken = srv.URL, "ghp_test"
+	a.mutate("", func() { a.file.GitHub = "o/r" })
+	a.syncGitHub()
+	tt.Frame()
+	if auth != "Bearer ghp_test" {
+		t.Fatalf("auth %q", auth)
+	}
+	n := find(t, a, "#3 登录失败")
+	if n.Task.Status != model.StatusTodo || n.Links[0] != "https://github.com/o/r/issues/3" || n.Tags[0] != "bug" || n.Note != "复现步骤…" {
+		t.Fatalf("issue %+v", n)
+	}
+	if _, err := findIn(a.doc, "#2 一个 PR"); err == nil {
+		t.Fatal("pull request synced")
+	}
+	if _, err := findIn(a.doc, "#1 旧的"); err == nil {
+		t.Fatal("closed issue added")
+	}
+	// Closed and renamed on GitHub: followed.
+	issues = `[{"number": 3, "title": "登录偶尔失败", "state": "closed", "html_url": "https://github.com/o/r/issues/3"}]`
+	a.syncGitHub()
+	n = find(t, a, "#3 登录偶尔失败")
+	if n.Task.Status != model.StatusDone || !strings.Contains(a.ghResult, "更新 1") {
+		t.Fatalf("after %+v %q", n.Task, a.ghResult)
+	}
+	// Errors are told.
+	a.mutate("", func() { a.file.GitHub = "o/missing" })
+	a.syncGitHub()
+	if !strings.Contains(a.ghResult, "找不到仓库") {
+		t.Fatalf("result %q", a.ghResult)
+	}
+	a.panelTab = tabCanvas
+	tt.Frame()
+	snapshot(t, tt, "github")
 }

@@ -50,6 +50,7 @@ func (a *app) panel(c *ui.Context) {
 				ui.Column(c).Padding(0, 16, 16).Gap(12).Children(func() {
 					ui.Divider(c)
 					a.projectSection(c)
+					a.githubSection(c)
 				})
 			}
 		})

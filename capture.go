@@ -312,6 +312,12 @@ func trayIcon() []byte {
 	return b.Bytes()
 }
 
+// openSettings opens the settings, with the fields as saved.
+func (a *app) openSettings() {
+	a.settingsOpen = true
+	a.captureKeyDraft, a.ghTokenDraft = a.cfg.CaptureKey, a.cfg.GitHubToken
+}
+
 // settingsView is the window of preferences: the capture shortcut, the
 // menu bar icon, reminders and the editor of code links.
 func (a *app) settingsView(c *ui.Context) {
@@ -355,6 +361,13 @@ func (a *app) settingsView(c *ui.Context) {
 					a.cfg.save()
 				}
 				ui.Text(c, "到期提醒：任务今天到期或已逾期时，每天发一次系统通知").FontSize(13).Wrap().Grow(1)
+			})
+			ui.Field(c, "GitHub Token（同步私有仓库的 issues 需要）", func() {
+				in := ui.TextInput(c.Key("gh-token"), &a.ghTokenDraft).Password().Placeholder("ghp_… 或 github_pat_…").Label("GitHub Token")
+				if in.Submitted() || in.PressedOutside() && a.ghTokenDraft != a.cfg.GitHubToken {
+					a.cfg.GitHubToken = strings.TrimSpace(a.ghTokenDraft)
+					a.cfg.save()
+				}
 			})
 			ui.Divider(c)
 			if a.file != nil {

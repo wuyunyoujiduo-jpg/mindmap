@@ -35,6 +35,10 @@ type config struct {
 	CaptureKey string `json:"captureKey,omitempty"`
 	// NoTray hides the menu bar icon.
 	NoTray bool `json:"noTray,omitempty"`
+	// GitHubToken reads the issues of private repositories; GitHubAPI is
+	// the API's address, for GitHub Enterprise ("" is github.com's).
+	GitHubToken string `json:"githubToken,omitempty"`
+	GitHubAPI   string `json:"githubAPI,omitempty"`
 	// NoReminders turns off the notifications of tasks due.
 	NoReminders bool `json:"noReminders,omitempty"`
 	// PanelWidth is the width the right panel was dragged to.

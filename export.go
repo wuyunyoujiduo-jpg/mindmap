@@ -92,6 +92,15 @@ func (a *app) exportMenu(m *ui.Menu) {
 	if m.Item("导出为 XMind…").Chosen() {
 		a.later(a.askExportXMind)
 	}
+	if m.Item("导出为 OPML…").Chosen() {
+		a.later(a.askExportOPML)
+	}
+	if m.Item("导出任务到日历（.ics）…").Chosen() {
+		a.later(a.askExportICS)
+	}
+	if m.Item("导出演说为 PDF…").Chosen() {
+		a.later(a.askExportSlides)
+	}
 	m.Separator()
 	if m.Item("复制当前画布为 Markdown").Shortcut(ui.Cmd|ui.Shift, ui.KeyC).Chosen() {
 		a.later(a.copyMarkdown)

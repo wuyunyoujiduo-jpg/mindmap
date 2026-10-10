@@ -14,6 +14,8 @@ type File struct {
 	// Project is the folder of the project's code, which relative links
 	// of nodes are in.
 	Project string `json:"project,omitempty"`
+	// GitHub is the repository ("owner/repo") whose issues sync as tasks.
+	GitHub string `json:"github,omitempty"`
 	// Iterations are the periods tasks are planned in, as sprints.
 	Iterations []Iteration `json:"iterations,omitempty"`
 }
@@ -142,7 +144,7 @@ func (f *File) MoveSheet(from, to int) {
 
 // Clone returns a deep copy of the file.
 func (f *File) Clone() *File {
-	c := &File{Version: f.Version, Project: f.Project, Sheets: make([]*Document, len(f.Sheets))}
+	c := &File{Version: f.Version, Project: f.Project, GitHub: f.GitHub, Sheets: make([]*Document, len(f.Sheets))}
 	for _, it := range f.Iterations {
 		if it.Start != nil {
 			s := *it.Start

@@ -47,7 +47,10 @@
   - 导出为 XMind：XMind 能直接打开；任务、节点样式、画布样式等 XMind 没有的信息也一并保存，再导入回来不会丢
   - 导出为 Markdown：所有画布导出成 Markdown 大纲（任务为复选框，标签为 #标签，备注在条目下）
   - 复制当前画布为 Markdown（⌘⇧C）：方便直接粘贴给 AI 或文档
+  - 导入 Markdown / OPML：标题和列表缩进变成层级，`- [ ]` / `- [x]` 变成任务（幕布、Logseq、OmniOutliner 等导出的 OPML 都可以）
+  - 导出为 OPML；导出任务到日历（.ics，有日期的任务变成全天日程，可导入「日历」）；导出演说为 PDF（每页一张幻灯片）
   - 以上都在「文件」菜单和画布右下角 ⤓ 菜单里
+- **GitHub Issues 同步**：在右侧「画布」页填仓库（owner/repo）后点「同步 Issues」，打开的 issue 作为待做任务加到「GitHub Issues」分支并链接到 issue，标签变成节点标签；再次同步会更新标题，关闭的标为完成。私有仓库在设置里填 Token
 - **导出图片**：文件菜单「导出为图片…」（⌘⇧E）或画布右下角 ⤓，把当前画布的整张导图导出为 2 倍清晰度的 PNG
 - **右侧面板可调宽度**：拖动面板左边的分隔线，宽度会记住
 - **AI 回复按 Markdown 显示**：标题、列表、引用、代码、表格、粗体、斜体等
@@ -207,6 +210,8 @@ canvas.go          无限画布：节点、连线、平移缩放、键盘操作�
 panel.go           右侧节点详情面板
 tasks.go           看板与日程视图
 focus.go           聚焦分支、多选、复制粘贴分支、展开到第 N 层
+interop.go         Markdown / OPML 导入、OPML / 日历 / PDF 导出、GitHub Issues 同步
+internal/formats   OPML、iCalendar、PDF 的读写
 aiactions.go       AI 快捷操作：周报、风险扫描、拆解任务、从文本 / 代码仓库生成
 capture.go         快速记录、收件箱、移到其他导图、菜单栏图标、设置
 plan.go            前置任务、估时、迭代、到期提醒
