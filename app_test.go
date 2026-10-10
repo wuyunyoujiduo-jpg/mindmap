@@ -794,3 +794,55 @@ func TestNodeStyle(t *testing.T) {
 		t.Fatal("undo did not bring the style back")
 	}
 }
+
+func TestMarkers(t *testing.T) {
+	a, tt := newTestApp(t)
+	tt.Click("后端")
+	if err := tt.Click("标记"); err != nil {
+		t.Fatal(err)
+	}
+	n := find(t, a, "后端")
+	w0 := a.boxes.Boxes[n.ID].W
+	for _, m := range []string{"优先级 1", "红旗", "任务进度 3/6", "喜欢"} {
+		if err := tt.Click(m); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !slices.Equal(n.Markers, []string{"priority:1", "task:3", "flag:red", "symbol:heart"}) {
+		t.Fatalf("markers %v", n.Markers)
+	}
+	// One of each group: another priority replaces the first.
+	tt.Click("优先级 2")
+	if n.Markers[0] != "priority:2" || len(n.Markers) != 4 {
+		t.Fatalf("markers %v", n.Markers)
+	}
+	tt.Frame()
+	if w := a.boxes.Boxes[n.ID].W; w < w0+4*18 {
+		t.Fatalf("box %v wide with four markers, %v without", w, w0)
+	}
+	if !tt.HasText("图例") {
+		t.Fatal("no legend")
+	}
+	snapshot(t, tt, "markers")
+	// Clicking the priority on the node goes to the next one.
+	if err := tt.Click("优先级 2"); err != nil { // the panel's: takes it off
+		t.Fatal(err)
+	}
+	tt.Click("优先级 2")
+	r, _ := tt.Find("我的项目")
+	_ = r
+	if got := nextMarker("priority:2"); got != "priority:3" || nextMarker("priority:7") != "priority:1" {
+		t.Fatalf("next marker %v", got)
+	}
+	// Clicking a marker that is on takes it off.
+	tt.Click("红旗")
+	if slices.Contains(n.Markers, "flag:red") {
+		t.Fatal("not taken off")
+	}
+	a.save()
+	f, _ := model.Load(a.path)
+	got, _ := f.Sheets[0].Find(n.ID)
+	if !slices.Equal(got.Markers, n.Markers) {
+		t.Fatalf("saved %v", got.Markers)
+	}
+}

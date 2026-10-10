@@ -75,6 +75,7 @@ func (a *app) measure(c *ui.Context) layout.Measure {
 		if n.Task != nil {
 			w += dotSize + nodeGap
 		}
+		w += float32(len(n.Markers)) * (markerSize(depth) + nodeGap)
 		for _, tag := range p.tags {
 			mw, _ := c.MeasureText(0, ui.Span{Text: tag, Size: markSize})
 			w += nodeGap + mw + markSize*1.1
@@ -141,6 +142,14 @@ func fontWeight(n *model.Node, depth int) int {
 		return 700
 	}
 	return weight(depth)
+}
+
+// markerSize is the size of a node's markers at zoom 1.
+func markerSize(depth int) float32 {
+	if depth <= 1 {
+		return 20
+	}
+	return 18
 }
 
 func weight(depth int) int {
@@ -549,6 +558,25 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 	el.Children(func() {
 		if n.Task != nil {
 			ui.Box(c).Size(dotSize*z, dotSize*z).Radius(999).Background(statusColor(n.Task.Status)).Shrink(0)
+		}
+		for _, m := range n.Markers {
+			// A click goes to the next marker of its group, as in XMind;
+			// its menu takes it off.
+			mk := markerView(c, m, markerSize(depth)*z).Cursor(ui.CursorPointer).Tooltip(markerName(m) + "（点击切换）")
+			if mk.Clicked() {
+				a.later(func() {
+					a.mutate("", func() {
+						if i := slices.Index(n.Markers, m); i >= 0 {
+							n.Markers[i] = nextMarker(m)
+						}
+					})
+				})
+			}
+			mk.ContextMenu(func(menu *ui.Menu) {
+				if menu.Item("移除「" + markerName(m) + "」").Chosen() {
+					a.later(func() { a.toggleMarker(n, m) })
+				}
+			})
 		}
 		size := fontSize(n, depth) * z
 		tw, _ := a.titleBox(c, n, depth)

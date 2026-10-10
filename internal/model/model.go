@@ -112,6 +112,7 @@ type Node struct {
 	Title     string     `json:"title"`
 	Note      string     `json:"note,omitempty"`
 	Tags      []string   `json:"tags,omitempty"`
+	Markers   []string   `json:"markers,omitempty"` // as "flag:red", one of each group
 	Task      *Task      `json:"task,omitempty"`
 	Collapsed bool       `json:"collapsed,omitempty"`
 	Style     *NodeStyle `json:"style,omitempty"`
@@ -363,6 +364,7 @@ func (n *Node) clone() *Node {
 	}
 	c := *n
 	c.Tags = slices.Clone(n.Tags)
+	c.Markers = slices.Clone(n.Markers)
 	if n.Style != nil {
 		st := *n.Style
 		c.Style = &st
