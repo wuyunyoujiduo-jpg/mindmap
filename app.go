@@ -26,8 +26,9 @@ type platform interface {
 	// OpenFile asks for a file of one of the extensions and calls done with
 	// it, "" when canceled, on the main thread.
 	OpenFile(title string, exts []string, done func(path string))
-	// CopyText puts text on the clipboard.
+	// CopyText puts text on the clipboard, and ClipboardText reads it.
 	CopyText(s string)
+	ClipboardText() string
 	ShowInFolder(path string)
 	Trash(path string) error
 	SetFullScreen(on bool)
@@ -85,8 +86,16 @@ type app struct {
 	selected  string
 	editing   string // the node whose title is edited on the canvas
 	editText  string
-	editFocus bool // the title input has had the focus
-	reveal    bool // scroll the selected node into view in the next frame
+	editFocus bool              // the title input has had the focus
+	reveal    bool              // scroll the selected node into view in the next frame
+	multi     map[string]bool   // nodes selected besides a.selected, with Shift or Cmd
+	focus     map[string]string // the branch each canvas is focused on, by canvas
+	progress  map[string][2]int // done and total tasks under each node shown
+	// Branches copied, to paste here or in another map: the copies, the
+	// assets folder of their pictures, and the text put on the clipboard.
+	clip       []*model.Node
+	clipAssets string
+	clipText   string
 
 	// The canvas: where each canvas of the file is looked at from.
 	cams    map[string]*camera
@@ -106,7 +115,16 @@ type app struct {
 	confirmSheet  bool
 	structureOpen bool
 	panelTab      int
-	outlineFocus  string // the node whose line the outline focuses
+	notePreview   bool // the panel shows notes as Markdown
+	// The command palette and the cheat sheet of shortcuts.
+	paletteOpen  bool
+	paletteMode  int
+	paletteQuery string
+	paletteIndex int
+	paletteShown int // the line last scrolled into view
+	cheatsOpen   bool
+	index        map[string]indexEntry // maps read for the search, by path
+	outlineFocus string                // the node whose line the outline focuses
 
 	// The presentation.
 	presenting bool
@@ -231,6 +249,7 @@ func (a *app) open(path string) error {
 		return err
 	}
 	a.path, a.file = path, f
+	a.remember(path)
 	a.learnTags(f)
 	a.modTime = modTime(path)
 	a.dirty, a.saveErr, a.lastEdit = false, "", ""
@@ -564,7 +583,7 @@ func (a *app) moveNode(id, parent string) {
 // Keyboard navigation on the canvas.
 
 func (a *app) navParent() {
-	if _, p := a.selectedNode(); p != nil {
+	if n, p := a.selectedNode(); p != nil && n != a.shownRoot() {
 		a.selectNode(p.ID)
 	}
 }
@@ -588,7 +607,7 @@ func (a *app) navSide(left bool) {
 	if n == nil {
 		return
 	}
-	if p == nil {
+	if p == nil || n == a.shownRoot() {
 		for _, c := range n.Children {
 			if a.boxes.Left[c.ID] == left {
 				a.selectNode(c.ID)
@@ -615,7 +634,8 @@ func (a *app) navSibling(delta int) {
 	}
 	var depthOf int
 	var row []string
-	a.doc.Walk(func(n, _ *model.Node, depth int) bool {
+	shown := a.shownDoc()
+	shown.Walk(func(n, _ *model.Node, depth int) bool {
 		if n.ID == a.selected {
 			depthOf = depth
 		}
@@ -637,7 +657,7 @@ func (a *app) navSibling(delta int) {
 			walk(c, depth+1)
 		}
 	}
-	walk(a.doc.Root, 0)
+	walk(shown.Root, 0)
 	i := slices.Index(row, a.selected)
 	if j := i + delta; i >= 0 && j >= 0 && j < len(row) {
 		a.selectNode(row[j])

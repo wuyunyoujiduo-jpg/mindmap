@@ -48,6 +48,8 @@ func (a *app) view(c *ui.Context) {
 		if a.lightbox != "" && a.doc != nil {
 			a.lightboxView(c)
 		}
+		a.paletteView(c)
+		a.cheatSheet(c)
 	})
 	if len(a.pending) > 0 {
 		a.runPending()
@@ -166,6 +168,9 @@ func (a *app) toolbar(c *ui.Context) {
 		if search.Submitted() {
 			a.mode = viewMap
 			a.nextMatch()
+		}
+		if room >= 700 && ui.Button(c, "⌘K").Label("命令面板").Tooltip("命令面板：查找命令、节点和导图 ⌘K").Shrink(0).Clicked() {
+			a.openPalette(paletteAll)
 		}
 		ai := ui.Button(c, "✦ AI").Label("AI 助手").Tooltip("AI 助手").Shrink(0)
 		if a.aiOpen {

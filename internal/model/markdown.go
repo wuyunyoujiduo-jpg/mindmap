@@ -18,6 +18,18 @@ func Markdown(d *Document) string {
 	if len(d.Root.Children) > 0 {
 		b.WriteString("\n")
 	}
+	writeItems(&b, d.Root.Children)
+	return b.String()
+}
+
+// MarkdownNodes writes nodes, with all below them, as a Markdown list.
+func MarkdownNodes(nodes []*Node) string {
+	var b strings.Builder
+	writeItems(&b, nodes)
+	return b.String()
+}
+
+func writeItems(b *strings.Builder, nodes []*Node) {
 	var walk func(n *Node, depth int)
 	walk = func(n *Node, depth int) {
 		indent := strings.Repeat("  ", depth)
@@ -35,10 +47,9 @@ func Markdown(d *Document) string {
 			walk(c, depth+1)
 		}
 	}
-	for _, c := range d.Root.Children {
+	for _, c := range nodes {
 		walk(c, 0)
 	}
-	return b.String()
 }
 
 // MarkdownFile writes every canvas of a file, one after another.

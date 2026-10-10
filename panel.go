@@ -35,6 +35,8 @@ func (a *app) panel(c *ui.Context) {
 		})
 		ui.Scroll(c.Key(fmt.Sprint("panel", a.panelTab))).Grow(1).Children(func() {
 			switch {
+			case a.doc != nil && a.panelTab == tabNode && len(a.multi) > 0:
+				a.multiPanel(c)
 			case a.doc == nil || a.panelTab == tabNode:
 				a.nodePanel(c)
 			case a.panelTab == tabStyle:
@@ -73,8 +75,28 @@ func (a *app) nodePanel(c *ui.Context) {
 			})
 
 			note := n.Note
-			ui.Field(c, "备注", func() {
-				if ui.TextArea(c, &note).Placeholder("实现要点、决策、注意事项…").Lines(5, 16).Changed() {
+			ui.Column(c).Gap(6).Children(func() {
+				ui.Row(c).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, "备注").FontSize(12).Bold().TextColor(t.TextMuted).Grow(1)
+					mode := 0
+					if a.notePreview && n.Note != "" {
+						mode = 1
+					}
+					if ui.Segmented(c, &mode, "编辑", "预览").FontSize(11).Changed() {
+						a.notePreview = mode == 1
+					}
+				})
+				if a.notePreview && n.Note != "" {
+					// The note as Markdown; a double click edits it.
+					box := ui.Box(c.Key("note-preview")).Padding(8, 10).Radius(6).Border(1, t.Border).FillWidth().
+						Tooltip("双击编辑")
+					if box.DoubleClicked() {
+						a.notePreview = false
+					}
+					box.Children(func() { markdownView(c, n.Note, 13) })
+					return
+				}
+				if ui.TextArea(c, &note).Placeholder("实现要点、决策、注意事项…（支持 Markdown）").Lines(5, 16).Label("备注内容").Changed() {
 					a.mutate("note:"+n.ID, func() { n.Note = note })
 				}
 			})

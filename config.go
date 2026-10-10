@@ -26,6 +26,8 @@ type config struct {
 	DSBaseURL  string `json:"deepseekBaseURL,omitempty"`
 	// Tags is the library of tags shared by all maps, with their colors.
 	Tags []tagDef `json:"tags,omitempty"`
+	// Recent are the maps opened last, the last first.
+	Recent []string `json:"recent,omitempty"`
 	// PanelWidth is the width the right panel was dragged to.
 	PanelWidth float32 `json:"panelWidth,omitempty"`
 }

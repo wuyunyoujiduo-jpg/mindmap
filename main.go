@@ -62,6 +62,11 @@ func (d *desktop) OpenFile(title string, exts []string, done func(string)) {
 
 func (d *desktop) CopyText(s string) { _ = mygo.Clipboard.Write(transfer.TextData(s)) }
 
+func (d *desktop) ClipboardText() string {
+	b, _ := mygo.Clipboard.ReadFormat(transfer.Text)
+	return string(b)
+}
+
 func (d *desktop) ShowInFolder(path string) { mygo.Shell.ShowItemInFolder(path) }
 
 func (d *desktop) Trash(path string) error { return mygo.Shell.TrashItem(path) }
@@ -136,6 +141,19 @@ func main() {
 				{Role: mygo.RoleClose},
 			}},
 			{Role: mygo.RoleEditMenu},
+			{Label: "前往", Submenu: []*mygo.MenuItem{
+				item("命令面板…", "CmdOrCtrl+K", func() { a.openPalette(paletteAll) }),
+				item("快速切换导图…", "CmdOrCtrl+P", func() { a.openPalette(paletteMaps) }),
+				item("搜索所有导图…", "CmdOrCtrl+Shift+F", func() { a.openPalette(paletteSearch) }),
+				mygo.Separator(),
+				item("聚焦所选分支", "Alt+Enter", func() { a.focusOn(a.selected) }),
+				item("退出聚焦", "", func() { a.focusOn("") }),
+				mygo.Separator(),
+				item("全部展开", "Alt+0", func() { a.expandTo(0) }),
+				item("展开到第 1 层", "Alt+1", func() { a.expandTo(1) }),
+				item("展开到第 2 层", "Alt+2", func() { a.expandTo(2) }),
+				item("展开到第 3 层", "Alt+3", func() { a.expandTo(3) }),
+			}},
 			{Label: "视图", Submenu: []*mygo.MenuItem{
 				item("思维导图", "CmdOrCtrl+1", func() { a.mode = viewMap }),
 				item("大纲", "CmdOrCtrl+2", func() { a.mode = viewOutline }),
@@ -158,6 +176,9 @@ func main() {
 				{Role: mygo.RoleToggleFullScreen},
 			}},
 			{Role: mygo.RoleWindowMenu},
+			{Label: "帮助", Submenu: []*mygo.MenuItem{
+				item("快捷键", "CmdOrCtrl+Shift+/", func() { a.cheatsOpen = true }),
+			}},
 		}))
 	})
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) { a.flush() })

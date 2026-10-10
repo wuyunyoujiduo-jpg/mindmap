@@ -88,6 +88,10 @@ func (a *app) measure(c *ui.Context) layout.Measure {
 			mw, _ := c.MeasureText(0, ui.Span{Text: p.due, Size: markSize})
 			w += nodeGap + mw
 		}
+		if pg := a.progress[n.ID]; pg[1] > 0 {
+			mw, _ := c.MeasureText(0, ui.Span{Text: progressText(pg), Size: markSize})
+			w += nodeGap + markSize + 3 + mw
+		}
 		if p.note {
 			mw, _ := c.MeasureText(0, ui.Span{Text: "✎", Size: markSize + 1})
 			w += nodeGap + mw
@@ -232,7 +236,12 @@ func (a *app) canvasArea(c *ui.Context) {
 	cam := a.cam()
 	z := cam.Zoom
 	lk := lookOf(a.doc.Style)
-	r := layout.Compute(a.doc, a.measure(c), layoutOptions(a.doc.Structure))
+	shown := a.shownDoc()
+	if !shown.Root.Contains(a.selected) && a.editing == "" { // left outside the branch focused on
+		a.selected, a.multi = shown.Root.ID, nil
+	}
+	a.progress = progressOf(shown.Root)
+	r := layout.Compute(shown, a.measure(c), layoutOptions(a.doc.Structure))
 	a.boxes = r
 	exporting := a.exportCam != nil // drawn into an image, off screen
 	if exporting {
@@ -246,7 +255,7 @@ func (a *app) canvasArea(c *ui.Context) {
 	// selected by keys in view.
 	if exporting {
 	} else if a.vp.W > 0 {
-		if root, ok := r.Boxes[a.doc.Root.ID]; ok && !cam.placed {
+		if root, ok := r.Boxes[shown.Root.ID]; ok && !cam.placed {
 			// The mind map centers its root; the one-sided structures
 			// center the whole map while it fits, else start at the left.
 			cam.X = a.vp.W/2 - (root.X+root.W/2)*z
@@ -270,10 +279,10 @@ func (a *app) canvasArea(c *ui.Context) {
 	}
 
 	branch := map[string]int{}
-	a.doc.Walk(func(n, p *model.Node, _ int) bool {
+	shown.Walk(func(n, p *model.Node, _ int) bool {
 		switch {
 		case p == nil:
-		case p == a.doc.Root:
+		case p == shown.Root:
 			branch[n.ID] = slices.Index(p.Children, n)
 		default:
 			branch[n.ID] = branch[p.ID]
@@ -293,6 +302,7 @@ func (a *app) canvasArea(c *ui.Context) {
 	}
 	if cv.Clicked() {
 		a.commitEditIfAny()
+		a.multi = nil
 	}
 	cv.Draw(func(p *ui.Painter, rect ui.Rect) {
 		// A grid of dots, which moves with the map.
@@ -318,7 +328,7 @@ func (a *app) canvasArea(c *ui.Context) {
 		drawEdges(p, r, a.doc.Structure, rect.X+cam.X, rect.Y+cam.Y, z, lk.line, color)
 	})
 	cv.Children(func() {
-		a.doc.Walk(func(n, _ *model.Node, depth int) bool {
+		shown.Walk(func(n, _ *model.Node, depth int) bool {
 			box, ok := r.Boxes[n.ID]
 			if !ok {
 				return false // under a collapsed node
@@ -329,6 +339,7 @@ func (a *app) canvasArea(c *ui.Context) {
 		if exporting {
 			return
 		}
+		a.focusBar(c)
 		a.structurePicker(c)
 		// Zoom and recenter, over the canvas's corner.
 		ui.Row(c).Absolute().Right(12).Bottom(12).Gap(2).Padding(3).Radius(8).
@@ -498,7 +509,7 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 	cam := a.cam()
 	z := cam.Zoom
 	p := a.parts(n)
-	selected := n.ID == a.selected
+	selected := a.isSelected(n.ID)
 	editing := n.ID == a.editing
 
 	el := ui.Row(c).Absolute().Left(cam.X+box.X*z).Top(cam.Y+box.Y*z).Size(box.W*z, box.H*z).
@@ -578,9 +589,14 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 
 	// Selecting, editing, dragging.
 	if !editing {
-		if el.Pressed() && !selected {
+		adding := a.mods&(ui.Shift|ui.Cmd) != 0 // adds to the selection, or takes out
+		if el.Pressed() && !adding && (n.ID != a.selected || len(a.multi) > 0) {
 			a.commitEditIfAny()
-			a.selected = n.ID
+			a.selected, a.multi = n.ID, nil
+		}
+		if el.Clicked() && adding {
+			a.commitEditIfAny()
+			a.toggleSelect(n.ID)
 		}
 		if el.DoubleClicked() {
 			a.startEdit(n.ID)
@@ -720,6 +736,13 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 		if p.more > 0 {
 			ui.Text(c, "+"+strconv.Itoa(p.more)).FontSize(markSize * z).TextColor(muted).NoWrap()
 		}
+		if pg := a.progress[n.ID]; pg[1] > 0 {
+			ui.Row(c.Key("progress")).Gap(3 * z).AlignItems(ui.Center).PassThrough().
+				Tooltip(fmt.Sprintf("下级任务完成 %d / %d", pg[0], pg[1])).Children(func() {
+				progressRing(c, pg, markSize*z, onFill, accent)
+				ui.Text(c, progressText(pg)).FontSize(markSize * z).TextColor(muted).NoWrap()
+			})
+		}
 		if p.due != "" {
 			col := muted
 			if n.Task.Overdue(a.now()) && !filled {
@@ -728,7 +751,7 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 			ui.Text(c, p.due).FontSize(markSize * z).TextColor(col).NoWrap()
 		}
 		if p.note {
-			ui.Text(c, "✎").FontSize((markSize + 1) * z).TextColor(muted).NoWrap()
+			ui.Text(c, "✎").FontSize((markSize + 1) * z).TextColor(muted).NoWrap().Tooltip(snippet(n.Note, ""))
 		}
 	})
 
@@ -761,7 +784,9 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 // nodeMenu is a node's context menu. Its actions wait until the map is
 // built, as they change the nodes being walked.
 func (a *app) nodeMenu(m *ui.Menu, n *model.Node, depth int) {
-	a.selected = n.ID
+	if !a.isSelected(n.ID) {
+		a.selected, a.multi = n.ID, nil
+	}
 	if m.Item("添加子节点").Shortcut(0, ui.KeyTab).Chosen() {
 		a.later(func() { a.addChild() })
 	}
@@ -772,6 +797,33 @@ func (a *app) nodeMenu(m *ui.Menu, n *model.Node, depth int) {
 		a.later(func() { a.startEdit(n.ID) })
 	}
 	a.tagMenu(m, n)
+	m.Separator()
+	if m.Item("复制").Shortcut(ui.Cmd, ui.KeyC).Chosen() {
+		a.later(func() { a.copyNodes(false) })
+	}
+	if m.Item("剪切").Shortcut(ui.Cmd, ui.KeyX).Disabled(depth == 0).Chosen() {
+		a.later(func() { a.copyNodes(true) })
+	}
+	if m.Item("粘贴为子节点").Chosen() {
+		a.later(func() { a.paste() })
+	}
+	m.Separator()
+	if a.shownRoot() == n && a.focusNode() != nil {
+		if m.Item("退出聚焦").Shortcut(0, ui.KeyEscape).Chosen() {
+			a.later(func() { a.focusOn("") })
+		}
+	} else if depth > 0 && m.Item("聚焦此分支").Shortcut(ui.Alt, ui.KeyEnter).Chosen() {
+		id := n.ID
+		a.later(func() { a.focusOn(id) })
+	}
+	if len(n.Children) > 0 {
+		if m.Item("展开全部下级").Chosen() {
+			a.later(func() { a.setCollapsedBelow(n, false) })
+		}
+		if m.Item("折叠全部下级").Chosen() {
+			a.later(func() { a.setCollapsedBelow(n, true) })
+		}
+	}
 	if n.Image != nil {
 		if m.Item("查看大图").Chosen() {
 			a.lightbox = n.ID
@@ -803,9 +855,65 @@ func (a *app) nodeMenu(m *ui.Menu, n *model.Node, depth int) {
 		}
 	}
 	m.Separator()
-	if m.Item("删除").Shortcut(0, ui.KeyDelete).Disabled(depth == 0).Chosen() {
-		a.later(func() { a.deleteSelected() })
+	label := "删除"
+	if len(a.multi) > 0 {
+		label = fmt.Sprintf("删除所选 %d 个节点", len(a.selection()))
 	}
+	if m.Item(label).Shortcut(0, ui.KeyDelete).Disabled(depth == 0 && len(a.multi) == 0).Chosen() {
+		a.later(a.deleteSelection)
+	}
+}
+
+// progressOf counts the tasks under every node below root: done and all.
+func progressOf(root *model.Node) map[string][2]int {
+	out := map[string][2]int{}
+	var walk func(n *model.Node) [2]int
+	walk = func(n *model.Node) [2]int {
+		var sum [2]int
+		for _, c := range n.Children {
+			below := walk(c)
+			sum[0] += below[0]
+			sum[1] += below[1]
+			if c.Task != nil {
+				sum[1]++
+				if c.Task.Status == model.StatusDone {
+					sum[0]++
+				}
+			}
+		}
+		if sum[1] > 0 {
+			out[n.ID] = sum
+		}
+		return sum
+	}
+	walk(root)
+	return out
+}
+
+func progressText(pg [2]int) string { return fmt.Sprintf("%d/%d", pg[0], pg[1]) }
+
+// progressRing draws how much of a node's tasks are done, as a pie.
+func progressRing(c *ui.Context, pg [2]int, size float32, on, accent ui.Color) {
+	frac := float32(pg[0]) / float32(pg[1])
+	ui.Box(c).Size(size, size).Shrink(0).Draw(func(p *ui.Painter, r ui.Rect) {
+		cx, cy, rad := r.X+r.W/2, r.Y+r.H/2, r.W/2
+		p.FillPath(new(ui.Path).Circle(cx, cy, rad), on.Alpha(0.18))
+		if frac <= 0 {
+			return
+		}
+		col := ui.Hex("#22c55e")
+		if frac >= 1 {
+			p.FillPath(new(ui.Path).Circle(cx, cy, rad), col)
+			return
+		}
+		path := new(ui.Path).MoveTo(cx, cy)
+		const steps = 24
+		for i := 0; i <= steps; i++ {
+			ang := -math.Pi/2 + 2*math.Pi*float64(frac)*float64(i)/steps
+			path.LineTo(cx+rad*float32(math.Cos(ang)), cy+rad*float32(math.Sin(ang)))
+		}
+		p.FillPath(path.Close(), col)
+	})
 }
 
 // canvasKey handles the keys pressed while the canvas has the focus.
@@ -822,10 +930,16 @@ func (a *app) canvasKey(ev ui.InputEvent) bool {
 			a.redo()
 			return true
 		case "delete":
-			a.deleteSelected()
+			a.deleteSelection()
+			return true
+		case "copy":
+			a.copyNodes(false)
+			return true
+		case "cut":
+			a.copyNodes(true)
 			return true
 		case "paste":
-			return a.pasteImage()
+			return a.paste()
 		}
 		return false
 	}
@@ -838,7 +952,28 @@ func (a *app) canvasKey(ev ui.InputEvent) bool {
 	case ev.Mods == 0 && ev.Key == ui.KeyEnter:
 		a.addSibling()
 	case ev.Mods == 0 && (ev.Key == ui.KeyDelete || ev.Key == ui.KeyBackspace):
-		a.deleteSelected()
+		a.deleteSelection()
+	case ev.Mods == 0 && ev.Key == ui.KeyEscape:
+		switch {
+		case len(a.multi) > 0:
+			a.multi = nil
+		case a.focusNode() != nil:
+			a.focusOn("")
+		default:
+			return false
+		}
+	case ev.Mods == ui.Alt && ev.Key == ui.KeyEnter:
+		if a.selected == a.shownRoot().ID {
+			a.focusOn("") // again on the middle: out
+		} else {
+			a.focusOn(a.selected)
+		}
+	case ev.Mods == ui.Alt && ev.Key >= ui.Key0 && ev.Key <= ui.Key9:
+		a.expandTo(int(ev.Key - ui.Key0))
+	case ev.Mods == ui.Cmd && ev.Key == ui.KeyC:
+		a.copyNodes(false)
+	case ev.Mods == ui.Cmd && ev.Key == ui.KeyX:
+		a.copyNodes(true)
 	case ev.Mods == 0 && (ev.Key == ui.KeyF2 || ev.Key == ui.KeySpace):
 		a.startEdit(a.selected)
 	case ev.Mods == 0 && ev.Key == ui.KeyLeft:
@@ -856,7 +991,7 @@ func (a *app) canvasKey(ev ui.InputEvent) bool {
 	case ev.Mods == ui.Cmd && ev.Key == ui.KeySlash:
 		a.toggleCollapse(a.selected)
 	case ev.Mods == ui.Cmd && ev.Key == ui.KeyV:
-		return a.pasteImage()
+		return a.paste()
 	case ev.Mods == ui.Cmd && ev.Key == ui.KeyZ:
 		a.undo()
 	case ev.Mods == ui.Cmd|ui.Shift && ev.Key == ui.KeyZ:

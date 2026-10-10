@@ -39,7 +39,8 @@ func (f *fakePlatform) SaveFile(name, ext string, done func(string)) { done(f.sa
 func (f *fakePlatform) OpenFile(title string, exts []string, done func(string)) {
 	done(f.openPath)
 }
-func (f *fakePlatform) CopyText(s string) { f.copied = s }
+func (f *fakePlatform) CopyText(s string)     { f.copied = s }
+func (f *fakePlatform) ClipboardText() string { return f.copied }
 
 func (f *fakePlatform) ClipboardImage() []byte      { return f.clipImage }
 func (f *fakePlatform) ClipboardFiles() []string    { return f.clipFiles }
@@ -90,6 +91,11 @@ func snapshot(t *testing.T, tt *ui.Tester, name string) {
 // sidebar's rows of the same text cannot take.
 func clickNode(t *testing.T, tt *ui.Tester, a *app, title string) error {
 	t.Helper()
+	return clickNodeMods(t, tt, a, 0, title)
+}
+
+func clickNodeMods(t *testing.T, tt *ui.Tester, a *app, mods ui.Modifiers, title string) error {
+	t.Helper()
 	tt.Frame()
 	n := find(t, a, title)
 	b, ok := a.boxes.Boxes[n.ID]
@@ -102,8 +108,18 @@ func clickNode(t *testing.T, tt *ui.Tester, a *app, title string) error {
 	cam.X += keepIn(cam.X+b.X*cam.Zoom, b.W*cam.Zoom, a.vp.W)
 	cam.Y += keepIn(cam.Y+b.Y*cam.Zoom, b.H*cam.Zoom, a.vp.H)
 	tt.Frame()
-	tt.ClickAt(a.vp.X+cam.X+(b.X+b.W/2)*cam.Zoom, a.vp.Y+cam.Y+(b.Y+b.H/2)*cam.Zoom)
+	tt.ClickAtWith(mods, a.vp.X+cam.X+(b.X+b.W/2)*cam.Zoom, a.vp.Y+cam.Y+(b.Y+b.H/2)*cam.Zoom)
 	return nil
+}
+
+// clickNodeWith clicks a node holding modifier keys.
+func clickNodeWith(t *testing.T, tt *ui.Tester, a *app, mods ui.Modifiers, title string) {
+	t.Helper()
+	tt.HoldModifiers(mods)
+	defer tt.HoldModifiers(0)
+	if err := clickNodeMods(t, tt, a, mods, title); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func find(t *testing.T, a *app, title string) *model.Node {
@@ -210,7 +226,7 @@ func TestPanelEditsNode(t *testing.T) {
 	if n.Title != "支持导出图片" {
 		t.Fatalf("selected %q", n.Title)
 	}
-	if err := tt.Click("备注"); err != nil {
+	if err := tt.Click("备注内容"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Type("PNG 和 SVG")
@@ -1838,4 +1854,221 @@ func TestMarkdownAndXMindFromTheApp(t *testing.T) {
 	if !strings.Contains(a.saveErr, "不是 XMind 文件") {
 		t.Fatalf("error %q", a.saveErr)
 	}
+}
+
+func TestFocusBranch(t *testing.T) {
+	a, tt := newTestApp(t)
+	clickNode(t, tt, a, "架构")
+	tt.Key(ui.Alt, ui.KeyEnter)
+	if a.focusNode() == nil || a.focusNode().Title != "架构" {
+		t.Fatal("not focused")
+	}
+	tt.Frame()
+	if _, ok := a.boxes.Boxes[find(t, a, "功能").ID]; ok {
+		t.Fatal("other branches still shown")
+	}
+	if !tt.HasText("聚焦") || !tt.HasText("我的项目") {
+		t.Fatalf("no focus bar: %q", tt.Texts())
+	}
+	snapshot(t, tt, "focus")
+	// Left from the middle goes to a child, not out of the branch.
+	tt.Key(0, ui.KeyLeft)
+	tt.Key(0, ui.KeyLeft)
+	if n, _ := a.selectedNode(); !find(t, a, "架构").Contains(n.ID) {
+		t.Fatalf("left the branch: %q", n.Title)
+	}
+	// The crumb of the root shows the whole map again; so does Esc.
+	if err := tt.Click("我的项目"); err != nil {
+		t.Fatal(err)
+	}
+	if a.focusNode() != nil {
+		t.Fatal("still focused")
+	}
+	a.focusOn(find(t, a, "功能").ID)
+	tt.Frame()
+	tt.Key(0, ui.KeyEscape)
+	if a.focusNode() != nil {
+		t.Fatal("Esc did not leave")
+	}
+}
+
+func TestMultiSelect(t *testing.T) {
+	a, tt := newTestApp(t)
+	clickNode(t, tt, a, "前端")
+	clickNodeWith(t, tt, a, ui.Shift, "后端")
+	clickNodeWith(t, tt, a, ui.Cmd, "登录")
+	if got := len(a.selection()); got != 3 {
+		t.Fatalf("selected %d", got)
+	}
+	tt.Frame()
+	if !tt.HasText("已选 3 个节点") {
+		t.Fatalf("no batch panel: %q", tt.Texts())
+	}
+	snapshot(t, tt, "multi")
+	if err := tt.Click("进行中"); err != nil {
+		t.Fatal(err)
+	}
+	for _, title := range []string{"前端", "后端", "登录"} {
+		if n := find(t, a, title); n.Task == nil || n.Task.Status != model.StatusDoing {
+			t.Fatalf("%s: %+v", title, n.Task)
+		}
+	}
+	if err := tt.Click("标签 核心"); err != nil {
+		t.Fatal(err)
+	}
+	if !find(t, a, "前端").HasTag("核心") {
+		t.Fatal("tag not put on all")
+	}
+	// A click with Shift again takes one out; a plain click selects one.
+	clickNodeWith(t, tt, a, ui.Shift, "后端")
+	if len(a.selection()) != 2 {
+		t.Fatalf("selected %d", len(a.selection()))
+	}
+	// Deleting deletes them all, in one step.
+	tt.Key(0, ui.KeyDelete)
+	if _, err := findIn(a.doc, "前端"); err == nil {
+		t.Fatal("not deleted")
+	}
+	if _, err := findIn(a.doc, "登录"); err == nil {
+		t.Fatal("not deleted")
+	}
+	a.undo()
+	find(t, a, "前端")
+	find(t, a, "登录")
+	clickNode(t, tt, a, "后端")
+	if len(a.multi) != 0 {
+		t.Fatal("plain click kept the others")
+	}
+}
+
+func TestCopyPasteBranches(t *testing.T) {
+	a, tt := newTestApp(t)
+	fp := a.plat.(*fakePlatform)
+	clickNode(t, tt, a, "架构")
+	tt.Key(ui.Cmd, ui.KeyC)
+	if a.clip == nil || !strings.Contains(fp.copied, "- 架构") || !strings.Contains(fp.copied, "  - 前端") {
+		t.Fatalf("copied %q", fp.copied)
+	}
+	// Into another map.
+	first := a.path
+	a.newMap()
+	a.commitEdit()
+	tt.Frame()
+	tt.Key(ui.Cmd, ui.KeyV)
+	root := a.doc.Root
+	if len(root.Children) != 1 || root.Children[0].Title != "架构" || len(root.Children[0].Children) != 2 {
+		t.Fatalf("pasted %+v", root.Children)
+	}
+	// Text from elsewhere pastes as an outline.
+	fp.copied = "调研\n  竞品\n  - [ ] 用户访谈"
+	fp.copied = strings.ReplaceAll(fp.copied, "\\n", "\n")
+	a.selected = root.ID
+	tt.Key(ui.Cmd, ui.KeyV)
+	if len(root.Children) != 2 || root.Children[1].Title != "调研" || len(root.Children[1].Children) != 2 ||
+		root.Children[1].Children[1].Task == nil {
+		t.Fatalf("outline pasted %+v", root.Children)
+	}
+	// Cut moves.
+	_ = a.open(first)
+	clickNode(t, tt, a, "前端")
+	tt.Key(ui.Cmd, ui.KeyX)
+	if _, err := findIn(a.doc, "前端"); err == nil {
+		t.Fatal("not cut")
+	}
+	clickNode(t, tt, a, "功能")
+	tt.Key(ui.Cmd, ui.KeyV)
+	if find(t, a, "前端") == nil || !find(t, a, "功能").Contains(find(t, a, "前端").ID) {
+		t.Fatal("not pasted")
+	}
+}
+
+func TestExpandLevelsAndProgress(t *testing.T) {
+	a, tt := newTestApp(t)
+	clickNode(t, tt, a, "我的项目")
+	tt.Key(ui.Alt, ui.Key1)
+	if !find(t, a, "功能").Collapsed || !find(t, a, "架构").Collapsed {
+		t.Fatal("not folded to level 1")
+	}
+	tt.Key(ui.Alt, ui.Key0)
+	if find(t, a, "功能").Collapsed {
+		t.Fatal("not opened")
+	}
+	tt.Frame()
+	pg := a.progress[find(t, a, "功能").ID]
+	if pg[1] == 0 {
+		t.Fatalf("no progress for 功能: %v", a.progress)
+	}
+	if !tt.HasText(progressText(pg)) {
+		t.Fatalf("progress not shown: %q", tt.Texts())
+	}
+	snapshot(t, tt, "progress")
+}
+
+func TestPaletteAndSearch(t *testing.T) {
+	a, tt := newTestApp(t)
+	// Another map to find things in.
+	other := filepath.Join(a.dir, model.FileName("后台"))
+	f := model.NewFile("后台系统")
+	n, _ := f.Sheets[0].AddChild(f.Sheets[0].Root.ID, "权限管理")
+	n.Note = "基于角色的访问控制"
+	f.Save(other)
+	a.refreshFiles()
+
+	a.openPalette(paletteAll)
+	tt.Frame()
+	tt.Type("看板")
+	tt.Frame()
+	snapshot(t, tt, "palette")
+	tt.Key(0, ui.KeyEnter)
+	if a.mode != viewBoard || a.paletteOpen {
+		t.Fatalf("mode %d open %v", a.mode, a.paletteOpen)
+	}
+	// Maps.
+	a.openPalette(paletteMaps)
+	tt.Frame()
+	tt.Type("后台")
+	tt.Key(0, ui.KeyEnter)
+	if a.path != other {
+		t.Fatalf("open %q", a.path)
+	}
+	// Every map: a note's words find its node, in the other map.
+	_ = a.open(filepath.Join(a.dir, model.FileName("使用指南")))
+	a.openPalette(paletteSearch)
+	tt.Frame()
+	tt.Type("访问控制")
+	tt.Frame()
+	if !tt.HasText("权限管理　— 基于角色的访问控制") {
+		t.Fatalf("texts %q", tt.Texts())
+	}
+	tt.Key(0, ui.KeyEnter)
+	if a.path != other || a.selected != n.ID || a.mode != viewMap {
+		t.Fatalf("at %q %q", a.path, a.selected)
+	}
+	// Recent maps come first.
+	if a.recentFiles()[0].Path != other {
+		t.Fatal("recent order")
+	}
+	// The cheat sheet.
+	a.cheatsOpen = true
+	tt.Frame()
+	if !tt.HasText("命令面板") || !tt.HasText("聚焦所选分支") {
+		t.Fatal("no cheat sheet")
+	}
+	snapshot(t, tt, "cheats")
+}
+
+func TestNotePreview(t *testing.T) {
+	a, tt := newTestApp(t)
+	clickNode(t, tt, a, "支持导出图片")
+	n, _ := a.selectedNode()
+	a.mutate("", func() { n.Note = "**粗体** 和 `代码`\n- 一\n- 二" })
+	a.mutate("", func() { n.Note = strings.ReplaceAll(n.Note, "\\n", "\n") })
+	tt.Frame()
+	if err := tt.Click("预览"); err != nil {
+		t.Fatal(err)
+	}
+	if !tt.HasText("粗体") || tt.HasText("**粗体** 和 `代码`") {
+		t.Fatalf("texts %q", tt.Texts())
+	}
+	snapshot(t, tt, "note-preview")
 }
