@@ -2509,3 +2509,92 @@ func TestTrayAndSettings(t *testing.T) {
 	}
 	snapshot(t, tt, "settings")
 }
+
+func reply(text string) string {
+	b, _ := json.Marshal(text)
+	return `{"id": "msg_r", "type": "message", "role": "assistant", "model": "claude-opus-5-5", "stop_reason": "end_turn",
+		"content": [{"type": "text", "text": ` + string(b) + `}], "usage": {"input_tokens": 1, "output_tokens": 1}}`
+}
+
+func TestAIActions(t *testing.T) {
+	a, tt := newTestApp(t)
+	fake := &fakeClaude{replies: []string{reply("## 本周完成\n- 登录"), reply("风险 1"), reply("拆好了"), reply("整理好了"), reply("架构")}}
+	a.sendAI = fake.send
+	a.cfg.AIKey = "sk-ant-test"
+	sent := func(i int) string {
+		body, _ := json.Marshal(fake.requests[i])
+		return string(body)
+	}
+	// The week's report: with what changed since a version of last week.
+	os.RemoveAll(a.versions.Dir)
+	old := a.file.Clone()
+	a.versions.Save(a.path, old, versions.Auto, "", testNow.AddDate(0, 0, -8))
+	login := find(t, a, "登录")
+	a.mutate("", func() { a.doc.AddChild(a.doc.Root.ID, "新模块") })
+	a.setStatus(find(t, a, "搜索"), model.StatusDone)
+	a.aiReport(7)
+	tt.Frame()
+	if body := sent(0); !strings.Contains(body, "周报") || !strings.Contains(body, "新增：新模块") || !strings.Contains(body, "搜索（10/10 完成）") {
+		t.Fatalf("report request %s", body)
+	}
+	if !tt.HasText("本周完成") {
+		t.Fatalf("reply not shown: %q", tt.Texts())
+	}
+	snapshot(t, tt, "ai-report")
+	// The risk scan: with the checks' findings.
+	a.aiRiskScan()
+	if body := sent(1); !strings.Contains(body, "自动检查发现") || !strings.Contains(body, "停留在「想法」的任务（1）：支持导出图片") {
+		t.Fatalf("risk request %s", body)
+	}
+	// Breaking a node down sends it alone.
+	a.selected = login.ID
+	a.aiBreakDown()
+	if body := sent(2); !strings.Contains(body, "拆解成") || !strings.Contains(body, "选中的节点及其下级") {
+		t.Fatalf("break-down request %s", body)
+	}
+	// Text pasted.
+	a.aiFromText("需求：支持导出 PDF")
+	if body := sent(3); !strings.Contains(body, "待整理的文本") || !strings.Contains(body, "支持导出 PDF") {
+		t.Fatalf("text request %s", body)
+	}
+	// A repository: its tree and README, and it becomes the project.
+	repo := t.TempDir()
+	os.MkdirAll(filepath.Join(repo, "internal", "auth"), 0o755)
+	os.MkdirAll(filepath.Join(repo, "node_modules", "x"), 0o755)
+	os.WriteFile(filepath.Join(repo, "README.md"), []byte("# 后台服务\n负责用户和权限"), 0o644)
+	os.WriteFile(filepath.Join(repo, "internal", "auth", "login.go"), []byte("package auth"), 0o644)
+	a.aiFromRepo(repo)
+	body := sent(4)
+	if !strings.Contains(body, "internal/") || !strings.Contains(body, "login.go") || !strings.Contains(body, "负责用户和权限") ||
+		strings.Contains(body, "node_modules") || a.file.Project != repo {
+		t.Fatalf("repo request %s", body)
+	}
+}
+
+func TestMapFromFoldersAndText(t *testing.T) {
+	a, tt := newTestApp(t)
+	repo := t.TempDir()
+	for _, d := range []string{"cmd/server", "internal/auth", "internal/store", ".git/x", "vendor/y"} {
+		os.MkdirAll(filepath.Join(repo, d), 0o755)
+	}
+	a.mapFromFolders(repo)
+	cmd := find(t, a, "cmd")
+	if cmd.Links[0] != "cmd" || find(t, a, "auth").Links[0] != "internal/auth" {
+		t.Fatalf("links %v", cmd.Links)
+	}
+	if _, err := findIn(a.doc, "vendor"); err == nil {
+		t.Fatal("vendor mapped")
+	}
+	// Without the AI, text becomes nodes by its indentation.
+	a.fromTextOpen = true
+	tt.Frame()
+	a.fromText = "上线计划\n  - [ ] 压测\n  - [ ] 灰度"
+	if err := tt.Click("按缩进直接转换"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	plan := find(t, a, "上线计划")
+	if len(plan.Children) != 2 || plan.Children[0].Task == nil {
+		t.Fatalf("plan %+v", plan.Children)
+	}
+}

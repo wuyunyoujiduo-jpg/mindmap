@@ -58,6 +58,7 @@ func (a *app) view(c *ui.Context) {
 		a.historyView(c)
 		a.mcpView(c)
 		a.settingsView(c)
+		a.fromTextView(c)
 	})
 	if len(a.pending) > 0 {
 		a.runPending()

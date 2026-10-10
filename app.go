@@ -151,6 +151,8 @@ type app struct {
 	captureErr      string
 	captureKeyDraft string
 	settingsOpen    bool
+	fromTextOpen    bool // the window to paste text to make nodes of
+	fromText        string
 	trayAt          time.Time // when the menu bar icon was last brought up to date
 	iterFilter      string    // the iteration the board and timeline show: "" all, "-" none
 	tlWeeks         bool      // the timeline shows weeks rather than days

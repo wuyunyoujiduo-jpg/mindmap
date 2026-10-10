@@ -847,6 +847,9 @@ func (a *app) nodeMenu(m *ui.Menu, n *model.Node, depth int) {
 	if m.Item("粘贴为子节点").Chosen() {
 		a.later(func() { a.paste() })
 	}
+	if m.Item("AI 拆解成任务").Chosen() {
+		a.later(a.aiBreakDown)
+	}
 	if depth > 0 && m.Item("移到其他导图…").Chosen() {
 		a.later(func() { a.openPalette(paletteMove) })
 	}

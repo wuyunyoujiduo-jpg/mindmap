@@ -55,6 +55,7 @@ type aiEdit struct {
 	Tags   []string `json:"tags"`
 	Status string   `json:"status"` // "", "none", "idea", "todo", "doing" or "done"
 	Due    string   `json:"due"`    // "", "none" or YYYY-MM-DD
+	Links  []string `json:"links"`  // links to add: pages, code files (path:line)
 }
 
 type aiProposal struct {
@@ -108,7 +109,8 @@ type aiState struct {
 	draft    string
 	busy     bool
 	scope    int
-	settings bool // the settings form is shown
+	settings bool   // the settings form is shown
+	extra    string // context an action adds to the next message, after the map
 	// answers answer the proposals of the last reply; the next message
 	// sends them first, as the APIs require.
 	answers   []toolAnswer
@@ -201,8 +203,9 @@ func editsSchema() map[string]any {
 			"tags":   map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "update 时替换为这些标签，add 时设置的标签；不改留空数组"},
 			"status": map[string]any{"type": "string", "enum": []string{"", "none", "idea", "todo", "doing", "done"}, "description": "任务状态：idea 想法，todo 待做，doing 进行中，done 完成，none 取消任务；不改留空"},
 			"due":    str("截止日期 YYYY-MM-DD，none 表示清除；不改留空"),
+			"links":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "要添加的链接：网址，或代码文件的相对路径（可带 :行号）；没有留空数组"},
 		},
-		"required":             []string{"op", "id", "parent", "ref", "title", "note", "tags", "status", "due"},
+		"required":             []string{"op", "id", "parent", "ref", "title", "note", "tags", "status", "due", "links"},
 		"additionalProperties": false,
 	}
 	return map[string]any{
@@ -319,6 +322,10 @@ func (a *app) aiSend() {
 	answers := ai.answers
 	ai.answers = nil
 	snapshot := "导图快照：\n" + a.snapshot(ai.scope)
+	if ai.extra != "" { // what an action gives besides the map
+		snapshot += "\n\n" + ai.extra
+		ai.extra = ""
+	}
 	ai.msgs = append(ai.msgs, chatMsg{role: "user", text: text})
 	ai.draft = ""
 	ai.busy = true
@@ -607,6 +614,11 @@ func setFields(n *model.Node, op aiEdit) {
 	if len(op.Tags) > 0 {
 		n.Tags = cleanTags(op.Tags)
 	}
+	for _, l := range op.Links {
+		if l = strings.TrimSpace(l); l != "" && !slices.Contains(n.Links, l) {
+			n.Links = append(n.Links, l)
+		}
+	}
 	switch op.Status {
 	case "":
 	case "none":
@@ -697,11 +709,15 @@ func (a *app) aiPanel(c *ui.Context) {
 			if len(ai.msgs) > 0 && ui.Button(c, "新对话").Disabled(ai.busy).Clicked() {
 				a.ai = aiState{scope: ai.scope}
 			}
-			if ui.Button(c, "设置").Clicked() {
-				ai.settings = !ai.settings
-				a.loadKeyDrafts()
-			}
-			if ui.Button(c, "关闭").Clicked() {
+			ui.MenuButton(c, "⋯", func(m *ui.Menu) {
+				a.aiMenu(m)
+				m.Separator()
+				if m.Item("AI 设置").Chosen() {
+					ai.settings = !ai.settings
+					a.loadKeyDrafts()
+				}
+			}).Label("AI 菜单").Tooltip("周报、风险扫描、拆解任务、从文本或代码仓库生成，以及设置").Disabled(ai.busy)
+			if ui.Button(c, "✕").Label("关闭").Tooltip("关闭 AI 助手").Clicked() {
 				a.aiOpen = false
 			}
 		})
@@ -713,7 +729,22 @@ func (a *app) aiPanel(c *ui.Context) {
 			if len(ai.msgs) == 0 {
 				ui.Text(c, "问问导图里的内容，或让 AI 帮你整理、拆分任务、补充备注。AI 提出的修改要你确认后才会应用。").
 					FontSize(12).TextColor(t.TextMuted).Wrap()
-				for _, s := range []string{"总结这个画布的进展和风险", "把「待优化」下的事项按优先级拆成任务", "给没有备注的功能补上实现要点"} {
+				actions := []struct {
+					label string
+					run   func()
+				}{
+					{"📋 生成本周周报", func() { a.aiReport(7) }},
+					{"⚠️ 风险扫描", a.aiRiskScan},
+					{"🔨 把选中的节点拆解成任务", a.aiBreakDown},
+					{"📝 从文本生成导图…", func() { a.fromTextOpen = true }},
+					{"📁 从代码仓库生成架构…", a.askRepo},
+				}
+				for _, act := range actions {
+					if ui.Button(c.Key(act.label), act.label).FillWidth().Clicked() {
+						a.later(act.run)
+					}
+				}
+				for _, s := range []string{"总结这个画布的进展和风险", "给没有备注的功能补上实现要点"} {
 					if ui.Button(c.Key(s), s).FillWidth().Clicked() {
 						ai.draft = s
 						a.aiSend()
@@ -778,6 +809,11 @@ func (a *app) chatBubble(c *ui.Context, i int) {
 		ui.Column(c).Gap(8).Children(func() {
 			if m.text != "" {
 				markdownView(c, m.text, 13)
+				text := m.text
+				if ui.Button(c, "复制").FontSize(11).Padding(1, 8).Tooltip("复制这段回复（Markdown）").AlignSelf(ui.Start).Clicked() {
+					a.plat.CopyText(text)
+					a.tell("已复制")
+				}
 			}
 			if m.proposal != nil {
 				a.proposalCard(c, i)
