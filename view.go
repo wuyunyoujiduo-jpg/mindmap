@@ -33,6 +33,7 @@ func (a *app) view(c *ui.Context) {
 					a.toolbar(c)
 					ui.Divider(c)
 					a.conflictBar(c)
+					a.brokenBar(c)
 					switch {
 					case a.doc == nil:
 						a.empty(c)

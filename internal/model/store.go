@@ -97,6 +97,11 @@ func (f *File) Save(path string) error {
 	if err != nil {
 		return err
 	}
+	// What is written must read back: a file that would not open is
+	// never put in place of one that does.
+	if _, err := Parse(b); err != nil {
+		return fmt.Errorf("保存前校验失败，文件未改动：%w", err)
+	}
 	tmp, err := os.CreateTemp(filepath.Dir(path), ".mindmap-*.tmp")
 	if err != nil {
 		return err

@@ -99,6 +99,8 @@ type Library struct {
 	vecs   *vectorFile
 	hashes map[string]cachedHash // of the clips' EmbedText
 	dups   *dupIndex             // the clips by what makes them the same
+	// Broken are the clips' files that would not read.
+	Broken []string
 	// Version counts the changes, for what is worked out from the clips
 	// to be kept until it changes.
 	Version int
@@ -121,6 +123,7 @@ func Open(dir string) (*Library, error) {
 		}
 		var c Clip
 		if json.Unmarshal(data, &c) != nil || c.ID == "" {
+			l.Broken = append(l.Broken, e.Name())
 			continue
 		}
 		l.Clips = append(l.Clips, &c)

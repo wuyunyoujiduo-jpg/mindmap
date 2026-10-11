@@ -30,6 +30,10 @@ func (a *app) libraryView(c *ui.Context) {
 				ui.Spinner(c)
 				ui.Text(c, "建立语义索引…").FontSize(12).TextColor(t.TextMuted).NoWrap()
 			}
+			if n := len(l.Broken); n > 0 {
+				ui.Text(c, fmt.Sprintf("%d 条资料的文件损坏", n)).FontSize(12).TextColor(t.Danger).NoWrap().
+					Tooltip("这些文件无法读取，已跳过：.library/clips/ 下的 " + strings.Join(l.Broken, "、"))
+			}
 			if a.embedErr != "" {
 				ui.Text(c, "语义检索不可用").FontSize(12).TextColor(t.Warning).NoWrap().Tooltip(a.embedErr + "（在设置里检查向量模型）")
 			}

@@ -93,9 +93,14 @@ func (c config) save() {
 		return
 	}
 	b, _ := json.MarshalIndent(c, "", "  ")
-	// Only the user may read it: it holds the API key.
-	_ = os.WriteFile(p, b, 0o600)
-	_ = os.Chmod(p, 0o600)
+	// Only the user may read it: it holds the API key. Written whole or
+	// not at all, through a file renamed over it.
+	tmp := p + ".tmp"
+	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+		return
+	}
+	_ = os.Chmod(tmp, 0o600)
+	_ = os.Rename(tmp, p)
 }
 
 // defaultDir is where maps go until the user picks a folder.

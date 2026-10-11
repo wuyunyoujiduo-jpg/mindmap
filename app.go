@@ -88,22 +88,24 @@ type app struct {
 	files []model.FileInfo // every map of the tree
 
 	// The open map: a file of canvases, one of them shown.
-	path     string
-	file     *model.File
-	doc      *model.Document // the canvas shown, one of file.Sheets
-	modTime  time.Time       // of the file as last read or written
-	dirty    bool
-	changed  time.Time // of the last unsaved change
-	checked  time.Time // when the file was last checked for outside changes
-	saveErr  string
-	savedAt  time.Time // when this run last saved the map
-	hist     *model.History
-	hists    map[string]*model.History // of the maps opened, while the app runs
-	views    map[string]*fileView      // how each map was left
-	versions versions.Store            // past versions of the maps
-	lastSnap map[string]time.Time      // when each map was last kept as a version
-	conflict bool                      // the file changed outside while the map had unsaved changes
-	lastEdit string                    // the key of the last coalesced edit (see mutate)
+	path      string
+	file      *model.File
+	doc       *model.Document // the canvas shown, one of file.Sheets
+	modTime   time.Time       // of the file as last read or written
+	dirty     bool
+	changed   time.Time // of the last unsaved change
+	checked   time.Time // when the file was last checked for outside changes
+	saveErr   string
+	savedAt   time.Time // when this run last saved the map
+	hist      *model.History
+	hists     map[string]*model.History // of the maps opened, while the app runs
+	views     map[string]*fileView      // how each map was left
+	versions  versions.Store            // past versions of the maps
+	lastSnap  map[string]time.Time      // when each map was last kept as a version
+	conflict  bool                      // the file changed outside while the map had unsaved changes
+	broken    string                    // a map that would not open, whose versions brokenBar offers
+	brokenErr string
+	lastEdit  string // the key of the last coalesced edit (see mutate)
 
 	// Selection and in-place editing.
 	selected  string
@@ -354,7 +356,13 @@ func (a *app) open(path string) error {
 	f, err := model.Load(path)
 	if err != nil {
 		a.saveErr = fmt.Sprintf("无法打开 %s: %v", filepath.Base(path), err)
+		if !errors.Is(err, os.ErrNotExist) {
+			a.broken, a.brokenErr = path, err.Error() // brokenBar offers its versions
+		}
 		return err
+	}
+	if a.broken == path {
+		a.broken = ""
 	}
 	a.path, a.file = path, f
 	a.conflict = false

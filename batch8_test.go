@@ -331,3 +331,32 @@ func TestBuiltinModel(t *testing.T) {
 		}
 	}
 }
+
+func TestBrokenMapRestored(t *testing.T) {
+	a, tt := newTestApp(t)
+	path := a.path
+	find(t, a, "列表加载慢")
+	os.WriteFile(path, []byte(`{"version": 2, "sheets": [`), 0o644) // cut off
+	if err := a.open(path); err == nil || a.broken != path {
+		t.Fatalf("err %v broken %q", err, a.broken)
+	}
+	tt.Frame()
+	if err := tt.Click("从历史版本恢复"); err != nil {
+		t.Fatalf("%v: %q", err, tt.Texts())
+	}
+	tt.Frame()
+	if a.broken != "" || a.path != path {
+		t.Fatalf("not restored: %q %q", a.broken, a.saveErr)
+	}
+	find(t, a, "列表加载慢")
+	matches, _ := filepath.Glob(path + ".broken-*")
+	if len(matches) != 1 {
+		t.Fatal("the broken file was not kept")
+	}
+	// A file that would not read back is never written.
+	f := model.NewFile("x")
+	f.Sheets[0].Root = nil
+	if err := f.Save(filepath.Join(a.dir, "x"+model.Ext)); err == nil {
+		t.Fatal("an unreadable file was saved")
+	}
+}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -67,6 +68,54 @@ func (a *app) conflictBar(c *ui.Context) {
 			a.resolveConflict(true)
 		}
 	})
+}
+
+// brokenBar offers to restore a map that would not open from its last
+// version that does.
+func (a *app) brokenBar(c *ui.Context) {
+	if a.broken == "" {
+		return
+	}
+	t := c.Theme()
+	path := a.broken
+	ui.Row(c.Key("broken")).Padding(8, 12).Gap(10).AlignItems(ui.Center).Background(t.Danger.Alpha(0.12)).Children(func() {
+		ui.Text(c, "「"+mapName(path)+"」无法打开（"+a.brokenErr+"）。可以从最近一个能打开的历史版本恢复，损坏的文件会另存一份。").
+			FontSize(12).Wrap().Grow(1)
+		if ui.Button(c, "从历史版本恢复").Clicked() {
+			a.later(func() { a.restoreBroken(path) })
+		}
+		if ui.Button(c, "在 Finder 中显示").Clicked() {
+			a.plat.ShowInFolder(path)
+		}
+		if ui.Button(c, "忽略").Clicked() {
+			a.broken = ""
+		}
+	})
+}
+
+// restoreBroken puts the last version of a map that opens in place of
+// its file, which is kept beside it as name.broken-time.
+func (a *app) restoreBroken(path string) {
+	for _, v := range a.versions.List(path) {
+		f, err := a.versions.Load(v)
+		if err != nil {
+			continue
+		}
+		if data, err := os.ReadFile(path); err == nil {
+			_ = os.WriteFile(path+".broken-"+a.now().Format("20060102-150405"), data, 0o644)
+		}
+		if err := f.Save(path); err != nil {
+			a.saveErr = err.Error()
+			return
+		}
+		a.broken = ""
+		a.refreshFiles()
+		if a.open(path) == nil {
+			a.tell("已从 " + v.Time.Format("01-02 15:04") + " 的版本恢复")
+		}
+		return
+	}
+	a.brokenErr = "没有能打开的历史版本"
 }
 
 // resolveConflict keeps the app's version (mine) or the file's, keeping the
