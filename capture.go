@@ -389,6 +389,7 @@ func (a *app) generalSettings(c *ui.Context) {
 	t := c.Theme()
 	a.iconSettings(c)
 	a.updateSettings(c)
+	a.shotSettings(c)
 	ui.Field(c, "全局快捷键", func() {
 		ui.Column(c).Gap(10).Children(func() {
 			rows := []struct {

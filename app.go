@@ -54,6 +54,8 @@ type platform interface {
 	Screenshot(fromApp bool)
 	// OpenShotSettings opens the system's settings of screen recording.
 	OpenShotSettings()
+	// ShotLog is the end of the screenshots' log.
+	ShotLog() string
 	// SetAppIcon shows the app's icon in the Dock or the taskbar, and the
 	// menu bar's.
 	SetAppIcon(app, tray []byte)
@@ -268,6 +270,7 @@ type app struct {
 	shotAlert                    bool
 	shotAlertTitle, shotAlertMsg string
 	shotAlertSettings            bool
+	shotModes                    bool                  // the choice of how, shown on any system (tests)
 	keyErr                       map[string]string     // why a shortcut recorded is not used
 	iconBitmaps                  map[string]*ui.Bitmap // the app's icons, in the settings
 	// The sync with GitHub (sync.go).

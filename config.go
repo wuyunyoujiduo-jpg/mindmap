@@ -54,6 +54,9 @@ type config struct {
 	SyncBranch string `json:"syncBranch,omitempty"`
 	SyncToken  string `json:"syncToken,omitempty"`
 	SyncOff    bool   `json:"syncOff,omitempty"`
+	// ShotSystem takes screenshots with macOS's own tool rather than the
+	// app's, which marks them up.
+	ShotSystem bool `json:"shotSystem,omitempty"`
 	// Icon is the app's icon chosen, "" for the default.
 	Icon string `json:"icon,omitempty"`
 	// LibraryManual leaves new clips for the AI to sort out when asked,

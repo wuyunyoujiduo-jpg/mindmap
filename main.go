@@ -9,7 +9,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -115,7 +117,11 @@ func (d *desktop) SetShotKey(key string) error {
 // the settings, and what fails is said.
 func (d *desktop) Screenshot(fromApp bool) {
 	inApp := fromApp || d.win.IsFocused()
-	logShot("截图开始：从应用内 %v，应用在前台 %v", fromApp, inApp)
+	logShot("截图开始：从应用内 %v，应用在前台 %v，系统截图 %v", fromApp, inApp, d.app.cfg.ShotSystem)
+	if d.app.cfg.ShotSystem && runtime.GOOS == "darwin" {
+		go d.systemShot(fromApp)
+		return
+	}
 	go func() {
 		if !screenshot.HasPermission() {
 			logShot("没有屏幕录制权限")
@@ -183,6 +189,64 @@ func logShot(format string, args ...any) {
 	}
 	defer f.Close()
 	fmt.Fprintf(f, "%s %s\n", time.Now().Format("2006-01-02 15:04:05"), fmt.Sprintf(format, args...))
+}
+
+// systemShot takes a screenshot with macOS's own tool, which frames a
+// region or a window, and keeps it in the library. Off the main thread.
+func (d *desktop) systemShot(fromApp bool) {
+	if fromApp {
+		d.win.Hide()
+		time.Sleep(250 * time.Millisecond)
+	}
+	defer func() {
+		if fromApp {
+			d.win.Update(d.ShowMain)
+		}
+	}()
+	f, err := os.CreateTemp("", "mymind-shot-*.png")
+	if err != nil {
+		logShot("系统截图失败：%v", err)
+		return
+	}
+	f.Close()
+	defer os.Remove(f.Name())
+	// -i: framed by the user, Esc cancels; -x: no sound.
+	out, err := exec.Command("/usr/sbin/screencapture", "-i", "-x", "-t", "png", f.Name()).CombinedOutput()
+	data, _ := os.ReadFile(f.Name())
+	if err != nil || len(data) == 0 {
+		logShot("系统截图没有得到图片：%v %s", err, out)
+		return // canceled
+	}
+	logShot("系统截图完成：%d 字节", len(data))
+	d.win.Update(func() { d.app.keepShot(data, screenshot.Library, fromApp) })
+	logShot("截图结束")
+}
+
+// ShotLog is the end of the screenshots' log.
+func (d *desktop) ShotLog() string {
+	data, err := os.ReadFile(shotLogPath())
+	if err != nil {
+		return ""
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	return strings.Join(lines[max(0, len(lines)-15):], "\n")
+}
+
+// shotUnfinished tells whether the last screenshot of the log never ended,
+// as when the app quit in the middle of it.
+func shotUnfinished(log string) bool {
+	lines := strings.Split(strings.TrimSpace(log), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		l := lines[i]
+		switch {
+		case strings.Contains(l, "截图开始"):
+			return true
+		case strings.Contains(l, "截图结束"), strings.Contains(l, "截图失败"), strings.Contains(l, "没有屏幕录制权限"),
+			strings.Contains(l, "系统截图"), strings.Contains(l, "上次截图没有完成"):
+			return false
+		}
+	}
+	return false
 }
 
 // saveShot asks where to save a screenshot and saves it there. Off the
@@ -432,6 +496,13 @@ func main() {
 		}
 		if err := plat.SetClipKey(a.clipKey()); err != nil {
 			log.Printf("收藏剪贴板快捷键 %s: %v", a.clipKey(), err)
+		}
+		// The last screenshot never ended: the app quit in it, most
+		// likely. The system's tool is offered.
+		if log := plat.ShotLog(); shotUnfinished(log) {
+			logShot("上次截图没有完成")
+			a.showShotAlert("上次截图没有完成",
+				"截图时 MyMind 可能意外退出了。可以在 设置 → 通用 → 截图 里改用「系统截图」，并把那里的截图记录复制发给开发者。", false)
 		}
 		if err := plat.SetShotKey(a.shotKey()); err != nil {
 			log.Printf("截图快捷键 %s: %v", a.shotKey(), err)

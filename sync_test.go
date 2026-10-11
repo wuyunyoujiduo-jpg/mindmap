@@ -96,3 +96,42 @@ func slicesHasName(a *app, name string) bool {
 	}
 	return false
 }
+
+// The settings choose how screenshots are taken, and show their log.
+func TestShotSettings(t *testing.T) {
+	a, tt := newTestApp(t)
+	a.shotModes = true
+	a.openSettings()
+	tt.Frame()
+	snapshot(t, tt, "settings-shot")
+	if err := tt.Click("系统截图"); err != nil {
+		t.Fatal(err)
+	}
+	if !a.cfg.ShotSystem {
+		t.Fatal("not the system's tool")
+	}
+	if !tt.HasText("2026-10-11 15:04:05 截图开始") {
+		t.Fatalf("no log: %q", tt.Texts())
+	}
+	if err := tt.Click("复制截图记录"); err != nil {
+		t.Fatal(err)
+	}
+	if a.plat.ClipboardText() != "2026-10-11 15:04:05 截图开始" {
+		t.Fatalf("copied %q", a.plat.ClipboardText())
+	}
+}
+
+func TestShotUnfinished(t *testing.T) {
+	for log, want := range map[string]bool{
+		"": false,
+		"a 截图开始：…\nb 截图窗口已打开":               true,
+		"a 截图开始：…\nb 截图结束":                  false,
+		"a 截图开始\nb 没有屏幕录制权限":                false,
+		"a 截图开始\nb 截图结束\nc 截图开始\nd 正在截取屏幕…": true,
+		"a 截图开始\nb 上次截图没有完成":                false,
+	} {
+		if shotUnfinished(log) != want {
+			t.Errorf("%q: %v", log, !want)
+		}
+	}
+}

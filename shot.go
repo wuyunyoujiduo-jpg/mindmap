@@ -1,6 +1,9 @@
 package main
 
 import (
+	"runtime"
+	"strings"
+
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/screenshot"
 )
@@ -62,4 +65,44 @@ func (a *app) keepShot(png []byte, act screenshot.Action, fromApp bool) {
 	case screenshot.Copy:
 		a.tell("截图已复制")
 	}
+}
+
+// shotSettings chooses how screenshots are taken, tries one, and shows
+// the end of their log, to be copied when one goes wrong.
+func (a *app) shotSettings(c *ui.Context) {
+	t := c.Theme()
+	ui.Field(c, "截图", func() {
+		ui.Column(c).Gap(8).Children(func() {
+			if runtime.GOOS == "darwin" || a.shotModes {
+				mode := 0
+				if a.cfg.ShotSystem {
+					mode = 1
+				}
+				if ui.Segmented(c, &mode, "MyMind 截图（可标注）", "系统截图").Changed() {
+					a.cfg.ShotSystem = mode == 1
+					a.cfg.save()
+				}
+				hint := "框选后可以加框线、箭头、文字，再收进资料库、复制或保存。"
+				if a.cfg.ShotSystem {
+					hint = "用 macOS 自带的截图：拖动框选，或按空格选窗口，截好直接收进资料库。"
+				}
+				ui.Text(c, hint).FontSize(12).TextColor(t.TextMuted).Wrap()
+			}
+			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+				if ui.Button(c, "试一下").Clicked() {
+					a.settingsOpen = false
+					a.later(a.screenshot)
+				}
+				if ui.Button(c, "复制截图记录").Tooltip("截图不成功时，把这段记录发给开发者").Clicked() {
+					a.plat.CopyText(a.plat.ShotLog())
+					a.tell("截图记录已复制")
+				}
+			})
+			if log := strings.TrimSpace(a.plat.ShotLog()); log != "" {
+				ui.Box(c.Key("shot-log")).Padding(8, 10).Radius(8).Background(t.Text.Alpha(0.05)).FillWidth().Children(func() {
+					ui.Text(c, log).FontSize(11).TextColor(t.TextMuted).Wrap().Selectable()
+				})
+			}
+		})
+	})
 }
