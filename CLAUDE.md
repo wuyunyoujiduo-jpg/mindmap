@@ -36,5 +36,9 @@ by AI, and an AI assistant.
   image each; each updates from its own manifest.
 - Sync with GitHub: `internal/ghsync` (a three-way merge over the REST API,
   state in `<maps folder>/.sync/`), wired in `sync.go`.
-- Screenshots come from OneShot, in `internal/screenshot`.
+- Screenshots come from OneShot. On macOS the app runs `helpers/shot`, OneShot
+  as a program of its own (its own module, on OneShot's MyGo 0.3.3, a menu
+  bar app), which the workflow builds into `resources/darwin-<arch>/shot`;
+  `internal/screenshot` is the same code in the app, for Windows. The
+  settings also offer macOS's own tool (`screencapture -i`).
 - The user writes in Chinese; the app's texts are Chinese.

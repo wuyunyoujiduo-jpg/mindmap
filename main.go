@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/egoist/mygo"
@@ -122,6 +123,10 @@ func (d *desktop) Screenshot(fromApp bool) {
 		go d.systemShot(fromApp)
 		return
 	}
+	if helper := shotHelper(); helper != "" {
+		go d.helperShot(helper, fromApp, inApp)
+		return
+	}
 	go func() {
 		if !screenshot.HasPermission() {
 			logShot("没有屏幕录制权限")
@@ -189,6 +194,92 @@ func logShot(format string, args ...any) {
 	}
 	defer f.Close()
 	fmt.Fprintf(f, "%s %s\n", time.Now().Format("2006-01-02 15:04:05"), fmt.Sprintf(format, args...))
+}
+
+// shotHelper is OneShot's screenshot as a program of its own, shipped in
+// the macOS app (helpers/shot), "" when there is none.
+func shotHelper() string {
+	if runtime.GOOS != "darwin" {
+		return ""
+	}
+	p := filepath.Join(resourcesDir(), "shot")
+	if info, err := os.Stat(p); err != nil || info.IsDir() {
+		return ""
+	}
+	return p
+}
+
+var helperBusy atomic.Bool
+
+// helperShot takes a screenshot with the helper: OneShot itself, a menu
+// bar app on its own version of MyGo, which frames and marks up the shot,
+// copies it, or writes it for the app to keep or save. Off the main
+// thread.
+func (d *desktop) helperShot(helper string, fromApp, inApp bool) {
+	if !helperBusy.CompareAndSwap(false, true) {
+		logShot("上一次截图还没有结束")
+		return
+	}
+	defer helperBusy.Store(false)
+	if fromApp {
+		d.win.Hide()
+		time.Sleep(250 * time.Millisecond)
+		defer d.win.Update(d.ShowMain)
+	}
+	dir, err := os.MkdirTemp("", "mymind-shot-")
+	if err != nil {
+		logShot("截图失败：%v", err)
+		return
+	}
+	defer os.RemoveAll(dir)
+	out := filepath.Join(dir, "shot.png")
+	cmd := exec.Command(helper, "-out", out)
+	var stdout, stderr strings.Builder
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	err = cmd.Run()
+	for _, l := range strings.Split(strings.TrimSpace(stderr.String()), "\n") {
+		if l != "" {
+			logShot("%s", l)
+		}
+	}
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	outcome := lines[len(lines)-1]
+	logShot("截图程序结束：%s（%v）", outcome, err)
+	switch {
+	case outcome == "library" || outcome == "save":
+		png, rerr := os.ReadFile(out)
+		if rerr != nil || len(png) == 0 {
+			logShot("截图失败：读不到图片 %v", rerr)
+			return
+		}
+		if outcome == "save" {
+			d.saveShot(png)
+		} else {
+			d.win.Update(func() { d.app.keepShot(png, screenshot.Library, fromApp) })
+		}
+	case outcome == "copy":
+		d.win.Update(func() { d.app.keepShot(nil, screenshot.Copy, fromApp) })
+	case outcome == "permission":
+		logShot("没有屏幕录制权限")
+		d.win.Update(func() {
+			d.ShowMain()
+			d.app.showShotAlert("截图需要屏幕录制权限", screenshot.PermissionHelp, true)
+		})
+		return
+	case outcome == "cancel":
+	default:
+		msg := strings.TrimPrefix(outcome, "error: ")
+		if msg == "" && err != nil {
+			msg = err.Error()
+		}
+		logShot("截图失败：%s", msg)
+		d.win.Update(func() {
+			d.ShowMain()
+			d.app.showShotAlert("截图失败", msg+"\n\n可以在 设置 → 通用 → 截图 里改用「系统截图」，并把截图记录复制发给开发者。", false)
+		})
+		return
+	}
+	logShot("截图结束")
 }
 
 // systemShot takes a screenshot with macOS's own tool, which frames a

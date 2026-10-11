@@ -46,6 +46,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release download embed-model --repo "$GITHUB_REPOSITORY" -p mindmap-embed.bin -p reference.json -D "$RUNNER_TEMP/embed"
+      - name: Test the screenshot helper (OneShot)
+        working-directory: helpers/shot
+        run: go vet ./... && go test ./...
       - run: go test ./...
         env:
           MINDMAP_EMBED_MODEL: ${{ runner.temp }}/embed/mindmap-embed.bin
@@ -107,6 +110,14 @@ jobs:
           gh release view "$tag" --repo "$UPDATES_REPO" >/dev/null 2>&1 ||
             gh release create "$tag" --repo "$UPDATES_REPO" --draft --target main --title "MyMind $tag" --notes "MyMind $(jq -r .version mygo.json)"
           echo "UPLOAD=-upload" >> "$GITHUB_ENV"
+      # OneShot's screenshot, a program of its own in the app, per chip.
+      - name: Build the screenshot helper
+        run: |
+          for arch in arm64 amd64; do
+            mkdir -p resources/darwin-$arch
+            (cd helpers/shot && GOOS=darwin GOARCH=$arch go build -trimpath -ldflags="-s -w" -o ../../resources/darwin-$arch/shot .)
+          done
+          ls -la resources/darwin-*/
       - name: Build MyMind.app and the disk image
         env:
           MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
