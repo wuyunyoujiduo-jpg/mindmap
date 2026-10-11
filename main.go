@@ -254,6 +254,7 @@ func main() {
 			log.Printf("收藏剪贴板快捷键 %s: %v", a.clipKey(), err)
 		}
 		plat.SetTray(!a.cfg.NoTray)
+		a.post = func(fn func()) { win.Update(fn) }
 		a.async = func(work func() (any, error), done func(any, error)) {
 			go func() {
 				v, err := work()

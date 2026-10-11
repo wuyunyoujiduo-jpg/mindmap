@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/mcp"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/versions"
 )
@@ -33,7 +34,9 @@ func serveMCP(args []string) error {
 	if _, err := os.Stat(abs); err != nil {
 		return fmt.Errorf("导图文件夹不存在：%s", abs)
 	}
-	s := &mcp.Server{Dir: abs, Versions: versions.Store{Dir: versionsDir()}, Version: version, Now: time.Now}
+	cfg := loadConfig()
+	s := &mcp.Server{Dir: abs, Versions: versions.Store{Dir: versionsDir()}, Version: version, Now: time.Now,
+		Embedder: library.Embedder{URL: cfg.EmbedURL, Key: cfg.EmbedKey, Model: cfg.EmbedModel}}
 	return s.Serve(os.Stdin, os.Stdout)
 }
 

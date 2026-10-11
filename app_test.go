@@ -1154,7 +1154,7 @@ type fakeClaude struct {
 	requests []anthropic.BetaMessageNewParams
 }
 
-func (f *fakeClaude) send(_ context.Context, _ config, p anthropic.BetaMessageNewParams) (*anthropic.BetaMessage, error) {
+func (f *fakeClaude) send(_ context.Context, _ config, p anthropic.BetaMessageNewParams, onText func(string)) (*anthropic.BetaMessage, error) {
 	f.requests = append(f.requests, p)
 	if len(f.replies) == 0 {
 		return nil, errors.New("no reply")
@@ -1162,6 +1162,13 @@ func (f *fakeClaude) send(_ context.Context, _ config, p anthropic.BetaMessageNe
 	var m anthropic.BetaMessage
 	err := json.Unmarshal([]byte(f.replies[0]), &m)
 	f.replies = f.replies[1:]
+	if onText != nil && err == nil { // as streamed
+		for _, b := range m.Content {
+			if b.Type == "text" {
+				onText(b.Text)
+			}
+		}
+	}
 	return &m, err
 }
 

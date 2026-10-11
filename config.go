@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // config is what the app remembers between runs.
@@ -47,6 +48,15 @@ type config struct {
 	// LibraryManual leaves new clips for the AI to sort out when asked,
 	// rather than at once.
 	LibraryManual bool `json:"libraryManual,omitempty"`
+	// The embedding model of the library's semantic search: an
+	// OpenAI-compatible API's address, its key and the model.
+	EmbedURL   string `json:"embedURL,omitempty"`
+	EmbedKey   string `json:"embedKey,omitempty"`
+	EmbedModel string `json:"embedModel,omitempty"`
+	// BackupDir is where the maps and the library are backed up each day,
+	// "" for no backups; BackupLast is when they last were.
+	BackupDir  string    `json:"backupDir,omitempty"`
+	BackupLast time.Time `json:"backupLast,omitzero"`
 	// PanelWidth is the width the right panel was dragged to.
 	PanelWidth float32 `json:"panelWidth,omitempty"`
 }

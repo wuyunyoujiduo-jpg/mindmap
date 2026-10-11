@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -77,9 +78,12 @@ func (e *dsError) Error() string { return fmt.Sprintf("%d %s", e.Status, e.Messa
 
 // deepseekSender sends a request to DeepSeek; tests point it at a server
 // of their own through the base URL.
-type deepseekSender func(ctx context.Context, cfg config, req dsRequest) (*dsResponse, error)
+type deepseekSender func(ctx context.Context, cfg config, req dsRequest, onText func(string)) (*dsResponse, error)
 
-func sendToDeepSeek(ctx context.Context, cfg config, req dsRequest) (*dsResponse, error) {
+// sendToDeepSeek calls the API, streaming the reply when onText takes its
+// text.
+func sendToDeepSeek(ctx context.Context, cfg config, req dsRequest, onText func(string)) (*dsResponse, error) {
+	req.Stream = onText != nil
 	body, err := json.Marshal(req)
 	if err != nil {
 		return nil, err
@@ -101,6 +105,9 @@ func sendToDeepSeek(ctx context.Context, cfg config, req dsRequest) (*dsResponse
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusOK && strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
+		return readDeepSeekStream(resp.Body, onText)
+	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
 	if err != nil {
 		return nil, err
@@ -189,4 +196,87 @@ func deepseekError(err error) string {
 		return "请求失败（" + e.Error() + "）"
 	}
 	return ""
+}
+
+// readDeepSeekStream reads a streamed reply, server-sent events of pieces
+// of the message, into the whole message.
+func readDeepSeekStream(r io.Reader, onText func(string)) (*dsResponse, error) {
+	var msg dsMessage
+	msg.Role = "assistant"
+	finish := ""
+	var calls []dsToolCall
+	sc := bufio.NewScanner(r)
+	sc.Buffer(make([]byte, 1<<20), 32<<20)
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		data, ok := strings.CutPrefix(line, "data:")
+		if !ok {
+			continue
+		}
+		data = strings.TrimSpace(data)
+		if data == "[DONE]" {
+			break
+		}
+		var chunk struct {
+			Choices []struct {
+				Delta struct {
+					Content          string `json:"content"`
+					ReasoningContent string `json:"reasoning_content"`
+					ToolCalls        []struct {
+						Index    int    `json:"index"`
+						ID       string `json:"id"`
+						Type     string `json:"type"`
+						Function struct {
+							Name      string `json:"name"`
+							Arguments string `json:"arguments"`
+						} `json:"function"`
+					} `json:"tool_calls"`
+				} `json:"delta"`
+				FinishReason *string `json:"finish_reason"`
+			} `json:"choices"`
+			Error *struct {
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+			continue
+		}
+		if chunk.Error != nil {
+			return nil, &dsError{Status: 500, Message: chunk.Error.Message}
+		}
+		for _, ch := range chunk.Choices {
+			d := ch.Delta
+			if d.Content != "" {
+				msg.Content += d.Content
+				if onText != nil {
+					onText(d.Content)
+				}
+			}
+			msg.ReasoningContent += d.ReasoningContent
+			for _, tc := range d.ToolCalls {
+				for len(calls) <= tc.Index {
+					calls = append(calls, dsToolCall{Type: "function"})
+				}
+				c := &calls[tc.Index]
+				if tc.ID != "" {
+					c.ID = tc.ID
+				}
+				c.Function.Name += tc.Function.Name
+				c.Function.Arguments += tc.Function.Arguments
+			}
+			if ch.FinishReason != nil {
+				finish = *ch.FinishReason
+			}
+		}
+	}
+	if err := sc.Err(); err != nil {
+		return nil, err
+	}
+	msg.ToolCalls = calls
+	out := &dsResponse{}
+	out.Choices = append(out.Choices, struct {
+		Message      dsMessage `json:"message"`
+		FinishReason string    `json:"finish_reason"`
+	}{msg, finish})
+	return out, nil
 }

@@ -24,6 +24,7 @@ const (
 	paletteLink  // a node to link the node a.linkFrom to
 	paletteAfter // a task for the task a.linkFrom to wait on
 	paletteMove  // a node to move the nodes selected under
+	paletteClip  // a clip of the library to link the node a.linkFrom to
 )
 
 // paletteItem is a line of the palette.
@@ -124,6 +125,19 @@ func (a *app) paletteItems() []paletteItem {
 		}
 		if q != "" && a.file != nil {
 			items = append(items, a.nodeItems(a.path, a.file, q, 30, a.goToNode)...)
+		}
+	}
+	if a.paletteMode == paletteClip && a.lib != nil {
+		for i, h := range a.lib.Search(a.paletteQuery, nil) {
+			if i == 100 {
+				break
+			}
+			id := h.Clip.ID
+			items = append(items, paletteItem{"资料", h.Clip.Label(), cmpOr(h.Clip.Desc, h.Clip.Category), func() {
+				if n := a.file.Node(a.linkFrom); n != nil {
+					a.addLink(n, clipScheme+id)
+				}
+			}})
 		}
 	}
 	if a.paletteMode == paletteAfter && a.file != nil {
@@ -344,6 +358,7 @@ func (a *app) paletteView(c *ui.Context) {
 			paletteLink:   "输入关键词，选择要链接到的节点…",
 			paletteAfter:  "选择要先完成的任务…",
 			paletteMove:   "移到哪个节点下？输入关键词查找，或选择导图的中心主题…",
+			paletteClip:   "在资料库里查找要链接的资料…",
 		}[a.paletteMode]
 		w, _ := c.Size()
 		ui.Column(c).Width(min(640, w-80)).Gap(8).Children(func() {

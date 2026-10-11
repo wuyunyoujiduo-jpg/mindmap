@@ -74,6 +74,9 @@ func NewIndex(clips []*Clip) *Index {
 type Hit struct {
 	Clip  *Clip
 	Score float64
+	// Coverage is the share of the query's words the clip has (pairs of
+	// characters, for Chinese), from 0 to 1.
+	Coverage float64
 }
 
 // Search finds the clips matching a query, the best first; keep, when not
@@ -91,7 +94,7 @@ func (ix *Index) Search(query string, keep func(*Clip) bool) []Hit {
 	if len(q) == 0 {
 		for _, c := range ix.clips {
 			if keep == nil || keep(c) {
-				hits = append(hits, Hit{c, 0})
+				hits = append(hits, Hit{Clip: c})
 			}
 		}
 		return hits
@@ -105,13 +108,20 @@ func (ix *Index) Search(query string, keep func(*Clip) bool) []Hit {
 		if keep != nil && !keep(c) {
 			continue
 		}
-		score, matched := 0.0, 0
+		score, matched, words, wordsMatched := 0.0, 0, 0, 0
 		for _, t := range q {
 			tf := ix.terms[i][t]
+			word := !isUnigram(t)
+			if word {
+				words++
+			}
 			if tf == 0 {
 				continue
 			}
 			matched++
+			if word {
+				wordsMatched++
+			}
 			df := float64(ix.df[t])
 			idf := math.Log(1 + (n-df+0.5)/(df+0.5))
 			score += idf * tf * (k1 + 1) / (tf + k1*(1-b+b*ix.lens[i]/max(ix.avg, 1)))
@@ -125,7 +135,11 @@ func (ix *Index) Search(query string, keep func(*Clip) bool) []Hit {
 		if len(phrase) > 1 && strings.Contains(strings.ToLower(c.Title+"\n"+c.Desc+"\n"+c.Summary+"\n"+c.Note+"\n"+c.Text+"\n"+strings.Join(c.Tags, " ")), phrase) {
 			score *= 2
 		}
-		hits = append(hits, Hit{c, score})
+		coverage := 1.0
+		if words > 0 {
+			coverage = float64(wordsMatched) / float64(words)
+		}
+		hits = append(hits, Hit{c, score, coverage})
 	}
 	slices.SortStableFunc(hits, func(a, b Hit) int {
 		switch {
@@ -137,6 +151,13 @@ func (ix *Index) Search(query string, keep func(*Clip) bool) []Hit {
 		return b.Clip.Created.Compare(a.Clip.Created)
 	})
 	return hits
+}
+
+// isUnigram tells whether a term is a single Chinese, Japanese or Korean
+// character, which says little alone.
+func isUnigram(t string) bool {
+	r := []rune(t)
+	return len(r) == 1 && isCJK(r[0])
 }
 
 func isCJK(r rune) bool {

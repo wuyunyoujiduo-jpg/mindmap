@@ -102,16 +102,20 @@ type chatMsg struct {
 
 // aiState is the conversation of the AI panel.
 type aiState struct {
-	provider string                       // of the conversation, which stays with it
-	claude   []anthropic.BetaMessageParam // the conversation, as sent to Claude
-	ds       []dsMessage                  // or to DeepSeek
-	msgs     []chatMsg
-	draft    string
-	busy     bool
-	scope    int
-	settings bool   // the settings form is shown
-	extra    string // context an action adds to the next message, after the map
-	rounds   int    // replies in a row that only looked things up in the library
+	provider  string                       // of the conversation, which stays with it
+	claude    []anthropic.BetaMessageParam // the conversation, as sent to Claude
+	ds        []dsMessage                  // or to DeepSeek
+	msgs      []chatMsg
+	draft     string
+	busy      bool
+	scope     int
+	settings  bool   // the settings form is shown
+	extra     string // context an action adds to the next message, after the map
+	rounds    int    // replies in a row that only looked things up in the library
+	turn      int    // counts the requests, so that a late piece of a reply is dropped
+	key       string // what the conversation is about: a map's path, or the library
+	chatID    string // the conversation's, as kept
+	streaming string // the text of the reply coming
 	// answers answer the proposals of the last reply; the next message
 	// sends them first, as the APIs require.
 	answers   []toolAnswer
@@ -121,8 +125,9 @@ type aiState struct {
 	baseDraft string
 }
 
-// aiSender sends a request to Claude; tests replace it.
-type aiSender func(ctx context.Context, cfg config, params anthropic.BetaMessageNewParams) (*anthropic.BetaMessage, error)
+// aiSender sends a request to Claude; tests replace it. onText, when not
+// nil, is given the reply's text as it comes, off the main thread.
+type aiSender func(ctx context.Context, cfg config, params anthropic.BetaMessageNewParams, onText func(string)) (*anthropic.BetaMessage, error)
 
 // providerKey is the API key of the provider chosen, from the settings or
 // the environment.
@@ -146,8 +151,9 @@ func providerModelName(cfg config) string {
 	return aiModelName(aiModel(cfg))
 }
 
-// sendToClaude calls the Messages API with the official SDK.
-func sendToClaude(ctx context.Context, cfg config, params anthropic.BetaMessageNewParams) (*anthropic.BetaMessage, error) {
+// sendToClaude calls the Messages API with the official SDK, streaming the
+// reply when onText takes its text.
+func sendToClaude(ctx context.Context, cfg config, params anthropic.BetaMessageNewParams, onText func(string)) (*anthropic.BetaMessage, error) {
 	opts := []option.RequestOption{option.WithRequestTimeout(5 * time.Minute)}
 	if key := aiKey(cfg); key != "" {
 		opts = append(opts, option.WithAPIKey(key))
@@ -156,7 +162,25 @@ func sendToClaude(ctx context.Context, cfg config, params anthropic.BetaMessageN
 		opts = append(opts, option.WithBaseURL(cfg.AIBaseURL))
 	}
 	client := anthropic.NewClient(opts...)
-	return client.Beta.Messages.New(ctx, params)
+	if onText == nil {
+		return client.Beta.Messages.New(ctx, params)
+	}
+	stream := client.Beta.Messages.NewStreaming(ctx, params)
+	defer stream.Close()
+	var msg anthropic.BetaMessage
+	for stream.Next() {
+		ev := stream.Current()
+		if err := msg.Accumulate(ev); err != nil {
+			return nil, err
+		}
+		if ev.Type == "content_block_delta" && ev.Delta.Type == "text_delta" && ev.Delta.Text != "" {
+			onText(ev.Delta.Text)
+		}
+	}
+	if err := stream.Err(); err != nil {
+		return nil, err
+	}
+	return &msg, nil
 }
 
 // aiKey is the API key of the settings, else of the environment.
@@ -306,6 +330,9 @@ func (a *app) snapshot(scope int) string {
 // aiSend sends the draft, with the map, or what the library holds when it
 // is shown, and waits for the reply in the background.
 func (a *app) aiSend() {
+	draft, extra := a.ai.draft, a.ai.extra
+	a.switchChat() // the conversation about what is shown
+	a.ai.draft, a.ai.extra = draft, extra
 	ai := &a.ai
 	text := strings.TrimSpace(ai.draft)
 	if text == "" || ai.busy || a.doc == nil && !a.libOpen {
@@ -317,7 +344,7 @@ func (a *app) aiSend() {
 		return
 	}
 	if ai.provider != a.cfg.AIProvider && len(ai.claude)+len(ai.ds) > 0 {
-		*ai = aiState{scope: ai.scope, draft: ai.draft} // another provider: a new conversation
+		*ai = aiState{scope: ai.scope, draft: ai.draft, key: ai.key} // another provider: a new conversation
 	}
 	ai.provider = a.cfg.AIProvider
 	ai.rounds = 0
@@ -355,6 +382,19 @@ func (a *app) aiTurn(snapshot, text string) {
 	ai.cancel = cancel
 	cfg := a.cfg
 	claudeLen, dsLen := len(ai.claude), len(ai.ds)
+	// The reply's text shows as it comes.
+	ai.turn++
+	turn := ai.turn
+	ai.streaming = ""
+	post := a.post
+	onText := func(s string) {
+		post(func() {
+			if ai.turn == turn && ai.busy {
+				ai.streaming += s
+				ai.scroll.Y = 1e9
+			}
+		})
+	}
 	done := func(v any, err error) {
 		cancel()
 		r, _ := v.(aiReply)
@@ -375,7 +415,7 @@ func (a *app) aiTurn(snapshot, text string) {
 		req := a.deepseekRequest()
 		send := a.sendDeepSeek
 		a.async(func() (any, error) {
-			resp, err := send(ctx, cfg, req)
+			resp, err := send(ctx, cfg, req, onText)
 			if err != nil {
 				return nil, err
 			}
@@ -394,7 +434,7 @@ func (a *app) aiTurn(snapshot, text string) {
 	params := a.aiParams()
 	send := a.sendAI
 	a.async(func() (any, error) {
-		resp, err := send(ctx, cfg, params)
+		resp, err := send(ctx, cfg, params, onText)
 		if err != nil {
 			return nil, err
 		}
@@ -446,7 +486,12 @@ func claudeReply(resp *anthropic.BetaMessage) aiReply {
 				r.texts = append(r.texts, s)
 			}
 		case anthropic.BetaToolUseBlock:
-			r.calls = append(r.calls, aiCall{id: b.ID, name: b.Name, input: b.JSON.Input.Raw()})
+			input := b.JSON.Input.Raw()
+			if input == "" {
+				raw, _ := json.Marshal(b.Input)
+				input = string(raw)
+			}
+			r.calls = append(r.calls, aiCall{id: b.ID, name: b.Name, input: input})
 		}
 	}
 	param := resp.ToParam()
@@ -457,7 +502,8 @@ func claudeReply(resp *anthropic.BetaMessage) aiReply {
 // aiReceive shows a reply: its text, and the edits it proposes.
 func (a *app) aiReceive(r aiReply, err error) {
 	ai := &a.ai
-	ai.busy, ai.cancel = false, nil
+	ai.busy, ai.cancel, ai.streaming = false, nil, ""
+	defer a.saveChat()
 	ai.scroll.Y = 1e9
 	switch {
 	case err != nil:
@@ -477,21 +523,15 @@ func (a *app) aiReceive(r aiReply, err error) {
 		if text != "" {
 			ai.msgs = append(ai.msgs, chatMsg{role: "assistant", text: text})
 		}
+		var queries []string
 		for _, call := range r.calls {
-			if !isLibraryTool(call.name) {
-				ai.answers = append(ai.answers, toolAnswer{id: call.id, text: "没有展示给用户：请先完成检索，再单独提出修改。", isError: true})
-				continue
+			if q := toolQuery(call); q != "" {
+				queries = append(queries, q)
 			}
-			result, shown := a.runLibraryTool(call)
-			ai.answers = append(ai.answers, toolAnswer{id: call.id, text: result})
-			ai.msgs = append(ai.msgs, chatMsg{role: "tool", text: shown})
 		}
-		if ai.rounds < 8 {
-			ai.rounds++
-			a.aiTurn("", "")
-		} else {
-			ai.msgs = append(ai.msgs, chatMsg{role: "error", text: "检索次数太多，已停下。可以换个问法再试。"})
-		}
+		// The queries' vectors first, to search by meaning, then the tools.
+		ai.busy = true
+		a.embedQueries(queries, func() { a.answerLibraryCalls(r.calls) })
 		return
 	}
 	shown := false
@@ -513,6 +553,27 @@ func (a *app) aiReceive(r aiReply, err error) {
 	}
 	if r.truncated {
 		ai.msgs = append(ai.msgs, chatMsg{role: "error", text: "回复太长，被截断了。"})
+	}
+}
+
+// answerLibraryCalls answers the library tools a reply called, and goes on.
+func (a *app) answerLibraryCalls(calls []aiCall) {
+	ai := &a.ai
+	ai.busy = false
+	for _, call := range calls {
+		if !isLibraryTool(call.name) {
+			ai.answers = append(ai.answers, toolAnswer{id: call.id, text: "没有展示给用户：请先完成检索，再单独提出修改。", isError: true})
+			continue
+		}
+		result, shown := a.runLibraryTool(call)
+		ai.answers = append(ai.answers, toolAnswer{id: call.id, text: result})
+		ai.msgs = append(ai.msgs, chatMsg{role: "tool", text: shown})
+	}
+	if ai.rounds < 8 {
+		ai.rounds++
+		a.aiTurn("", "")
+	} else {
+		ai.msgs = append(ai.msgs, chatMsg{role: "error", text: "检索次数太多，已停下。可以换个问法再试。"})
 	}
 }
 
@@ -567,6 +628,7 @@ func (a *app) answerProposal(i int, apply bool) {
 		m.state = proposalDiscarded
 	}
 	ai.answers = append(ai.answers, toolAnswer{id: m.toolUseID, text: result})
+	a.saveChat()
 }
 
 // applyEdits makes the proposed edits, all or none, as one step of the
@@ -763,19 +825,22 @@ func (a *app) describeEdit(op aiEdit, added map[string]string) string {
 // aiPanel is the panel's AI tab: the conversation, a field to write in,
 // and the settings.
 func (a *app) aiPanel(c *ui.Context) {
+	a.switchChat()
 	t := c.Theme()
 	ai := &a.ai
 	ui.Column(c.Key("ai")).Fill().Children(func() {
 		ui.Row(c).Padding(12, 16, 6).Gap(6).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, "✦ AI 助手").Bold().Grow(1)
 			if len(ai.msgs) > 0 && ui.Button(c, "新对话").Disabled(ai.busy).Clicked() {
-				a.ai = aiState{scope: ai.scope}
+				a.newChat()
 			}
 			ui.MenuButton(c, "⋯", func(m *ui.Menu) {
 				if !a.libOpen {
 					a.aiMenu(m)
 					m.Separator()
 				}
+				a.chatsMenu(m)
+				m.Separator()
 				if m.Item("AI 设置").Chosen() {
 					ai.settings = !ai.settings
 					a.loadKeyDrafts()
@@ -831,10 +896,17 @@ func (a *app) aiPanel(c *ui.Context) {
 			for i := range ai.msgs {
 				a.chatBubble(c.Key(i), i)
 			}
+			if ai.busy && ai.streaming != "" {
+				markdownView(c.Key("streaming"), ai.streaming, 13)
+			}
 			if ai.busy {
 				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 					ui.Spinner(c)
-					ui.Text(c, "思考中…").FontSize(12).TextColor(t.TextMuted)
+					status := "思考中…"
+					if ai.streaming != "" {
+						status = "正在回答…"
+					}
+					ui.Text(c, status).FontSize(12).TextColor(t.TextMuted)
 					if ui.Link(c, "停止", "").FontSize(12).Clicked() && ai.cancel != nil {
 						ai.cancel()
 					}

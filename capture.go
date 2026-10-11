@@ -337,6 +337,7 @@ func trayIcon() []byte {
 func (a *app) openSettings() {
 	a.settingsOpen = true
 	a.captureKeyDraft, a.ghTokenDraft, a.clipKeyDraft = a.cfg.CaptureKey, a.cfg.GitHubToken, a.cfg.ClipKey
+	a.embedDrafts = [3]string{a.cfg.EmbedURL, a.cfg.EmbedKey, a.cfg.EmbedModel}
 }
 
 // settingsView is the window of preferences: the capture shortcut, the
@@ -344,8 +345,8 @@ func (a *app) openSettings() {
 func (a *app) settingsView(c *ui.Context) {
 	t := c.Theme()
 	ui.Modal(c.Key("settings"), &a.settingsOpen, func() {
-		w, _ := c.Size()
-		ui.Column(c).Gap(16).Width(min(560, w-80)).Children(func() {
+		w, h := c.Size()
+		ui.Scroll(c.Key("settings-scroll")).Gap(16).Width(min(580, w-80)).MaxHeight(h-120).Padding(0, 10, 0, 0).Children(func() {
 			ui.Row(c).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "设置").FontSize(17).Bold().Grow(1)
 				if ui.Button(c, "关闭").Clicked() {
@@ -388,6 +389,8 @@ func (a *app) settingsView(c *ui.Context) {
 				}
 				ui.Text(c, "资料库：新收藏的资料由 AI 自动起标题、写摘要、分类和打标签（用 AI 助手的 API Key，按用量计费）").FontSize(13).Wrap().Grow(1)
 			})
+			a.embedSettings(c)
+			a.backupSettings(c)
 			tray := !a.cfg.NoTray
 			ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
 				if ui.Switch(c, &tray).Label("菜单栏图标").Changed() {

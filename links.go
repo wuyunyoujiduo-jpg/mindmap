@@ -22,6 +22,7 @@ const (
 	linkWeb = iota
 	linkFile
 	linkNode
+	linkClip
 )
 
 // nodeScheme starts links to nodes: "mindmap:folder/map#id".
@@ -37,6 +38,8 @@ var editors = []struct{ id, name string }{
 func (a *app) parseLink(link string) (kind int, target string, line int) {
 	link = strings.TrimSpace(link)
 	switch {
+	case strings.HasPrefix(link, clipScheme):
+		return linkClip, strings.TrimPrefix(link, clipScheme), 0
 	case strings.HasPrefix(link, nodeScheme):
 		rel, id, _ := strings.Cut(strings.TrimPrefix(link, nodeScheme), "#")
 		path := a.path
@@ -107,6 +110,8 @@ func (a *app) openLink(link string) {
 	switch kind {
 	case linkWeb:
 		a.plat.OpenURL(target)
+	case linkClip:
+		a.showClip(target)
 	case linkNode:
 		path, id, _ := strings.Cut(target, "#")
 		if path != a.path {
@@ -173,6 +178,11 @@ func (a *app) linkLabel(link string) (icon, label string) {
 			}
 		}
 		return "🔗", "（节点已不存在）"
+	case linkClip:
+		if c := a.lib.Find(target); c != nil {
+			return "📚", c.Label()
+		}
+		return "📚", "（资料已不存在）"
 	}
 	rel, err := filepath.Rel(a.projectDir(), target)
 	if err != nil || strings.HasPrefix(rel, "..") {
@@ -315,6 +325,10 @@ func (a *app) linksSection(c *ui.Context, n *model.Node) {
 				if ui.Button(c, "链接到节点…").FontSize(12).Clicked() {
 					a.linkFrom = n.ID
 					a.openPalette(paletteLink)
+				}
+				if len(a.lib.Clips) > 0 && ui.Button(c, "链接到资料…").FontSize(12).Clicked() {
+					a.linkFrom = n.ID
+					a.openPalette(paletteClip)
 				}
 			})
 			if back := a.backlinks(n.ID); len(back) > 0 {

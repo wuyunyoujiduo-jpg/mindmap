@@ -7,13 +7,15 @@ import (
 
 // SearchText is what a search of the library finds, as the AI
 // reads it, and how many clips it found.
-func SearchText(l *Library, query, category string, limit int) (string, int) {
+// qv, when not nil, is the query's vector of the model, to find clips by
+// meaning too.
+func SearchText(l *Library, query, category string, limit int, qv []float32, model string) (string, int) {
 	category = strings.TrimSpace(category)
 	var keep func(*Clip) bool
 	if category != "" {
 		keep = func(c *Clip) bool { return c.Category == category }
 	}
-	hits := l.Search(query, keep)
+	hits := l.SearchBoth(query, qv, model, keep)
 	if len(hits) == 0 {
 		return "没有找到匹配的资料。可以换个说法或更少的关键词再试。", 0
 	}

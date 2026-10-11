@@ -77,14 +77,22 @@ func (a *app) noteLibraryWrite() {
 	a.libMod = modTime(filepath.Join(a.lib.Dir, "clips"))
 }
 
-// addClip keeps a clip and has its page read and the AI sort it out.
-func (a *app) addClip(c *library.Clip) error {
-	if err := a.lib.Add(c, a.now()); err != nil {
-		return err
+// kept takes a clip just kept, or the one it repeats: that one is shown
+// rather than a second kept, and a.dupe says so.
+func (a *app) kept(c *library.Clip, err error) (*library.Clip, error) {
+	var dup *library.DuplicateError
+	if errors.As(err, &dup) {
+		a.dupe = true
+		a.libSel = dup.Clip.ID
+		a.tell("已经收藏过：" + dup.Clip.Label())
+		return dup.Clip, nil
+	}
+	if err != nil {
+		return nil, err
 	}
 	a.noteLibraryWrite()
 	a.enqueueClip(c.ID, !a.cfg.LibraryManual)
-	return nil
+	return c, nil
 }
 
 // addClipText keeps text: a link when it is a lone web address.
@@ -97,30 +105,18 @@ func (a *app) addClipText(text, source string) (*library.Clip, error) {
 	if library.IsURL(text) {
 		c.Kind, c.Text, c.URL = library.KindLink, "", text
 	}
-	return c, a.addClip(c)
+	return a.kept(c, a.lib.Add(c, a.now()))
 }
 
 // addClipFile copies a file into the library: a picture or a file.
 func (a *app) addClipFile(path, source string) (*library.Clip, error) {
-	c, err := a.lib.AddFile(path, source, a.now())
-	if err != nil {
-		return nil, err
-	}
-	a.noteLibraryWrite()
-	a.enqueueClip(c.ID, !a.cfg.LibraryManual)
-	return c, nil
+	return a.kept(a.lib.AddFile(path, source, a.now()))
 }
 
 // addClipImage keeps a picture, as PNG data.
 func (a *app) addClipImage(data []byte, source string) (*library.Clip, error) {
 	name := "图片 " + a.now().Format("2006-01-02 15.04.05") + ".png"
-	c, err := a.lib.AddData(data, name, library.KindImage, source, a.now())
-	if err != nil {
-		return nil, err
-	}
-	a.noteLibraryWrite()
-	a.enqueueClip(c.ID, !a.cfg.LibraryManual)
-	return c, nil
+	return a.kept(a.lib.AddData(data, name, library.KindImage, source, a.now()))
 }
 
 // clipClipboard keeps what is on the clipboard: the files copied, else a
@@ -161,9 +157,14 @@ func (a *app) clipClipboard(source string) ([]*library.Clip, error) {
 // clipFromShortcut keeps the clipboard when the global shortcut is
 // pressed, in any app, and says so in a notification.
 func (a *app) clipFromShortcut() {
+	a.dupe = false
 	clips, err := a.clipClipboard("剪贴板")
 	if err != nil {
 		a.plat.Notify("没有收进资料库", err.Error())
+		return
+	}
+	if a.dupe && len(clips) == 1 {
+		a.plat.Notify("已经收藏过", clips[0].Label())
 		return
 	}
 	body := clips[0].Label()
@@ -439,7 +440,7 @@ func askOrganize(ctx context.Context, cfg config, send aiSender, sendDS deepseek
 	if cfg.AIProvider == providerDeepSeek {
 		resp, err := sendDS(ctx, cfg, dsRequest{Model: deepseekModel(cfg), MaxTokens: 2000, Messages: []dsMessage{
 			{Role: "system", Content: organizeSystem}, {Role: "user", Content: prompt},
-		}})
+		}}, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -457,7 +458,7 @@ func askOrganize(ctx context.Context, cfg config, send aiSender, sendDS deepseek
 			MaxTokens: 2000,
 			System:    []anthropic.BetaTextBlockParam{{Text: organizeSystem}},
 			Messages:  []anthropic.BetaMessageParam{anthropic.NewBetaUserMessage(blocks...)},
-		})
+		}, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -523,8 +524,9 @@ func (a *app) clipToMap(c *library.Clip) error {
 		note = append(note, c.Text)
 	}
 	n.Note = strings.Join(note, "\n\n")
+	n.Links = []string{clipScheme + c.ID}
 	if c.URL != "" {
-		n.Links = []string{c.URL}
+		n.Links = append(n.Links, c.URL)
 	}
 	n.Tags = slices.Clone(c.Tags)
 	if p := a.lib.FilePath(c); p != "" {

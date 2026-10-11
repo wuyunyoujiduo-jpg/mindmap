@@ -58,7 +58,9 @@
   - 导入 Markdown / OPML：标题和列表缩进变成层级，`- [ ]` / `- [x]` 变成任务（幕布、Logseq、OmniOutliner 等导出的 OPML 都可以）
   - 导出为 OPML；导出任务到日历（.ics，有日期的任务变成全天日程，可导入「日历」）；导出演说为 PDF（每页一张幻灯片）
   - 以上都在「文件」菜单和画布右下角 ⤓ 菜单里
-- **资料库**（左侧「📚 资料库」，⌘⇧L）：收藏文字、链接、图片和文件。上方输入框记文字或粘贴链接（⌘↩ 收藏），「粘贴」收剪贴板，图片和文件直接拖进来；在任何应用里复制后按 ⌃⌥V 直接收进资料库，快速记录窗口也能选「资料库」。链接会自动读取网页标题和正文；AI 自动给每条资料起标题、加一句简单的说明、写摘要、分类、打标签，并生成检索关键词（图片由 Claude 识别图中文字和内容）。本地索引支持中英文检索，可按类型、分类、标签、星标筛选；资料可一键加到当前导图。AI 助手对话时会自动检索资料库（导图里提问也可以），回答时注明依据的资料。资料保存在导图文件夹的隐藏目录 `.library` 里，一条资料一个 JSON 文件；MCP 也提供 search_library / read_clip / add_clip，Claude Code 等工具可以检索和收藏
+- **资料库**（左侧「📚 资料库」，⌘⇧L）：收藏文字、链接、图片和文件。上方输入框记文字或粘贴链接（⌘↩ 收藏），「粘贴」收剪贴板，图片和文件直接拖进来；在任何应用里复制后按 ⌃⌥V 直接收进资料库，快速记录窗口也能选「资料库」。链接会自动读取网页标题和正文；AI 自动给每条资料起标题、加一句简单的说明、写摘要、分类、打标签，并生成检索关键词（图片由 Claude 识别图中文字和内容）。本地索引支持中英文检索，可按类型、分类、标签、星标筛选；资料可一键加到当前导图。AI 助手对话时会自动检索资料库（导图里提问也可以），回答时注明依据的资料。同一链接、同样文字或同一文件再收藏时只定位到已有的那条。PDF、Word、PPT、Excel 会提取正文；GBK 等中文编码的网页自动识别，读不到正文时可以手动粘贴。**语义检索**（可选）：在设置里填一个 OpenAI 兼容的向量接口（Ollama 本机 bge-m3 免费离线，或硅基流动、OpenAI），按意思而不只是关键词检索，并据此推荐「相关资料」。**回顾**：AI 回顾最近 7 / 30 天收藏的资料，或把资料按分类生成导图。节点可以「链接到资料…」，节点详情会提示资料库里可能相关的资料，资料详情显示被哪些节点引用。资料保存在导图文件夹的隐藏目录 `.library` 里，一条资料一个 JSON 文件；MCP 也提供 search_library / read_clip / add_clip，Claude Code 等工具可以检索和收藏
+- **AI 回复实时显示**：回答边生成边显示；每张导图和资料库的对话自动保存，重开应用后还在，⋯ 菜单「历史对话」可切回以前的对话
+- **备份**：设置里「立即备份…」把导图文件夹（含资料库）打包成 zip，或选一个文件夹每天自动备份，保留最近 14 份
 - **GitHub Issues 同步**：在右侧「画布」页填仓库（owner/repo）后点「同步 Issues」，打开的 issue 作为待做任务加到「GitHub Issues」分支并链接到 issue，标签变成节点标签；再次同步会更新标题，关闭的标为完成。私有仓库在设置里填 Token
 - **导出图片**：文件菜单「导出为图片…」（⌘⇧E）或画布右下角 ⤓，把当前画布的整张导图导出为 2 倍清晰度的 PNG
 - **右侧面板可调宽度**：拖动面板左边的分隔线，宽度会记住
@@ -117,6 +119,21 @@ gh api repos/wuyunyoujiduo-jpg/mindmap/contents/update.sh -H "Accept: applicatio
 2. 推送同名标签：`git tag v0.2.0 && git push origin v0.2.0`。也可以不推标签：在 Actions 页面手动运行 Build 工作流，勾选「发布 Release」
 
 工作流会检查标签和版本号是否一致，打包后在 Releases 页面发布 `.dmg`。
+
+### 签名和公证（可选）
+
+有 Apple 开发者账号（每年 99 美元）后，在仓库 Settings → Secrets and variables → Actions 里添加下面 6 个 secret，之后打包的应用会用 Developer ID 签名并经苹果公证，用户下载后双击即可打开，不再需要 `xattr -cr`：
+
+| Secret | 内容 |
+| --- | --- |
+| `APPLE_CERTIFICATE` | 「Developer ID Application」证书导出的 .p12，`base64 -i cert.p12 \| pbcopy` 后粘贴 |
+| `APPLE_CERTIFICATE_PASSWORD` | 导出 .p12 时设的密码 |
+| `APPLE_SIGNING_IDENTITY` | 如 `Developer ID Application: Your Name (TEAMID)`（`security find-identity -v -p codesigning` 可查） |
+| `APPLE_ID` | 开发者账号的 Apple ID 邮箱 |
+| `APPLE_TEAM_ID` | 10 位的 Team ID |
+| `APPLE_APP_PASSWORD` | 在 account.apple.com 生成的 App 专用密码 |
+
+没有这些 secret 时照旧打包（未签名）。
 
 ## 从源码运行
 
@@ -231,7 +248,10 @@ capture.go         快速记录、收件箱、移到其他导图、菜单栏图�
 clips.go           资料库：收藏、读取网页、AI 整理、加到导图
 libview.go         资料库界面
 libchat.go         AI 对话检索资料库的工具
-internal/library   资料库存储、中英文检索索引（BM25）、网页正文提取
+internal/library   资料库存储、中英文检索索引（BM25）、向量语义检索、网页正文与文档文字提取、去重
+libmore.go         语义检索、相关资料、回顾、节点与资料互链、向量模型和备份设置
+chats.go           AI 对话的保存与恢复
+backup.go          备份
 plan.go            前置任务、估时、迭代、到期提醒
 timeline.go        时间线（甘特图）
 overview.go        总览

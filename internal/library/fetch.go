@@ -10,6 +10,9 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"golang.org/x/text/encoding/htmlindex"
+	"golang.org/x/text/encoding/simplifiedchinese"
 )
 
 // Page is what a web page says of itself, and its text.
@@ -55,13 +58,44 @@ func FetchPage(ctx context.Context, url string) (Page, error) {
 	if err != nil {
 		return Page{}, err
 	}
-	if ct := resp.Header.Get("Content-Type"); strings.HasPrefix(ct, "text/plain") || strings.HasPrefix(ct, "text/markdown") {
-		return Page{Text: clip(string(data), MaxPageText)}, nil
+	ct := resp.Header.Get("Content-Type")
+	text, err := Decode(data, ct)
+	if err != nil {
+		return Page{}, err
 	}
-	if !utf8.Valid(data) {
-		return Page{}, fmt.Errorf("网页不是 UTF-8 编码，未能读取正文")
+	if strings.HasPrefix(ct, "text/plain") || strings.HasPrefix(ct, "text/markdown") {
+		return Page{Text: clip(text, MaxPageText)}, nil
 	}
-	return ParseHTML(string(data)), nil
+	return ParseHTML(text), nil
+}
+
+var reCharset = regexp.MustCompile(`(?i)charset\s*=\s*["']?([\w.:-]+)`)
+
+// Decode reads a page's bytes as text, in the encoding its Content-Type
+// or its <meta> names, else UTF-8, else GB18030, as Chinese pages often
+// are.
+func Decode(data []byte, contentType string) (string, error) {
+	name := ""
+	if m := reCharset.FindStringSubmatch(contentType); m != nil {
+		name = m[1]
+	} else if m := reCharset.FindSubmatch(data[:min(len(data), 4096)]); m != nil {
+		name = string(m[1])
+	}
+	name = strings.ToLower(name)
+	if name != "" && name != "utf-8" && name != "utf8" {
+		if enc, err := htmlindex.Get(name); err == nil {
+			if out, err := enc.NewDecoder().Bytes(data); err == nil {
+				return string(out), nil
+			}
+		}
+	}
+	if utf8.Valid(data) {
+		return string(data), nil
+	}
+	if out, err := simplifiedchinese.GB18030.NewDecoder().Bytes(data); err == nil {
+		return string(out), nil
+	}
+	return "", fmt.Errorf("无法识别网页的文字编码")
 }
 
 // ParseHTML reads a page's title, description and text from its HTML.

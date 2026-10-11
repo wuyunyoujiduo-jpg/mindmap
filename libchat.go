@@ -82,6 +82,17 @@ func libraryToolsDeepSeek() []dsTool {
 
 // runLibraryTool answers a call of a library tool, and says what it did
 // for the conversation shown.
+// toolQuery is the query of a call of search_library, "" for others.
+func toolQuery(call aiCall) string {
+	var in struct {
+		Query string `json:"query"`
+	}
+	if call.name != toolSearchLibrary || json.Unmarshal([]byte(call.input), &in) != nil {
+		return ""
+	}
+	return strings.TrimSpace(in.Query)
+}
+
 func (a *app) runLibraryTool(call aiCall) (result, shown string) {
 	var in struct {
 		Query    string `json:"query"`
@@ -101,7 +112,7 @@ func (a *app) runLibraryTool(call aiCall) (result, shown string) {
 		}
 		return library.Full(c, 20000), "📖 读取资料「" + c.Label() + "」"
 	}
-	text, n := library.SearchText(a.lib, in.Query, in.Category, 8)
+	text, n := library.SearchText(a.lib, in.Query, in.Category, 8, a.qvecs[strings.TrimSpace(in.Query)], a.cfg.EmbedModel)
 	return text, fmt.Sprintf("🔎 在资料库中检索「%s」：%d 条结果", in.Query, n)
 }
 

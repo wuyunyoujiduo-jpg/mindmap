@@ -8,6 +8,7 @@ package mcp
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -30,6 +31,8 @@ type Server struct {
 	Versions versions.Store
 	Version  string // the app's, as the server's
 	Now      func() time.Time
+	// Embedder, when set up, finds clips by meaning too.
+	Embedder library.Embedder
 }
 
 type request struct {
@@ -268,7 +271,13 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 			if v, ok := args["limit"].(float64); ok && v > 0 {
 				limit = min(int(v), 50)
 			}
-			text, _ := library.SearchText(l, get("query"), get("category"), limit)
+			var qv []float32
+			if s.Embedder.On() && strings.TrimSpace(get("query")) != "" {
+				if vs, err := s.Embedder.Embed(context.Background(), []string{get("query")}); err == nil {
+					qv = vs[0]
+				}
+			}
+			text, _ := library.SearchText(l, get("query"), get("category"), limit, qv, s.Embedder.Model)
 			return text, nil
 		case "read_clip":
 			c := l.Find(get("id"))

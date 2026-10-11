@@ -26,6 +26,12 @@ func (a *app) libraryView(c *ui.Context) {
 			if a.libWorking != "" {
 				ui.Spinner(c)
 				ui.Text(c, fmt.Sprintf("整理中，还有 %d 条", len(a.libQueue)+1)).FontSize(12).TextColor(t.TextMuted).NoWrap()
+			} else if a.embedBusy {
+				ui.Spinner(c)
+				ui.Text(c, "建立语义索引…").FontSize(12).TextColor(t.TextMuted).NoWrap()
+			}
+			if a.embedErr != "" {
+				ui.Text(c, "语义检索不可用").FontSize(12).TextColor(t.Warning).NoWrap().Tooltip(a.embedErr + "（在设置里检查向量模型）")
 			}
 			ui.Spacer(c)
 			search := ui.TextInput(c.Key("lib-search"), &a.libQuery).Placeholder("搜索资料…").Label("搜索资料库").
@@ -33,6 +39,11 @@ func (a *app) libraryView(c *ui.Context) {
 			if a.libQuery != "" && search.Shortcut(0, ui.KeyEscape) {
 				a.libQuery = ""
 			}
+			if search.Changed() {
+				a.libQueryAt = a.now()
+			}
+			a.searchQueryVector(c)
+			ui.MenuButton(c, "回顾", a.reviewMenu).Label("回顾").Tooltip("AI 回顾最近收藏的资料，或把资料生成导图").Shrink(0)
 			if k := len(l.Unorganized()); k > 0 && a.libWorking == "" {
 				if ui.Button(c, fmt.Sprintf("AI 整理 %d 条", k)).Tooltip("让 AI 给还没整理的资料起标题、写摘要、分类和打标签").Shrink(0).Clicked() {
 					a.organizeAll()
@@ -121,6 +132,9 @@ func (a *app) libHits() []library.Hit {
 			return false
 		}
 		return true
+	}
+	if e := a.embedder(); e.On() {
+		return a.lib.SearchBoth(a.libQuery, a.qvecs[strings.TrimSpace(a.libQuery)], e.Model, keep)
 	}
 	return a.lib.Search(a.libQuery, keep)
 }
@@ -329,6 +343,10 @@ func (a *app) clipMenu(m *ui.Menu, clip *library.Clip) {
 	if p := a.lib.FilePath(clip); p != "" && m.Item("打开文件").Chosen() {
 		a.plat.OpenPath(p)
 	}
+	if m.Item("复制资料链接").Chosen() {
+		a.plat.CopyText(clipScheme + clip.ID)
+		a.tell("已复制，可以粘贴到节点的链接里")
+	}
 	if m.Item("复制内容").Chosen() {
 		a.plat.CopyText(clipCopyText(clip))
 		a.tell("已复制")
@@ -500,6 +518,21 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 				a.saveClip(clip)
 			}
 		})
+	} else if clip.Kind == library.KindLink {
+		text := clip.Text
+		ui.Field(c, "网页正文", func() {
+			ui.Column(c).Gap(4).Children(func() {
+				in := ui.TextArea(c.Key("clip-page"), &text).Lines(3, 12).Label("网页正文").
+					Placeholder("没读到网页正文时（需要登录的页面、公众号文章等），可以把正文复制粘贴到这里")
+				if in.Changed() {
+					clip.Text = text
+					a.saveClip(clip)
+				}
+				if in.PressedOutside() && clip.Text != "" && clip.Organized == nil && providerKey(a.cfg) != "" && !a.cfg.LibraryManual {
+					a.enqueueClip(clip.ID, true)
+				}
+			})
+		})
 	} else if clip.Text != "" {
 		label := "网页正文"
 		switch clip.Kind {
@@ -534,6 +567,8 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 			a.tell("已复制")
 		}
 	})
+	a.relatedSection(c, clip)
+	a.clipBacklinksSection(c, clip)
 }
 
 // libraryRow is the library's entry in the sidebar.

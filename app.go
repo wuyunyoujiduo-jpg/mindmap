@@ -198,6 +198,17 @@ type app struct {
 	libTagText   string    // a tag being typed for the clip shown
 	libConfirm   bool      // deleting the clip shown is being confirmed
 	fetchPage    fetchPager
+	embed        embedFunc
+	qvecs        map[string][]float32 // the vectors of queries, by query
+	qPending     map[string]bool      // queries whose vectors are being made
+	embedBusy    bool                 // clips' vectors are being made
+	embedErr     string               // why making vectors failed, which stops it until the settings change
+	libQueryAt   time.Time            // when the library's search was last typed in
+	dupe         bool                 // the last clip kept was kept before
+	backupBusy   bool
+	backupErr    string
+	embedDrafts  [3]string // the settings' fields of the embedding model: address, key, model
+	embedTest    string    // how testing the embedding model went
 	clipKeyDraft string
 
 	// The presentation.
@@ -214,6 +225,7 @@ type app struct {
 	sendAI       aiSender
 	sendDeepSeek deepseekSender
 	async        asyncRunner
+	post         func(fn func()) // runs fn on the main thread, from any
 
 	// Chrome.
 	mode          int
@@ -261,7 +273,11 @@ func newApp(plat platform, cfg config) *app {
 		sendAI:        sendToClaude,
 		sendDeepSeek:  sendToDeepSeek,
 		fetchPage:     library.FetchPage,
+		embed:         embedWith,
+		qvecs:         map[string][]float32{},
+		qPending:      map[string]bool{},
 		libStatus:     map[string]string{},
+		post:          func(fn func()) { fn() },
 		async: func(work func() (any, error), done func(any, error)) {
 			v, err := work()
 			done(v, err)
@@ -462,6 +478,8 @@ func (a *app) tick(c *ui.Context) {
 	if now.Sub(a.checked) >= 2*time.Second {
 		a.checked = now
 		a.checkLibrary()
+		a.embedLibrary()
+		a.autoBackup()
 	}
 	if a.path != "" && a.checked == now {
 		if mt := modTime(a.path); !mt.IsZero() && !mt.Equal(a.modTime) {

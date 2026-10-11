@@ -53,8 +53,10 @@ type Clip struct {
 	Keywords  []string   `json:"keywords,omitempty"`
 	Organized *time.Time `json:"organized,omitempty"`
 	Starred   bool       `json:"starred,omitempty"`
-	Created   time.Time  `json:"created"`
-	Updated   time.Time  `json:"updated"`
+	// Hash is the SHA-256 of a picture's or file's data, to find it again.
+	Hash    string    `json:"hash,omitempty"`
+	Created time.Time `json:"created"`
+	Updated time.Time `json:"updated"`
 }
 
 // Label is the clip's title, else the start of its text, URL or name.
@@ -86,9 +88,11 @@ func KindLabel(kind string) string {
 
 // Library is the clips of a folder, held in memory, newest first.
 type Library struct {
-	Dir   string
-	Clips []*Clip
-	index *Index
+	Dir    string
+	Clips  []*Clip
+	index  *Index
+	vecs   *vectorFile
+	hashes map[string]cachedHash // of the clips' EmbedText
 }
 
 // Open reads the library of a folder, which need not exist yet.
@@ -149,8 +153,12 @@ func (l *Library) Find(id string) *Clip {
 	return nil
 }
 
-// Add keeps a new clip, giving it an ID and times when it has none.
+// Add keeps a new clip, giving it an ID and times when it has none. A clip
+// already kept is not kept again: Add returns a *DuplicateError.
 func (l *Library) Add(c *Clip, now time.Time) error {
+	if d := l.Duplicate(c); d != nil {
+		return &DuplicateError{d}
+	}
 	if c.ID == "" {
 		c.ID = NewID()
 	}
@@ -182,6 +190,9 @@ func (l *Library) AddFile(path, source string, now time.Time) (*Clip, error) {
 
 // AddData keeps data, a picture or file named name, as a clip.
 func (l *Library) AddData(data []byte, name, kind, source string, now time.Time) (*Clip, error) {
+	if d := l.Duplicate(&Clip{Hash: hashOf(data)}); d != nil {
+		return nil, &DuplicateError{d}
+	}
 	if err := os.MkdirAll(l.FilesDir(), 0o755); err != nil {
 		return nil, err
 	}
@@ -192,17 +203,21 @@ func (l *Library) AddData(data []byte, name, kind, source string, now time.Time)
 	}
 	if kind == KindFile {
 		c.Title = strings.TrimSuffix(name, filepath.Ext(name))
-		if isTextFile(name) && len(data) <= 1<<20 {
-			c.Text = string(data)
-		}
+		c.Text = ExtractText(name, data)
 	}
-	return c, l.Add(c, now)
+	c.Hash = hashOf(data)
+	if err := l.Add(c, now); err != nil {
+		_ = os.Remove(filepath.Join(l.FilesDir(), c.File))
+		return nil, err
+	}
+	return c, nil
 }
 
 // Save writes a changed clip.
 func (l *Library) Save(c *Clip, now time.Time) error {
 	c.Updated = now
 	l.index = nil
+	delete(l.hashes, c.ID)
 	return l.write(c)
 }
 
