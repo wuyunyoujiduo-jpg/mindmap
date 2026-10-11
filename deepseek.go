@@ -147,8 +147,12 @@ func (a *app) deepseekRequest() dsRequest {
 	tool.Function.Name = "propose_edits"
 	tool.Function.Description = proposeEditsDescription
 	tool.Function.Parameters = editsSchema()
-	msgs := append([]dsMessage{{Role: "system", Content: aiSystemPrompt}}, a.ai.ds...)
-	return dsRequest{Model: deepseekModel(a.cfg), Messages: msgs, Tools: []dsTool{tool}, MaxTokens: 16000}
+	msgs := append([]dsMessage{{Role: "system", Content: aiSystem()}}, a.ai.ds...)
+	tools := libraryToolsDeepSeek()
+	if a.aiEdits() {
+		tools = append([]dsTool{tool}, tools...)
+	}
+	return dsRequest{Model: deepseekModel(a.cfg), Messages: msgs, Tools: tools, MaxTokens: 16000}
 }
 
 // deepseekReply turns DeepSeek's answer into what the panel shows.

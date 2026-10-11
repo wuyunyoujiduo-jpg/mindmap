@@ -11,6 +11,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/layout"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/versions"
 )
@@ -41,6 +42,9 @@ type platform interface {
 	HideCapture()
 	ShowMain()
 	SetCaptureKey(accelerator string) error
+	// SetClipKey sets the shortcut that keeps the clipboard in the
+	// library, from any app.
+	SetClipKey(accelerator string) error
 	SetTray(on bool)
 	UpdateTray()
 	ShowInFolder(path string)
@@ -177,6 +181,25 @@ type app struct {
 	index           map[string]indexEntry // maps read for the search, by path
 	outlineFocus    string                // the node whose line the outline focuses
 
+	// The library of clips.
+	lib          *library.Library
+	libOpen      bool   // the main area shows the library
+	libSel       string // the clip shown
+	libQuery     string
+	libKind      int    // 0 every kind, then text, link, picture, file
+	libCat       string // the category shown, "" all
+	libTag       string // the tag shown, "" all
+	libDraft     string // what is typed to keep
+	libQueue     []clipJob
+	libWorking   string            // the clip being read or sorted out
+	libStatus    map[string]string // what is happening to clips, or went wrong
+	libErr       string
+	libMod       time.Time // of the clips folder, as last read or written
+	libTagText   string    // a tag being typed for the clip shown
+	libConfirm   bool      // deleting the clip shown is being confirmed
+	fetchPage    fetchPager
+	clipKeyDraft string
+
 	// The presentation.
 	presenting bool
 	slides     []slide
@@ -237,6 +260,8 @@ func newApp(plat platform, cfg config) *app {
 		bitmaps:       map[string]*ui.Bitmap{},
 		sendAI:        sendToClaude,
 		sendDeepSeek:  sendToDeepSeek,
+		fetchPage:     library.FetchPage,
+		libStatus:     map[string]string{},
 		async: func(work func() (any, error), done func(any, error)) {
 			v, err := work()
 			done(v, err)
@@ -266,6 +291,7 @@ func (a *app) openDir(dir string) {
 		a.saveErr = err.Error()
 	}
 	a.refreshFiles()
+	a.openLibrary()
 	if len(a.files) == 0 {
 		path := filepath.Join(dir, model.FileName("使用指南"))
 		if err := welcomeFile(a.now()).Save(path); err == nil {
@@ -294,7 +320,7 @@ func inside(path, dir string) bool {
 func (a *app) open(path string) error {
 	a.commitEditIfAny()
 	a.flush()
-	a.lightbox, a.presenting = "", false
+	a.lightbox, a.presenting, a.libOpen = "", false, false
 	f, err := model.Load(path)
 	if err != nil {
 		a.saveErr = fmt.Sprintf("无法打开 %s: %v", filepath.Base(path), err)
@@ -433,8 +459,11 @@ func (a *app) tick(c *ui.Context) {
 		a.trayAt = now
 		a.plat.UpdateTray()
 	}
-	if a.path != "" && now.Sub(a.checked) >= 2*time.Second {
+	if now.Sub(a.checked) >= 2*time.Second {
 		a.checked = now
+		a.checkLibrary()
+	}
+	if a.path != "" && a.checked == now {
 		if mt := modTime(a.path); !mt.IsZero() && !mt.Equal(a.modTime) {
 			a.reloadFromDisk(c)
 		}

@@ -26,7 +26,7 @@ const panelMin = 260
 func (a *app) panel(c *ui.Context) {
 	t := c.Theme()
 	ui.Column(c).Width(a.panelWidth).FillHeight().Background(t.Surface).Children(func() {
-		if a.aiOpen && a.doc != nil {
+		if a.aiOpen && (a.doc != nil || a.libOpen) {
 			a.aiPanel(c) // scrolls its conversation itself
 			return
 		}

@@ -111,6 +111,7 @@ type aiState struct {
 	scope    int
 	settings bool   // the settings form is shown
 	extra    string // context an action adds to the next message, after the map
+	rounds   int    // replies in a row that only looked things up in the library
 	// answers answer the proposals of the last reply; the next message
 	// sends them first, as the APIs require.
 	answers   []toolAnswer
@@ -302,12 +303,12 @@ func (a *app) snapshot(scope int) string {
 	return b.String()
 }
 
-// aiSend sends the draft, with the map, and waits for the reply in the
-// background.
+// aiSend sends the draft, with the map, or what the library holds when it
+// is shown, and waits for the reply in the background.
 func (a *app) aiSend() {
 	ai := &a.ai
 	text := strings.TrimSpace(ai.draft)
-	if text == "" || ai.busy || a.doc == nil {
+	if text == "" || ai.busy || a.doc == nil && !a.libOpen {
 		return
 	}
 	if providerKey(a.cfg) == "" {
@@ -319,21 +320,34 @@ func (a *app) aiSend() {
 		*ai = aiState{scope: ai.scope, draft: ai.draft} // another provider: a new conversation
 	}
 	ai.provider = a.cfg.AIProvider
+	ai.rounds = 0
 	// Proposals left unanswered are discarded by sending on.
 	for i := range ai.msgs {
 		if ai.msgs[i].proposal != nil && ai.msgs[i].state == proposalPending {
 			a.answerProposal(i, false)
 		}
 	}
-	answers := ai.answers
-	ai.answers = nil
-	snapshot := "导图快照：\n" + a.snapshot(ai.scope)
+	var snapshot string
+	if a.libOpen || a.doc == nil {
+		snapshot = "资料库：\n" + a.librarySnapshot()
+	} else {
+		snapshot = "导图快照：\n" + a.snapshot(ai.scope)
+	}
 	if ai.extra != "" { // what an action gives besides the map
 		snapshot += "\n\n" + ai.extra
 		ai.extra = ""
 	}
 	ai.msgs = append(ai.msgs, chatMsg{role: "user", text: text})
 	ai.draft = ""
+	a.aiTurn(snapshot, text)
+}
+
+// aiTurn sends the answers to the last reply's tool calls, and the user's
+// message when there is one, and waits for the reply in the background.
+func (a *app) aiTurn(snapshot, text string) {
+	ai := &a.ai
+	answers := ai.answers
+	ai.answers = nil
 	ai.busy = true
 	ai.scroll.Y = 1e9
 
@@ -355,7 +369,9 @@ func (a *app) aiSend() {
 		for _, an := range answers {
 			ai.ds = append(ai.ds, dsMessage{Role: "tool", ToolCallID: an.id, Content: an.text})
 		}
-		ai.ds = append(ai.ds, dsMessage{Role: "user", Content: snapshot + "\n\n" + text})
+		if text != "" {
+			ai.ds = append(ai.ds, dsMessage{Role: "user", Content: snapshot + "\n\n" + text})
+		}
 		req := a.deepseekRequest()
 		send := a.sendDeepSeek
 		a.async(func() (any, error) {
@@ -371,7 +387,9 @@ func (a *app) aiSend() {
 	for _, an := range answers {
 		blocks = append(blocks, anthropic.NewBetaToolResultBlock(an.id, an.text, an.isError))
 	}
-	blocks = append(blocks, anthropic.NewBetaTextBlock(snapshot), anthropic.NewBetaTextBlock(text))
+	if text != "" {
+		blocks = append(blocks, anthropic.NewBetaTextBlock(snapshot), anthropic.NewBetaTextBlock(text))
+	}
 	ai.claude = append(ai.claude, anthropic.NewBetaUserMessage(blocks...))
 	params := a.aiParams()
 	send := a.sendAI
@@ -384,17 +402,27 @@ func (a *app) aiSend() {
 	}, done)
 }
 
+// aiSystem is the system prompt: on the map, and on the library.
+func aiSystem() string { return aiSystemPrompt + "\n\n" + libraryPrompt }
+
+// aiEdits tells whether the assistant may propose edits: when the map is
+// what the conversation is about.
+func (a *app) aiEdits() bool { return !a.libOpen && a.doc != nil }
+
 func (a *app) aiParams() anthropic.BetaMessageNewParams {
 	m := aiModel(a.cfg)
 	p := anthropic.BetaMessageNewParams{
 		Model:     anthropic.Model(m),
 		MaxTokens: 16000,
-		System:    []anthropic.BetaTextBlockParam{{Text: aiSystemPrompt}},
+		System:    []anthropic.BetaTextBlockParam{{Text: aiSystem()}},
 		Messages:  slices.Clone(a.ai.claude),
-		Tools:     []anthropic.BetaToolUnionParam{proposeEditsTool()},
+		Tools:     libraryToolsClaude(),
 		OutputConfig: anthropic.BetaOutputConfigParam{
 			Effort: anthropic.BetaOutputConfigEffortMedium,
 		},
+	}
+	if a.aiEdits() {
+		p.Tools = append([]anthropic.BetaToolUnionParam{proposeEditsTool()}, p.Tools...)
 	}
 	// A refusal of the model's safeguards is answered again by another
 	// model the API picks, where the model has such fallbacks.
@@ -441,6 +469,31 @@ func (a *app) aiReceive(r aiReply, err error) {
 	}
 	r.commit(ai)
 	text := strings.Join(r.texts, "\n\n")
+	looked := false // the reply looked things up, and goes on
+	for _, call := range r.calls {
+		looked = looked || isLibraryTool(call.name)
+	}
+	if looked {
+		if text != "" {
+			ai.msgs = append(ai.msgs, chatMsg{role: "assistant", text: text})
+		}
+		for _, call := range r.calls {
+			if !isLibraryTool(call.name) {
+				ai.answers = append(ai.answers, toolAnswer{id: call.id, text: "没有展示给用户：请先完成检索，再单独提出修改。", isError: true})
+				continue
+			}
+			result, shown := a.runLibraryTool(call)
+			ai.answers = append(ai.answers, toolAnswer{id: call.id, text: result})
+			ai.msgs = append(ai.msgs, chatMsg{role: "tool", text: shown})
+		}
+		if ai.rounds < 8 {
+			ai.rounds++
+			a.aiTurn("", "")
+		} else {
+			ai.msgs = append(ai.msgs, chatMsg{role: "error", text: "检索次数太多，已停下。可以换个问法再试。"})
+		}
+		return
+	}
 	shown := false
 	for _, call := range r.calls {
 		var p aiProposal
@@ -498,7 +551,10 @@ func (a *app) answerProposal(i int, apply bool) {
 		return
 	}
 	result := "用户没有应用这些修改。"
-	if apply {
+	if apply && a.file == nil {
+		m.state, m.result = proposalFailed, "没有打开的导图"
+		result = "应用失败：没有打开的导图。"
+	} else if apply {
 		n, err := a.applyEdits(m.proposal.Operations)
 		if err != nil {
 			m.state, m.result = proposalFailed, err.Error()
@@ -716,8 +772,10 @@ func (a *app) aiPanel(c *ui.Context) {
 				a.ai = aiState{scope: ai.scope}
 			}
 			ui.MenuButton(c, "⋯", func(m *ui.Menu) {
-				a.aiMenu(m)
-				m.Separator()
+				if !a.libOpen {
+					a.aiMenu(m)
+					m.Separator()
+				}
 				if m.Item("AI 设置").Chosen() {
 					ai.settings = !ai.settings
 					a.loadKeyDrafts()
@@ -732,7 +790,20 @@ func (a *app) aiPanel(c *ui.Context) {
 			return
 		}
 		ui.Scroll(c.Key("chat")).Grow(1).TrackScroll(&ai.scroll).Padding(4, 16, 12).Gap(10).Children(func() {
-			if len(ai.msgs) == 0 {
+			if len(ai.msgs) == 0 && a.libOpen {
+				ui.Text(c, "问问资料库里的内容：AI 会先在本地检索相关资料，再根据它们回答，并说明依据的是哪几条。").
+					FontSize(12).TextColor(t.TextMuted).Wrap()
+				asks := []string{"我最近收藏了哪些资料？按主题归纳一下", "资料库里有哪些值得深入看的内容？"}
+				if clip := a.lib.Find(a.libSel); clip != nil {
+					asks = append([]string{"总结选中的这条资料，并找找资料库里相关的内容"}, asks...)
+				}
+				for _, s := range asks {
+					if ui.Button(c.Key(s), s).FillWidth().Clicked() {
+						ai.draft = s
+						a.aiSend()
+					}
+				}
+			} else if len(ai.msgs) == 0 {
 				ui.Text(c, "问问导图里的内容，或让 AI 帮你整理、拆分任务、补充备注。AI 提出的修改要你确认后才会应用。").
 					FontSize(12).TextColor(t.TextMuted).Wrap()
 				actions := []struct {
@@ -772,7 +843,11 @@ func (a *app) aiPanel(c *ui.Context) {
 		})
 		ui.Divider(c)
 		ui.Column(c).Padding(10, 16, 14).Gap(8).Children(func() {
-			ui.Segmented(c, &ai.scope, "当前画布", "选中节点", "整个文件").FillWidth()
+			if a.libOpen {
+				ui.Text(c, "基于资料库对话；导图里提问时也能检索资料库").FontSize(11).TextColor(t.TextMuted)
+			} else {
+				ui.Segmented(c, &ai.scope, "当前画布", "选中节点", "整个文件").FillWidth()
+			}
 			in := ui.TextAreaBase(c.Key("draft"), &ai.draft).Lines(2, 6).Placeholder("输入消息，⌘↩ 发送").
 				Padding(8).Radius(8).Border(1, t.Border).Background(t.Background).FontSize(13)
 			send := in.Shortcut(ui.Cmd, ui.KeyEnter)
@@ -811,6 +886,8 @@ func (a *app) chatBubble(c *ui.Context, i int) {
 		})
 	case "error":
 		ui.Text(c, m.text).FontSize(12).TextColor(t.Danger).Wrap()
+	case "tool":
+		ui.Text(c, m.text).FontSize(12).TextColor(t.TextMuted).Wrap()
 	default:
 		ui.Column(c).Gap(8).Children(func() {
 			if m.text != "" {

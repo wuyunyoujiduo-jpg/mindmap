@@ -39,13 +39,21 @@ func (a *app) captureKey() string {
 
 // Where captured text goes.
 const (
-	captureInbox = iota
-	captureHere  // under the node selected in the open map
+	captureInbox   = iota
+	captureLibrary // a clip of the library
+	captureHere    // under the node selected in the open map
 )
 
 // capture adds text to the inbox, or under the node selected: a node a
 // line, nested by indentation, as a pasted outline is.
 func (a *app) capture(text string, where int) error {
+	if where == captureLibrary {
+		if _, err := a.addClipText(text, "快速记录"); err != nil {
+			return err
+		}
+		a.tell("已收进资料库")
+		return nil
+	}
 	nodes := model.ParseOutline(text)
 	if len(nodes) == 0 {
 		return nil
@@ -127,8 +135,16 @@ func (a *app) captureView(c *ui.Context) {
 			return false
 		})
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+			if ui.Button(c, "收藏剪贴板").FontSize(12).Tooltip("把剪贴板里的文字、链接、图片或文件收进资料库（" + keyLabel(a.clipKey()) + "）").Clicked() {
+				if _, err := a.clipClipboard("剪贴板"); err != nil {
+					a.captureErr = err.Error()
+				} else {
+					a.captureErr = ""
+					a.plat.HideCapture()
+				}
+			}
 			ui.Text(c, "记到").FontSize(12).TextColor(t.TextMuted)
-			labels := []string{"收件箱"}
+			labels := []string{"收件箱", "资料库"}
 			if n, _ := a.selectedNode(); n != nil && a.path != a.inboxPath() {
 				labels = append(labels, "「"+mapName(a.path)+"」的「"+n.Title+"」下")
 			}
@@ -233,7 +249,12 @@ type trayTask struct {
 
 // trayMenu is the menu of the menu bar icon.
 func (a *app) trayMenu() []trayEntry {
-	items := []trayEntry{{label: "快速记录…", run: a.plat.ShowCapture}}
+	items := []trayEntry{{label: "快速记录…", run: a.plat.ShowCapture},
+		{label: "收藏剪贴板到资料库", run: a.clipFromShortcut},
+		{label: fmt.Sprintf("资料库（%d）", len(a.lib.Clips)), run: func() {
+			a.plat.ShowMain()
+			a.showLibrary()
+		}}}
 	if k := a.inboxCount(); k > 0 {
 		items = append(items, trayEntry{label: fmt.Sprintf("收件箱（%d）", k), run: func() {
 			a.plat.ShowMain()
@@ -315,7 +336,7 @@ func trayIcon() []byte {
 // openSettings opens the settings, with the fields as saved.
 func (a *app) openSettings() {
 	a.settingsOpen = true
-	a.captureKeyDraft, a.ghTokenDraft = a.cfg.CaptureKey, a.cfg.GitHubToken
+	a.captureKeyDraft, a.ghTokenDraft, a.clipKeyDraft = a.cfg.CaptureKey, a.cfg.GitHubToken, a.cfg.ClipKey
 }
 
 // settingsView is the window of preferences: the capture shortcut, the
@@ -344,6 +365,28 @@ func (a *app) settingsView(c *ui.Context) {
 					ui.Text(c, "在任何应用里按下它，弹出一个小窗口记下想法。格式如 Control+Alt+Space、CmdOrCtrl+Shift+M；留空用默认（⌃⌥Space）。").
 						FontSize(12).TextColor(t.TextMuted).Wrap()
 				})
+			})
+			ui.Field(c, "收藏剪贴板的全局快捷键", func() {
+				ui.Column(c).Gap(6).Children(func() {
+					in := ui.TextInput(c.Key("clip-key"), &a.clipKeyDraft).Placeholder(defaultClipKey).Label("收藏剪贴板快捷键")
+					if in.Submitted() || in.PressedOutside() && a.clipKeyDraft != a.cfg.ClipKey {
+						a.cfg.ClipKey = strings.TrimSpace(a.clipKeyDraft)
+						a.cfg.save()
+						if err := a.plat.SetClipKey(a.clipKey()); err != nil {
+							a.saveErr = "快捷键无效：" + err.Error()
+						}
+					}
+					ui.Text(c, "在任何应用里复制文字、链接、图片或文件后按下它，直接收进资料库。留空用默认（⌃⌥V）。").
+						FontSize(12).TextColor(t.TextMuted).Wrap()
+				})
+			})
+			auto := !a.cfg.LibraryManual
+			ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
+				if ui.Switch(c, &auto).Label("自动整理资料").Changed() {
+					a.cfg.LibraryManual = !auto
+					a.cfg.save()
+				}
+				ui.Text(c, "资料库：新收藏的资料由 AI 自动起标题、写摘要、分类和打标签（用 AI 助手的 API Key，按用量计费）").FontSize(13).Wrap().Grow(1)
 			})
 			tray := !a.cfg.NoTray
 			ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {

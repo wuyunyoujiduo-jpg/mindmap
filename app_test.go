@@ -55,6 +55,7 @@ func (f *fakePlatform) HideCapture()                   { f.capture = false }
 func (f *fakePlatform) ShowMain()                      {}
 func (f *fakePlatform) SetCaptureKey(key string) error { f.captureKey = key; return nil }
 func (f *fakePlatform) SetTray(on bool)                {}
+func (f *fakePlatform) SetClipKey(key string) error    { return nil }
 func (f *fakePlatform) UpdateTray()                    { f.trayUpdates++ }
 func (f *fakePlatform) Notify(title, body string) {
 	f.notes = append(f.notes, title+"："+body)
@@ -1200,7 +1201,7 @@ func TestAIProposesEdits(t *testing.T) {
 
 	// The request: the model, the tool, and the map with its IDs.
 	req := fake.requests[0]
-	if req.Model != "claude-opus-5-5" || len(req.Tools) != 1 || req.Tools[0].OfTool.Name != "propose_edits" {
+	if req.Model != "claude-opus-5-5" || len(req.Tools) != 3 || req.Tools[0].OfTool.Name != "propose_edits" {
 		t.Fatalf("request %+v", req)
 	}
 	body, _ := json.Marshal(req)

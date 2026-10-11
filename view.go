@@ -21,6 +21,14 @@ func (a *app) view(c *ui.Context) {
 	ui.Row(c).Fill().AlignItems(ui.Stretch).Background(t.Background).Children(func() {
 		ui.Split(c, &a.sidebarWidth, func() { a.sidebar(c) }, func() {
 			ui.Row(c).Fill().AlignItems(ui.Stretch).Children(func() {
+				if a.libOpen {
+					a.libraryView(c)
+					if a.aiOpen {
+						a.panelResizer(c)
+						a.panel(c)
+					}
+					return
+				}
 				ui.Column(c).Grow(1).Children(func() {
 					a.toolbar(c)
 					ui.Divider(c)

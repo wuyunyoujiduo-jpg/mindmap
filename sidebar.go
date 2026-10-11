@@ -44,6 +44,7 @@ func (a *app) sidebar(c *ui.Context) {
 			}
 		})
 		ui.Scroll(c.Key("sidebar")).Grow(1).Padding(0, 6, 12).Gap(2).Children(func() {
+			a.libraryRow(c)
 			a.inboxRow(c)
 			a.favorites(c)
 			a.section(c, "导图", &a.filesOpen, a.dir, func() {
@@ -113,7 +114,7 @@ func (a *app) inboxRow(c *ui.Context) {
 	row := ui.Row(c.Key("inbox")).Padding(6, 8, 6, 12).Gap(8).Radius(6).AlignItems(ui.Center).Cursor(ui.CursorPointer).
 		Label("收件箱").Tooltip("快速记录的内容（" + a.captureKey() + "），整理后用右键「移到其他导图…」")
 	switch {
-	case a.path == path:
+	case a.path == path && !a.libOpen:
 		row.Background(t.Accent.Alpha(0.14))
 	case row.Hovered():
 		row.Background(t.SurfaceHover)
@@ -221,7 +222,7 @@ func (a *app) folderRow(c *ui.Context, f model.Folder, depth int) {
 
 func (a *app) fileRow(c *ui.Context, f model.FileInfo, depth int, inFavorites bool) {
 	t := c.Theme()
-	current := f.Path == a.path
+	current := f.Path == a.path && !a.libOpen
 	fav := slices.Contains(a.cfg.Favorites, f.Path)
 	row := ui.Row(c).Padding(5, 8, 5, 26+float32(depth)*14).Gap(6).Radius(6).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).Label(f.Name).Drag(fileDrag{f.Path})

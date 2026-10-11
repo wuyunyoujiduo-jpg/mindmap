@@ -22,13 +22,14 @@ type desktop struct {
 	capture *mygo.Window // the capture window, made the first time
 	tray    *mygo.Tray
 	key     string // the capture shortcut registered
+	clipKey string // the shortcut registered to keep the clipboard
 }
 
 func (d *desktop) ShowCapture() {
 	if d.capture == nil {
 		d.capture = mygo.NewWindow(mygo.WindowOptions{
 			Title:       "快速记录",
-			Width:       560,
+			Width:       640,
 			Height:      170,
 			MinWidth:    420,
 			MinHeight:   150,
@@ -64,6 +65,18 @@ func (d *desktop) SetCaptureKey(key string) error {
 		return err
 	}
 	d.key = key
+	return nil
+}
+
+func (d *desktop) SetClipKey(key string) error {
+	if d.clipKey != "" {
+		mygo.GlobalShortcut.Unregister(d.clipKey)
+	}
+	d.clipKey = ""
+	if err := mygo.GlobalShortcut.Register(key, func() { d.win.Update(d.app.clipFromShortcut) }); err != nil {
+		return err
+	}
+	d.clipKey = key
 	return nil
 }
 
@@ -237,6 +250,9 @@ func main() {
 		if err := plat.SetCaptureKey(a.captureKey()); err != nil {
 			log.Printf("快速记录快捷键 %s: %v", a.captureKey(), err)
 		}
+		if err := plat.SetClipKey(a.clipKey()); err != nil {
+			log.Printf("收藏剪贴板快捷键 %s: %v", a.clipKey(), err)
+		}
 		plat.SetTray(!a.cfg.NoTray)
 		a.async = func(work func() (any, error), done func(any, error)) {
 			go func() {
@@ -270,6 +286,8 @@ func main() {
 				mygo.Separator(),
 				item("快速记录…", "", plat.ShowCapture),
 				item("打开收件箱", "", func() { _ = a.open(a.inboxPath()) }),
+				item("打开资料库", "CmdOrCtrl+Shift+L", a.showLibrary),
+				item("收藏剪贴板到资料库", "", a.clipFromShortcut),
 				mygo.Separator(),
 				item("导入 XMind…", "CmdOrCtrl+Shift+I", a.askImportXMind),
 				item("导入 Markdown / OPML…", "", a.askImportOutline),

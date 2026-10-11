@@ -75,7 +75,7 @@ func TestServer(t *testing.T) {
 		t.Fatalf("init %v", init)
 	}
 	tools := ss.do("tools/list", nil)["tools"].([]any)
-	if len(tools) != 9 {
+	if len(tools) != 12 {
 		t.Fatalf("%d tools", len(tools))
 	}
 
@@ -152,5 +152,27 @@ func TestProtocol(t *testing.T) {
 	if !strings.Contains(lines[0], fmt.Sprintf(`"protocolVersion":"%s"`, supported[0])) ||
 		!strings.Contains(lines[1], `"id":"a"`) || !strings.Contains(lines[2], "-32700") || !strings.Contains(lines[3], "-32601") {
 		t.Fatalf("%s", out.String())
+	}
+}
+
+func TestLibraryTools(t *testing.T) {
+	dir := t.TempDir()
+	ss := &session{t: t, s: &Server{Dir: dir, Now: time.Now}}
+	if got := ss.tool("search_library", map[string]any{"query": "缓存"}, false); !strings.Contains(got, "没有找到") {
+		t.Fatalf("empty: %s", got)
+	}
+	got := ss.tool("add_clip", map[string]any{"text": "Redis 缓存要设过期时间，避免雪崩。", "title": "缓存要点", "tags": []any{"后端"}}, false)
+	id := strings.TrimSuffix(strings.TrimPrefix(got, "Kept in the library as "), ".")
+	ss.tool("add_clip", map[string]any{"text": "https://example.com/post"}, false)
+	got = ss.tool("search_library", map[string]any{"query": "缓存 雪崩"}, false)
+	if !strings.Contains(got, "["+id+"] 缓存要点") || !strings.Contains(got, "#后端") {
+		t.Fatalf("search: %s", got)
+	}
+	if got := ss.tool("read_clip", map[string]any{"id": id}, false); !strings.Contains(got, "避免雪崩") {
+		t.Fatalf("read: %s", got)
+	}
+	ss.tool("read_clip", map[string]any{"id": "nope"}, true)
+	if got := ss.tool("search_library", map[string]any{"query": "example"}, false); !strings.Contains(got, "链接") {
+		t.Fatalf("link: %s", got)
 	}
 }

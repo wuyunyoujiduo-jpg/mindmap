@@ -41,6 +41,12 @@ type config struct {
 	GitHubAPI   string `json:"githubAPI,omitempty"`
 	// NoReminders turns off the notifications of tasks due.
 	NoReminders bool `json:"noReminders,omitempty"`
+	// ClipKey keeps what is on the clipboard in the library, from any
+	// app; "" is the default.
+	ClipKey string `json:"clipKey,omitempty"`
+	// LibraryManual leaves new clips for the AI to sort out when asked,
+	// rather than at once.
+	LibraryManual bool `json:"libraryManual,omitempty"`
 	// PanelWidth is the width the right panel was dragged to.
 	PanelWidth float32 `json:"panelWidth,omitempty"`
 }

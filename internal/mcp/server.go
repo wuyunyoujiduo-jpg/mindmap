@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/versions"
 )
@@ -121,7 +122,7 @@ func (s *Server) handle(req request) (any, *rpcError) {
 	return nil, &rpcError{-32601, "method not found: " + req.Method}
 }
 
-const instructions = `MindMap holds the user's project maps: the architecture, features, implementation notes, tasks and the next optimizations, as trees of nodes. Read the relevant map before working on a project, and keep it current as you work: mark tasks done or in progress, add notes on how things were implemented and decisions made, link nodes to the files (path:line) and PRs that implement them, and add nodes for follow-ups and optimizations you notice. Node IDs appear as {id:…} in read_map's output. Always pass a short "summary" of what you changed; the user reviews changes in the app's history.`
+const instructions = `MindMap holds the user's project maps: the architecture, features, implementation notes, tasks and the next optimizations, as trees of nodes. Read the relevant map before working on a project, and keep it current as you work: mark tasks done or in progress, add notes on how things were implemented and decisions made, link nodes to the files (path:line) and PRs that implement them, and add nodes for follow-ups and optimizations you notice. Node IDs appear as {id:…} in read_map's output. Always pass a short "summary" of what you changed; the user reviews changes in the app's history. The user also keeps a library of collected notes, links, pictures and files: search it with search_library when the task may build on what they collected.`
 
 // tool is a tool as tools/list describes it.
 type tool struct {
@@ -189,6 +190,14 @@ var tools = []tool{
 	{"delete_node", "Delete a node", "Delete a node and all below it. The user can restore it from the map's history.",
 		schema([]string{"map", "id", "summary"}, map[string]any{"map": mapProp, "id": str("The node to delete."), "summary": summaryProp}),
 		map[string]any{"destructiveHint": true}},
+	{"search_library", "Search the library", "Search the user's library of collected notes, links (with the pages' text), pictures and files, which the app's AI sorted into categories and tagged. Returns the best matches with their ids, summaries and matching excerpts.",
+		schema([]string{"query"}, map[string]any{"query": str("Keywords, separated by spaces; Chinese or English."),
+			"category": str("Only clips of this category."), "limit": map[string]any{"type": "integer", "description": "How many clips at most; 10 when left out."}}), readOnly},
+	{"read_clip", "Read a clip", "Read a clip of the library in full: its text, the page's text for a link, notes, tags.",
+		schema([]string{"id"}, map[string]any{"id": str("The clip's id, as search_library shows it.")}), readOnly},
+	{"add_clip", "Add to the library", "Keep a note or a link in the user's library, where the app's AI sorts it out. A lone URL as text is kept as a link, whose page the app reads.",
+		schema([]string{"text"}, map[string]any{"text": str("The note's text, or a URL."), "title": str("A title."),
+			"tags": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}, "category": str("A category.")}), nil},
 	{"create_map", "Create a map", "Create a new map in the maps folder, optionally with nodes from a Markdown outline under its root.",
 		schema([]string{"name"}, map[string]any{"name": str("The map's name, also its file's."), "root_title": str("The central topic; the name when left out."),
 			"outline": str("Nodes under the root, as a Markdown list."), "folder": str("A folder within the maps folder to put it in.")}), nil},
@@ -248,6 +257,45 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 		return msg, nil
 	case "create_map":
 		return s.createMap(get("name"), get("root_title"), get("outline"), get("folder"))
+	case "search_library", "read_clip", "add_clip":
+		l, err := library.Open(library.In(s.Dir))
+		if err != nil {
+			return "", err
+		}
+		switch name {
+		case "search_library":
+			limit := 10
+			if v, ok := args["limit"].(float64); ok && v > 0 {
+				limit = min(int(v), 50)
+			}
+			text, _ := library.SearchText(l, get("query"), get("category"), limit)
+			return text, nil
+		case "read_clip":
+			c := l.Find(get("id"))
+			if c == nil {
+				return "", fmt.Errorf("no clip %q", get("id"))
+			}
+			return library.Full(c, 50000), nil
+		}
+		text := strings.TrimSpace(get("text"))
+		if text == "" {
+			return "", errors.New("text is empty")
+		}
+		c := &library.Clip{Kind: library.KindText, Text: text, Title: get("title"), Category: get("category"), Source: "AI 工具"}
+		if library.IsURL(text) {
+			c.Kind, c.Text, c.URL = library.KindLink, "", text
+		}
+		if tags, ok := args["tags"].([]any); ok {
+			for _, t := range tags {
+				if t, ok := t.(string); ok && strings.TrimSpace(t) != "" {
+					c.Tags = append(c.Tags, strings.TrimSpace(t))
+				}
+			}
+		}
+		if err := l.Add(c, s.Now()); err != nil {
+			return "", err
+		}
+		return "Kept in the library as " + c.ID + ".", nil
 	}
 	return "", fmt.Errorf("unknown tool %q", name)
 }
