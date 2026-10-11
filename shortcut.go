@@ -206,3 +206,15 @@ func (a *app) stopRecording(set func(string) error, value string) {
 	a.recordingKey = ""
 	_ = set(value)
 }
+
+// keysBack registers the shortcuts again when the settings closed while
+// one was being recorded, which let go of it.
+func (a *app) keysBack() {
+	if a.recordingKey == "" || a.settingsOpen {
+		return
+	}
+	a.recordingKey = ""
+	_ = a.plat.SetCaptureKey(a.captureKey())
+	_ = a.plat.SetClipKey(a.clipKey())
+	_ = a.plat.SetShotKey(a.shotKey())
+}

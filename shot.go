@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/screenshot"
 )
 
@@ -20,6 +21,26 @@ func (a *app) shotKey() string {
 // screenshot takes one from inside the app, the window stepping aside so
 // that what is behind it can be framed.
 func (a *app) screenshot() { a.plat.Screenshot(true) }
+
+// showShotAlert says what kept a screenshot from being taken; settings
+// offers the system's settings of screen recording.
+func (a *app) showShotAlert(title, msg string, settings bool) {
+	a.shotAlert, a.shotAlertTitle, a.shotAlertMsg, a.shotAlertSettings = true, title, msg, settings
+}
+
+// shotAlertView is that message.
+func (a *app) shotAlertView(c *ui.Context) {
+	if !a.shotAlert {
+		return
+	}
+	if !a.shotAlertSettings {
+		ui.AlertDialog(c, &a.shotAlert, a.shotAlertTitle, a.shotAlertMsg, "好")
+		return
+	}
+	if ui.AlertDialog(c, &a.shotAlert, a.shotAlertTitle, a.shotAlertMsg, "以后再说", "打开系统设置") == 1 {
+		a.plat.OpenShotSettings()
+	}
+}
 
 // keepShot does what was chosen with a screenshot: into the library, where
 // it is shown when the shot was taken from the app, or onto the clipboard.

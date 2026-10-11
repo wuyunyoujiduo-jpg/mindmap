@@ -74,6 +74,7 @@ func (a *app) view(c *ui.Context) {
 		a.fromTextView(c)
 		a.templatesView(c)
 		a.tourView(c)
+		a.shotAlertView(c)
 		a.cardWindow(c)
 	})
 	if len(a.pending) > 0 {

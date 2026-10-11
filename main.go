@@ -120,15 +120,12 @@ func (d *desktop) Screenshot(fromApp bool) {
 		if !screenshot.HasPermission() {
 			logShot("没有屏幕录制权限")
 			screenshot.RequestPermission()
-			res, err := mygo.Dialog.Message(mygo.MessageOptions{
-				Type:    mygo.MessageWarning,
-				Message: "需要屏幕录制权限",
-				Detail:  screenshot.PermissionHelp,
-				Buttons: []string{"打开系统设置", "取消"},
+			// Said in the app's window, brought to the front: a dialog of
+			// its own could open behind the app the shortcut was pressed in.
+			d.win.Update(func() {
+				d.ShowMain()
+				d.app.showShotAlert("截图需要屏幕录制权限", screenshot.PermissionHelp, true)
 			})
-			if err == nil && res.Button == 0 {
-				screenshot.OpenPermissionSettings()
-			}
 			return
 		}
 		if fromApp {
@@ -153,7 +150,10 @@ func (d *desktop) Screenshot(fromApp bool) {
 		}, end)
 		if err != nil {
 			logShot("截图失败：%v", err)
-			mygo.Dialog.Error("截图失败", err.Error()+"\n\n详细记录在 "+shotLogPath())
+			d.win.Update(func() {
+				d.ShowMain()
+				d.app.showShotAlert("截图失败", err.Error()+"\n\n每一步的记录在「帮助 → 在访达中显示截图记录」。", false)
+			})
 		}
 		if !ok && fromApp {
 			d.win.Update(d.ShowMain)
@@ -207,6 +207,8 @@ func (d *desktop) saveShot(png []byte) {
 
 // CheckUpdates checks as the user asked: the update window, but for when
 // no update was ever published, which is no error to the user.
+func (d *desktop) OpenShotSettings() { screenshot.OpenPermissionSettings() }
+
 func (d *desktop) CheckUpdates() {
 	if !mygo.Updater.Enabled() {
 		updater.CheckForUpdates() // the window says why it cannot update

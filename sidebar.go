@@ -152,7 +152,7 @@ func (a *app) inboxRow(c *ui.Context) {
 	}
 	k := a.inboxCount()
 	row := ui.Row(c.Key("inbox")).Padding(5, 8).Gap(8).Radius(6).AlignItems(ui.Center).Cursor(ui.CursorPointer).
-		Label("收件箱").Tooltip("快速记录的内容（" + a.captureKey() + "），整理后用右键「移到其他导图…」")
+		Label("收件箱").Tooltip("快速记录的内容（" + keyLabel(a.captureKey()) + "），整理后用右键「移到其他导图…」")
 	switch {
 	case a.path == path && !a.libOpen:
 		row.Background(t.Accent.Alpha(0.14))

@@ -35,7 +35,8 @@ func requestCapturePermission() {
 	}
 }
 
-const capturePermissionHelp = "请在“系统设置 › 隐私与安全性 › 录屏与系统录音”中允许 MyMind，然后退出并重新打开 MyMind。"
+const capturePermissionHelp = "在「系统设置 › 隐私与安全性 › 录屏与系统录音」里打开 MyMind，然后退出并重新打开 MyMind。\n\n" +
+	"每装一个新版本都要重新允许一次：如果列表里的 MyMind 已经是打开的，先选中它点「−」删掉，再点「＋」把「应用程序」里的 MyMind 加进去。"
 
 func openCapturePermissionSettings() {
 	_ = mygo.Shell.OpenExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")

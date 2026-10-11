@@ -52,6 +52,8 @@ type platform interface {
 	// taken from the app.
 	SetShotKey(accelerator string) error
 	Screenshot(fromApp bool)
+	// OpenShotSettings opens the system's settings of screen recording.
+	OpenShotSettings()
 	// SetAppIcon shows the app's icon in the Dock or the taskbar, and the
 	// menu bar's.
 	SetAppIcon(app, tray []byte)
@@ -260,9 +262,14 @@ type app struct {
 	pluginGet     pluginGetter
 	clipKeyDraft  string
 	shotKeyDraft  string
-	recordingKey  string                // the shortcut being recorded, by its label
-	keyErr        map[string]string     // why a shortcut recorded is not used
-	iconBitmaps   map[string]*ui.Bitmap // the app's icons, in the settings
+	recordingKey  string // the shortcut being recorded, by its label
+	// What kept a screenshot from being taken, said in the app's window,
+	// which comes to the front for it.
+	shotAlert                    bool
+	shotAlertTitle, shotAlertMsg string
+	shotAlertSettings            bool
+	keyErr                       map[string]string     // why a shortcut recorded is not used
+	iconBitmaps                  map[string]*ui.Bitmap // the app's icons, in the settings
 	// The sync with GitHub (sync.go).
 	syncBusy                       bool
 	syncMsg, syncErr, syncCheck    string
@@ -553,6 +560,7 @@ func (a *app) tick(c *ui.Context) {
 		a.embedLibrary()
 		a.autoBackup()
 		a.syncDue()
+		a.keysBack()
 	}
 	if a.path != "" && a.checked == now {
 		if mt := modTime(a.path); !mt.IsZero() && !mt.Equal(a.modTime) {

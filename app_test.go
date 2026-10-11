@@ -62,6 +62,7 @@ func (f *fakePlatform) SetTray(on bool)                {}
 func (f *fakePlatform) SetClipKey(key string) error    { return nil }
 func (f *fakePlatform) SetShotKey(key string) error    { return nil }
 func (f *fakePlatform) Screenshot(fromApp bool)        { f.shots++ }
+func (f *fakePlatform) OpenShotSettings()              { f.opened = append(f.opened, "shot-settings") }
 func (f *fakePlatform) SetAppIcon(png, tray []byte)    { f.icon, f.tray = png, tray }
 func (f *fakePlatform) CheckUpdates()                  { f.checks++ }
 func (f *fakePlatform) AutoUpdates() bool              { return !f.noAuto }
@@ -2538,6 +2539,16 @@ func TestTrayAndSettings(t *testing.T) {
 	}
 	if fp.captureKey != defaultCaptureKey || a.cfg.CaptureKey != "" {
 		t.Fatalf("default: %q", fp.captureKey)
+	}
+	// Closed while recording: the shortcut comes back.
+	tt.Click("快速记录快捷键")
+	if fp.captureKey != "" {
+		t.Fatal("not let go while recording")
+	}
+	a.settingsOpen = false
+	a.keysBack()
+	if fp.captureKey != defaultCaptureKey || a.recordingKey != "" {
+		t.Fatalf("not back: %q", fp.captureKey)
 	}
 	snapshot(t, tt, "settings")
 }
