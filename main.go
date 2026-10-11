@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/plugins/updater"
+	updaterui "github.com/egoist/mygo/plugins/updater/native"
 	"github.com/egoist/mygo/transfer"
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/screenshot"
@@ -162,6 +164,10 @@ func (d *desktop) saveShot(png []byte) {
 	}
 	d.Notify("截图已保存", path)
 }
+
+func (d *desktop) CheckUpdates()          { updater.CheckForUpdates() }
+func (d *desktop) AutoUpdates() bool      { return updater.AutomaticChecks() }
+func (d *desktop) SetAutoUpdates(on bool) { updater.SetAutomaticChecks(on) }
 
 func (d *desktop) SetAppIcon(png []byte) {
 	_ = mygo.App.Dock.SetIcon(png)
@@ -330,6 +336,9 @@ func main() {
 		}
 		return
 	}
+	// Updates: a window, as Sparkle's, offers a new version once a day and
+	// installs it, then restarts the app (mygo.json's updates).
+	mygo.Use(updaterui.Plugin)
 	plat := &desktop{}
 	a := newApp(plat, loadConfig())
 	plat.app = a
@@ -379,6 +388,7 @@ func main() {
 		mygo.App.SetMenu(mygo.NewMenu([]*mygo.MenuItem{
 			{Label: "MindMap", Submenu: []*mygo.MenuItem{
 				{Role: mygo.RoleAbout},
+				updater.MenuItem(),
 				mygo.Separator(),
 				item("设置…", "CmdOrCtrl+,", a.openSettings),
 				mygo.Separator(),

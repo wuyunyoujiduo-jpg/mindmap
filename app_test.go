@@ -42,6 +42,8 @@ type fakePlatform struct {
 	trayUpdates int
 	shots       int
 	icon        []byte
+	checks      int
+	noAuto      bool
 }
 
 func (f *fakePlatform) SaveFile(name, ext string, done func(string)) { done(f.savePath) }
@@ -61,6 +63,9 @@ func (f *fakePlatform) SetClipKey(key string) error    { return nil }
 func (f *fakePlatform) SetShotKey(key string) error    { return nil }
 func (f *fakePlatform) Screenshot(fromApp bool)        { f.shots++ }
 func (f *fakePlatform) SetAppIcon(png []byte)          { f.icon = png }
+func (f *fakePlatform) CheckUpdates()                  { f.checks++ }
+func (f *fakePlatform) AutoUpdates() bool              { return !f.noAuto }
+func (f *fakePlatform) SetAutoUpdates(on bool)         { f.noAuto = !on }
 func (f *fakePlatform) UpdateTray()                    { f.trayUpdates++ }
 func (f *fakePlatform) Notify(title, body string) {
 	f.notes = append(f.notes, title+"："+body)
@@ -2945,5 +2950,28 @@ func TestChooseAppIcon(t *testing.T) {
 		if _, err := png.Decode(bytes.NewReader(appIconPNG(ic.key))); err != nil {
 			t.Fatal(ic.name, err)
 		}
+	}
+}
+
+// The settings check for updates, and turn the daily check off.
+func TestUpdateSettings(t *testing.T) {
+	a, tt := newTestApp(t)
+	fp := a.plat.(*fakePlatform)
+	a.openSettings()
+	tt.Frame()
+	if !tt.HasText("MindMap " + version) {
+		t.Fatalf("no version: %q", tt.Texts())
+	}
+	if err := tt.Click("检查更新…"); err != nil {
+		t.Fatal(err)
+	}
+	if fp.checks != 1 {
+		t.Fatalf("checks %d", fp.checks)
+	}
+	if err := tt.Click("自动检查更新"); err != nil {
+		t.Fatal(err)
+	}
+	if !fp.noAuto {
+		t.Fatal("daily check still on")
 	}
 }

@@ -1,6 +1,11 @@
 {
   "name": "MindMap",
   "identifier": "com.wuyunyoujiduo.mindmap",
-  "version": "0.23.0",
-  "out": "build"
+  "version": "0.24.0",
+  "out": "build",
+  "updates": {
+    "publicKey": "QiqxcF4IRxoXZeYeRcxscPP0HCto8pGMHvdFqvDtx/A=",
+    "github": "wuyunyoujiduo-jpg/mindmap-models",
+    "tagPrefix": "desktop-v"
+  }
 }

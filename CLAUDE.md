@@ -15,8 +15,9 @@ by AI, and an AI assistant.
    `GOOS=darwin GOARCH=arm64 go build -o /dev/null .`,
    `GOOS=windows go build -o /dev/null .`, `go tool mygo vet`.
    UI snapshots: `MINDMAP_SNAPSHOTS=<dir> go test .`, then look at them.
-4. Commit, push to the working branch, bump `version` in `mygo.json`, and
-   release by running the `build` workflow with `release: true`.
+4. Commit, push to the working branch, bump `version` in `mygo.json`, add
+   its section to `CHANGELOG.md` (in Chinese: the update window shows it),
+   and release by running the `build` workflow with `release: true`.
 
 ## Notes
 
@@ -26,5 +27,8 @@ by AI, and an AI assistant.
   knowledge cards, and `appicons/` the icons to choose in the settings.
 - The semantic search model is a plugin downloaded from the public
   `mindmap-models` repository (`plugin.go`).
+- Auto-updates: `mygo.json`'s `updates` and MyGo's updater plugin. Releases
+  sign the update files and publish them to `mindmap-models`, tagged
+  `desktop-v<version>` (secrets `MYGO_UPDATER_PRIVATE_KEY`, `RELEASES_TOKEN`).
 - Screenshots come from OneShot, in `internal/screenshot`.
 - The user writes in Chinese; the app's texts are Chinese.

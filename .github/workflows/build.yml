@@ -20,6 +20,17 @@ on:
 permissions:
   contents: write # creating the release
 
+# Auto-updates (mygo.json's updates): with these secrets, releases also
+# sign the update files and publish them, with the installers, to the
+# public repository mindmap-models, tagged desktop-v<version>, where the
+# app looks for new versions.
+#   MYGO_UPDATER_PRIVATE_KEY  the key that signs updates (mygo-update.key)
+#   RELEASES_TOKEN            a token that may write mindmap-models'
+#                             releases (fine-grained: Contents read/write)
+env:
+  UPDATES_REPO: wuyunyoujiduo-jpg/mindmap-models
+  RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -87,12 +98,24 @@ jobs:
           jq --arg kc "$kc" '.macos.notarize = {keychainProfile: "mindmap-notary", keychain: $kc}' mygo.json > mygo.signed.json
           mv mygo.signed.json mygo.json
           echo "SIGN_IDENTITY=$APPLE_SIGNING_IDENTITY" >> "$GITHUB_ENV"
+      - name: Open the draft of the update release
+        if: (startsWith(github.ref, 'refs/tags/') || inputs.release) && env.RELEASES_TOKEN != ''
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+        run: |
+          tag="desktop-v$(jq -r .version mygo.json)"
+          gh release view "$tag" --repo "$UPDATES_REPO" >/dev/null 2>&1 ||
+            gh release create "$tag" --repo "$UPDATES_REPO" --draft --target main --title "MindMap $tag" --notes "MindMap $(jq -r .version mygo.json)"
+          echo "UPLOAD=-upload" >> "$GITHUB_ENV"
       - name: Build MindMap.app and the disk image
+        env:
+          MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN || github.token }}
         run: |
           if [ -n "$SIGN_IDENTITY" ]; then
-            go tool mygo build -platform darwin/universal -sign "$SIGN_IDENTITY"
+            go tool mygo build -platform darwin/universal -sign "$SIGN_IDENTITY" $UPLOAD
           else
-            go tool mygo build -platform darwin/universal
+            go tool mygo build -platform darwin/universal $UPLOAD
           fi
       - uses: actions/upload-artifact@v7
         with:
@@ -120,7 +143,15 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Build MindMap.exe and the installer
-        run: go tool mygo build -platform windows/amd64
+        shell: bash
+        env:
+          MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN || github.token }}
+          RELEASE: ${{ startsWith(github.ref, 'refs/tags/') || inputs.release }}
+        run: |
+          upload=""
+          if [ "$RELEASE" = true ] && [ -n "$RELEASES_TOKEN" ]; then upload=-upload; fi
+          go tool mygo build -platform windows/amd64 $upload
       - uses: actions/upload-artifact@v7
         with:
           name: MindMap-Windows
@@ -133,3 +164,12 @@ jobs:
         run: |
           tag="v$(jq -r .version mygo.json)"
           gh release upload "$tag" build/windows-amd64/*Setup*.exe --repo "$GITHUB_REPOSITORY" --clobber
+      # The apps check the newest desktop-v release: publishing the draft
+      # offers the version to them. It stays off "latest", which is the
+      # embedding model's.
+      - name: Publish the update release
+        if: (startsWith(github.ref, 'refs/tags/') || inputs.release) && env.RELEASES_TOKEN != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+        run: gh release edit "desktop-v$(jq -r .version mygo.json)" --repo "$UPDATES_REPO" --draft=false --latest=false

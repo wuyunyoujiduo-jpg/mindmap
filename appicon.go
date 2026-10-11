@@ -100,3 +100,21 @@ func (a *app) iconSettings(c *ui.Context) {
 		})
 	})
 }
+
+// updateSettings shows the version, and checks for a newer one.
+func (a *app) updateSettings(c *ui.Context) {
+	ui.Field(c, "版本", func() {
+		ui.Column(c).Gap(6).Children(func() {
+			ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, "MindMap "+version).FontSize(textBody).Grow(1)
+				if ui.Button(c, "检查更新…").Clicked() {
+					a.plat.CheckUpdates()
+				}
+			})
+			auto := a.plat.AutoUpdates()
+			switchRow(c, &auto, "自动检查更新", "每天检查一次；有新版本时显示更新说明，点「安装更新」后自动下载并重启", func() {
+				a.plat.SetAutoUpdates(auto)
+			})
+		})
+	})
+}

@@ -53,6 +53,12 @@ type platform interface {
 	Screenshot(fromApp bool)
 	// SetAppIcon shows the app's icon in the Dock or the taskbar.
 	SetAppIcon(png []byte)
+	// CheckUpdates checks for a newer version and offers to install it and
+	// restart; AutoUpdates and SetAutoUpdates are whether it checks by
+	// itself, once a day.
+	CheckUpdates()
+	AutoUpdates() bool
+	SetAutoUpdates(on bool)
 	SetTray(on bool)
 	UpdateTray()
 	ShowInFolder(path string)

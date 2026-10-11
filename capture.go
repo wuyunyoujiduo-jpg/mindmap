@@ -424,6 +424,7 @@ func switchRow(c *ui.Context, on *bool, label, text string, changed func()) {
 func (a *app) generalSettings(c *ui.Context) {
 	t := c.Theme()
 	a.iconSettings(c)
+	a.updateSettings(c)
 	ui.Field(c, "快速记录的全局快捷键", func() {
 		ui.Column(c).Gap(6).Children(func() {
 			in := ui.TextInput(c.Key("capture-key"), &a.captureKeyDraft).Placeholder(defaultCaptureKey).Label("快速记录快捷键")
