@@ -316,7 +316,7 @@ func (a *app) annotationsSection(c *ui.Context, n *model.Node) {
 					if ui.TextInput(c, &label).Placeholder("标签").FontSize(12).Grow(1).Label(name + "标签").Changed() {
 						a.mutate(key+":"+n.ID, func() { (*m).Label = label })
 					}
-					if ui.Button(c, "✕").Label("删除"+name).FontSize(11).Padding(0, 6).Clicked() {
+					if iconButton(c, iconClose, "删除"+name, "删除"+name, 22, true).Clicked() {
 						a.later(func() { a.mutate("", func() { *m = nil }) })
 					}
 				})
@@ -345,7 +345,7 @@ func (a *app) annotationsSection(c *ui.Context, n *model.Node) {
 							}
 						})
 					}
-					if ui.Button(c, "✕").Label("删除关联线").FontSize(11).Padding(0, 6).Clicked() {
+					if iconButton(c, iconClose, "删除关联线", "删除关联线", 22, true).Clicked() {
 						id := rel.ID
 						a.later(func() { a.removeRelation(id) })
 					}

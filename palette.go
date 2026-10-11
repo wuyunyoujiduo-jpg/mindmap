@@ -454,7 +454,7 @@ func (a *app) cheatSheet(c *ui.Context) {
 	ui.Modal(c.Key("cheats"), &a.cheatsOpen, func() {
 		ui.Row(c).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, "快捷键").FontSize(18).Bold().Grow(1)
-			if ui.Button(c, "关闭").Clicked() {
+			if iconButton(c, iconClose, "关闭", "关闭（Esc）", 28, true).Clicked() {
 				a.cheatsOpen = false
 			}
 		})

@@ -349,7 +349,7 @@ func (a *app) settingsView(c *ui.Context) {
 		ui.Column(c).Gap(14).Width(min(600, w-80)).Children(func() {
 			ui.Row(c).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "设置").FontSize(17).Bold().Grow(1)
-				if ui.Button(c, "关闭").Clicked() {
+				if iconButton(c, iconClose, "关闭", "关闭（Esc）", 28, true).Clicked() {
 					a.settingsOpen = false
 				}
 			})

@@ -20,8 +20,9 @@ func (a *app) libraryView(c *ui.Context) {
 		a.later(func() { a.dropClips(files) })
 	}
 	root.Children(func() {
-		ui.Row(c).Padding(8, 12).Gap(10).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "📚 资料库").Bold().FontSize(15).NoWrap()
+		ui.Row(c.Key("lib-head")).Height(toolbarHeight).Padding(0, 10, 0, 16).Gap(10).AlignItems(ui.Center).Shrink(0).
+			DragWindow().Children(func() {
+			ui.Text(c, "资料库").Bold().FontSize(textTitle).NoWrap()
 			ui.Text(c, fmt.Sprintf("%d 条", len(l.Clips))).FontSize(12).TextColor(t.TextMuted).NoWrap()
 			if a.libWorking != "" {
 				ui.Spinner(c)
@@ -38,8 +39,7 @@ func (a *app) libraryView(c *ui.Context) {
 				ui.Text(c, "语义检索不可用").FontSize(12).TextColor(t.Warning).NoWrap().Tooltip(a.embedErr + "（在设置里检查向量模型）")
 			}
 			ui.Spacer(c)
-			search := ui.TextInput(c.Key("lib-search"), &a.libQuery).Placeholder("搜索资料…").Label("搜索资料库").
-				Tooltip("按标题、内容、摘要、标签和关键词查找").Width(200).Shrink(1).MinWidth(90)
+			search := searchBox(c, "lib-search", &a.libQuery, "搜索资料", "搜索资料库", "按标题、内容、摘要、标签和关键词查找", 200)
 			if a.libQuery != "" && search.Shortcut(0, ui.KeyEscape) {
 				a.libQuery = ""
 			}
@@ -53,14 +53,10 @@ func (a *app) libraryView(c *ui.Context) {
 					a.organizeAll()
 				}
 			}
-			ai := ui.Button(c, "✦ AI").Label("AI 助手").Tooltip("和 AI 聊资料库里的内容，它会检索相关资料来回答").Shrink(0)
-			if a.aiOpen {
-				ai.Background(t.Accent).TextColor(t.AccentText)
-			}
-			if ai.Clicked() {
+			if iconTextButton(c, iconSparkle, "AI", "AI 助手", "和 AI 聊资料库里的内容，它会检索相关资料来回答", a.aiOpen).Clicked() {
 				a.aiOpen = !a.aiOpen
 			}
-			if ui.Button(c, "✕").Label("关闭资料库").Tooltip("回到导图").Width(32).Shrink(0).Clicked() {
+			if iconButton(c, iconClose, "关闭资料库", "回到导图", 30, true).Clicked() {
 				a.libOpen = false
 			}
 		})
@@ -428,19 +424,29 @@ func (a *app) clipIntoMap(clip *library.Clip) {
 	a.reveal = true
 }
 
-// clipDetail shows and edits the clip chosen.
+// clipDetail shows and edits the clip chosen, as a page to read: its
+// title and line large and edited in place, its properties in rows, what
+// the AI made of it in a card of its own, and the user's note in another.
 func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 	t := c.Theme()
-	ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-		ui.Text(c, kindIcon(clip.Kind)+" "+library.KindLabel(clip.Kind)).FontSize(12).TextColor(t.TextMuted)
-		ui.Text(c, "· "+cmpOr(clip.Source, "手动")+" · "+clip.Created.Format("2006-01-02 15:04")).FontSize(12).TextColor(t.TextMuted).Grow(1)
-		star := ui.Button(c, map[bool]string{true: "★", false: "☆"}[clip.Starred]).Label("星标").Tooltip("星标").Width(30)
-		if star.Clicked() {
+	// The bar: what it is and when, and what to do with it.
+	ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
+		pill(c, kindIcon(clip.Kind)+" "+library.KindLabel(clip.Kind), t.Text.Alpha(0.06), t.TextMuted)
+		ui.Text(c, cmpOr(clip.Source, "手动")+" · "+clip.Created.Format("2006-01-02 15:04")).FontSize(textCaption).
+			TextColor(t.TextMuted).NoWrap().Ellipsis("…").Grow(1).Shrink(1).MinWidth(0).Margin(0, 0, 0, 4)
+		star := iconStar
+		if clip.Starred {
+			star = iconStarFilled
+		}
+		if iconButton(c, star, "星标", map[bool]string{true: "取消星标", false: "加星标"}[clip.Starred], 28, true).Clicked() {
 			clip.Starred = !clip.Starred
 			a.saveClip(clip)
 		}
-		ui.MenuButton(c, "⋯", func(m *ui.Menu) { a.clipMenu(m, clip) }).Label("资料菜单")
-		if ui.Button(c, "✕").Label("关闭详情").Width(30).Clicked() {
+		if iconButton(c, iconShare, "分享卡片", "生成分享卡片", 28, true).Clicked() {
+			a.openCard(clip)
+		}
+		iconButton(c, iconMore, "资料菜单", "更多", 28, true).Menu(func(m *ui.Menu) { a.clipMenu(m, clip) })
+		if iconButton(c, iconClose, "关闭详情", "关闭", 28, true).Clicked() {
 			a.libSel = ""
 		}
 	})
@@ -449,67 +455,50 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 		if strings.Contains(s, "失败") {
 			col = t.Danger
 		}
-		ui.Text(c, s).FontSize(12).TextColor(col).Wrap()
+		ui.Text(c, s).FontSize(textSmall).TextColor(col).Wrap()
 	}
-	title := clip.Title
-	ui.Field(c, "标题", func() {
-		if ui.TextInput(c.Key("clip-title"), &title).Placeholder(clip.Label()).Label("资料标题").Changed() {
+
+	// The title and the line saying what it is, large, edited in place.
+	ui.Column(c).Gap(2).Margin(4, -6, 0).Children(func() {
+		title := clip.Title
+		if inlineInput(c.Key("clip-title"), &title, textHeadline, true, clip.Label(), "资料标题").Changed() {
 			clip.Title = title
 			a.saveClip(clip)
 		}
-	})
-	desc := clip.Desc
-	ui.Field(c, "说明", func() {
-		in := ui.TextInput(c.Key("clip-desc"), &desc).Placeholder("一句话说明这是什么（AI 整理时自动生成）").Label("资料说明")
+		desc := clip.Desc
+		in := inlineArea(c.Key("clip-desc"), &desc, textBody, 1, 4, "加一句说明，说清这是什么（AI 整理时自动生成）", "资料说明")
+		in.TextColor(t.TextMuted)
 		if in.Changed() {
 			clip.Desc = desc
 			a.saveClip(clip)
 		}
 	})
+
 	if clip.Kind == library.KindImage {
 		if b := a.fileBitmap(a.lib.FilePath(clip)); b != nil {
 			w, h := b.Size()
-			k := min(1, 360/float32(max(w, 1)), 280/float32(max(h, 1)))
-			img := ui.Image(c, b).Size(float32(w)*k, float32(h)*k).Fit(ui.Contain).Radius(8).Cursor(ui.CursorPointer).Tooltip("用默认应用打开")
+			k := min(1, 420/float32(max(w, 1)), 320/float32(max(h, 1)))
+			img := ui.Image(c, b).Size(float32(w)*k, float32(h)*k).Fit(ui.Contain).Radius(10).Cursor(ui.CursorPointer).Tooltip("用默认应用打开")
 			if img.Clicked() {
 				a.plat.OpenPath(a.lib.FilePath(clip))
 			}
 		}
 	}
-	if clip.URL != "" {
-		ui.Field(c, "链接", func() {
-			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				if ui.Link(c, clip.URL, "").FontSize(12).MaxLines(2).Shrink(1).Clicked() {
-					a.plat.OpenURL(clip.URL)
-				}
-			})
-		})
-	}
-	if clip.Kind == library.KindFile {
-		ui.Field(c, "文件", func() {
-			if ui.Link(c, "📎 "+clip.Name, "").FontSize(12).Clicked() {
-				a.plat.OpenPath(a.lib.FilePath(clip))
+
+	// Properties.
+	ui.Column(c).Gap(2).Children(func() {
+		propRow(c, "分类", func() {
+			cat := clip.Category
+			in := inlineInput(c.Key("clip-cat"), &cat, textBody, false, "未分类", "资料分类")
+			if in.Changed() {
+				clip.Category = strings.TrimSpace(cat)
+				a.saveClip(clip)
 			}
 		})
-	}
-	if clip.Summary != "" {
-		ui.Field(c, "AI 摘要", func() {
-			ui.Text(c, clip.Summary).FontSize(13).Wrap().Selectable()
-		})
-	}
-	ui.Field(c, "分类", func() {
-		cat := clip.Category
-		in := ui.TextInput(c.Key("clip-cat"), &cat).Placeholder("如 技术、产品、灵感").Label("资料分类")
-		if in.Changed() {
-			clip.Category = strings.TrimSpace(cat)
-			a.saveClip(clip)
-		}
-	})
-	ui.Field(c, "标签", func() {
-		ui.Row(c).Gap(6).Wrap().GapY(6).AlignItems(ui.Center).Children(func() {
+		propRow(c, "标签", func() {
 			for _, tag := range clip.Tags {
 				tag := tag
-				chip := tagChip(c.Key("tag:"+tag), tag, "#"+tag, false, 12).Tooltip("点击筛选；右键移除")
+				chip := tagChip(c.Key("tag:"+tag), tag, "#"+tag, false, textSmall).Tooltip("点击筛选；右键移除")
 				if chip.Clicked() {
 					a.libTag = tag
 				}
@@ -520,7 +509,13 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 					}
 				})
 			}
-			in := ui.TextInput(c.Key("clip-tag"), &a.libTagText).Placeholder("+ 标签").Label("添加标签").Width(110)
+			in := ui.TextInputBase(c.Key("clip-tag"), &a.libTagText).Placeholder("+ 添加").Label("添加标签").
+				FontSize(textSmall).Width(80).Padding(3, 6).Radius(6)
+			if in.Focused() {
+				in.Border(1, t.Accent.Alpha(0.6))
+			} else if in.Hovered() {
+				in.Background(t.Text.Alpha(0.05))
+			}
 			if in.Submitted() {
 				for _, tag := range cleanTags(strings.Fields(strings.ReplaceAll(a.libTagText, "#", " "))) {
 					if !slices.Contains(clip.Tags, tag) {
@@ -531,80 +526,113 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 				a.saveClip(clip)
 			}
 		})
+		if clip.URL != "" {
+			propRow(c, "链接", func() {
+				if ui.Link(c, clip.URL, "").FontSize(textSmall).MaxLines(1).Ellipsis("…").Shrink(1).MinWidth(0).Clicked() {
+					a.plat.OpenURL(clip.URL)
+				}
+			})
+		}
+		if clip.Kind == library.KindFile {
+			propRow(c, "文件", func() {
+				if ui.Link(c, clip.Name, "").FontSize(textSmall).MaxLines(1).Ellipsis("…").Shrink(1).MinWidth(0).Clicked() {
+					a.plat.OpenPath(a.lib.FilePath(clip))
+				}
+			})
+		}
 	})
-	note := clip.Note
-	ui.Field(c, "我的备注", func() {
-		if ui.TextArea(c.Key("clip-note"), &note).Lines(2, 8).Placeholder("为什么收藏它、想怎么用…").Label("资料备注").Changed() {
+
+	// What the AI made of it.
+	card(c, t.Accent.Alpha(0.06)).Children(func() {
+		ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+			ui.Box(c).Size(14, 14).Draw(func(p *ui.Painter, r ui.Rect) { drawIcon(p, r, 13, iconSparkle, t.Accent) })
+			ui.Text(c, "AI 整理").FontSize(textSmall).Bold().TextColor(t.Accent).Grow(1)
+			label := "整理"
+			if clip.Organized != nil {
+				label = "重新整理"
+			}
+			if a.libWorking == clip.ID {
+				ui.Spinner(c)
+			} else if ghostButton(c, label, "让 AI 起标题、写说明和摘要、分类、打标签、生成同义词和分析").Clicked() {
+				a.organizeClip(clip.ID)
+			}
+		})
+		if clip.Summary == "" && clip.Analysis == "" && len(clip.Synonyms) == 0 {
+			ui.Text(c, "还没整理。点「整理」，AI 会写摘要、分析要点，并生成检索用的同义词。").FontSize(textSmall).TextColor(t.TextMuted).Wrap()
+			return
+		}
+		if clip.Summary != "" {
+			ui.Text(c, clip.Summary).FontSize(textBody).LineHeight(1.55).Wrap().Selectable()
+		}
+		if clip.Analysis != "" {
+			markdownView(c.Key("clip-analysis"), clip.Analysis, textBody)
+		}
+		if a.libSynFor != clip.ID || !a.libSynEditing {
+			a.libSynFor, a.libSynText = clip.ID, strings.Join(clip.Synonyms, "、")
+		}
+		ui.Column(c).Gap(2).Margin(4, 0, 0).Children(func() {
+			sectionHeader(c, "同义词 · 用来检索，可修改")
+			in := inlineInput(c.Key("clip-syn"), &a.libSynText, textSmall, false, "AI 整理时自动生成", "资料同义词").Margin(0, -6)
+			if in.Changed() {
+				a.libSynEditing = true
+			}
+			if a.libSynEditing && (in.Submitted() || in.PressedOutside()) {
+				clip.Synonyms = cleanTags(strings.FieldsFunc(a.libSynText, func(r rune) bool { return r == '、' || r == ',' || r == '，' || r == ';' || r == '；' }))
+				a.libSynEditing = false
+				a.saveClip(clip)
+			}
+		})
+	})
+
+	// The user's note.
+	card(c, ui.Hex("#f5b942").Alpha(0.1)).Children(func() {
+		sectionHeader(c, "我的备注")
+		note := clip.Note
+		if inlineArea(c.Key("clip-note"), &note, textBody, 2, 10, "为什么收藏它、想怎么用…", "资料备注").Margin(0, -8).Changed() {
 			clip.Note = note
 			a.saveClip(clip)
 		}
 	})
-	if clip.Kind == library.KindText {
-		text := clip.Text
-		ui.Field(c, "内容", func() {
-			if ui.TextArea(c.Key("clip-text"), &text).Lines(4, 20).Label("资料内容").Changed() {
+
+	// The content.
+	switch {
+	case clip.Kind == library.KindText:
+		ui.Column(c).Gap(4).Children(func() {
+			sectionHeader(c, "内容")
+			text := clip.Text
+			if inlineArea(c.Key("clip-text"), &text, textBody+1, 3, 30, "", "资料内容").Margin(0, -8).Changed() {
 				clip.Text = text
 				a.saveClip(clip)
 			}
 		})
-	} else if clip.Kind == library.KindLink {
-		text := clip.Text
-		ui.Field(c, "网页正文", func() {
-			ui.Column(c).Gap(4).Children(func() {
-				in := ui.TextArea(c.Key("clip-page"), &text).Lines(3, 12).Label("网页正文").
-					Placeholder("没读到网页正文时（需要登录的页面、公众号文章等），可以把正文复制粘贴到这里")
-				if in.Changed() {
-					clip.Text = text
-					a.saveClip(clip)
-				}
-				if in.PressedOutside() && clip.Text != "" && clip.Organized == nil && providerKey(a.cfg) != "" && !a.cfg.LibraryManual {
-					a.enqueueClip(clip.ID, true)
-				}
-			})
+	case clip.Kind == library.KindLink:
+		ui.Column(c).Gap(4).Children(func() {
+			sectionHeader(c, "网页正文")
+			text := clip.Text
+			in := inlineArea(c.Key("clip-page"), &text, textBody, 3, 16,
+				"没读到网页正文时（需要登录的页面、公众号文章等），可以把正文复制粘贴到这里", "网页正文").Margin(0, -8)
+			if in.Changed() {
+				clip.Text = text
+				a.saveClip(clip)
+			}
+			if in.PressedOutside() && clip.Text != "" && clip.Organized == nil && providerKey(a.cfg) != "" && !a.cfg.LibraryManual {
+				a.enqueueClip(clip.ID, true)
+			}
 		})
-	} else if clip.Text != "" {
-		label := "网页正文"
-		switch clip.Kind {
-		case library.KindImage:
+	case clip.Text != "":
+		label := "文件内容"
+		if clip.Kind == library.KindImage {
 			label = "图中内容（AI 识别）"
-		case library.KindFile:
-			label = "文件内容"
 		}
-		ui.Field(c, label, func() {
-			ui.Text(c, library.Excerpt(clip.Text, "", 3000)).FontSize(12).TextColor(t.TextMuted).Wrap().Selectable()
+		ui.Column(c).Gap(4).Children(func() {
+			sectionHeader(c, label)
+			ui.Text(c, library.Excerpt(clip.Text, "", 3000)).FontSize(textSmall).LineHeight(1.5).TextColor(t.TextMuted).Wrap().Selectable()
 		})
 	}
-	if clip.Analysis != "" {
-		ui.Field(c, "AI 分析", func() {
-			markdownView(c.Key("clip-analysis"), clip.Analysis, 13)
-		})
-	}
-	if a.libSynFor != clip.ID || !a.libSynEditing {
-		a.libSynFor, a.libSynText = clip.ID, strings.Join(clip.Synonyms, "、")
-	}
-	ui.Field(c, "同义词（用来检索，可修改，用顿号或逗号分隔）", func() {
-		in := ui.TextInput(c.Key("clip-syn"), &a.libSynText).Placeholder("AI 整理时自动生成").Label("资料同义词")
-		if in.Changed() {
-			a.libSynEditing = true
-		}
-		if a.libSynEditing && (in.Submitted() || in.PressedOutside()) {
-			clip.Synonyms = cleanTags(strings.FieldsFunc(a.libSynText, func(r rune) bool { return r == '、' || r == ',' || r == '，' || r == ';' || r == '；' }))
-			a.libSynEditing = false
-			a.saveClip(clip)
-		}
-	})
-	if len(clip.Keywords) > 0 {
-		ui.Text(c, "检索关键词："+strings.Join(clip.Keywords, "、")).FontSize(11).TextColor(t.TextMuted).Wrap()
-	}
-	ui.Row(c).Gap(8).Wrap().GapY(6).Children(func() {
-		label := "AI 整理"
-		if clip.Organized != nil {
-			label = "AI 重新整理"
-		}
-		if ui.Button(c, label).Disabled(a.libWorking == clip.ID).Tooltip("让 AI 起标题、写摘要、分类、打标签").Clicked() {
-			a.organizeClip(clip.ID)
-		}
-		if ui.Button(c, "问 AI").Tooltip("打开 AI 助手，就这条资料提问").Clicked() {
+
+	// What else to do with it.
+	ui.Row(c).Gap(6).Wrap().GapY(6).Children(func() {
+		if iconTextButton(c, iconSparkle, "问 AI", "问 AI", "打开 AI 助手，就这条资料提问", false).Clicked() {
 			a.aiOpen = true
 		}
 		if a.doc != nil && ui.Button(c, "加到导图").Tooltip("加到「"+mapName(a.path)+"」的选中节点下").Clicked() {
@@ -614,10 +642,10 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 			a.plat.CopyText(clipCopyText(clip))
 			a.tell("已复制")
 		}
-		if ui.Button(c, "分享卡片").Tooltip("把内容排成一张精美的图片").Clicked() {
-			a.openCard(clip)
-		}
 	})
+	if len(clip.Keywords) > 0 {
+		ui.Text(c, "检索关键词："+strings.Join(clip.Keywords, "、")).FontSize(textCaption).TextColor(t.TextMuted).Wrap()
+	}
 	a.relatedSection(c, clip)
 	a.clipBacklinksSection(c, clip)
 }
@@ -625,19 +653,19 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 // libraryRow is the library's entry in the sidebar.
 func (a *app) libraryRow(c *ui.Context) {
 	t := c.Theme()
-	row := ui.Row(c.Key("library-row")).Padding(6, 8, 6, 12).Gap(8).Radius(6).AlignItems(ui.Center).Cursor(ui.CursorPointer).
+	row := ui.Row(c.Key("library-row")).Padding(5, 8).Gap(8).Radius(6).AlignItems(ui.Center).Cursor(ui.CursorPointer).
 		Label("资料库").Tooltip("收藏的文字、链接、图片和文件，AI 自动整理；复制后按 " + keyLabel(a.clipKey()) + " 收进来")
 	switch {
 	case a.libOpen:
 		row.Background(t.Accent.Alpha(0.14))
 	case row.Hovered():
-		row.Background(t.SurfaceHover)
+		row.Background(t.Text.Alpha(0.06))
 	}
 	if row.Clicked() {
 		a.later(a.showLibrary)
 	}
 	row.Children(func() {
-		ui.Text(c, "📚").FontSize(13)
+		sideIcon(c, iconLibrary, a.libOpen)
 		ui.Text(c, "资料库").FontSize(13).Grow(1)
 		if n := len(a.lib.Clips); n > 0 {
 			ui.Text(c, fmt.Sprint(n)).FontSize(11).TextColor(t.TextMuted)

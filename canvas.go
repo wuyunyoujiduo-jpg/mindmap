@@ -513,7 +513,7 @@ func (a *app) sheetTabs(c *ui.Context) {
 			for _, d := range a.file.Sheets {
 				a.sheetTab(c.Key(d.ID), d)
 			}
-			if ui.Button(c, "+").Label("新建画布").Tooltip("新建画布").Width(28).Clicked() {
+			if iconButton(c, iconPlus, "新建画布", "新建画布", 26, true).Clicked() {
 				a.addSheet()
 			}
 		})

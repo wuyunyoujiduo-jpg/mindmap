@@ -1,6 +1,8 @@
 package main
 
 import (
+	"math"
+
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
@@ -21,6 +23,17 @@ const (
 	iconRedo
 	iconCheck
 	iconPencil
+	iconClose
+	iconStar
+	iconStarFilled
+	iconMore
+	iconSparkle
+	iconShare
+	iconFolder
+	iconLibrary
+	iconInbox
+	iconMap
+	iconSearch
 )
 
 // drawIcon draws an icon in the square of side s centered in r.
@@ -63,11 +76,75 @@ func drawIcon(p *ui.Painter, r ui.Rect, s float32, ic icon, col ui.Color) {
 	case iconCheck:
 		check := new(ui.Path).MoveTo(cx-h*0.55, cy+h*0.02).LineTo(cx-h*0.15, cy+h*0.42).LineTo(cx+h*0.6, cy-h*0.4)
 		p.StrokePath(check, w*1.15, col)
+	case iconClose:
+		p.StrokePath(new(ui.Path).MoveTo(cx-h*0.55, cy-h*0.55).LineTo(cx+h*0.55, cy+h*0.55), w, col)
+		p.StrokePath(new(ui.Path).MoveTo(cx-h*0.55, cy+h*0.55).LineTo(cx+h*0.55, cy-h*0.55), w, col)
+	case iconStar, iconStarFilled:
+		star := new(ui.Path)
+		for i := range 10 {
+			rr := h * 0.95
+			if i%2 == 1 {
+				rr = h * 0.42
+			}
+			a := float64(i)*math.Pi/5 - math.Pi/2
+			x, y := cx+rr*float32(math.Cos(a)), cy+h*0.08+rr*float32(math.Sin(a))
+			if i == 0 {
+				star.MoveTo(x, y)
+			} else {
+				star.LineTo(x, y)
+			}
+		}
+		star.Close()
+		if ic == iconStarFilled {
+			p.FillPath(star, col)
+		} else {
+			p.StrokePath(star, w*0.9, col)
+		}
+	case iconMore:
+		for _, dx := range []float32{-0.6, 0, 0.6} {
+			p.FillPath(new(ui.Path).Circle(cx+dx*h, cy, max(w*0.85, 1.4)), col)
+		}
+	case iconSparkle:
+		// A four-pointed star with curved sides, and a small one.
+		spark := func(x, y, r float32) *ui.Path {
+			k := r * 0.18
+			return new(ui.Path).MoveTo(x, y-r).QuadTo(x+k, y-k, x+r, y).QuadTo(x+k, y+k, x, y+r).
+				QuadTo(x-k, y+k, x-r, y).QuadTo(x-k, y-k, x, y-r).Close()
+		}
+		p.FillPath(spark(cx-h*0.12, cy+h*0.1, h*0.82), col)
+		p.FillPath(spark(cx+h*0.62, cy-h*0.6, h*0.32), col)
+	case iconShare:
+		// A card with an arrow going up out of it.
+		p.Line(cx, cy-h*0.85, cx, cy+h*0.25, w, col)
+		p.StrokePath(new(ui.Path).MoveTo(cx-h*0.38, cy-h*0.45).LineTo(cx, cy-h*0.85).LineTo(cx+h*0.38, cy-h*0.45), w, col)
+		p.StrokePath(new(ui.Path).MoveTo(cx-h*0.3, cy-h*0.1).LineTo(cx-h*0.75, cy-h*0.1).LineTo(cx-h*0.75, cy+h*0.85).
+			LineTo(cx+h*0.75, cy+h*0.85).LineTo(cx+h*0.75, cy-h*0.1).LineTo(cx+h*0.3, cy-h*0.1), w, col)
+	case iconFolder:
+		f := new(ui.Path).MoveTo(cx-h*0.85, cy-h*0.55).LineTo(cx-h*0.2, cy-h*0.55).LineTo(cx, cy-h*0.35).
+			LineTo(cx+h*0.85, cy-h*0.35).LineTo(cx+h*0.85, cy+h*0.65).LineTo(cx-h*0.85, cy+h*0.65).Close()
+		p.StrokePath(f, w, col)
+	case iconLibrary: // books on a shelf
+		p.StrokePath(roundedRect(cx-h*0.8, cy-h*0.7, h*0.42, h*1.4, h*0.08), w, col)
+		p.StrokePath(roundedRect(cx-h*0.25, cy-h*0.7, h*0.42, h*1.4, h*0.08), w, col)
+		p.StrokePath(new(ui.Path).MoveTo(cx+h*0.35, cy-h*0.55).LineTo(cx+h*0.68, cy-h*0.68).LineTo(cx+h*0.95, cy+h*0.62).LineTo(cx+h*0.62, cy+h*0.75).Close(), w, col)
+	case iconInbox:
+		p.StrokePath(roundedRect(cx-h*0.85, cy-h*0.65, h*1.7, h*1.3, h*0.2), w, col)
+		p.StrokePath(new(ui.Path).MoveTo(cx-h*0.85, cy+h*0.1).LineTo(cx-h*0.35, cy+h*0.1).LineTo(cx-h*0.2, cy+h*0.35).
+			LineTo(cx+h*0.2, cy+h*0.35).LineTo(cx+h*0.35, cy+h*0.1).LineTo(cx+h*0.85, cy+h*0.1), w, col)
+	case iconMap: // a node with three branches
+		p.FillPath(new(ui.Path).Circle(cx-h*0.45, cy, h*0.28), col)
+		for _, dy := range []float32{-0.6, 0, 0.6} {
+			p.StrokePath(new(ui.Path).MoveTo(cx-h*0.2, cy).CubeTo(cx+h*0.1, cy, cx+h*0.1, cy+dy*h, cx+h*0.45, cy+dy*h), w*0.9, col)
+			p.FillPath(new(ui.Path).Circle(cx+h*0.7, cy+dy*h, h*0.16), col)
+		}
+	case iconSearch:
+		p.StrokePath(new(ui.Path).Circle(cx-h*0.15, cy-h*0.15, h*0.55), w, col)
+		p.StrokePath(new(ui.Path).MoveTo(cx+h*0.25, cy+h*0.25).LineTo(cx+h*0.8, cy+h*0.8), w*1.1, col)
 	case iconPencil:
 		body := new(ui.Path).MoveTo(cx-h*0.7, cy+h*0.7).LineTo(cx-h*0.6, cy+h*0.3).LineTo(cx+h*0.35, cy-h*0.65).
 			LineTo(cx+h*0.7, cy-h*0.3).LineTo(cx-h*0.25, cy+h*0.65).Close()
 		p.StrokePath(body, w*0.9, col)
-		p.Line(cx+h*0.15, cy-h*0.45, cx+h*0.5, cy-h*0.1, w*0.9, col)
+		p.StrokePath(new(ui.Path).MoveTo(cx+h*0.15, cy-h*0.45).LineTo(cx+h*0.5, cy-h*0.1), w*0.9, col)
 	}
 }
 
@@ -216,4 +293,30 @@ func (a *app) notePopover(c *ui.Context, anchor ui.Element, n *model.Node) {
 	if !open {
 		a.noteEditing = ""
 	}
+}
+
+// iconTextButton is a button of an icon and a word, as the AI's.
+func iconTextButton(c *ui.Context, ic icon, text, label, tip string, active bool) ui.Element {
+	t := c.Theme()
+	b := ui.Row(c.Key(label)).Height(30).Padding(0, 10).Gap(5).Radius(6).AlignItems(ui.Center).Cursor(ui.CursorPointer).
+		Label(label).Tooltip(tip).Shrink(0).Border(1, t.Border)
+	col := t.Text
+	switch {
+	case active:
+		b.Background(t.Accent).Border(1, t.Accent)
+		col = t.AccentText
+	case b.Pressed():
+		b.Background(t.Text.Alpha(0.12))
+	case b.Hovered():
+		b.Background(t.SurfaceHover)
+	default:
+		b.Background(t.Surface)
+	}
+	b.Children(func() {
+		ui.Box(c).Size(14, 14).PassThrough().Draw(func(p *ui.Painter, r ui.Rect) { drawIcon(p, r, 13, ic, col) })
+		if text != "" {
+			ui.Text(c, text).FontSize(13).TextColor(col).PassThrough()
+		}
+	})
+	return b
 }

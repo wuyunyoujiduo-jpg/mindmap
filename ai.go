@@ -829,12 +829,14 @@ func (a *app) aiPanel(c *ui.Context) {
 	t := c.Theme()
 	ai := &a.ai
 	ui.Column(c.Key("ai")).Fill().Children(func() {
-		ui.Row(c).Padding(12, 16, 6).Gap(6).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "✦ AI 助手").Bold().Grow(1)
+		ui.Row(c.Key("ai-head")).Height(toolbarHeight).Padding(0, 10, 0, 16).Gap(6).AlignItems(ui.Center).Shrink(0).
+			BorderWidth(0, 0, 1, 0).BorderColor(hairline(t)).DragWindow().Children(func() {
+			ui.Box(c).Size(16, 16).Draw(func(p *ui.Painter, r ui.Rect) { drawIcon(p, r, 14, iconSparkle, t.Accent) })
+			ui.Text(c, "AI 助手").FontSize(textTitle).Bold().Grow(1)
 			if len(ai.msgs) > 0 && ui.Button(c, "新对话").Disabled(ai.busy).Clicked() {
 				a.newChat()
 			}
-			ui.MenuButton(c, "⋯", func(m *ui.Menu) {
+			iconButton(c, iconMore, "AI 菜单", "周报、风险扫描、拆解任务、从文本或代码仓库生成，以及设置", 28, !ai.busy).Menu(func(m *ui.Menu) {
 				if !a.libOpen {
 					a.aiMenu(m)
 					m.Separator()
@@ -845,8 +847,8 @@ func (a *app) aiPanel(c *ui.Context) {
 					ai.settings = !ai.settings
 					a.loadKeyDrafts()
 				}
-			}).Label("AI 菜单").Tooltip("周报、风险扫描、拆解任务、从文本或代码仓库生成，以及设置").Disabled(ai.busy)
-			if ui.Button(c, "✕").Label("关闭").Tooltip("关闭 AI 助手").Clicked() {
+			})
+			if iconButton(c, iconClose, "关闭", "关闭 AI 助手", 28, true).Clicked() {
 				a.aiOpen = false
 			}
 		})
@@ -872,26 +874,31 @@ func (a *app) aiPanel(c *ui.Context) {
 				ui.Text(c, "问问导图里的内容，或让 AI 帮你整理、拆分任务、补充备注。AI 提出的修改要你确认后才会应用。").
 					FontSize(12).TextColor(t.TextMuted).Wrap()
 				actions := []struct {
+					icon  icon
 					label string
 					run   func()
 				}{
-					{"📋 生成本周周报", func() { a.aiReport(7) }},
-					{"⚠️ 风险扫描", a.aiRiskScan},
-					{"🔨 把选中的节点拆解成任务", a.aiBreakDown},
-					{"📝 从文本生成导图…", func() { a.fromTextOpen = true }},
-					{"📁 从代码仓库生成架构…", a.askRepo},
+					{iconPencil, "生成本周周报", func() { a.aiReport(7) }},
+					{iconTarget, "风险扫描", a.aiRiskScan},
+					{iconCheck, "把选中的节点拆解成任务", a.aiBreakDown},
+					{iconMap, "从文本生成导图…", func() { a.fromTextOpen = true }},
+					{iconFolder, "从代码仓库生成架构…", a.askRepo},
 				}
-				for _, act := range actions {
-					if ui.Button(c.Key(act.label), act.label).FillWidth().Clicked() {
-						a.later(act.run)
+				ui.Column(c).Gap(2).Margin(4, -6, 0).Children(func() {
+					sectionHeader(c, "常用").Margin(0, 10, 4)
+					for _, act := range actions {
+						if listRow(c, act.icon, act.label).Clicked() {
+							a.later(act.run)
+						}
 					}
-				}
-				for _, s := range []string{"总结这个画布的进展和风险", "给没有备注的功能补上实现要点"} {
-					if ui.Button(c.Key(s), s).FillWidth().Clicked() {
-						ai.draft = s
-						a.aiSend()
+					sectionHeader(c, "试着问").Margin(10, 10, 4)
+					for _, s := range []string{"总结这个画布的进展和风险", "给没有备注的功能补上实现要点"} {
+						if listRow(c, iconSparkle, s).Clicked() {
+							ai.draft = s
+							a.aiSend()
+						}
 					}
-				}
+				})
 			}
 			for i := range ai.msgs {
 				a.chatBubble(c.Key(i), i)

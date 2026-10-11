@@ -299,7 +299,7 @@ func (a *app) linksSection(c *ui.Context, n *model.Node) {
 						}
 						ui.Text(c, label).FontSize(12).TextColor(t.Accent).MaxLines(1)
 					})
-					if ui.Button(c, "✕").Label("删除链接").Tooltip("删除链接").FontSize(11).Padding(0, 6).Clicked() {
+					if iconButton(c, iconClose, "删除链接", "删除链接", 22, true).Clicked() {
 						link := l
 						a.later(func() { a.removeLink(n, link) })
 					}

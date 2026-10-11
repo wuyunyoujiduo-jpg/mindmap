@@ -18,9 +18,13 @@ func (a *app) view(c *ui.Context) {
 		a.runPending()
 		return
 	}
-	ui.Row(c).Fill().AlignItems(ui.Stretch).Background(t.Background).Children(func() {
+	root := ui.Row(c).Fill().AlignItems(ui.Stretch)
+	if !c.Vibrancy() { // else the sidebar's glass shows through
+		root.Background(t.Background)
+	}
+	root.Children(func() {
 		ui.Split(c, &a.sidebarWidth, func() { a.sidebar(c) }, func() {
-			ui.Row(c).Fill().AlignItems(ui.Stretch).Children(func() {
+			ui.Row(c).Fill().AlignItems(ui.Stretch).Background(t.Background).Children(func() {
 				if a.libOpen {
 					a.libraryView(c)
 					if a.aiOpen {
@@ -145,14 +149,23 @@ func tagColor(tag string) ui.Color {
 
 func (a *app) toolbar(c *ui.Context) {
 	t := c.Theme()
-	// The room between the sidebar and the panel: the name and the status
-	// give way first, then the search narrows, and the buttons keep their
-	// size.
+	// The room between the sidebar and the panel: the status gives way
+	// first, then the search narrows, and the buttons keep their size.
 	w, _ := c.Size()
 	room := w - a.sidebarWidth - a.panelWidth
-	ui.Row(c).Padding(8, 12).Gap(10).Wrap().GapY(6).Children(func() {
-		if a.doc != nil {
-			ui.Text(c, mapName(a.path)).Bold().FontSize(15).NoWrap().MaxWidth(220).Ellipsis("…").Shrink(1).MinWidth(40)
+	// The toolbar is the window's title bar: it drags the window, and its
+	// title is the map's, with how saving goes below it.
+	gap := float32(10)
+	if room < 760 {
+		gap = 4
+	}
+	ui.Row(c.Key("toolbar")).Height(toolbarHeight).Padding(0, 10, 0, 14).Gap(gap).AlignItems(ui.Center).DragWindow().Children(func() {
+		if a.doc == nil {
+			ui.Spacer(c)
+			return
+		}
+		ui.Column(c).Gap(1).Shrink(1).MinWidth(40).Children(func() {
+			ui.Text(c, mapName(a.path)).Bold().FontSize(textTitle).NoWrap().MaxWidth(240).Ellipsis("…")
 			status, col := "已自动保存", t.TextMuted
 			switch {
 			case a.saveErr != "":
@@ -161,58 +174,66 @@ func (a *app) toolbar(c *ui.Context) {
 				status, col = a.notice, t.Accent
 				c.After(noticeTime - a.now().Sub(a.noticeAt))
 			case a.dirty:
-				status = "编辑中，稍后自动保存…"
+				status = "编辑中…"
 			case !a.savedAt.IsZero():
-				status = "已自动保存 " + a.savedAt.Format("15:04")
+				status = "已保存 " + a.savedAt.Format("15:04")
 			}
-			if room >= 820 || a.saveErr != "" || col == t.Accent {
-				ui.Text(c, status).FontSize(12).TextColor(col).NoWrap().MaxWidth(240).Ellipsis("…").Shrink(1).MinWidth(0).
+			if room >= 700 || a.saveErr != "" || col == t.Accent {
+				ui.Text(c, status).FontSize(textCaption).TextColor(col).NoWrap().MaxWidth(240).Ellipsis("…").
 					Tooltip("编辑停顿后自动保存到文件，无需手动保存")
 			}
-		}
+		})
 		ui.Spacer(c)
-		if a.doc == nil {
-			return
-		}
 		mapLabel := "思维导图"
 		if room < 960 {
 			mapLabel = "导图"
 		}
-		ui.Segmented(c, &a.mode, mapLabel, "大纲", "看板", "日程", "时间线", "总览").Shrink(0)
-		if iconButton(c, iconPlay, "开始演说", "开始演说 ⌘↩", 32, true).Border(1, t.Border).Clicked() {
+		views := []string{mapLabel, "大纲", "看板", "日程", "时间线", "总览"}
+		if room >= 760 {
+			ui.Segmented(c, &a.mode, views...).Shrink(0)
+		} else { // narrow: a menu of the views
+			ui.MenuButton(c, views[a.mode], func(m *ui.Menu) {
+				for i, v := range views {
+					if m.Item(v).Checked(a.mode == i).Chosen() {
+						a.mode = i
+					}
+				}
+			}).Label("视图").Shrink(0)
+		}
+		ui.Spacer(c)
+		a.searchField(c, searchWidth(room))
+		if room >= 450 && iconButton(c, iconPlay, "开始演说", "开始演说 ⌘↩", 30, true).Clicked() {
 			a.later(func() { a.startPresenting("") })
 		}
-		search := ui.TextInput(c.Key("search"), &a.search).Placeholder("搜索…").Tooltip("搜索标题、备注、标签，回车跳到下一个").Label("搜索").Width(searchWidth(room)).Shrink(1).MinWidth(70)
-		if a.search != "" && search.Shortcut(0, ui.KeyEscape) {
-			a.search = ""
-		}
-		if search.Submitted() {
-			a.mode = viewMap
-			a.nextMatch()
-		}
-		if room >= 1000 && ui.Button(c, "⌘K").Label("命令面板").Tooltip("命令面板：查找命令、节点和导图 ⌘K").Shrink(0).Clicked() {
-			a.openPalette(paletteAll)
-		}
-		aiLabel := "✦ AI"
+		aiText := "AI"
 		if room < 900 {
-			aiLabel = "✦"
+			aiText = ""
 		}
-		ai := ui.Button(c, aiLabel).Label("AI 助手").Tooltip("AI 助手").Shrink(0)
-		if a.aiOpen {
-			ai.Background(t.Accent).TextColor(t.AccentText)
-		}
-		if ai.Clicked() {
+		if iconTextButton(c, iconSparkle, aiText, "AI 助手", "AI 助手", a.aiOpen).Clicked() {
 			a.aiOpen = !a.aiOpen
 		}
-		ui.Row(c).Gap(2).Shrink(0).Children(func() {
-			if iconButton(c, iconUndo, "撤销", "撤销 ⌘Z", 32, a.hist.CanUndo()).Clicked() && a.hist.CanUndo() {
+		ui.Row(c).Gap(0).Shrink(0).Children(func() {
+			if iconButton(c, iconUndo, "撤销", "撤销 ⌘Z", 30, a.hist.CanUndo()).Clicked() && a.hist.CanUndo() {
 				a.undo()
 			}
-			if iconButton(c, iconRedo, "重做", "重做 ⌘⇧Z", 32, a.hist.CanRedo()).Clicked() && a.hist.CanRedo() {
+			if iconButton(c, iconRedo, "重做", "重做 ⌘⇧Z", 30, a.hist.CanRedo()).Clicked() && a.hist.CanRedo() {
 				a.redo()
 			}
 		})
 	})
+}
+
+// searchField is the toolbar's search: a field with a magnifier, which
+// Return steps through what it finds and Escape clears.
+func (a *app) searchField(c *ui.Context, width float32) {
+	search := searchBox(c, "search", &a.search, "搜索", "搜索", "搜索标题、备注、标签，回车跳到下一个", width)
+	if a.search != "" && search.Shortcut(0, ui.KeyEscape) {
+		a.search = ""
+	}
+	if search.Submitted() {
+		a.mode = viewMap
+		a.nextMatch()
+	}
 }
 
 // searchWidth is the search field's width for the toolbar's room.

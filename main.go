@@ -256,7 +256,11 @@ func main() {
 			MinWidth:  900,
 			MinHeight: 560,
 			StateKey:  "main",
-			Content:   ui.View(a.view),
+			// A sidebar of glass, and the toolbar as the title bar, the
+			// window's controls over the sidebar's top.
+			TitleBarStyle: mygo.TitleBarHiddenInset,
+			Vibrancy:      mygo.VibrancySidebar,
+			Content:       ui.View(a.view),
 		})
 		plat.win = win
 		if err := plat.SetCaptureKey(a.captureKey()); err != nil {

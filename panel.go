@@ -30,7 +30,10 @@ func (a *app) panel(c *ui.Context) {
 			a.aiPanel(c) // scrolls its conversation itself
 			return
 		}
-		ui.Box(c).Padding(10, 16, 4).Children(func() {
+		// The inspector's tabs sit in the title bar's band, which drags the
+		// window, with a hairline under them.
+		ui.Row(c.Key("panel-head")).Height(toolbarHeight).Padding(0, 12).AlignItems(ui.Center).Shrink(0).
+			BorderWidth(0, 0, 1, 0).BorderColor(hairline(t)).DragWindow().Children(func() {
 			ui.Segmented(c, &a.panelTab, "节点", "样式", "标记", "画布", "演说").FillWidth()
 		})
 		ui.Scroll(c.Key(fmt.Sprint("panel", a.panelTab))).Grow(1).Children(func() {
@@ -73,16 +76,14 @@ func (a *app) nodePanel(c *ui.Context) {
 			a.breadcrumbs(c, n)
 
 			title := n.Title
-			ui.Field(c, "标题", func() {
-				if ui.TextInput(c, &title).Changed() {
-					a.mutate("title:"+n.ID, func() { n.Title = title })
-				}
-			})
+			if inlineInput(c, &title, textHeadline, true, "无标题", "标题").Changed() {
+				a.mutate("title:"+n.ID, func() { n.Title = title })
+			}
 
 			note := n.Note
 			ui.Column(c).Gap(6).Children(func() {
 				ui.Row(c).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, "备注").FontSize(12).Bold().TextColor(t.TextMuted).Grow(1)
+					sectionHeader(c, "备注").Grow(1)
 					mode := 0
 					if a.notePreview && n.Note != "" {
 						mode = 1
@@ -93,7 +94,7 @@ func (a *app) nodePanel(c *ui.Context) {
 				})
 				if a.notePreview && n.Note != "" {
 					// The note as Markdown; a double click edits it.
-					box := ui.Box(c.Key("note-preview")).Padding(8, 10).Radius(6).Border(1, t.Border).FillWidth().
+					box := ui.Box(c.Key("note-preview")).Padding(10, 12).Radius(10).Background(ui.Hex("#f5b942").Alpha(0.1)).FillWidth().
 						Tooltip("双击编辑")
 					if box.DoubleClicked() {
 						a.notePreview = false
@@ -101,7 +102,7 @@ func (a *app) nodePanel(c *ui.Context) {
 					box.Children(func() { markdownView(c, n.Note, 13) })
 					return
 				}
-				if ui.TextArea(c, &note).Placeholder("实现要点、决策、注意事项…（支持 Markdown）").Lines(5, 16).Label("备注内容").Changed() {
+				if inlineArea(c, &note, textBody, 4, 16, "实现要点、决策、注意事项…（支持 Markdown）", "备注内容").Changed() {
 					a.mutate("note:"+n.ID, func() { n.Note = note })
 				}
 			})
@@ -114,11 +115,11 @@ func (a *app) nodePanel(c *ui.Context) {
 
 			ui.Field(c, "标签", func() { a.tagPicker(c, n) })
 
-			ui.Divider(c)
+			ui.Box(c).Height(1).FillWidth().Background(hairline(t))
 			a.taskEditor(c, n)
 
-			ui.Divider(c)
-			ui.Text(c, a.nodeStats(n)).FontSize(12).TextColor(t.TextMuted)
+			ui.Box(c).Height(1).FillWidth().Background(hairline(t))
+			ui.Text(c, a.nodeStats(n)).FontSize(textCaption).TextColor(t.TextMuted)
 			if n != a.doc.Root {
 				if ui.Button(c, "删除节点").TextColor(t.Danger).Clicked() {
 					a.selected = n.ID

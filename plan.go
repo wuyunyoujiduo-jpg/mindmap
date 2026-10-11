@@ -72,7 +72,7 @@ func (a *app) planEditor(c *ui.Context, n *model.Node) {
 						a.later(func() { a.selectNode(id) })
 					}
 					go_.Children(func() { ui.Text(c, b.Title).FontSize(12).TextColor(t.Accent).MaxLines(1) })
-					if ui.Button(c, "✕").Label("移除前置任务").FontSize(11).Padding(0, 6).Clicked() {
+					if iconButton(c, iconClose, "移除前置任务", "移除前置任务", 22, true).Clicked() {
 						id := id
 						a.later(func() { a.removeAfter(n, id) })
 					}

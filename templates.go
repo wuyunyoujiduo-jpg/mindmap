@@ -193,7 +193,7 @@ func (a *app) templatesView(c *ui.Context) {
 				if a.file != nil && ui.Button(c, "把当前导图存为模板").Clicked() {
 					a.saveAsTemplate()
 				}
-				if ui.Button(c, "关闭").Clicked() {
+				if iconButton(c, iconClose, "关闭", "关闭（Esc）", 28, true).Clicked() {
 					a.templatesOpen = false
 				}
 			})

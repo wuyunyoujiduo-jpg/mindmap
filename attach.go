@@ -89,7 +89,7 @@ func (a *app) filesSection(c *ui.Context, n *model.Node) {
 						ui.Text(c, "📎").FontSize(12)
 						ui.Text(c, f.Name).FontSize(12).TextColor(t.Accent).MaxLines(1)
 					})
-					if ui.Button(c, "✕").Label("删除附件").FontSize(11).Padding(0, 6).Clicked() {
+					if iconButton(c, iconClose, "删除附件", "删除附件", 22, true).Clicked() {
 						file := f.File
 						a.later(func() { a.removeFile(n, file) })
 					}

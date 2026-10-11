@@ -316,7 +316,7 @@ func (a *app) cardWindow(c *ui.Context) {
 					if ui.PrimaryButton(c, "保存图片…").Clicked() {
 						a.saveCard(o, clip)
 					}
-					if ui.Button(c, "关闭").Clicked() {
+					if iconButton(c, iconClose, "关闭", "关闭（Esc）", 28, true).Clicked() {
 						a.cardOpen = false
 					}
 				})

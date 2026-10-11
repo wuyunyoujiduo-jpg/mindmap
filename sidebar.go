@@ -19,29 +19,53 @@ type fileDrag struct{ Path string }
 // its folders, and the tags of the open map.
 func (a *app) sidebar(c *ui.Context) {
 	t := c.Theme()
-	ui.Column(c).Fill().Background(t.Surface).Children(func() {
-		ui.Row(c).Padding(10, 12, 6).Gap(6).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, filepath.Base(a.dir)).Bold().Grow(1).Shrink(1).MinWidth(0).NoWrap().Ellipsis("…").Tooltip(a.dir)
-			if ui.Button(c, "导入").Tooltip("导入 XMind 文件 ⌘⇧I").Clicked() {
-				a.askImportXMind()
-			}
-			if ui.Button(c, "打开…").Tooltip("选择存放导图的文件夹").Clicked() {
-				a.pickWorkspace()
-			}
-		})
-		ui.Row(c).Padding(0, 12, 6).Gap(6).Children(func() {
-			newMap := ui.Button(c, "+ 导图").Tooltip("在当前文件夹新建导图（右键：从模板新建）").Grow(1)
-			if newMap.Clicked() {
-				a.newMap()
-			}
-			newMap.ContextMenu(func(m *ui.Menu) {
+	side := ui.Column(c).Fill()
+	if !c.Vibrancy() {
+		side.Background(t.Surface)
+	}
+	side.Children(func() {
+		// The title bar's part over the sidebar: the window's controls, and
+		// the folder of maps, whose menu opens another or imports.
+		bar := c.TitleBar()
+		ui.Row(c.Key("side-bar")).Height(toolbarHeight).Padding(0, 10, 0, max(bar.Left, 12)).Gap(4).AlignItems(ui.Center).
+			DragWindow().Children(func() {
+			ui.Spacer(c)
+			iconButton(c, iconPlus, "新建", "新建导图、文件夹，或导入", 28, true).Menu(func(m *ui.Menu) {
+				if m.Item("新建导图").Shortcut(ui.Cmd, ui.KeyN).Chosen() {
+					a.later(a.newMap)
+				}
 				if m.Item("从模板新建…").Chosen() {
 					a.templatesOpen = true
 				}
+				if m.Item("新建文件夹").Chosen() {
+					a.later(func() { a.newFolder(a.currentFolder()) })
+				}
+				m.Separator()
+				if m.Item("导入 XMind…").Chosen() {
+					a.askImportXMind()
+				}
+				if m.Item("导入 Markdown / OPML…").Chosen() {
+					a.askImportOutline()
+				}
 			})
-			if ui.Button(c, "+ 文件夹").Tooltip("在当前文件夹新建文件夹").Grow(1).Clicked() {
-				a.newFolder(a.currentFolder())
+		})
+		folder := ui.Row(c.Key("folder-switch")).Padding(4, 8).Margin(0, 8, 6).Gap(6).Radius(6).AlignItems(ui.Center).
+			Cursor(ui.CursorPointer).Label("切换文件夹").Tooltip(a.dir)
+		if folder.Hovered() {
+			folder.Background(t.Text.Alpha(0.06))
+		}
+		folder.Menu(func(m *ui.Menu) {
+			if m.Item("打开其他文件夹…").Shortcut(ui.Cmd, ui.KeyO).Chosen() {
+				a.pickWorkspace()
 			}
+			if m.Item("在 Finder 中显示").Chosen() {
+				a.plat.ShowInFolder(a.dir)
+			}
+		})
+		folder.Children(func() {
+			ui.Box(c).Size(16, 16).PassThrough().Draw(func(p *ui.Painter, r ui.Rect) { drawIcon(p, r, 14, iconFolder, t.Accent) })
+			ui.Text(c, filepath.Base(a.dir)).FontSize(textBody).Bold().Grow(1).Shrink(1).MinWidth(0).NoWrap().Ellipsis("…").PassThrough()
+			ui.Text(c, "⌄").FontSize(textSmall).TextColor(t.TextMuted).PassThrough()
 		})
 		ui.Scroll(c.Key("sidebar")).Grow(1).Padding(0, 6, 12).Gap(2).Children(func() {
 			a.libraryRow(c)
@@ -52,6 +76,20 @@ func (a *app) sidebar(c *ui.Context) {
 			})
 			if a.file != nil {
 				a.tagList(c)
+			}
+		})
+		ui.Row(c.Key("side-foot")).Padding(6, 8).Gap(2).BorderWidth(1, 0, 0, 0).BorderColor(hairline(t)).Children(func() {
+			newMap := sideFootButton(c, "+ 导图", "在当前文件夹新建导图（右键：从模板新建）")
+			if newMap.Clicked() {
+				a.newMap()
+			}
+			newMap.ContextMenu(func(m *ui.Menu) {
+				if m.Item("从模板新建…").Chosen() {
+					a.templatesOpen = true
+				}
+			})
+			if sideFootButton(c, "+ 文件夹", "在当前文件夹新建文件夹").Clicked() {
+				a.newFolder(a.currentFolder())
 			}
 		})
 	})
@@ -78,7 +116,7 @@ func (a *app) pickWorkspace() {
 // it move into dropDir, when it is not "".
 func (a *app) section(c *ui.Context, title string, open *bool, dropDir string, fn func()) {
 	t := c.Theme()
-	head := ui.Row(c.Key("section:"+title)).Padding(8, 8, 4).Gap(4).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(title)
+	head := ui.Row(c.Key("section:"+title)).Padding(12, 8, 4).Gap(4).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(title)
 	if dropDir != "" {
 		if _, over := ui.DragOver[fileDrag](head); over {
 			head.Background(t.Accent.Alpha(0.15)).Radius(6)
@@ -96,7 +134,7 @@ func (a *app) section(c *ui.Context, title string, open *bool, dropDir string, f
 			arrow = "▸"
 		}
 		ui.Text(c, arrow).FontSize(10).TextColor(t.TextMuted).Width(10)
-		ui.Text(c, title).FontSize(12).Bold().TextColor(t.TextMuted)
+		ui.Text(c, title).FontSize(textCaption).Bold().TextColor(t.TextMuted)
 	})
 	if *open {
 		fn()
@@ -111,19 +149,19 @@ func (a *app) inboxRow(c *ui.Context) {
 		return
 	}
 	k := a.inboxCount()
-	row := ui.Row(c.Key("inbox")).Padding(6, 8, 6, 12).Gap(8).Radius(6).AlignItems(ui.Center).Cursor(ui.CursorPointer).
+	row := ui.Row(c.Key("inbox")).Padding(5, 8).Gap(8).Radius(6).AlignItems(ui.Center).Cursor(ui.CursorPointer).
 		Label("收件箱").Tooltip("快速记录的内容（" + a.captureKey() + "），整理后用右键「移到其他导图…」")
 	switch {
 	case a.path == path && !a.libOpen:
 		row.Background(t.Accent.Alpha(0.14))
 	case row.Hovered():
-		row.Background(t.SurfaceHover)
+		row.Background(t.Text.Alpha(0.06))
 	}
 	if row.Clicked() {
 		a.later(func() { _ = a.open(path) })
 	}
 	row.Children(func() {
-		ui.Text(c, "📥").FontSize(13)
+		sideIcon(c, iconInbox, a.path == path && !a.libOpen)
 		ui.Text(c, "收件箱").FontSize(13).Grow(1)
 		if k > 0 {
 			ui.Box(c).Padding(0, 6).Radius(999).Background(t.Accent).Children(func() {
@@ -171,7 +209,7 @@ func (a *app) folderRow(c *ui.Context, f model.Folder, depth int) {
 	row := ui.Row(c).Padding(5, 8, 5, 8+float32(depth)*14).Gap(6).Radius(6).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).Label(f.Name)
 	if row.Hovered() {
-		row.Background(t.SurfaceHover)
+		row.Background(t.Text.Alpha(0.06))
 	}
 	if _, over := ui.DragOver[fileDrag](row); over {
 		row.Background(t.Accent.Alpha(0.15))
@@ -205,7 +243,7 @@ func (a *app) folderRow(c *ui.Context, f model.Folder, depth int) {
 			arrow = "▸"
 		}
 		ui.Text(c, arrow).FontSize(10).TextColor(t.TextMuted).Width(10)
-		ui.Text(c, "📁").FontSize(12)
+		sideIcon(c, iconFolder, false)
 		if a.renaming == path {
 			a.renameInput(c)
 			return
@@ -224,13 +262,13 @@ func (a *app) fileRow(c *ui.Context, f model.FileInfo, depth int, inFavorites bo
 	t := c.Theme()
 	current := f.Path == a.path && !a.libOpen
 	fav := slices.Contains(a.cfg.Favorites, f.Path)
-	row := ui.Row(c).Padding(5, 8, 5, 26+float32(depth)*14).Gap(6).Radius(6).AlignItems(ui.Center).
+	row := ui.Row(c).Padding(5, 8, 5, 22+float32(depth)*14).Gap(6).Radius(6).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).Label(f.Name).Drag(fileDrag{f.Path})
 	switch {
 	case current:
 		row.Background(t.Accent.Alpha(0.16))
 	case row.Hovered():
-		row.Background(t.SurfaceHover)
+		row.Background(t.Text.Alpha(0.06))
 	}
 	if row.Pressed() && !current && a.renaming != f.Path {
 		path := f.Path
@@ -274,6 +312,7 @@ func (a *app) fileRow(c *ui.Context, f model.FileInfo, depth int, inFavorites bo
 			a.renameInput(c)
 			return
 		}
+		sideIcon(c, iconMap, current)
 		text := ui.Text(c, f.Name).FontSize(13).Grow(1).NoWrap().Ellipsis("…")
 		if current {
 			text.Bold()
@@ -473,7 +512,7 @@ func (a *app) tagRow(c *ui.Context, tag string, count int) {
 	case active:
 		row.Background(tagColor(tag).Alpha(0.18))
 	case row.Hovered():
-		row.Background(t.SurfaceHover)
+		row.Background(t.Text.Alpha(0.06))
 	}
 	if row.Clicked() {
 		if active {
@@ -530,4 +569,25 @@ func filterTags(tags []string, query string) []string {
 		}
 	}
 	return out
+}
+
+// sideFootButton is a button of the sidebar's foot.
+func sideFootButton(c *ui.Context, text, tip string) ui.Element {
+	t := c.Theme()
+	b := ui.Box(c.Key(text)).Padding(5, 10).Radius(6).Cursor(ui.CursorPointer).Label(text).Tooltip(tip)
+	if b.Hovered() {
+		b.Background(t.Text.Alpha(0.06))
+	}
+	b.Children(func() { ui.Text(c, text).FontSize(textSmall).TextColor(t.TextMuted).PassThrough() })
+	return b
+}
+
+// sideIcon is a row's icon in the sidebar, in the accent color, stronger
+// on the row chosen.
+func sideIcon(c *ui.Context, ic icon, current bool) {
+	col := c.Theme().Accent
+	if !current {
+		col = col.Alpha(0.85)
+	}
+	ui.Box(c).Size(16, 16).Shrink(0).PassThrough().Draw(func(p *ui.Painter, r ui.Rect) { drawIcon(p, r, 14, ic, col) })
 }

@@ -36,7 +36,7 @@ func TestLibraryKeepsAndOrganizes(t *testing.T) {
 	if err := tt.Click("资料库"); err != nil {
 		t.Fatal(err)
 	}
-	if !a.libOpen || !tt.HasText("📚 资料库") {
+	if !a.libOpen || !tt.HasText("0 条") {
 		t.Fatalf("library not shown: %q", tt.Texts())
 	}
 	a.libDraft = "https://example.com/cache"
@@ -106,7 +106,7 @@ func TestLibraryKeepsAndOrganizes(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if !tt.HasText("一篇讲缓存读写顺序和防雪崩的实践文章。") || !tt.HasText("AI 摘要") || !tt.HasText("介绍缓存读写顺序和防雪崩的做法。") {
+	if !tt.HasText("一篇讲缓存读写顺序和防雪崩的实践文章。") || !tt.HasText("AI 整理") || !tt.HasText("介绍缓存读写顺序和防雪崩的做法。") {
 		t.Fatalf("detail: %q", tt.Texts())
 	}
 	snapshot(t, tt, "library")

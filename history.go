@@ -203,7 +203,7 @@ func (a *app) historyView(c *ui.Context) {
 		}
 		ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
 			ui.Text(c, "历史版本 · "+mapName(a.path)).FontSize(17).Bold().Grow(1)
-			if ui.Button(c, "关闭").Clicked() {
+			if iconButton(c, iconClose, "关闭", "关闭（Esc）", 28, true).Clicked() {
 				a.historyOpen = false
 			}
 		})

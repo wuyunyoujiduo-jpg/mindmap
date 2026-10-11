@@ -73,7 +73,7 @@ func (a *app) mcpView(c *ui.Context) {
 		ui.Column(c).Gap(14).Width(min(680, w-80)).Children(func() {
 			ui.Row(c).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "连接 AI 编程工具（MCP）").FontSize(17).Bold().Grow(1)
-				if ui.Button(c, "关闭").Clicked() {
+				if iconButton(c, iconClose, "关闭", "关闭（Esc）", 28, true).Clicked() {
 					a.mcpOpen = false
 				}
 			})
