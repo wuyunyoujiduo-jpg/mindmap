@@ -402,17 +402,14 @@ var embedPresets = []struct{ name, url, model, note string }{
 func (a *app) embedSettings(c *ui.Context) {
 	t := c.Theme()
 	d := &a.embedDrafts
-	ui.Field(c, "资料库语义检索", func() {
+	func() {
 		ui.Column(c).Gap(8).Children(func() {
 			on := !a.cfg.NoEmbed
-			ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
-				if ui.Switch(c, &on).Label("语义检索").Changed() {
-					a.cfg.NoEmbed = !on
-					a.cfg.save()
-					a.embedErr, a.qvecs = "", map[string][]float32{}
-					a.embedLibrary()
-				}
-				ui.Text(c, "按意思检索资料（如搜「数据库变慢」能找到「SQL 优化」），并推荐相关资料").FontSize(13).Wrap().Grow(1)
+			switchRow(c, &on, "语义检索", "按意思检索资料（如搜「数据库变慢」能找到「SQL 优化」），并推荐相关资料", func() {
+				a.cfg.NoEmbed = !on
+				a.cfg.save()
+				a.embedErr, a.qvecs = "", map[string][]float32{}
+				a.embedLibrary()
 			})
 			if a.cfg.NoEmbed {
 				return
@@ -477,7 +474,7 @@ func (a *app) embedSettings(c *ui.Context) {
 				}
 			})
 		})
-	})
+	}()
 }
 
 // backupSettings is the settings' part on backups.

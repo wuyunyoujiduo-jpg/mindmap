@@ -245,6 +245,9 @@ func main() {
 	plat := &desktop{}
 	a := newApp(plat, loadConfig())
 	plat.app = a
+	if !a.cfg.TourDone {
+		a.tourStep = 1 // the first run
+	}
 	mygo.App.WhenReady(func() {
 		win := mygo.NewWindow(mygo.WindowOptions{
 			Title:     "MindMap",

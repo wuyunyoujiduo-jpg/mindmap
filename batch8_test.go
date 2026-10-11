@@ -360,3 +360,31 @@ func TestBrokenMapRestored(t *testing.T) {
 		t.Fatal("an unreadable file was saved")
 	}
 }
+
+func TestTour(t *testing.T) {
+	a, tt := newTestApp(t)
+	a.tourStep = 1
+	tt.Frame()
+	if !tt.HasText("用导图管理项目") {
+		t.Fatalf("%q", tt.Texts())
+	}
+	snapshot(t, tt, "tour")
+	tt.Click("下一步")
+	if !tt.HasText("资料库：随手收藏，AI 整理") {
+		t.Fatal("step 2")
+	}
+	tt.Click("打开资料库")
+	tt.Frame()
+	if a.tourStep != 0 || !a.libOpen || !a.cfg.TourDone {
+		t.Fatalf("step %d lib %v done %v", a.tourStep, a.libOpen, a.cfg.TourDone)
+	}
+	// The settings, a tab a part.
+	a.libOpen = false
+	a.openSettings()
+	a.settingsTab = 1 // 资料库
+	tt.Frame()
+	if !tt.HasText("自动整理资料") {
+		t.Fatalf("library tab: %q", tt.Texts())
+	}
+	snapshot(t, tt, "settings-library")
+}

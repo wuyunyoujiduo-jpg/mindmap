@@ -159,6 +159,8 @@ type app struct {
 	captureErr      string
 	captureKeyDraft string
 	settingsOpen    bool
+	settingsTab     int
+	tourStep        int    // the step of the tour shown, 0 for none
 	ghBusy          bool   // the issues are being synced
 	ghResult        string // how the last sync went
 	ghTokenDraft    string

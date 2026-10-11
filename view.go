@@ -69,6 +69,7 @@ func (a *app) view(c *ui.Context) {
 		a.settingsView(c)
 		a.fromTextView(c)
 		a.templatesView(c)
+		a.tourView(c)
 	})
 	if len(a.pending) > 0 {
 		a.runPending()

@@ -346,79 +346,121 @@ func (a *app) settingsView(c *ui.Context) {
 	t := c.Theme()
 	ui.Modal(c.Key("settings"), &a.settingsOpen, func() {
 		w, h := c.Size()
-		ui.Scroll(c.Key("settings-scroll")).Gap(16).Width(min(580, w-80)).MaxHeight(h-120).Padding(0, 10, 0, 0).Children(func() {
+		ui.Column(c).Gap(14).Width(min(600, w-80)).Children(func() {
 			ui.Row(c).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "设置").FontSize(17).Bold().Grow(1)
 				if ui.Button(c, "关闭").Clicked() {
 					a.settingsOpen = false
 				}
 			})
-			ui.Field(c, "快速记录的全局快捷键", func() {
-				ui.Column(c).Gap(6).Children(func() {
-					in := ui.TextInput(c.Key("capture-key"), &a.captureKeyDraft).Placeholder(defaultCaptureKey).Label("快速记录快捷键")
-					if in.Submitted() || in.PressedOutside() && a.captureKeyDraft != a.cfg.CaptureKey {
-						a.cfg.CaptureKey = strings.TrimSpace(a.captureKeyDraft)
-						a.cfg.save()
-						if err := a.plat.SetCaptureKey(a.captureKey()); err != nil {
-							a.saveErr = "快捷键无效：" + err.Error()
-						}
-					}
-					ui.Text(c, "在任何应用里按下它，弹出一个小窗口记下想法。格式如 Control+Alt+Space、CmdOrCtrl+Shift+M；留空用默认（⌃⌥Space）。").
-						FontSize(12).TextColor(t.TextMuted).Wrap()
-				})
-			})
-			ui.Field(c, "收藏剪贴板的全局快捷键", func() {
-				ui.Column(c).Gap(6).Children(func() {
-					in := ui.TextInput(c.Key("clip-key"), &a.clipKeyDraft).Placeholder(defaultClipKey).Label("收藏剪贴板快捷键")
-					if in.Submitted() || in.PressedOutside() && a.clipKeyDraft != a.cfg.ClipKey {
-						a.cfg.ClipKey = strings.TrimSpace(a.clipKeyDraft)
-						a.cfg.save()
-						if err := a.plat.SetClipKey(a.clipKey()); err != nil {
-							a.saveErr = "快捷键无效：" + err.Error()
-						}
-					}
-					ui.Text(c, "在任何应用里复制文字、链接、图片或文件后按下它，直接收进资料库。留空用默认（⌃⌥V）。").
-						FontSize(12).TextColor(t.TextMuted).Wrap()
-				})
-			})
-			auto := !a.cfg.LibraryManual
-			ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
-				if ui.Switch(c, &auto).Label("自动整理资料").Changed() {
-					a.cfg.LibraryManual = !auto
-					a.cfg.save()
-				}
-				ui.Text(c, "资料库：新收藏的资料由 AI 自动起标题、写摘要、分类和打标签（用 AI 助手的 API Key，按用量计费）").FontSize(13).Wrap().Grow(1)
-			})
-			a.embedSettings(c)
-			a.backupSettings(c)
-			tray := !a.cfg.NoTray
-			ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
-				if ui.Switch(c, &tray).Label("菜单栏图标").Changed() {
-					a.cfg.NoTray = !tray
-					a.cfg.save()
-					a.plat.SetTray(tray)
-				}
-				ui.Text(c, "菜单栏图标：显示今天到期和已逾期的任务数，点开列出任务、快速记录").FontSize(13).Wrap().Grow(1)
-			})
-			on := !a.cfg.NoReminders
-			ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
-				if ui.Switch(c, &on).Label("到期提醒").Changed() {
-					a.cfg.NoReminders = !on
-					a.cfg.save()
-				}
-				ui.Text(c, "到期提醒：任务今天到期或已逾期时，每天发一次系统通知").FontSize(13).Wrap().Grow(1)
-			})
-			ui.Field(c, "GitHub Token（同步私有仓库的 issues 需要）", func() {
-				in := ui.TextInput(c.Key("gh-token"), &a.ghTokenDraft).Password().Placeholder("ghp_… 或 github_pat_…").Label("GitHub Token")
-				if in.Submitted() || in.PressedOutside() && a.ghTokenDraft != a.cfg.GitHubToken {
-					a.cfg.GitHubToken = strings.TrimSpace(a.ghTokenDraft)
-					a.cfg.save()
-				}
-			})
-			ui.Divider(c)
+			tabs := []string{"通用", "资料库", "备份", "连接"}
 			if a.file != nil {
-				a.projectSection(c)
+				tabs = append(tabs, "当前导图")
 			}
+			a.settingsTab = min(a.settingsTab, len(tabs)-1)
+			ui.Segmented(c, &a.settingsTab, tabs...).FillWidth()
+			ui.Scroll(c.Key(fmt.Sprint("settings", a.settingsTab))).Gap(16).MaxHeight(h-200).Padding(0, 10, 0, 0).Children(func() {
+				switch tabs[a.settingsTab] {
+				case "通用":
+					a.generalSettings(c)
+				case "资料库":
+					auto := !a.cfg.LibraryManual
+					switchRow(c, &auto, "自动整理资料", "新收藏的资料由 AI 自动起标题、加说明、写摘要、分类、打标签，并生成同义词和分析（用 AI 助手的 API Key，按用量计费）", func() {
+						a.cfg.LibraryManual = !auto
+						a.cfg.save()
+					})
+					a.embedSettings(c)
+				case "备份":
+					a.backupSettings(c)
+				case "连接":
+					ui.Field(c, "AI 助手", func() {
+						ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+							ui.Text(c, "服务商、API Key 和模型在 AI 助手面板的「⋯ → AI 设置」里。当前："+providerModelName(a.cfg)).FontSize(12).TextColor(t.TextMuted).Wrap().Grow(1)
+							if ui.Button(c, "打开 AI 设置").Clicked() {
+								a.settingsOpen, a.aiOpen, a.ai.settings = false, true, true
+								a.loadKeyDrafts()
+							}
+						})
+					})
+					ui.Field(c, "AI 编程工具（MCP）", func() {
+						ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+							ui.Text(c, "让 Claude Code、Cursor 等读写导图、检索资料库").FontSize(12).TextColor(t.TextMuted).Grow(1)
+							if ui.Button(c, "连接说明…").Clicked() {
+								a.settingsOpen, a.mcpOpen = false, true
+							}
+						})
+					})
+					ui.Field(c, "GitHub Token（同步私有仓库的 issues 需要）", func() {
+						in := ui.TextInput(c.Key("gh-token"), &a.ghTokenDraft).Password().Placeholder("ghp_… 或 github_pat_…").Label("GitHub Token")
+						if in.Submitted() || in.PressedOutside() && a.ghTokenDraft != a.cfg.GitHubToken {
+							a.cfg.GitHubToken = strings.TrimSpace(a.ghTokenDraft)
+							a.cfg.save()
+						}
+					})
+				default:
+					a.projectSection(c)
+				}
+			})
 		})
 	})
+}
+
+// switchRow is a switch with what it does beside it.
+func switchRow(c *ui.Context, on *bool, label, text string, changed func()) {
+	ui.Row(c.Key(label)).Gap(10).AlignItems(ui.Center).Children(func() {
+		if ui.Switch(c, on).Label(label).Changed() {
+			changed()
+		}
+		ui.Column(c).Gap(2).Grow(1).Children(func() {
+			ui.Text(c, label).FontSize(13).Bold()
+			ui.Text(c, text).FontSize(12).TextColor(c.Theme().TextMuted).Wrap()
+		})
+	})
+}
+
+// generalSettings are the shortcuts, the menu bar icon and the reminders.
+func (a *app) generalSettings(c *ui.Context) {
+	t := c.Theme()
+	ui.Field(c, "快速记录的全局快捷键", func() {
+		ui.Column(c).Gap(6).Children(func() {
+			in := ui.TextInput(c.Key("capture-key"), &a.captureKeyDraft).Placeholder(defaultCaptureKey).Label("快速记录快捷键")
+			if in.Submitted() || in.PressedOutside() && a.captureKeyDraft != a.cfg.CaptureKey {
+				a.cfg.CaptureKey = strings.TrimSpace(a.captureKeyDraft)
+				a.cfg.save()
+				if err := a.plat.SetCaptureKey(a.captureKey()); err != nil {
+					a.saveErr = "快捷键无效：" + err.Error()
+				}
+			}
+			ui.Text(c, "在任何应用里按下它，弹出一个小窗口记下想法。格式如 Control+Alt+Space、CmdOrCtrl+Shift+M；留空用默认（⌃⌥Space）。").
+				FontSize(12).TextColor(t.TextMuted).Wrap()
+		})
+	})
+	ui.Field(c, "收藏剪贴板的全局快捷键", func() {
+		ui.Column(c).Gap(6).Children(func() {
+			in := ui.TextInput(c.Key("clip-key"), &a.clipKeyDraft).Placeholder(defaultClipKey).Label("收藏剪贴板快捷键")
+			if in.Submitted() || in.PressedOutside() && a.clipKeyDraft != a.cfg.ClipKey {
+				a.cfg.ClipKey = strings.TrimSpace(a.clipKeyDraft)
+				a.cfg.save()
+				if err := a.plat.SetClipKey(a.clipKey()); err != nil {
+					a.saveErr = "快捷键无效：" + err.Error()
+				}
+			}
+			ui.Text(c, "在任何应用里复制文字、链接、图片或文件后按下它，直接收进资料库。留空用默认（⌃⌥V）。").
+				FontSize(12).TextColor(t.TextMuted).Wrap()
+		})
+	})
+	tray := !a.cfg.NoTray
+	switchRow(c, &tray, "菜单栏图标", "显示今天到期和已逾期的任务数，点开列出任务、快速记录、收藏剪贴板", func() {
+		a.cfg.NoTray = !tray
+		a.cfg.save()
+		a.plat.SetTray(tray)
+	})
+	on := !a.cfg.NoReminders
+	switchRow(c, &on, "到期提醒", "任务今天到期或已逾期时，每天发一次系统通知", func() {
+		a.cfg.NoReminders = !on
+		a.cfg.save()
+	})
+	if ui.Link(c, "重新查看新手引导", "").FontSize(12).Clicked() {
+		a.settingsOpen, a.tourStep = false, 1
+	}
 }
