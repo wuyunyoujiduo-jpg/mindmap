@@ -98,12 +98,32 @@ type Repo struct {
 func Check(ctx context.Context, cfg Config) (*Repo, error) {
 	var r Repo
 	if err := cfg.call(ctx, "GET", "", nil, &r); err != nil {
-		return nil, err
+		return nil, cfg.explain(ctx, err)
 	}
 	if !r.Permissions.Push {
-		return &r, errors.New("令牌没有写入这个仓库的权限（需要 Contents 读写）")
+		return &r, errors.New("令牌能看到这个仓库，但不能写入：在 GitHub 编辑这个令牌，Repository permissions → Contents 选 Read and write")
 	}
 	return &r, nil
+}
+
+// explain says why the repository was not found: GitHub answers 404, not
+// 403, for a private repository the token may not reach, so that whether
+// it exists is not told. The token's account tells which it is.
+func (cfg Config) explain(ctx context.Context, err error) error {
+	if status(err) != 404 {
+		return err
+	}
+	var me struct{ Login string }
+	if cfg.request(ctx, "GET", "/user", nil, &me) != nil || me.Login == "" {
+		return err
+	}
+	owner, _, _ := strings.Cut(cfg.Repo, "/")
+	if !strings.EqualFold(owner, me.Login) {
+		return fmt.Errorf("令牌属于 %s，找不到 %s：检查仓库名是否写对", me.Login, cfg.Repo)
+	}
+	return fmt.Errorf("令牌有效，但没有授权访问 %s。在 GitHub 编辑这个令牌（Settings → Developer settings → Fine-grained tokens）："+
+		"Repository access 选「Only select repositories」并勾上这个仓库（仓库在令牌之后新建的，要再勾一次），"+
+		"Repository permissions → Contents 选 Read and write", cfg.Repo)
 }
 
 // Included tells whether a file of the folder, by its slash-separated
@@ -251,7 +271,7 @@ func Sync(ctx context.Context, dir string, cfg Config, progress func(string)) (R
 		if errors.Is(err, errMoved) && attempt < 3 {
 			continue
 		}
-		return res, err
+		return res, cfg.explain(ctx, err)
 	}
 }
 
@@ -567,6 +587,11 @@ func (cfg Config) call(ctx context.Context, method, p string, in, out any) error
 	if cfg.Repo == "" || !strings.Contains(cfg.Repo, "/") {
 		return errors.New("仓库应写成 owner/name")
 	}
+	return cfg.request(ctx, method, "/repos/"+cfg.Repo+p, in, out)
+}
+
+// request sends a request to the API, path from its root.
+func (cfg Config) request(ctx context.Context, method, p string, in, out any) error {
 	if cfg.Token == "" {
 		return errors.New("还没有填写 GitHub 令牌")
 	}
@@ -580,7 +605,7 @@ func (cfg Config) call(ctx context.Context, method, p string, in, out any) error
 	}
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, method, cfg.api()+"/repos/"+cfg.Repo+p, body)
+	req, err := http.NewRequestWithContext(ctx, method, cfg.api()+p, body)
 	if err != nil {
 		return err
 	}

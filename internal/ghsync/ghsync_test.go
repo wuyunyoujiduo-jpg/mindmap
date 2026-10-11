@@ -101,6 +101,10 @@ func (f *fakeGitHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Header.Get("Authorization") != "Bearer good":
 		reply(401, map[string]string{"message": "Bad credentials"})
+	case r.URL.Path == "/user":
+		reply(200, map[string]string{"login": "me"})
+	case !strings.HasPrefix(r.URL.Path, "/repos/me/notes"):
+		reply(404, map[string]string{"message": "Not Found"})
 	case p == "" && r.Method == "GET":
 		reply(200, map[string]any{"full_name": "me/notes", "private": true, "permissions": map[string]bool{"push": true}})
 	case p == "/git/ref/heads/main":
@@ -327,6 +331,19 @@ func TestErrors(t *testing.T) {
 	cfg.Repo = "nonsense"
 	if _, err := Check(context.Background(), cfg); err == nil {
 		t.Fatal("no error for a bad repository name")
+	}
+	// Not found: a repository of the token's account it may not reach, or
+	// a name of another account mistyped.
+	cfg.Repo = "me/secret"
+	if _, err := Check(context.Background(), cfg); err == nil || !strings.Contains(err.Error(), "没有授权访问 me/secret") {
+		t.Fatalf("err %v", err)
+	}
+	cfg.Repo = "someone/notes"
+	if _, err := Check(context.Background(), cfg); err == nil || !strings.Contains(err.Error(), "令牌属于 me") {
+		t.Fatalf("err %v", err)
+	}
+	if _, err := Sync(context.Background(), t.TempDir(), cfg, nil); err == nil || !strings.Contains(err.Error(), "令牌属于 me") {
+		t.Fatalf("sync err %v", err)
 	}
 }
 
