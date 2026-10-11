@@ -85,13 +85,16 @@ func (a *app) boardColumns(c *ui.Context, tasks []model.TaskNode) {
 					ui.Text(c, s.Label()).Bold()
 					ui.Text(c, fmt.Sprint(len(col))).TextColor(t.TextMuted)
 				})
-				ui.Scroll(c).Grow(1).Padding(0, 8, 8).Gap(8).Children(func() {
-					for _, tn := range col {
-						a.taskCard(c.Key(tn.Node.ID), tn, false)
-					}
-					if len(col) == 0 {
-						ui.Text(c, "拖动卡片到这里").FontSize(12).TextColor(t.TextMuted).Margin(8, 4)
-					}
+				if len(col) == 0 {
+					ui.Text(c, "拖动卡片到这里").FontSize(12).TextColor(t.TextMuted).Margin(8, 12)
+					ui.Spacer(c)
+					return
+				}
+				// A virtual list: only the cards in view are built.
+				ui.List(c, nil, len(col)).Grow(1).ItemKey(func(i int) any { return col[i].Node.ID }).Rows(func(r ui.ListRow) {
+					ui.Box(r.Context).Padding(0, 8, 8).Children(func() {
+						a.taskCard(r.Context, col[r.Index], false)
+					})
 				})
 			})
 		}
@@ -257,24 +260,50 @@ func (a *app) agendaView(c *ui.Context) {
 	tasks := a.visibleTasks()
 	sortTasks(tasks)
 	groups := agenda(tasks, a.now())
+	// The groups' headings and cards as the rows of a virtual list: only
+	// those in view are built.
+	type row struct {
+		head  string
+		count int
+		tn    model.TaskNode
+	}
+	var rows []row
+	for _, g := range groups {
+		if len(g.tasks) > 0 {
+			rows = append(rows, row{head: g.title, count: len(g.tasks)})
+			for _, tn := range g.tasks {
+				rows = append(rows, row{tn: tn})
+			}
+		}
+	}
+	if len(rows) > 0 {
+		ui.List(c, nil, len(rows)).Grow(1).ItemKey(func(i int) any {
+			if rows[i].head != "" {
+				return "head:" + rows[i].head
+			}
+			return rows[i].tn.Node.ID
+		}).Rows(func(r ui.ListRow) {
+			c := r.Context
+			it := rows[r.Index]
+			ui.Box(c).Padding(0, 24).Children(func() {
+				ui.Box(c).MaxWidth(760).Children(func() {
+					if it.head != "" {
+						head := ui.Text(c, fmt.Sprintf("%s  %d", it.head, it.count)).Bold()
+						if it.head == "已逾期" {
+							head.TextColor(t.Danger)
+						}
+						head.Margin(16, 0, 8)
+						return
+					}
+					ui.Box(c).Padding(0, 0, 8).Children(func() { a.taskCard(c, it.tn, true) })
+				})
+			})
+		})
+		return
+	}
 	ui.Scroll(c).Grow(1).Children(func() {
 		ui.Column(c).Padding(16, 24).Gap(18).MaxWidth(760).Children(func() {
 			any := false
-			for _, g := range groups {
-				if len(g.tasks) == 0 {
-					continue
-				}
-				any = true
-				ui.Column(c.Key(g.title)).Gap(8).Children(func() {
-					head := ui.Text(c, fmt.Sprintf("%s  %d", g.title, len(g.tasks))).Bold()
-					if g.title == "已逾期" {
-						head.TextColor(t.Danger)
-					}
-					for _, tn := range g.tasks {
-						a.taskCard(c.Key(tn.Node.ID), tn, true)
-					}
-				})
-			}
 			if !any {
 				ui.Text(c, "没有未完成的任务。在节点的详情面板中勾选「作为任务」来添加。").TextColor(t.TextMuted).Wrap()
 			}

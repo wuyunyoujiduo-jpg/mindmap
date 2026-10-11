@@ -11,6 +11,9 @@ import (
 // The overview: how the map's tasks stand, by branch and iteration; what
 // is overdue, due this week, blocked, and done lately.
 
+// overviewCards is how many cards a list of the overview shows.
+const overviewCards = 24
+
 func (a *app) overviewView(c *ui.Context) {
 	t := c.Theme()
 	now := a.now()
@@ -112,10 +115,18 @@ func (a *app) overviewView(c *ui.Context) {
 				}
 				a.section2(c, fmt.Sprintf("%s %d", title, len(tasks)), func() {
 					ui.Row(c).Wrap().Gap(10).Children(func() {
-						for _, tn := range tasks {
+						for i, tn := range tasks {
+							if i == overviewCards {
+								break
+							}
 							ui.Box(c.Key(tn.Node.ID)).Width(300).Children(func() { a.taskCard(c, tn, true) })
 						}
 					})
+					if len(tasks) > overviewCards {
+						if ui.Link(c, fmt.Sprintf("还有 %d 个，在日程里查看全部", len(tasks)-overviewCards), "").FontSize(12).Clicked() {
+							a.mode = viewAgenda
+						}
+					}
 				})
 				_ = col
 			}

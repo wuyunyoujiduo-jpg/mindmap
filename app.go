@@ -128,6 +128,8 @@ type app struct {
 	pointer [2]float32    // where the pointer is over the canvas
 	mods    ui.Modifiers  // the modifier keys held, as of the last frame
 
+	measured map[measureKey][2]float32 // texts measured, by how (see measureText)
+
 	// Actions that change the map, taken while it is built, wait for the
 	// end of the frame (see later).
 	pending []func()
@@ -165,6 +167,7 @@ type app struct {
 	iterFilter      string    // the iteration the board and timeline show: "" all, "-" none
 	tlWeeks         bool      // the timeline shows weeks rather than days
 	tlDrag          tlDrag
+	tlScroll        ui.ScrollState
 	reminded        map[string]bool // tasks reminded of on remindedDay
 	remindedDay     time.Time
 	remindedAt      time.Time
@@ -207,7 +210,14 @@ type app struct {
 	embedBusy     bool                 // clips' vectors are being made
 	embedErr      string               // why making vectors failed, which stops it until the settings change
 	libQueryAt    time.Time            // when the library's search was last typed in
-	dupe          bool                 // the last clip kept was kept before
+	libHitsFor    libHitsKey           // what libHitsList was found for
+	libHitsList   []library.Hit
+	relatedFor    string // the clip and library version relatedList is of
+	relatedList   []library.Hit
+	clipBackFor   string // the clip clipBackList is of, as of clipBackAt
+	clipBackAt    time.Time
+	clipBackList  []backlink
+	dupe          bool // the last clip kept was kept before
 	backupBusy    bool
 	backupErr     string
 	embedDrafts   [3]string // the settings' fields of the embedding model: address, key, model

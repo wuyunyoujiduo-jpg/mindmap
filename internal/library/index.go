@@ -37,6 +37,7 @@ type Index struct {
 	lens  []float64
 	avg   float64
 	df    map[string]int // how many clips have each term
+	lower []string       // each clip's text in lower case, for whole phrases
 }
 
 func (l *Library) idx() *Index {
@@ -63,6 +64,7 @@ func NewIndex(clips []*Clip) *Index {
 			ix.df[t]++
 		}
 		ix.terms = append(ix.terms, tf)
+		ix.lower = append(ix.lower, strings.ToLower(c.Title+"\n"+c.Desc+"\n"+c.Summary+"\n"+c.Note+"\n"+c.Text+"\n"+strings.Join(c.Tags, " ")+"\n"+strings.Join(c.Synonyms, " ")))
 		ix.lens = append(ix.lens, n)
 		total += n
 	}
@@ -134,7 +136,7 @@ func (ix *Index) Search(query string, keep func(*Clip) bool) []Hit {
 		// Clips with more of the query's terms first, and the whole query
 		// as it was written above all.
 		score *= float64(matched) / float64(len(q))
-		if len(phrase) > 1 && strings.Contains(strings.ToLower(c.Title+"\n"+c.Desc+"\n"+c.Summary+"\n"+c.Note+"\n"+c.Text+"\n"+strings.Join(c.Tags, " ")), phrase) {
+		if len(phrase) > 1 && strings.Contains(ix.lower[i], phrase) {
 			score *= 2
 		}
 		coverage := 1.0

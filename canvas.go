@@ -67,6 +67,29 @@ func (a *app) parts(n *model.Node) nodeParts {
 }
 
 // measure sizes a node's box at zoom 1, as nodeView draws it.
+// measureKey is a text measured, with how.
+type measureKey struct {
+	text, font   string
+	size, wrap   float32
+	weight       int
+	italic, bold bool
+}
+
+// measureText is c.MeasureText, kept: the layout measures every node of
+// the map at every frame, and their titles seldom change.
+func (a *app) measureText(c *ui.Context, wrap float32, span ui.Span) (float32, float32) {
+	k := measureKey{text: span.Text, font: span.Font, size: span.Size, wrap: wrap, weight: int(span.Weight), italic: span.Italic}
+	if v, ok := a.measured[k]; ok {
+		return v[0], v[1]
+	}
+	w, h := c.MeasureText(wrap, span)
+	if a.measured == nil || len(a.measured) > 50000 {
+		a.measured = map[measureKey][2]float32{}
+	}
+	a.measured[k] = [2]float32{w, h}
+	return w, h
+}
+
 func (a *app) measure(c *ui.Context) layout.Measure {
 	return func(n *model.Node, depth int) (float32, float32) {
 		p := a.parts(n)
@@ -75,37 +98,37 @@ func (a *app) measure(c *ui.Context) layout.Measure {
 		if n.Task != nil {
 			w += dotSize + nodeGap
 			if a.blocked(n) {
-				mw, _ := c.MeasureText(0, ui.Span{Text: "🔒", Size: markSize})
+				mw, _ := a.measureText(c, 0, ui.Span{Text: "🔒", Size: markSize})
 				w += mw + nodeGap
 			}
 		}
 		w += float32(len(n.Markers)) * (markerSize(depth) + nodeGap)
 		for _, tag := range p.tags {
-			mw, _ := c.MeasureText(0, ui.Span{Text: tag, Size: markSize})
+			mw, _ := a.measureText(c, 0, ui.Span{Text: tag, Size: markSize})
 			w += nodeGap + mw + markSize*1.1
 		}
 		if p.more > 0 {
-			mw, _ := c.MeasureText(0, ui.Span{Text: fmt.Sprintf("+%d", p.more), Size: markSize})
+			mw, _ := a.measureText(c, 0, ui.Span{Text: fmt.Sprintf("+%d", p.more), Size: markSize})
 			w += nodeGap + mw
 		}
 		if p.due != "" {
-			mw, _ := c.MeasureText(0, ui.Span{Text: p.due, Size: markSize})
+			mw, _ := a.measureText(c, 0, ui.Span{Text: p.due, Size: markSize})
 			w += nodeGap + mw
 		}
 		if pg := a.progress[n.ID]; pg[1] > 0 {
-			mw, _ := c.MeasureText(0, ui.Span{Text: progressText(pg), Size: markSize})
+			mw, _ := a.measureText(c, 0, ui.Span{Text: progressText(pg), Size: markSize})
 			w += nodeGap + markSize + 3 + mw
 		}
 		if p.note {
-			mw, _ := c.MeasureText(0, ui.Span{Text: "✎", Size: markSize + 1})
+			mw, _ := a.measureText(c, 0, ui.Span{Text: "✎", Size: markSize + 1})
 			w += nodeGap + mw
 		}
 		if len(n.Links) > 0 {
-			mw, _ := c.MeasureText(0, ui.Span{Text: "↗", Size: markSize + 1})
+			mw, _ := a.measureText(c, 0, ui.Span{Text: "↗", Size: markSize + 1})
 			w += nodeGap + mw
 		}
 		if m := filesMark(n); m != "" {
-			mw, _ := c.MeasureText(0, ui.Span{Text: m, Size: markSize})
+			mw, _ := a.measureText(c, 0, ui.Span{Text: m, Size: markSize})
 			w += nodeGap + mw
 		}
 		h := float32(nodeHeight)
@@ -139,20 +162,20 @@ func (a *app) titleBox(c *ui.Context, n *model.Node, depth int) (w, h float32) {
 		if st.Width > 0 {
 			wrap = st.Width
 		}
-		w, h = c.MeasureText(0, span)
+		w, h = a.measureText(c, 0, span)
 		if w > wrap {
-			_, h = c.MeasureText(wrap, span)
+			_, h = a.measureText(c, wrap, span)
 			w = wrap
 		}
 		return max(w, titleMin) + 4, h
 	}
-	w, h = c.MeasureText(0, span)
+	w, h = a.measureText(c, 0, span)
 	if st.Width > 0 { // a width of its own, at which the title wraps
-		_, h = c.MeasureText(st.Width, span)
+		_, h = a.measureText(c, st.Width, span)
 		return st.Width, h
 	}
 	if w > titleMax {
-		w, h = c.MeasureText(titleMax, span)
+		w, h = a.measureText(c, titleMax, span)
 		w = titleMax
 	}
 	return max(w, titleMin), h
@@ -365,7 +388,11 @@ func (a *app) canvasArea(c *ui.Context) {
 			return col
 		}
 		a.drawBoundaries(p, r, shown, rect.X+cam.X, rect.Y+cam.Y, z, color)
-		drawEdges(p, r, a.doc.Structure, rect.X+cam.X, rect.Y+cam.Y, z, lk.line, color)
+		view := rect
+		if exporting {
+			view = ui.Rect{} // all of it
+		}
+		drawEdges(p, r, a.doc.Structure, rect.X+cam.X, rect.Y+cam.Y, z, lk.line, view, color)
 		a.drawSummaries(p, r, shown, rect.X+cam.X, rect.Y+cam.Y, z, color)
 		a.drawDependencies(p, r, rect.X+cam.X, rect.Y+cam.Y, z)
 		a.drawRelations(p, r, rect.X+cam.X, rect.Y+cam.Y, z, ui.Hex("#6366f1"))
@@ -376,6 +403,13 @@ func (a *app) canvasArea(c *ui.Context) {
 			box, ok := r.Boxes[n.ID]
 			if !ok {
 				return
+			}
+			if !exporting && a.vp.W > 0 && n.ID != a.selected && n.ID != a.editing && !a.multi[n.ID] {
+				// Off the screen: not built, which a large map needs.
+				x, y := cam.X+box.X*z, cam.Y+box.Y*z
+				if x+box.W*z < -nodeCull || x > a.vp.W+nodeCull || y+box.H*z < -nodeCull || y > a.vp.H+nodeCull {
+					return
+				}
 			}
 			if floating[n.ID] != nil {
 				depth++ // floating topics look as main topics
@@ -406,6 +440,10 @@ func (a *app) canvasArea(c *ui.Context) {
 		})
 	})
 }
+
+// nodeCull is how far off the canvas nodes are still built, so that they
+// are there as soon as a pan brings them in.
+const nodeCull = 200
 
 // keepIn returns how far to move a span at pos, size long, to keep it in
 // [margin, length-margin], preferring its start.
@@ -1127,7 +1165,8 @@ func layoutOptions(s model.Structure) layout.Options {
 // with the map's origin at (ox, oy) and zoom z: curves for the mind map, a
 // trunk of straight lines for the logic chart, and a curly bracket around
 // the children for the bracket chart.
-func drawEdges(p *ui.Painter, r layout.Result, s model.Structure, ox, oy, z, line float32, color func(to string) ui.Color) {
+// Edges wholly outside view are not drawn.
+func drawEdges(p *ui.Painter, r layout.Result, s model.Structure, ox, oy, z, line float32, view ui.Rect, color func(to string) ui.Color) {
 	width := max(line*z, 1)
 	switch s {
 	case model.StructureOrg:
@@ -1144,6 +1183,9 @@ func drawEdges(p *ui.Painter, r layout.Result, s model.Structure, ox, oy, z, lin
 			x1, y1 := ox+to.X*z, oy+(to.Y+to.H/2)*z
 			if e.Left {
 				x0, x1 = ox+from.X*z, ox+(to.X+to.W)*z
+			}
+			if outside(view, min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1)) {
+				continue
 			}
 			var path ui.Path
 			path.MoveTo(x0, y0)
@@ -1175,6 +1217,9 @@ func drawEdges(p *ui.Painter, r layout.Result, s model.Structure, ox, oy, z, lin
 			} else {
 				top, bottom = min(top, oy+(b.Y+b.H/2)*z), max(bottom, oy+(b.Y+b.H/2)*z)
 			}
+		}
+		if outside(view, min(px, cx-12*z), min(top, py), max(px, cx), max(bottom, py)) {
+			continue
 		}
 		col := color(kids[0])
 		if s == model.StructureLogic {
@@ -1219,6 +1264,16 @@ func drawEdges(p *ui.Painter, r layout.Result, s model.Structure, ox, oy, z, lin
 		stem.LineTo(bx-rad, mid)
 		p.StrokePath(&stem, width, col)
 	}
+}
+
+// outside tells whether a box, by its corners, is wholly outside view, with
+// a margin for the lines' width; an empty view holds everything.
+func outside(view ui.Rect, x0, y0, x1, y1 float32) bool {
+	if view.W <= 0 || view.H <= 0 {
+		return false
+	}
+	const m = 8
+	return x1 < view.X-m || x0 > view.X+view.W+m || y1 < view.Y-m || y0 > view.Y+view.H+m
 }
 
 // drawOrgEdges joins each node to the row of its children: down from its
@@ -1377,7 +1432,7 @@ func drawStructureIcon(p *ui.Painter, r ui.Rect, s model.Structure, col ui.Color
 	z := min(r.W/lr.Width, r.H/lr.Height)
 	ox := r.X + (r.W-lr.Width*z)/2
 	oy := r.Y + (r.H-lr.Height*z)/2
-	drawEdges(p, lr, s, ox, oy, z, 1.5, func(string) ui.Color { return col })
+	drawEdges(p, lr, s, ox, oy, z, 1.5, ui.Rect{}, func(string) ui.Color { return col })
 	for id, b := range lr.Boxes {
 		box := ui.Rect{X: ox + b.X*z, Y: oy + b.Y*z, W: b.W * z, H: b.H * z}
 		if id == d.Root.ID {

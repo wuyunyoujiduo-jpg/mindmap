@@ -42,24 +42,58 @@ func NormalizeURL(s string) string {
 	return u.String()
 }
 
-func sameText(a, b string) bool {
-	return strings.Join(strings.Fields(a), " ") == strings.Join(strings.Fields(b), " ")
+// dupIndex finds clips by their file, page and text.
+type dupIndex struct {
+	hash, url, text map[string]*Clip
+}
+
+func textKey(s string) string {
+	s = strings.Join(strings.Fields(s), " ")
+	if s == "" {
+		return ""
+	}
+	return hashOf([]byte(s))
+}
+
+func (l *Library) dupIdx() *dupIndex {
+	if l.dups == nil {
+		d := &dupIndex{hash: map[string]*Clip{}, url: map[string]*Clip{}, text: map[string]*Clip{}}
+		for _, c := range l.Clips {
+			d.add(c)
+		}
+		l.dups = d
+	}
+	return l.dups
+}
+
+func (d *dupIndex) add(c *Clip) {
+	if c.Hash != "" {
+		d.hash[c.Hash] = c
+	}
+	switch c.Kind {
+	case KindLink:
+		d.url[NormalizeURL(c.URL)] = c
+	case KindText:
+		if k := textKey(c.Text); k != "" {
+			d.text[k] = c
+		}
+	}
 }
 
 // Duplicate is the clip already kept that c would repeat, nil when none.
 func (l *Library) Duplicate(c *Clip) *Clip {
-	for _, o := range l.Clips {
-		if o == c || o.ID == c.ID {
-			continue
-		}
-		switch {
-		case c.Hash != "" && o.Hash == c.Hash:
-			return o
-		case c.Kind == KindLink && o.Kind == KindLink && NormalizeURL(o.URL) == NormalizeURL(c.URL):
-			return o
-		case c.Kind == KindText && o.Kind == KindText && strings.TrimSpace(c.Text) != "" && sameText(o.Text, c.Text):
-			return o
-		}
+	d := l.dupIdx()
+	var o *Clip
+	switch {
+	case c.Hash != "" && d.hash[c.Hash] != nil:
+		o = d.hash[c.Hash]
+	case c.Kind == KindLink:
+		o = d.url[NormalizeURL(c.URL)]
+	case c.Kind == KindText:
+		o = d.text[textKey(c.Text)]
 	}
-	return nil
+	if o == c || o != nil && o.ID == c.ID {
+		return nil
+	}
+	return o
 }

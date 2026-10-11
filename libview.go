@@ -74,22 +74,21 @@ func (a *app) libraryView(c *ui.Context) {
 		ui.Divider(c)
 		hits := a.libHits()
 		ui.Row(c).Grow(1).AlignItems(ui.Stretch).Children(func() {
-			ui.Scroll(c.Key("clips")).Grow(1).Basis(0).Padding(8, 10, 16).Gap(6).Children(func() {
-				if len(hits) == 0 {
+			if len(hits) == 0 {
+				ui.Column(c).Grow(1).Basis(0).Padding(8, 10, 16).Children(func() {
 					msg := "还没有资料。在上面记点什么、粘贴链接，或把图片和文件拖进来。\n在任何应用里复制内容后按 " + keyLabel(a.clipKey()) + "，也能直接收进资料库。"
 					if len(l.Clips) > 0 {
 						msg = "没有符合条件的资料。"
 					}
 					ui.Text(c, msg).FontSize(13).TextColor(t.TextMuted).Wrap().Padding(20, 10)
-				}
-				for i, h := range hits {
-					if i == 300 {
-						ui.Textf(c, "还有 %d 条，换个关键词缩小范围", len(hits)-i).FontSize(12).TextColor(t.TextMuted)
-						break
-					}
-					a.clipRow(c.Key(h.Clip.ID), h.Clip)
-				}
-			})
+				})
+			} else {
+				// A virtual list: only the rows in view are built.
+				ui.List(c.Key("clips"), nil, len(hits)).Grow(1).Basis(0).ItemKey(func(i int) any { return hits[i].Clip.ID }).
+					Rows(func(r ui.ListRow) {
+						ui.Box(r.Context).Padding(3, 10).Children(func() { a.clipRow(r.Context, hits[r.Index].Clip) })
+					})
+			}
 			if clip := l.Find(a.libSel); clip != nil {
 				ui.Box(c).Width(1).FillHeight().Background(t.Border)
 				ui.Scroll(c.Key("clip-detail:"+clip.ID)).Grow(1).Basis(0).Padding(14, 16, 20).Gap(12).Children(func() {
@@ -116,6 +115,28 @@ func keyLabel(accel string) string {
 
 // libHits are the clips the search and the filters find.
 func (a *app) libHits() []library.Hit {
+	e := a.embedder()
+	q := strings.TrimSpace(a.libQuery)
+	k := libHitsKey{a.libQuery, a.libKind, a.libCat, a.libTag, a.lib, a.lib.Version, e.Name(), a.qvecs[q] != nil}
+	if a.libHitsFor == k {
+		return a.libHitsList
+	}
+	a.libHitsFor, a.libHitsList = k, a.searchClips()
+	return a.libHitsList
+}
+
+// libHitsKey is what the clips found depend on.
+type libHitsKey struct {
+	query    string
+	kind     int
+	cat, tag string
+	lib      *library.Library
+	version  int
+	model    string
+	vector   bool
+}
+
+func (a *app) searchClips() []library.Hit {
 	kinds := []string{"", library.KindText, library.KindLink, library.KindImage, library.KindFile}
 	kind := kinds[min(a.libKind, len(kinds)-1)]
 	keep := func(c *library.Clip) bool {

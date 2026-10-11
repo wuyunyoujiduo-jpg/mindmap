@@ -98,6 +98,10 @@ type Library struct {
 	index  *Index
 	vecs   *vectorFile
 	hashes map[string]cachedHash // of the clips' EmbedText
+	dups   *dupIndex             // the clips by what makes them the same
+	// Version counts the changes, for what is worked out from the clips
+	// to be kept until it changes.
+	Version int
 }
 
 // Open reads the library of a folder, which need not exist yet.
@@ -128,6 +132,13 @@ func Open(dir string) (*Library, error) {
 func (l *Library) sort() {
 	slices.SortStableFunc(l.Clips, func(a, b *Clip) int { return b.Created.Compare(a.Created) })
 	l.index = nil
+	l.Version++
+}
+
+// changed drops what was worked out from the clips.
+func (l *Library) changed() {
+	l.index, l.dups = nil, nil
+	l.Version++
 }
 
 // NewID returns a new clip ID.
@@ -175,6 +186,9 @@ func (l *Library) Add(c *Clip, now time.Time) error {
 		return err
 	}
 	l.Clips = append([]*Clip{c}, l.Clips...) // first of those kept at the same time
+	if l.dups != nil {
+		l.dups.add(c)
+	}
 	l.sort()
 	return nil
 }
@@ -221,7 +235,7 @@ func (l *Library) AddData(data []byte, name, kind, source string, now time.Time)
 // Save writes a changed clip.
 func (l *Library) Save(c *Clip, now time.Time) error {
 	c.Updated = now
-	l.index = nil
+	l.changed()
 	delete(l.hashes, c.ID)
 	return l.write(c)
 }
@@ -257,7 +271,7 @@ func (l *Library) Delete(id string) error {
 		_ = os.Remove(p)
 	}
 	l.Clips = slices.Delete(l.Clips, i, i+1)
-	l.index = nil
+	l.changed()
 	return nil
 }
 

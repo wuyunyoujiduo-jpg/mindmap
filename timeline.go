@@ -133,7 +133,7 @@ func (a *app) timelineView(c *ui.Context) {
 			ui.Text(c, "没有任务。在节点详情里勾选「作为任务」并设置日期后会显示在这里。").TextColor(t.TextMuted).Margin(24)
 			return
 		}
-		ui.ScrollBoth(c.Key("timeline")).Grow(1).Children(func() {
+		ui.ScrollBoth(c.Key("timeline")).Grow(1).TrackScroll(&a.tlScroll).Children(func() {
 			grid := ui.Column(c).Width(width).Height(tlHeadH + float32(len(rows))*tlRowH + 8)
 			grid.Draw(func(p *ui.Painter, r ui.Rect) {
 				// Weekends, iterations, the days' heads and today.
@@ -186,15 +186,25 @@ func (a *app) timelineView(c *ui.Context) {
 			})
 			grid.Children(func() {
 				ui.Box(c).Height(tlHeadH)
-				for i, row := range rows {
-					a.timelineRow(c.Key(fmt.Sprint("row", i)), row, first, dayW, width)
+				// Only the rows in view, and the room of the others.
+				_, h := c.Size()
+				from := max(0, int((a.tlScroll.Y-tlHeadH)/tlRowH)-5)
+				to := min(len(rows), from+int(h/tlRowH)+10)
+				from = min(from, to)
+				ui.Box(c).Height(float32(from) * tlRowH)
+				for i := from; i < to; i++ {
+					a.timelineRow(c.Key(fmt.Sprint("row", i)), rows[i], first, dayW, width)
 				}
 			})
 			if len(unplanned) > 0 {
 				ui.Column(c).Padding(12).Gap(6).Children(func() {
 					ui.Text(c, fmt.Sprintf("未安排日期 %d", len(unplanned))).FontSize(12).Bold().TextColor(t.TextMuted)
 					ui.Row(c).Wrap().Gap(6).Children(func() {
-						for _, tn := range unplanned {
+						for i, tn := range unplanned {
+							if i == 200 {
+								ui.Text(c, fmt.Sprintf("还有 %d 个", len(unplanned)-i)).FontSize(12).TextColor(t.TextMuted)
+								break
+							}
 							n := tn.Node
 							chip := ui.Row(c.Key(n.ID)).Padding(3, 8).Gap(6).Radius(6).Background(t.Surface).Border(1, t.Border).
 								AlignItems(ui.Center).Cursor(ui.CursorPointer).Tooltip("点击排到今天开始，持续 3 天").Label("安排 " + n.Title)

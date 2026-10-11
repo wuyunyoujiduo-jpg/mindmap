@@ -119,7 +119,12 @@ func (a *app) searchQueryVector(c *ui.Context) {
 
 // relatedSection lists the clips like the one shown.
 func (a *app) relatedSection(c *ui.Context, clip *library.Clip) {
-	hits := a.lib.Related(clip, a.embedder().Name(), 5)
+	model := a.embedder().Name()
+	key := fmt.Sprint(clip.ID, a.lib.Version, model)
+	if a.relatedFor != key {
+		a.relatedFor, a.relatedList = key, a.lib.Related(clip, model, 5)
+	}
+	hits := a.relatedList
 	if len(hits) == 0 {
 		return
 	}
@@ -218,6 +223,16 @@ const clipScheme = "clip:"
 
 // clipBacklinks are the nodes of every map that link to a clip.
 func (a *app) clipBacklinks(id string) []backlink {
+	// Found again at most every few seconds: every map is read.
+	if a.clipBackFor == id && a.now().Sub(a.clipBackAt) < 3*time.Second && !a.clipBackAt.After(a.now()) {
+		return a.clipBackList
+	}
+	a.clipBackFor, a.clipBackAt = id, a.now()
+	a.clipBackList = a.findClipBacklinks(id)
+	return a.clipBackList
+}
+
+func (a *app) findClipBacklinks(id string) []backlink {
 	var out []backlink
 	for _, f := range a.files {
 		file := a.file
