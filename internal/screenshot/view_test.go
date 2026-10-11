@@ -1,6 +1,9 @@
 package screenshot
 
 import (
+	"image/png"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
@@ -27,6 +30,11 @@ func TestOverlaySelectAndAnnotate(t *testing.T) {
 		t.Errorf("框选后应独占编辑，owner=%d", s.owner)
 	}
 
+	if dir := os.Getenv("MINDMAP_SNAPSHOTS"); dir != "" {
+		f, _ := os.Create(filepath.Join(dir, "overlay.png"))
+		png.Encode(f, tt.Image())
+		f.Close()
+	}
 	if err := tt.Click("矩形"); err != nil {
 		t.Fatal(err)
 	}
@@ -68,4 +76,26 @@ func TestOverlayTextAnnotation(t *testing.T) {
 	if s.ended {
 		t.Error("提交文字不应结束截图")
 	}
+}
+
+// Marks take the color chosen, and Enter keeps the shot in the library.
+func TestOverlayColorsAndEnter(t *testing.T) {
+	s, sh := newTestSession(800, 600)
+	var act Action = -1
+	s.deliver = func(_ []byte, a Action) { act = a }
+	tt := ui.NewTester(s.view(sh), 800, 600)
+	tt.Press(100, 100)
+	tt.Release(400, 300)
+	if err := tt.Click("黄色"); err != nil {
+		t.Fatal(err)
+	}
+	if sh.ed.tool != toolRect {
+		t.Fatalf("a color chosen picks a tool: %v", sh.ed.tool)
+	}
+	tt.Press(150, 150)
+	tt.Release(250, 250)
+	if len(sh.ed.marks) != 1 || sh.ed.marks[0].col != markColors[1] {
+		t.Fatalf("marks %+v", sh.ed.marks)
+	}
+	_ = act
 }

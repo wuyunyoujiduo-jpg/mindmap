@@ -1,7 +1,6 @@
 package main
 
 import (
-	"runtime"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -73,21 +72,19 @@ func (a *app) shotSettings(c *ui.Context) {
 	t := c.Theme()
 	ui.Field(c, "截图", func() {
 		ui.Column(c).Gap(8).Children(func() {
-			if runtime.GOOS == "darwin" || a.shotModes {
-				mode := 0
-				if a.cfg.ShotSystem {
-					mode = 1
-				}
-				if ui.Segmented(c, &mode, "框选后标注", "框选后直接收进资料库").Changed() {
-					a.cfg.ShotSystem = mode == 1
-					a.cfg.save()
-				}
-				hint := "拖动框选一块屏幕，或按空格选一个窗口，Esc 取消；然后加框线、箭头、画笔、文字，收进资料库、复制或保存。"
-				if a.cfg.ShotSystem {
-					hint = "拖动框选一块屏幕，或按空格选一个窗口，Esc 取消；截好直接收进资料库。"
-				}
-				ui.Text(c, hint).FontSize(12).TextColor(t.TextMuted).Wrap()
+			mode := 0
+			if a.cfg.ShotSystem {
+				mode = 1
 			}
+			if ui.Segmented(c, &mode, "MyMind 截图", "系统框选").Changed() {
+				a.cfg.ShotSystem = mode == 1
+				a.cfg.save()
+			}
+			hint := "屏幕定格后直接框选，可拖动、拉边调整；框选后加框线、箭头、画笔、文字，回车收进资料库，⌘C 复制，⌘S 保存。"
+			if a.cfg.ShotSystem {
+				hint = "用系统的框选（Mac 上同 ⌘⇧4，Windows 上同 Win+Shift+S），再在标注窗口里加框线、箭头、文字。"
+			}
+			ui.Text(c, hint).FontSize(12).TextColor(t.TextMuted).Wrap()
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				if ui.Button(c, "试一下").Clicked() {
 					a.settingsOpen = false

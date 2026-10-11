@@ -103,7 +103,7 @@ func (a *Annotator) View(c *ui.Context) {
 				if e.editing {
 					in := ui.TextInputBase(c.Key(a.textKey), &e.editText).
 						Absolute().Left(e.editAt.X).Top(e.editAt.Y).Width(max(80, r.W-e.editAt.X)).
-						FontSize(textSize).FontWeight(textWeight).TextColor(markColor).
+						FontSize(textSize).FontWeight(textWeight).TextColor(colorOf(e.color)).
 						SingleLine().AutoFocus().Label("标注文字")
 					if in.Submitted() {
 						e.commitText()

@@ -11,7 +11,9 @@ import (
 )
 
 var (
-	markColor   = ui.RGB(0xF5, 0x3B, 0x3B)
+	markColor = ui.RGB(0xF5, 0x3B, 0x3B)
+	// markColors are the colors to mark in: red, yellow, green, blue.
+	markColors  = []ui.Color{markColor, ui.RGB(0xFF, 0xC1, 0x07), ui.RGB(0x22, 0xC5, 0x5E), ui.RGB(0x1E, 0x6F, 0xFF)}
 	selColor    = ui.RGB(0x2E, 0xC4, 0x6A)
 	maskColor   = ui.RGBA(0, 0, 0, 0.4)
 	labelBg     = ui.RGBA(0, 0, 0, 0.75)
@@ -30,14 +32,23 @@ func drawShot(p *ui.Painter, bmp *ui.Bitmap, size pt, marks []mark, off pt) {
 	}
 }
 
+// colorOf is a mark's color.
+func colorOf(c ui.Color) ui.Color {
+	if c == (ui.Color{}) {
+		return markColor
+	}
+	return c
+}
+
 func drawMark(p *ui.Painter, m mark, off pt) {
 	at := func(q pt) pt { return pt{q.X + off.X, q.Y + off.Y} }
+	col := colorOf(m.col)
 	switch m.tool {
 	case toolRect:
 		r := rectFrom(at(m.first()), at(m.last()))
-		p.Stroke(r, markColor, 0, markWidth)
+		p.Stroke(r, col, 0, markWidth)
 	case toolArrow:
-		drawArrow(p, at(m.first()), at(m.last()))
+		drawArrow(p, at(m.first()), at(m.last()), col)
 	case toolPen:
 		var path ui.Path
 		for i, q := range m.pts {
@@ -48,18 +59,18 @@ func drawMark(p *ui.Painter, m mark, off pt) {
 				path.LineTo(q.X, q.Y)
 			}
 		}
-		p.StrokePath(&path, markWidth, markColor)
+		p.StrokePath(&path, markWidth, col)
 	case toolText:
 		q := at(m.first())
-		p.RichText(q.X, q.Y, 0, textSpan(m.text))
+		p.RichText(q.X, q.Y, 0, textSpan(m.text, col))
 	}
 }
 
-func textSpan(s string) ui.Span {
-	return ui.Span{Text: s, Size: textSize, Weight: textWeight, Color: markColor}
+func textSpan(s string, col ui.Color) ui.Span {
+	return ui.Span{Text: s, Size: textSize, Weight: textWeight, Color: col}
 }
 
-func drawArrow(p *ui.Painter, a, b pt) {
+func drawArrow(p *ui.Painter, a, b pt, col ui.Color) {
 	angle := math.Atan2(float64(b.Y-a.Y), float64(b.X-a.X))
 	back := func(length float32, da float64) pt {
 		return pt{b.X - length*float32(math.Cos(angle+da)), b.Y - length*float32(math.Sin(angle+da))}
@@ -67,11 +78,11 @@ func drawArrow(p *ui.Painter, a, b pt) {
 	var line ui.Path
 	base := back(arrowHead*0.8, 0)
 	line.MoveTo(a.X, a.Y).LineTo(base.X, base.Y)
-	p.StrokePath(&line, markWidth, markColor)
+	p.StrokePath(&line, markWidth, col)
 	l, r := back(arrowHead, -arrowSpread), back(arrowHead, arrowSpread)
 	var head ui.Path
 	head.MoveTo(b.X, b.Y).LineTo(l.X, l.Y).LineTo(r.X, r.Y).Close()
-	p.FillPath(&head, markColor)
+	p.FillPath(&head, col)
 }
 
 // drawChrome 画选区外的遮罩、选区边框、控制点和尺寸。

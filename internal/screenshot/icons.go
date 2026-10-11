@@ -15,6 +15,7 @@ var (
 	iconSave    = icon(`<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>`)
 	iconClose   = icon(`<path d="M6 6l12 12M18 6L6 18"/>`)
 	iconCheck   = icon(`<path d="M5 12l5 5 9-10"/>`)
+	iconCopy    = icon(`<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>`)
 	iconLibrary = icon(`<path d="M5 4h4v16H5zM10 4h4v16h-4zM15.5 5.2l3.4-.9 2.6 14.6-3.4.9z"/>`)
 	iconClear   = icon(`<circle cx="12" cy="12" r="9" fill="currentColor" stroke="none"/><path d="M9 9l6 6M15 9l-6 6" stroke="#fff"/>`)
 )

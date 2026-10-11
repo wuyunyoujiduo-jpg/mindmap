@@ -9,6 +9,8 @@ import (
 	"errors"
 	"sync"
 	"time"
+
+	"github.com/egoist/mygo"
 )
 
 // Action is what is done with the shot.
@@ -35,12 +37,18 @@ const stuck = 2 * time.Minute
 // Log, when set, is told each step of a shot, to find what went wrong.
 var Log = func(string, ...any) {}
 
+// shown is how long the windows have to show and draw before the shot is
+// handed to fallback.
+const shown = 1500 * time.Millisecond
+
 // Start captures every display and opens the windows to frame a region
 // in. deliver gets the picture and what to do with it, off the main
 // thread, after the windows close; onEnd runs once the shot is over,
-// however it ended. While a shot is under way, Start returns ErrBusy.
-// Call it from any goroutine.
-func Start(deliver func(png []byte, act Action), onEnd func()) (bool, error) {
+// however it ended. When the windows have not shown and drawn soon after,
+// they close and fallback, when not nil, takes the shot on another way,
+// before onEnd. While a shot is under way, Start returns ErrBusy. Call it
+// from any goroutine.
+func Start(deliver func(png []byte, act Action), onEnd func(), fallback func()) (bool, error) {
 	mu.Lock()
 	if !busySince.IsZero() && time.Since(busySince) < stuck {
 		mu.Unlock()
@@ -71,8 +79,25 @@ func Start(deliver func(png []byte, act Action), onEnd func()) (bool, error) {
 		w, h := sh.bmp.Size()
 		Log("屏幕 %d：%v，%dx%d 像素", sh.index, sh.display.Bounds, w, h)
 	}
-	openSession(shots, deliver, done)
+	s := openSession(shots, deliver, done)
 	Log("截图窗口已打开")
+	go func() {
+		time.Sleep(shown)
+		if s.isEnded() {
+			return
+		}
+		visible, drawn := false, false
+		for _, sh := range s.shots {
+			visible = visible || sh.win.IsVisible()
+			drawn = drawn || sh.drawn.Load()
+		}
+		if visible && drawn {
+			Log("截图窗口已显示")
+			return
+		}
+		Log("截图窗口没有出现（显示 %v，绘制 %v），改用另一种截图方式", visible, drawn)
+		mygo.RunOnMain(func() { s.endThen(fallback) })
+	}()
 	return true, nil
 }
 

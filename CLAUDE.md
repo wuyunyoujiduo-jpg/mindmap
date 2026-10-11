@@ -36,9 +36,12 @@ by AI, and an AI assistant.
   image each; each updates from its own manifest.
 - Sync with GitHub: `internal/ghsync` (a three-way merge over the REST API,
   state in `<maps folder>/.sync/`), wired in `sync.go`.
-- Screenshots are the app's own (`internal/screenshot`). On macOS the region
-  is framed with the system's `screencapture -i` (as ⌘⇧4), then marked up in
-  an ordinary window of the app (`Annotator`), never in windows laid over
-  the screen; `macShot` in `main.go`. Windows uses the overlay of
-  `session.go`.
+- Screenshots are the app's own (`internal/screenshot`), on OneShot's way:
+  every display frozen under a window of its own (`session.go`), a region
+  framed there with handles and marked up in colors, the toolbar by it.
+  Should those windows not show and draw within 1.5 s, the shot goes on the
+  system's way (`shoot` in `main.go`): `screencapture -i` on macOS, the
+  Snipping Tool (`ms-screenclip:`) on Windows, then an `Annotator` window.
+  The settings can choose the system's way; each step goes to
+  `screenshot.log`.
 - The user writes in Chinese; the app's texts are Chinese.

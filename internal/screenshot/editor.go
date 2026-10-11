@@ -18,6 +18,7 @@ type mark struct {
 	tool tool
 	pts  []pt
 	text string
+	col  ui.Color // the zero color is markColor
 }
 
 func (m mark) first() pt { return m.pts[0] }
@@ -55,6 +56,7 @@ const textLineHeight = 26
 // editor 是一块屏幕上的截图编辑状态，不涉及绘制，方便测试。
 type editor struct {
 	bounds ui.Rect
+	color  ui.Color // of the marks drawn next; the zero color is markColor
 
 	sel    ui.Rect
 	hasSel bool
@@ -99,7 +101,7 @@ func (e *editor) down(p pt, clicks int) result {
 			e.editing, e.editAt, e.editText = true, pt{p.X, p.Y - textLineHeight/2}, ""
 			return resultNone
 		}
-		e.cur = &mark{tool: e.tool, pts: []pt{p, p}}
+		e.cur = &mark{tool: e.tool, pts: []pt{p, p}, col: e.color}
 		e.drag = dragDraw
 		return resultNone
 	}
@@ -170,7 +172,7 @@ func (e *editor) commitText() {
 	}
 	e.editing = false
 	if e.editText != "" {
-		e.marks = append(e.marks, mark{tool: toolText, pts: []pt{e.editAt}, text: e.editText})
+		e.marks = append(e.marks, mark{tool: toolText, pts: []pt{e.editAt}, text: e.editText, col: e.color})
 	}
 	e.editText = ""
 }

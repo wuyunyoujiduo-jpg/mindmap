@@ -100,11 +100,10 @@ func slicesHasName(a *app, name string) bool {
 // The settings choose how screenshots are taken, and show their log.
 func TestShotSettings(t *testing.T) {
 	a, tt := newTestApp(t)
-	a.shotModes = true
 	a.openSettings()
 	tt.Frame()
 	snapshot(t, tt, "settings-shot")
-	if err := tt.Click("框选后直接收进资料库"); err != nil {
+	if err := tt.Click("系统框选"); err != nil {
 		t.Fatal(err)
 	}
 	if !a.cfg.ShotSystem {

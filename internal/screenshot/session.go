@@ -4,6 +4,7 @@ import (
 	"log"
 	"runtime"
 	"sync"
+	"sync/atomic"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -18,7 +19,8 @@ type screenShot struct {
 	ed      *editor
 	win     *mygo.Window
 	hover   pt
-	textKey int // 每次新开文字输入换一个 key，输入框状态不沿用
+	drawn   atomic.Bool // its window drew a frame: it shows
+	textKey int         // 每次新开文字输入换一个 key，输入框状态不沿用
 }
 
 // session 是一次截图：每块屏幕一个全屏窗口，最先框选的那块屏幕独占编辑。
@@ -108,6 +110,7 @@ func openSession(shots []*screenShot, deliver func([]byte, Action), onEnd func()
 
 func (s *session) view(sh *screenShot) func(c *ui.Context) {
 	return func(c *ui.Context) {
+		sh.drawn.Store(true)
 		e := sh.ed
 		w, h := c.Size()
 		e.bounds = ui.Rect{W: w, H: h}
@@ -155,7 +158,7 @@ func (s *session) shortcuts(c *ui.Context, sh *screenShot) {
 		if e.editing {
 			e.commitText()
 		} else if e.hasSel {
-			s.copy(sh)
+			s.keep(sh) // 回车收进资料库
 		}
 	}
 	if e.editing {
@@ -169,9 +172,6 @@ func (s *session) shortcuts(c *ui.Context, sh *screenShot) {
 	}
 	if c.Shortcut(ui.Cmd, ui.KeyS) && e.hasSel {
 		s.save(sh)
-	}
-	if c.Shortcut(ui.Shift, ui.KeyEnter) && e.hasSel {
-		s.keep(sh)
 	}
 }
 
@@ -196,8 +196,8 @@ func (s *session) input(sh *screenShot, ev ui.InputEvent, avoid []ui.Rect) bool 
 		if ev.Button != 0 || (s.owner != -1 && s.owner != sh.index) {
 			return true
 		}
-		if e.down(p, ev.Clicks) == resultCopy {
-			s.copy(sh)
+		if e.down(p, ev.Clicks) == resultCopy { // 双击选区：收进资料库
+			s.keep(sh)
 		}
 		if e.editing {
 			sh.textKey++
@@ -227,7 +227,7 @@ func (s *session) textInput(c *ui.Context, sh *screenShot) {
 	e := sh.ed
 	in := ui.TextInputBase(c.Key(sh.textKey), &e.editText).
 		Absolute().Left(e.editAt.X).Top(e.editAt.Y).Width(textInputWidth(e)).
-		FontSize(textSize).FontWeight(textWeight).TextColor(markColor).
+		FontSize(textSize).FontWeight(textWeight).TextColor(colorOf(e.color)).
 		SingleLine().AutoFocus()
 	if in.Submitted() {
 		e.commitText()
@@ -239,8 +239,9 @@ const (
 	toolbarH   = float32(36)
 	toolbarPad = float32(4)
 	toolbarSep = float32(9) // 分隔线 1 + 左右各 4
-	// 4 个工具 + 分隔线 + 5 个操作，子元素间隔 2。
-	toolbarW = 9*toolbarBtn + toolbarSep + 9*2 + 2*toolbarPad
+	toolbarDot = float32(22)
+	// 4 个工具、分隔线、4 种颜色、分隔线、撤销和 4 个操作，子元素间隔 2。
+	toolbarW = 9*toolbarBtn + 4*toolbarDot + 2*toolbarSep + 16*2 + 2*toolbarPad
 )
 
 var (
@@ -254,8 +255,8 @@ var (
 func (s *session) toolbar(c *ui.Context, sh *screenShot, at pt) {
 	e := sh.ed
 	ui.Row(c).Absolute().Left(at.X).Top(at.Y).Size(toolbarW, toolbarH).Padding(toolbarPad).Gap(2).
-		AlignItems(ui.Center).Background(toolbarBg).Radius(6).
-		Shadow(0, 2, 10, 0, ui.RGBA(0, 0, 0, 0.3)).Cursor(ui.CursorDefault).
+		AlignItems(ui.Center).Background(toolbarBg).Radius(8).
+		Shadow(0, 2, 12, 0, ui.RGBA(0, 0, 0, 0.3)).Cursor(ui.CursorDefault).
 		Children(func() {
 			for _, t := range []struct {
 				icon *ui.SVG
@@ -279,22 +280,45 @@ func (s *session) toolbar(c *ui.Context, sh *screenShot, at pt) {
 				}
 			}
 			ui.Box(c).Size(1, 20).MarginX(4).Background(ui.RGBA(0, 0, 0, 0.15))
+			for i, col := range markColors {
+				if colorDot(c, i, col, colorOf(e.color) == col).Clicked() {
+					e.color = col
+					if e.tool == toolNone {
+						e.setTool(toolRect) // 选了颜色就是要画
+					}
+				}
+			}
+			ui.Box(c).Size(1, 20).MarginX(4).Background(ui.RGBA(0, 0, 0, 0.15))
 			if toolButton(c, iconUndo, "撤销 "+cmdLabel("Z")).TextColor(iconGray).Clicked() {
 				e.undo()
-			}
-			if toolButton(c, iconSave, "保存 "+cmdLabel("S")).TextColor(iconGray).Clicked() {
-				s.save(sh)
 			}
 			if toolButton(c, iconClose, "取消 Esc").TextColor(iconCancel).Clicked() {
 				s.end()
 			}
-			if toolButton(c, iconLibrary, "收进资料库 ⇧↩").TextColor(iconActive).Clicked() {
-				s.keep(sh)
+			if toolButton(c, iconSave, "保存 "+cmdLabel("S")).TextColor(iconGray).Clicked() {
+				s.save(sh)
 			}
-			if toolButton(c, iconCheck, "复制到剪贴板 ↩").TextColor(iconConfirm).Clicked() {
+			if toolButton(c, iconCopy, "复制 "+cmdLabel("C")).TextColor(iconGray).Clicked() {
 				s.copy(sh)
 			}
+			if toolButton(c, iconCheck, "收进资料库 ↩").TextColor(iconConfirm).Clicked() {
+				s.keep(sh)
+			}
 		})
+}
+
+// colorDot is a color to mark in, ringed when chosen.
+func colorDot(c *ui.Context, i int, col ui.Color, on bool) ui.Element {
+	names := []string{"红色", "黄色", "绿色", "蓝色"}
+	b := ui.ButtonBase(c.Key(names[i])).Size(toolbarDot, 28).Label(names[i]).Tooltip(names[i])
+	b.Draw(func(p *ui.Painter, r ui.Rect) {
+		cx, cy := r.X+r.W/2, r.Y+r.H/2
+		if on {
+			p.StrokePath(new(ui.Path).Circle(cx, cy, 9), 2, col)
+		}
+		p.FillPath(new(ui.Path).Circle(cx, cy, 6), col)
+	})
+	return b
 }
 
 func toolButton(c *ui.Context, icon *ui.SVG, tip string) ui.Element {
@@ -354,6 +378,13 @@ func (s *session) finish(sh *screenShot, act Action) {
 			s.deliver(png, act)
 		}
 	})
+}
+
+// isEnded tells, from any goroutine, whether the shot is over.
+func (s *session) isEnded() bool {
+	var ended bool
+	mygo.RunOnMain(func() { ended = s.ended })
+	return ended
 }
 
 // end 关闭所有选区窗口。
