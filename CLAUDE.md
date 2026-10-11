@@ -15,7 +15,9 @@ by AI, and an AI assistant.
    `GOOS=darwin GOARCH=arm64 go build -o /dev/null .`,
    `GOOS=windows go build -o /dev/null .`, `go tool mygo vet`.
    UI snapshots: `MINDMAP_SNAPSHOTS=<dir> go test .`, then look at them.
-4. Commit, push to the working branch, bump `version` in `mygo.json`, add
+4. Commit, push to the working branch, bump `version` in `mygo.json` (the
+   third number for fixes and small changes, 0.25.0 → 0.25.1; the second
+   only for a new feature of some size, 0.25.x → 0.26.0), add
    its section to `CHANGELOG.md` (in Chinese: the update window shows it),
    and release by running the `build` workflow with `release: true`.
 
@@ -30,6 +32,8 @@ by AI, and an AI assistant.
 - Auto-updates: `mygo.json`'s `updates` and MyGo's updater plugin. Releases
   sign the update files and publish them to `mindmap-models`, tagged
   `desktop-v<version>` (secrets `MYGO_UPDATER_PRIVATE_KEY`, `RELEASES_TOKEN`).
+- macOS builds are per chip, `darwin/arm64` and `darwin/amd64`, a disk
+  image each; each updates from its own manifest.
 - Sync with GitHub: `internal/ghsync` (a three-way merge over the REST API,
   state in `<maps folder>/.sync/`), wired in `sync.go`.
 - Screenshots come from OneShot, in `internal/screenshot`.

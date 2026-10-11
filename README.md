@@ -81,7 +81,7 @@
 
 ## 下载安装（macOS）
 
-在 [Releases](https://github.com/wuyunyoujiduo-jpg/mindmap/releases/latest) 下载 `.dmg`，打开后把 MindMap 拖进「应用程序」。应用没有经过苹果公证，第一次打开前在终端执行：
+在 [Releases](https://github.com/wuyunyoujiduo-jpg/mindmap/releases/latest) 下载 `.dmg`（Apple 芯片选 `arm64`，Intel 选 `amd64`），打开后把 MindMap 拖进「应用程序」。应用没有经过苹果公证，第一次打开前在终端执行：
 
 ```sh
 xattr -cr /Applications/MindMap.app

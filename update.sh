@@ -73,7 +73,12 @@ cleanup() {
 trap cleanup EXIT
 
 say "下载…"
-gh release download "$tag" -R "$REPO" -p '*.dmg' -D "$work" || fail "下载失败。"
+# The disk image of this Mac's chip, or the one for both of releases
+# before 0.25.1.
+arch=arm64
+[ "$(uname -m)" = "x86_64" ] && arch=amd64
+gh release download "$tag" -R "$REPO" -p "*.$arch.dmg" -D "$work" 2>/dev/null ||
+	gh release download "$tag" -R "$REPO" -p '*.dmg' -D "$work" || fail "下载失败。"
 dmg="$(ls "$work"/*.dmg | head -n 1)"
 
 # Quit the app if it runs, so that it saves; it saves as it quits.

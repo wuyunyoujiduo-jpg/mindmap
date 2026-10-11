@@ -113,9 +113,9 @@ jobs:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN || github.token }}
         run: |
           if [ -n "$SIGN_IDENTITY" ]; then
-            go tool mygo build -platform darwin/universal -sign "$SIGN_IDENTITY" $UPLOAD
+            go tool mygo build -platform darwin/arm64,darwin/amd64 -sign "$SIGN_IDENTITY" $UPLOAD
           else
-            go tool mygo build -platform darwin/universal $UPLOAD
+            go tool mygo build -platform darwin/arm64,darwin/amd64 $UPLOAD
           fi
       - uses: actions/upload-artifact@v7
         with:
