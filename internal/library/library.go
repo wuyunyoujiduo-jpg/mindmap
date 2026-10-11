@@ -44,8 +44,9 @@ type Clip struct {
 	Name string `json:"name,omitempty"`
 	// Source says where it came from: 手动, 剪贴板, 快速记录, 拖入, AI 工具.
 	Source string `json:"source,omitempty"`
-	// What the AI made of it: a summary, a category, tags and words to
-	// find it by. Organized is when.
+	// What the AI made of it: a line saying what it is, a summary, a
+	// category, tags and words to find it by. Organized is when.
+	Desc      string     `json:"desc,omitempty"`
 	Summary   string     `json:"summary,omitempty"`
 	Category  string     `json:"category,omitempty"`
 	Tags      []string   `json:"tags,omitempty"`
@@ -280,11 +281,15 @@ func counts(clips []*Clip, of func(*Clip) []string) []Count {
 	return out
 }
 
+// NeedsOrganizing tells whether the AI has yet to sort a clip out, or to
+// say in a line what it is.
+func (c *Clip) NeedsOrganizing() bool { return c.Organized == nil || c.Desc == "" }
+
 // Unorganized are the clips the AI has not sorted yet, oldest first.
 func (l *Library) Unorganized() []*Clip {
 	var out []*Clip
 	for i := len(l.Clips) - 1; i >= 0; i-- {
-		if l.Clips[i].Organized == nil {
+		if l.Clips[i].NeedsOrganizing() {
 			out = append(out, l.Clips[i])
 		}
 	}

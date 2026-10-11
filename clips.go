@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/egoist/mygo/ui"
@@ -221,6 +222,7 @@ type clipResult struct {
 // clipOrganized is the AI's answer on a clip.
 type clipOrganized struct {
 	Title    string   `json:"title"`
+	Desc     string   `json:"desc"`
 	Summary  string   `json:"summary"`
 	Category string   `json:"category"`
 	Tags     []string `json:"tags"`
@@ -337,6 +339,11 @@ func applyOrganized(c *library.Clip, o *clipOrganized, now time.Time) {
 	if s := strings.TrimSpace(o.Summary); s != "" {
 		c.Summary = s
 	}
+	if s := strings.TrimSpace(o.Desc); s != "" {
+		c.Desc = s
+	} else if c.Desc == "" {
+		c.Desc = firstSentence(c.Summary)
+	}
 	if c.Category == "" {
 		c.Category = strings.TrimSpace(o.Category)
 	}
@@ -373,7 +380,7 @@ func (a *app) organizePrompt() string {
 	}
 	var b strings.Builder
 	b.WriteString(`请整理下面这条资料，输出 JSON：
-{"title": "简短标题，不超过 30 字", "summary": "2–4 句话的摘要，说清它讲了什么、有什么用", "category": "一个分类", "tags": ["1–5 个标签"], "keywords": ["5–12 个检索关键词：同义词、中英文说法、相关概念"], "text": "只有图片才填：图中的文字和内容描述；其他留空字符串"}
+{"title": "简短标题，不超过 30 字", "desc": "一句简单的描述说明：这是什么、有什么用，不超过 40 字", "summary": "2–4 句话的摘要，说清它讲了什么、有什么用", "category": "一个分类", "tags": ["1–5 个标签"], "keywords": ["5–12 个检索关键词：同义词、中英文说法、相关概念"], "text": "只有图片才填：图中的文字和内容描述；其他留空字符串"}
 `)
 	if len(cats) > 0 {
 		b.WriteString("\n已有分类：" + strings.Join(cats, "、") + "。合适就沿用已有分类，都不合适才新建；分类要宽泛，比如 技术、产品、设计、学习、工作、灵感、生活、资源。\n")
@@ -507,7 +514,7 @@ func (a *app) clipToMap(c *library.Clip) error {
 	}
 	n := model.NewNode(c.Label())
 	var note []string
-	for _, s := range []string{c.Summary, c.Note} {
+	for _, s := range []string{c.Desc, c.Summary, c.Note} {
 		if s = strings.TrimSpace(s); s != "" {
 			note = append(note, s)
 		}
@@ -556,3 +563,16 @@ func (a *app) clipToMap(c *library.Clip) error {
 
 // fetchPager reads a web page; tests replace it.
 type fetchPager func(ctx context.Context, url string) (library.Page, error)
+
+// firstSentence is the first sentence of a text, for a description.
+func firstSentence(s string) string {
+	s = strings.TrimSpace(s)
+	if i := strings.IndexAny(s, "。！？\n"); i >= 0 {
+		_, size := utf8.DecodeRuneInString(s[i:])
+		s = s[:i+size]
+	}
+	if r := []rune(s); len(r) > 60 {
+		s = string(r[:60]) + "…"
+	}
+	return strings.TrimSpace(s)
+}

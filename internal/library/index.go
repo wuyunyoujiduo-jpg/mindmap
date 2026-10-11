@@ -21,6 +21,7 @@ var fieldWeights = []struct {
 	{func(c *Clip) string { return strings.Join(c.Tags, " ") }, 3},
 	{func(c *Clip) string { return c.Category }, 2},
 	{func(c *Clip) string { return strings.Join(c.Keywords, " ") }, 2},
+	{func(c *Clip) string { return c.Desc }, 2.5},
 	{func(c *Clip) string { return c.Summary }, 2},
 	{func(c *Clip) string { return c.Note }, 1.5},
 	{func(c *Clip) string { return c.Text }, 1},
@@ -121,7 +122,7 @@ func (ix *Index) Search(query string, keep func(*Clip) bool) []Hit {
 		// Clips with more of the query's terms first, and the whole query
 		// as it was written above all.
 		score *= float64(matched) / float64(len(q))
-		if len(phrase) > 1 && strings.Contains(strings.ToLower(c.Title+"\n"+c.Summary+"\n"+c.Note+"\n"+c.Text+"\n"+strings.Join(c.Tags, " ")), phrase) {
+		if len(phrase) > 1 && strings.Contains(strings.ToLower(c.Title+"\n"+c.Desc+"\n"+c.Summary+"\n"+c.Note+"\n"+c.Text+"\n"+strings.Join(c.Tags, " ")), phrase) {
 			score *= 2
 		}
 		hits = append(hits, Hit{c, score})

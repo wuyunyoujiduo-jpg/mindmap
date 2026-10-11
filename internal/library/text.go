@@ -43,6 +43,9 @@ func Brief(c *Clip, query string) string {
 	if c.URL != "" {
 		b.WriteString("  网址：" + c.URL + "\n")
 	}
+	if c.Desc != "" {
+		b.WriteString("  说明：" + c.Desc + "\n")
+	}
 	if c.Summary != "" {
 		b.WriteString("  摘要：" + c.Summary + "\n")
 	}

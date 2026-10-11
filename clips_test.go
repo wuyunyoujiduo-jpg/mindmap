@@ -27,7 +27,7 @@ func TestLibraryKeepsAndOrganizes(t *testing.T) {
 		return library.Page{Title: "缓存设计的五个原则", Description: "讲缓存", Text: "先读缓存再读库；过期时间加随机，避免雪崩。"}, nil
 	}
 	fake := &fakeClaude{replies: []string{
-		claudeText("```json\n" + `{"title": "缓存设计原则", "summary": "介绍缓存读写顺序和防雪崩的做法。", "category": "技术", "tags": ["后端", "缓存"], "keywords": ["cache", "Redis", "雪崩"], "text": ""}` + "\n```"),
+		claudeText("```json\n" + `{"title": "缓存设计原则", "desc": "一篇讲缓存读写顺序和防雪崩的实践文章。", "summary": "介绍缓存读写顺序和防雪崩的做法。", "category": "技术", "tags": ["后端", "缓存"], "keywords": ["cache", "Redis", "雪崩"], "text": ""}` + "\n```"),
 		claudeText(`{"title": "周会改到周四", "summary": "团队周会时间调整。", "category": "工作", "tags": ["会议"], "keywords": ["例会"], "text": ""}`),
 	}}
 	a.sendAI = fake.send
@@ -52,6 +52,9 @@ func TestLibraryKeepsAndOrganizes(t *testing.T) {
 	if c.Kind != library.KindLink || len(fetched) != 1 || c.Title != "缓存设计的五个原则" || !strings.Contains(c.Text, "雪崩") {
 		t.Fatalf("link clip %+v, fetched %v", c, fetched)
 	}
+	if c.Desc != "一篇讲缓存读写顺序和防雪崩的实践文章。" {
+		t.Fatalf("desc %q", c.Desc)
+	}
 	if c.Category != "技术" || !strings.Contains(strings.Join(c.Tags, ","), "缓存") || c.Organized == nil || c.Summary == "" {
 		t.Fatalf("not organized: %+v", c)
 	}
@@ -69,6 +72,9 @@ func TestLibraryKeepsAndOrganizes(t *testing.T) {
 	tt.Frame()
 	if len(a.lib.Clips) != 2 || a.lib.Clips[0].Title != "周会改到周四" || a.lib.Clips[0].Category != "工作" {
 		t.Fatalf("text clip %+v", a.lib.Clips[0])
+	}
+	if a.lib.Clips[0].Desc != "团队周会时间调整。" { // none given: the summary's first sentence
+		t.Fatalf("fallback desc %q", a.lib.Clips[0].Desc)
 	}
 	req, _ = json.Marshal(fake.requests[1].Messages)
 	if !strings.Contains(string(req), "已有分类：技术") {
@@ -94,7 +100,7 @@ func TestLibraryKeepsAndOrganizes(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if !tt.HasText("AI 摘要") || !tt.HasText("介绍缓存读写顺序和防雪崩的做法。") {
+	if !tt.HasText("一篇讲缓存读写顺序和防雪崩的实践文章。") || !tt.HasText("AI 摘要") || !tt.HasText("介绍缓存读写顺序和防雪崩的做法。") {
 		t.Fatalf("detail: %q", tt.Texts())
 	}
 	snapshot(t, tt, "library")

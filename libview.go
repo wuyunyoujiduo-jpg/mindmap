@@ -111,7 +111,7 @@ func (a *app) libHits() []library.Hit {
 		switch {
 		case kind != "" && c.Kind != kind:
 			return false
-		case a.libCat == "-" && c.Organized != nil:
+		case a.libCat == "-" && !c.NeedsOrganizing():
 			return false
 		case a.libCat == "★" && !c.Starred:
 			return false
@@ -259,7 +259,7 @@ func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 					ui.Text(c, "★").FontSize(12).TextColor(t.Warning)
 				}
 			})
-			sub := clip.Summary
+			sub := cmpOr(clip.Desc, clip.Summary)
 			if sub == "" {
 				sub = cmpOr(clip.Note, clip.Text)
 			}
@@ -408,6 +408,14 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 	ui.Field(c, "标题", func() {
 		if ui.TextInput(c.Key("clip-title"), &title).Placeholder(clip.Label()).Label("资料标题").Changed() {
 			clip.Title = title
+			a.saveClip(clip)
+		}
+	})
+	desc := clip.Desc
+	ui.Field(c, "说明", func() {
+		in := ui.TextInput(c.Key("clip-desc"), &desc).Placeholder("一句话说明这是什么（AI 整理时自动生成）").Label("资料说明")
+		if in.Changed() {
+			clip.Desc = desc
 			a.saveClip(clip)
 		}
 	})
