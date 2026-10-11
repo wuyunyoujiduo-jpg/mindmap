@@ -124,13 +124,32 @@ def encode(t, emb, text):
     return v / (np.linalg.norm(v) or 1), enc.tokens
 
 
-# What the normalizer makes of each character it changes.
+# What the normalizer's precompiled charsmap makes of each character it
+# changes: the charsmap alone, the rest of the normalizer being rules the
+# reader runs itself.
+def find_precompiled(n):
+    if isinstance(n, dict):
+        if n.get("type") == "Precompiled":
+            return n
+        for v in n.values():
+            if (f := find_precompiled(v)) is not None:
+                return f
+    if isinstance(n, list):
+        for v in n:
+            if (f := find_precompiled(v)) is not None:
+                return f
+    return None
+
+
+pre_only = dict(tj)
+pre_only["normalizer"] = find_precompiled(tj["normalizer"])
+charsmap = Tokenizer.from_str(json.dumps(pre_only)).normalizer
 charmap = {}
 for o in list(range(0x0, 0xA000)) + list(range(0xF900, 0x10000)):
     ch = chr(o)
     if unicodedata.category(ch) in ("Cs", "Co", "Cn"):
         continue
-    out = tok.normalizer.normalize_str(ch)
+    out = charsmap.normalize_str(ch)
     if out != ch:
         charmap[ch] = out
 print("charmap entries:", len(charmap))
