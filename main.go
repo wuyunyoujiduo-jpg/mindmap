@@ -1,12 +1,15 @@
-// MindMap is a desktop mind map for managing projects: nodes carry notes,
+// MyMind is a desktop mind map for managing projects: nodes carry notes,
 // tags and tasks with dates, shown as a map, a board and an agenda.
 package main
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/png"
 	"log"
 	"os"
 	"os/exec"
@@ -119,12 +122,8 @@ func (d *desktop) SetShotKey(key string) error {
 func (d *desktop) Screenshot(fromApp bool) {
 	inApp := fromApp || d.win.IsFocused()
 	logShot("截图开始：从应用内 %v，应用在前台 %v，系统截图 %v", fromApp, inApp, d.app.cfg.ShotSystem)
-	if d.app.cfg.ShotSystem && runtime.GOOS == "darwin" {
-		go d.systemShot(fromApp)
-		return
-	}
-	if helper := shotHelper(); helper != "" {
-		go d.helperShot(helper, fromApp, inApp)
+	if runtime.GOOS == "darwin" {
+		go d.macShot(fromApp, inApp)
 		return
 	}
 	go func() {
@@ -196,121 +195,141 @@ func logShot(format string, args ...any) {
 	fmt.Fprintf(f, "%s %s\n", time.Now().Format("2006-01-02 15:04:05"), fmt.Sprintf(format, args...))
 }
 
-// shotHelper is OneShot's screenshot as a program of its own, shipped in
-// the macOS app (helpers/shot), "" when there is none.
-func shotHelper() string {
-	if runtime.GOOS != "darwin" {
-		return ""
-	}
-	p := filepath.Join(resourcesDir(), "shot")
-	if info, err := os.Stat(p); err != nil || info.IsDir() {
-		return ""
-	}
-	return p
-}
+var shotBusy atomic.Bool
 
-var helperBusy atomic.Bool
-
-// helperShot takes a screenshot with the helper: OneShot itself, a menu
-// bar app on its own version of MyGo, which frames and marks up the shot,
-// copies it, or writes it for the app to keep or save. Off the main
-// thread.
-func (d *desktop) helperShot(helper string, fromApp, inApp bool) {
-	if !helperBusy.CompareAndSwap(false, true) {
+// macShot takes a screenshot on macOS: the system's own tool frames a
+// region, or a window with Space, as ⌘⇧4 does; then the shot is marked up
+// in a window of the app, unless the settings keep it as it is. Off the
+// main thread.
+func (d *desktop) macShot(fromApp, inApp bool) {
+	if !shotBusy.CompareAndSwap(false, true) {
 		logShot("上一次截图还没有结束")
 		return
 	}
-	defer helperBusy.Store(false)
-	if fromApp {
-		d.win.Hide()
-		time.Sleep(250 * time.Millisecond)
-		defer d.win.Update(d.ShowMain)
-	}
-	dir, err := os.MkdirTemp("", "mymind-shot-")
-	if err != nil {
-		logShot("截图失败：%v", err)
-		return
-	}
-	defer os.RemoveAll(dir)
-	out := filepath.Join(dir, "shot.png")
-	cmd := exec.Command(helper, "-out", out)
-	var stdout, stderr strings.Builder
-	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	err = cmd.Run()
-	for _, l := range strings.Split(strings.TrimSpace(stderr.String()), "\n") {
-		if l != "" {
-			logShot("%s", l)
-		}
-	}
-	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
-	outcome := lines[len(lines)-1]
-	logShot("截图程序结束：%s（%v）", outcome, err)
-	switch {
-	case outcome == "library" || outcome == "save":
-		png, rerr := os.ReadFile(out)
-		if rerr != nil || len(png) == 0 {
-			logShot("截图失败：读不到图片 %v", rerr)
-			return
-		}
-		if outcome == "save" {
-			d.saveShot(png)
-		} else {
-			d.win.Update(func() { d.app.keepShot(png, screenshot.Library, fromApp) })
-		}
-	case outcome == "copy":
-		d.win.Update(func() { d.app.keepShot(nil, screenshot.Copy, fromApp) })
-	case outcome == "permission":
+	if !screenshot.HasPermission() {
+		shotBusy.Store(false)
 		logShot("没有屏幕录制权限")
+		screenshot.RequestPermission()
 		d.win.Update(func() {
 			d.ShowMain()
 			d.app.showShotAlert("截图需要屏幕录制权限", screenshot.PermissionHelp, true)
 		})
 		return
-	case outcome == "cancel":
-	default:
-		msg := strings.TrimPrefix(outcome, "error: ")
-		if msg == "" && err != nil {
-			msg = err.Error()
-		}
-		logShot("截图失败：%s", msg)
-		d.win.Update(func() {
-			d.ShowMain()
-			d.app.showShotAlert("截图失败", msg+"\n\n可以在 设置 → 通用 → 截图 里改用「系统截图」，并把截图记录复制发给开发者。", false)
-		})
-		return
 	}
-	logShot("截图结束")
-}
-
-// systemShot takes a screenshot with macOS's own tool, which frames a
-// region or a window, and keeps it in the library. Off the main thread.
-func (d *desktop) systemShot(fromApp bool) {
 	if fromApp {
 		d.win.Hide()
-		time.Sleep(250 * time.Millisecond)
+		time.Sleep(250 * time.Millisecond) // till it is off the screen
 	}
-	defer func() {
+	data, err := frameRegion()
+	if err != nil || len(data) == 0 {
+		shotBusy.Store(false)
+		if err != nil {
+			logShot("截图失败：%v", err)
+		} else {
+			logShot("截图取消")
+		}
 		if fromApp {
 			d.win.Update(d.ShowMain)
 		}
-	}()
+		logShot("截图结束")
+		return
+	}
+	logShot("已框选：%d 字节", len(data))
+	if d.app.cfg.ShotSystem { // kept as it is
+		shotBusy.Store(false)
+		d.win.Update(func() { d.app.keepShot(data, screenshot.Library, fromApp) })
+		logShot("截图结束")
+		return
+	}
+	img, err := png.Decode(bytes.NewReader(data))
+	if err != nil {
+		shotBusy.Store(false)
+		logShot("截图失败：读不懂图片 %v", err)
+		return
+	}
+	d.win.Update(func() { d.annotate(img, fromApp, inApp) })
+}
+
+// frameRegion has the user frame a region of the screen with macOS's
+// screencapture, and returns it as PNG; nothing when canceled with Esc.
+func frameRegion() ([]byte, error) {
 	f, err := os.CreateTemp("", "mymind-shot-*.png")
 	if err != nil {
-		logShot("系统截图失败：%v", err)
-		return
+		return nil, err
 	}
 	f.Close()
 	defer os.Remove(f.Name())
-	// -i: framed by the user, Esc cancels; -x: no sound.
-	out, err := exec.Command("/usr/sbin/screencapture", "-i", "-x", "-t", "png", f.Name()).CombinedOutput()
-	data, _ := os.ReadFile(f.Name())
-	if err != nil || len(data) == 0 {
-		logShot("系统截图没有得到图片：%v %s", err, out)
-		return // canceled
+	// -i: framed by the user, Space for a window, Esc cancels; -x: no
+	// sound; -o: no window shadow.
+	out, err := exec.Command("/usr/sbin/screencapture", "-i", "-x", "-o", "-t", "png", f.Name()).CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("screencapture: %v %s", err, out)
 	}
-	logShot("系统截图完成：%d 字节", len(data))
-	d.win.Update(func() { d.app.keepShot(data, screenshot.Library, fromApp) })
-	logShot("截图结束")
+	return os.ReadFile(f.Name())
+}
+
+// annotate shows the shot in a window to mark it up, then keeps, copies or
+// saves it. On the main thread.
+func (d *desktop) annotate(img image.Image, fromApp, inApp bool) {
+	an := screenshot.NewAnnotator(img)
+	maxW, maxH := float32(1200), float32(800)
+	for _, disp := range mygo.Screen.Displays() {
+		if disp.Primary {
+			an.Scale = float32(disp.ScaleFactor)
+			maxW, maxH = float32(disp.WorkArea.Width)*0.9, float32(disp.WorkArea.Height)*0.9
+		}
+	}
+	w, h := an.Size(maxW, maxH)
+	win := mygo.NewWindow(mygo.WindowOptions{
+		Title:         "截图标注",
+		Width:         int(w),
+		Height:        int(h),
+		MinWidth:      520,
+		MinHeight:     300,
+		TitleBarStyle: mygo.TitleBarHiddenInset,
+		Content:       ui.View(an.View),
+	})
+	closed := false
+	end := func() {
+		if closed {
+			return
+		}
+		closed = true
+		shotBusy.Store(false)
+		logShot("截图结束")
+		if fromApp {
+			d.ShowMain()
+		} else if !inApp {
+			screenshot.ReturnFocus() // back to the app the shortcut was pressed in
+		}
+	}
+	an.Deliver = func(data []byte, act screenshot.Action) {
+		logShot("截图完成：%d 字节，操作 %d", len(data), act)
+		win.Close()
+		end()
+		switch act {
+		case screenshot.Copy:
+			if err := mygo.Clipboard.WriteImage(data); err != nil {
+				d.win.Update(func() { d.app.showShotAlert("复制失败", err.Error(), false) })
+				return
+			}
+			d.win.Update(func() { d.app.keepShot(data, act, fromApp) })
+		case screenshot.Save:
+			go d.saveShot(data)
+		default:
+			d.win.Update(func() { d.app.keepShot(data, act, fromApp) })
+		}
+	}
+	an.Cancel = func() {
+		logShot("截图取消")
+		win.Close()
+		end()
+	}
+	win.OnClosed(end) // closed with its button
+	win.Center()
+	win.Show()
+	win.Focus()
+	logShot("截图标注窗口已打开")
 }
 
 // ShotLog is the end of the screenshots' log.

@@ -78,13 +78,13 @@ func (a *app) shotSettings(c *ui.Context) {
 				if a.cfg.ShotSystem {
 					mode = 1
 				}
-				if ui.Segmented(c, &mode, "MyMind 截图（可标注）", "系统截图").Changed() {
+				if ui.Segmented(c, &mode, "框选后标注", "框选后直接收进资料库").Changed() {
 					a.cfg.ShotSystem = mode == 1
 					a.cfg.save()
 				}
-				hint := "框选后可以加框线、箭头、文字，再收进资料库、复制或保存。"
+				hint := "拖动框选一块屏幕，或按空格选一个窗口，Esc 取消；然后加框线、箭头、画笔、文字，收进资料库、复制或保存。"
 				if a.cfg.ShotSystem {
-					hint = "用 macOS 自带的截图：拖动框选，或按空格选窗口，截好直接收进资料库。"
+					hint = "拖动框选一块屏幕，或按空格选一个窗口，Esc 取消；截好直接收进资料库。"
 				}
 				ui.Text(c, hint).FontSize(12).TextColor(t.TextMuted).Wrap()
 			}

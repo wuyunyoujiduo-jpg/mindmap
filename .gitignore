@@ -4,5 +4,3 @@ mygo_windows_*.syso
 /mindmap
 resources/mindmap-embed.bin
 
-# Built by the workflow (helpers/shot)
-/resources/darwin-*/

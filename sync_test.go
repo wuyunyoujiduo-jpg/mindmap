@@ -104,7 +104,7 @@ func TestShotSettings(t *testing.T) {
 	a.openSettings()
 	tt.Frame()
 	snapshot(t, tt, "settings-shot")
-	if err := tt.Click("系统截图"); err != nil {
+	if err := tt.Click("框选后直接收进资料库"); err != nil {
 		t.Fatal(err)
 	}
 	if !a.cfg.ShotSystem {

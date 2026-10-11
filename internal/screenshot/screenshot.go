@@ -1,8 +1,8 @@
-// Package screenshot frames a part of the screen and marks it up before it
-// is kept: a window over each display shows what was on it, frozen; a
-// drag frames a region, which can be moved and resized; boxes, arrows,
-// lines and text mark it; and the toolbar copies it, saves it or keeps it
-// in the library. It came from OneShot, a menu bar screenshot tool.
+// Package screenshot is the app's screenshot: a region of the screen,
+// marked up with boxes, arrows, lines and text, then kept in the library,
+// copied or saved. On macOS the system's tool frames the region and an
+// Annotator marks it up in an ordinary window; elsewhere a window laid over
+// each display does both (session.go).
 package screenshot
 
 import (

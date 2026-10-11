@@ -10,11 +10,6 @@ by AI, and an AI assistant.
    out, upgrade with `tools/check-mygo.sh -u`, read what it adds (its
    `docs/` in the module cache, `go doc github.com/egoist/mygo`) and use it
    where it helps. Note the upgrade in the commit message.
-   The exception, for now, is `helpers/shot`, the screenshot helper: it
-   stays on MyGo 0.3.3, on which OneShot is known to work on the user's Mac,
-   until a screenshot taken with it is confirmed there; then it is moved to
-   the latest MyGo in a release of its own, to tell whether MyGo was what
-   broke the screenshot.
 2. Make the change, matching the code around it.
 3. Check: `gofmt -l .`, `go vet ./...`, `go test ./...`,
    `GOOS=darwin GOARCH=arm64 go build -o /dev/null .`,
@@ -41,9 +36,9 @@ by AI, and an AI assistant.
   image each; each updates from its own manifest.
 - Sync with GitHub: `internal/ghsync` (a three-way merge over the REST API,
   state in `<maps folder>/.sync/`), wired in `sync.go`.
-- Screenshots come from OneShot. On macOS the app runs `helpers/shot`, OneShot
-  as a program of its own (its own module, on OneShot's MyGo 0.3.3, a menu
-  bar app), which the workflow builds into `resources/darwin-<arch>/shot`;
-  `internal/screenshot` is the same code in the app, for Windows. The
-  settings also offer macOS's own tool (`screencapture -i`).
+- Screenshots are the app's own (`internal/screenshot`). On macOS the region
+  is framed with the system's `screencapture -i` (as ⌘⇧4), then marked up in
+  an ordinary window of the app (`Annotator`), never in windows laid over
+  the screen; `macShot` in `main.go`. Windows uses the overlay of
+  `session.go`.
 - The user writes in Chinese; the app's texts are Chinese.
