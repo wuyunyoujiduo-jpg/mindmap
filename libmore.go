@@ -414,13 +414,13 @@ func (a *app) embedSettings(c *ui.Context) {
 			if a.cfg.NoEmbed {
 				return
 			}
-			switch e := a.embedder(); {
-			case e.Builtin():
-				ui.Text(c, "✓ 正在使用内置模型：离线、免费、不上传任何内容。想要更准，可以在下面换成外部向量模型。").FontSize(12).TextColor(t.Success).Wrap()
+			switch {
+			case a.cfg.EmbedURL == "":
+				a.pluginSettings(c)
 			case a.cfg.EmbedURL != "":
 				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 					ui.Text(c, "正在使用外部向量模型 "+a.cfg.EmbedModel).FontSize(12).TextColor(t.TextMuted).Grow(1)
-					if a.localModel() != nil && ui.Button(c, "改回内置模型").FontSize(12).Clicked() {
+					if ui.Button(c, "改用离线插件").FontSize(12).Clicked() {
 						a.cfg.EmbedURL, a.cfg.EmbedKey, a.cfg.EmbedModel = "", "", ""
 						a.embedDrafts = [3]string{}
 						a.cfg.save()
@@ -428,10 +428,8 @@ func (a *app) embedSettings(c *ui.Context) {
 						a.embedLibrary()
 					}
 				})
-			default:
-				ui.Text(c, "这个版本没有内置模型，可以接一个外部向量模型。").FontSize(12).TextColor(t.Warning).Wrap()
 			}
-			ui.Text(c, "外部向量模型（可选，更准）：支持任何 OpenAI 兼容的 /embeddings 接口。").
+			ui.Text(c, "或者用外部向量模型（更准）：支持任何 OpenAI 兼容的 /embeddings 接口。").
 				FontSize(12).TextColor(t.TextMuted).Wrap()
 			ui.Row(c).Gap(6).Wrap().GapY(6).Children(func() {
 				for _, p := range embedPresets {
@@ -523,31 +521,55 @@ func (a *app) backupSettings(c *ui.Context) {
 	})
 }
 
-// localModelPath finds the built-in embedding model's file: among the
-// app's resources, or where MINDMAP_EMBED_MODEL says. Tests replace it.
-var localModelPath = func() string {
+// The embedding model of the library's semantic search is a plugin: not
+// in the app, but downloaded when wanted (see plugin.go) into the app's
+// folder. Where MINDMAP_EMBED_MODEL says, or among the app's resources
+// (a build from source can put it there), it is taken as well.
+
+// localModelPaths are where the model is looked for, the first found used.
+var localModelPaths = func() []string {
+	var out []string
 	if p := os.Getenv("MINDMAP_EMBED_MODEL"); p != "" {
-		return p
+		out = append(out, p)
+	}
+	if p := pluginPath(); p != "" {
+		out = append(out, p)
 	}
 	if dir := resourcesDir(); dir != "" {
-		return filepath.Join(dir, embed.FileName)
+		out = append(out, filepath.Join(dir, embed.FileName))
 	}
-	return ""
+	return out
 }
 
 var (
-	localOnce  sync.Once
-	localModel *embed.Model
+	localMu     sync.Mutex
+	localLoaded bool
+	localModel  *embed.Model
 )
 
-// loadLocalModel reads the built-in model once, nil when the app has none.
+// loadLocalModel reads the model once, nil when there is none.
 func loadLocalModel() *embed.Model {
-	localOnce.Do(func() {
-		if p := localModelPath(); p != "" {
-			localModel, _ = embed.Load(p)
+	localMu.Lock()
+	defer localMu.Unlock()
+	if !localLoaded {
+		localLoaded = true
+		for _, p := range localModelPaths() {
+			if m, err := embed.Load(p); err == nil {
+				localModel = m
+				break
+			}
 		}
-	})
+	}
 	return localModel
+}
+
+// reloadLocalModel reads the model again, as after it was downloaded or
+// removed.
+func reloadLocalModel() *embed.Model {
+	localMu.Lock()
+	localLoaded, localModel = false, nil
+	localMu.Unlock()
+	return loadLocalModel()
 }
 
 func (a *app) localModel() *embed.Model {

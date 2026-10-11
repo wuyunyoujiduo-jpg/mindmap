@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -227,6 +228,13 @@ type app struct {
 	embedDrafts   [3]string // the settings' fields of the embedding model: address, key, model
 	embedTest     string    // how testing the embedding model went
 	noLocalModel  bool      // tests leave the built-in model out
+	pluginBusy    bool
+	pluginErr     string
+	pluginNote    string
+	pluginDone    int64 // bytes downloaded of pluginSize
+	pluginSize    int64
+	pluginCancel  context.CancelFunc
+	pluginGet     pluginGetter
 	clipKeyDraft  string
 
 	// The presentation.
@@ -292,6 +300,7 @@ func newApp(plat platform, cfg config) *app {
 		sendDeepSeek:  sendToDeepSeek,
 		fetchPage:     library.FetchPage,
 		embed:         embedWith,
+		pluginGet:     httpGet,
 		qvecs:         map[string][]float32{},
 		qPending:      map[string]bool{},
 		libStatus:     map[string]string{},

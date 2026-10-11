@@ -65,6 +65,7 @@ func (a *app) libraryView(c *ui.Context) {
 			}
 		})
 		ui.Divider(c)
+		a.pluginBanner(c)
 		a.clipComposer(c)
 		a.clipFilters(c)
 		if a.libErr != "" {
