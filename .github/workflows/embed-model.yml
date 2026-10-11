@@ -10,9 +10,15 @@ on:
       model:
         description: "Model2Vec 模型"
         default: "minishlab/potion-multilingual-128M"
-      tokens:
-        description: "保留的词元数"
-        default: "64000"
+      cjk:
+        description: "保留的中日文词元数"
+        default: "70000"
+      ascii:
+        description: "保留的英文词元数"
+        default: "30000"
+      dims:
+        description: "向量维度（PCA）"
+        default: "128"
 
 permissions:
   contents: write
@@ -27,7 +33,7 @@ jobs:
           python-version: "3.12"
       - run: pip install model2vec numpy
       - name: Build the model
-        run: python tools/embedmodel/build.py "${{ inputs.model }}" mindmap-embed.bin reference.json "${{ inputs.tokens }}"
+        run: python tools/embedmodel/build.py "${{ inputs.model }}" mindmap-embed.bin reference.json "${{ inputs.cjk }}" "${{ inputs.ascii }}" "${{ inputs.dims }}"
       - run: ls -la mindmap-embed.bin reference.json && gzip -k -9 mindmap-embed.bin && ls -la mindmap-embed.bin.gz
       - name: Publish
         env:
