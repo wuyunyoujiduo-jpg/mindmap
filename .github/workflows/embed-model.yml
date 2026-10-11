@@ -1,0 +1,37 @@
+name: Embedding model
+
+# Builds the built-in embedding model of the library's semantic search
+# from a Model2Vec model (tools/embedmodel) and publishes it as the assets
+# of the embed-model release, which the app's builds download into
+# resources/. Run by hand when the model or its trimming changes.
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "Model2Vec 模型"
+        default: "minishlab/potion-multilingual-128M"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install model2vec numpy
+      - name: Build the model
+        run: python tools/embedmodel/build.py "${{ inputs.model }}" mindmap-embed.bin reference.json
+      - run: ls -la mindmap-embed.bin reference.json && gzip -k -9 mindmap-embed.bin && ls -la mindmap-embed.bin.gz
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view embed-model --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 ||
+            gh release create embed-model --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --title "内置向量模型" --notes "资料库语义检索的内置模型，由 tools/embedmodel 生成，供打包时下载。" \
+              --prerelease --latest=false
+          gh release upload embed-model mindmap-embed.bin reference.json --repo "$GITHUB_REPOSITORY" --clobber
