@@ -3,23 +3,15 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
 	_ "embed"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"image"
-	"image/png"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/egoist/mygo"
@@ -129,23 +121,13 @@ func (d *desktop) SetShotKey(key string) error {
 // the settings, and what fails is said.
 func (d *desktop) Screenshot(fromApp bool) {
 	inApp := fromApp || d.win.IsFocused()
-	logShot("截图开始：从应用内 %v，应用在前台 %v，系统框选 %v", fromApp, inApp, d.app.cfg.ShotSystem)
-	frame := frameRegion
-	if runtime.GOOS == "windows" {
-		frame = snipRegion
-	}
-	if d.app.cfg.ShotSystem {
-		go d.shoot(frame, fromApp, inApp)
-		return
-	}
-	go d.overlayShot(frame, fromApp, inApp)
+	logShot("截图开始：从应用内 %v，应用在前台 %v", fromApp, inApp)
+	go d.overlayShot(fromApp, inApp)
 }
 
-// overlayShot takes a screenshot the app's own way: every display frozen
-// under a window of its own, in which a region is framed and marked up.
-// Should those windows not show, the shot goes on with the system's tool
-// to frame (shoot). Off the main thread.
-func (d *desktop) overlayShot(frame func(int64) ([]byte, error), fromApp, inApp bool) {
+// overlayShot takes a screenshot: every display frozen under a window of
+// its own, in which a region is framed and marked up. Off the main thread.
+func (d *desktop) overlayShot(fromApp, inApp bool) {
 	if !screenshot.HasPermission() {
 		logShot("没有屏幕录制权限")
 		screenshot.RequestPermission()
@@ -161,7 +143,6 @@ func (d *desktop) overlayShot(frame func(int64) ([]byte, error), fromApp, inApp 
 		d.win.Hide()
 		time.Sleep(250 * time.Millisecond) // till it is off the screen
 	}
-	var fellBack atomic.Bool
 	ok, err := screenshot.Start(func(png []byte, act screenshot.Action) {
 		logShot("截图完成：%d 字节，操作 %d", len(png), act)
 		if act == screenshot.Save {
@@ -170,29 +151,18 @@ func (d *desktop) overlayShot(frame func(int64) ([]byte, error), fromApp, inApp 
 		}
 		d.win.Update(func() { d.app.keepShot(png, act, fromApp) })
 	}, func() {
-		if fellBack.Load() {
-			return // the shot goes on
-		}
 		switch {
 		case fromApp:
 			d.win.Update(d.ShowMain)
 		case !inApp:
 			screenshot.ReturnFocus()
 		}
-	}, func() {
-		fellBack.Store(true)
-		go d.shoot(frame, fromApp, inApp)
 	})
-	if errors.Is(err, screenshot.ErrBusy) { // the last one never ended
-		logShot("上一次截图没有结束，改用系统框选")
-		go d.shoot(frame, fromApp, inApp)
-		return
-	}
 	if err != nil {
 		logShot("截图失败：%v", err)
 		d.win.Update(func() {
 			d.ShowMain()
-			d.app.showShotAlert("截图失败", err.Error()+"\n\n可以在 设置 → 通用 → 截图 里改用「系统框选」，并把截图记录复制发给开发者。", false)
+			d.app.showShotAlert("截图失败", err.Error()+"\n\n可以在 设置 → 通用 → 截图 里把截图记录复制发给开发者。", false)
 		})
 	}
 	if !ok && fromApp {
@@ -222,165 +192,6 @@ func logShot(format string, args ...any) {
 	}
 	defer f.Close()
 	fmt.Fprintf(f, "%s %s\n", time.Now().Format("2006-01-02 15:04:05"), fmt.Sprintf(format, args...))
-}
-
-// shotBusy is set while a shot is marked up; shotGen counts the shots
-// begun, so that a new one ends the wait of one left in the system's tool.
-var (
-	shotBusy atomic.Bool
-	shotGen  atomic.Int64
-)
-
-// shoot takes a screenshot the system's way: its own tool frames a region,
-// or a window, as ⌘⇧4 does on macOS and Win+Shift+S on Windows; then the
-// shot is marked up in a window of the app. Off the main thread.
-func (d *desktop) shoot(frame func(gen int64) ([]byte, error), fromApp, inApp bool) {
-	if !shotBusy.CompareAndSwap(false, true) {
-		logShot("上一次截图还在标注")
-		return
-	}
-	gen := shotGen.Add(1)
-	if !screenshot.HasPermission() {
-		shotBusy.Store(false)
-		logShot("没有屏幕录制权限")
-		screenshot.RequestPermission()
-		d.win.Update(func() {
-			d.ShowMain()
-			d.app.showShotAlert("截图需要屏幕录制权限", screenshot.PermissionHelp, true)
-		})
-		return
-	}
-	if fromApp {
-		d.win.Hide()
-		time.Sleep(250 * time.Millisecond) // till it is off the screen
-	}
-	data, err := frame(gen)
-	if err != nil || len(data) == 0 {
-		shotBusy.Store(false)
-		if err != nil {
-			logShot("截图失败：%v", err)
-		} else {
-			logShot("截图取消")
-		}
-		if fromApp {
-			d.win.Update(d.ShowMain)
-		}
-		logShot("截图结束")
-		return
-	}
-	logShot("已框选：%d 字节", len(data))
-	img, err := png.Decode(bytes.NewReader(data))
-	if err != nil {
-		shotBusy.Store(false)
-		logShot("截图失败：读不懂图片 %v", err)
-		return
-	}
-	d.win.Update(func() { d.annotate(img, fromApp, inApp) })
-}
-
-// frameRegion has the user frame a region of the screen with macOS's
-// screencapture, and returns it as PNG; nothing when canceled with Esc.
-func frameRegion(int64) ([]byte, error) {
-	f, err := os.CreateTemp("", "mymind-shot-*.png")
-	if err != nil {
-		return nil, err
-	}
-	f.Close()
-	defer os.Remove(f.Name())
-	// -i: framed by the user, Space for a window, Esc cancels; -x: no
-	// sound; -o: no window shadow.
-	out, err := exec.Command("/usr/sbin/screencapture", "-i", "-x", "-o", "-t", "png", f.Name()).CombinedOutput()
-	if err != nil {
-		return nil, fmt.Errorf("screencapture: %v %s", err, out)
-	}
-	return os.ReadFile(f.Name())
-}
-
-// snipRegion has the user frame a region with Windows' own tool, the
-// Snipping Tool's screen clip (Win+Shift+S), and returns it as PNG when it
-// lands on the clipboard; nothing when canceled, which is seen when no shot
-// came in two minutes or another shot began.
-func snipRegion(gen int64) ([]byte, error) {
-	before := sha256.Sum256(mygo.Clipboard.ReadImage())
-	shotBusy.Store(false) // a new shot may end this wait
-	defer shotBusy.Store(true)
-	if err := mygo.Shell.OpenExternal("ms-screenclip:"); err != nil {
-		return nil, fmt.Errorf("打不开 Windows 的截图工具：%w", err)
-	}
-	for deadline := time.Now().Add(2 * time.Minute); time.Now().Before(deadline); {
-		time.Sleep(300 * time.Millisecond)
-		if shotGen.Load() != gen {
-			return nil, nil // another shot began
-		}
-		if img := mygo.Clipboard.ReadImage(); len(img) > 0 && sha256.Sum256(img) != before {
-			return img, nil
-		}
-	}
-	return nil, nil
-}
-
-// annotate shows the shot in a window to mark it up, then keeps, copies or
-// saves it. On the main thread.
-func (d *desktop) annotate(img image.Image, fromApp, inApp bool) {
-	an := screenshot.NewAnnotator(img)
-	maxW, maxH := float32(1200), float32(800)
-	for _, disp := range mygo.Screen.Displays() {
-		if disp.Primary {
-			an.Scale = float32(disp.ScaleFactor)
-			maxW, maxH = float32(disp.WorkArea.Width)*0.9, float32(disp.WorkArea.Height)*0.9
-		}
-	}
-	w, h := an.Size(maxW, maxH)
-	win := mygo.NewWindow(mygo.WindowOptions{
-		Title:         "截图标注",
-		Width:         int(w),
-		Height:        int(h),
-		MinWidth:      520,
-		MinHeight:     300,
-		TitleBarStyle: mygo.TitleBarHiddenInset,
-		Content:       ui.View(an.View),
-	})
-	closed := false
-	end := func() {
-		if closed {
-			return
-		}
-		closed = true
-		shotBusy.Store(false)
-		logShot("截图结束")
-		if fromApp {
-			d.ShowMain()
-		} else if !inApp {
-			screenshot.ReturnFocus() // back to the app the shortcut was pressed in
-		}
-	}
-	an.Deliver = func(data []byte, act screenshot.Action) {
-		logShot("截图完成：%d 字节，操作 %d", len(data), act)
-		win.Close()
-		end()
-		switch act {
-		case screenshot.Copy:
-			if err := mygo.Clipboard.WriteImage(data); err != nil {
-				d.win.Update(func() { d.app.showShotAlert("复制失败", err.Error(), false) })
-				return
-			}
-			d.win.Update(func() { d.app.keepShot(data, act, fromApp) })
-		case screenshot.Save:
-			go d.saveShot(data)
-		default:
-			d.win.Update(func() { d.app.keepShot(data, act, fromApp) })
-		}
-	}
-	an.Cancel = func() {
-		logShot("截图取消")
-		win.Close()
-		end()
-	}
-	win.OnClosed(end) // closed with its button
-	win.Center()
-	win.Show()
-	win.Focus()
-	logShot("截图标注窗口已打开")
 }
 
 // ShotLog is the end of the screenshots' log.
@@ -696,7 +507,7 @@ func main() {
 		mygo.App.SetMenu(mygo.NewMenu([]*mygo.MenuItem{
 			{Label: "MyMind", Submenu: []*mygo.MenuItem{
 				{Role: mygo.RoleAbout},
-				updater.MenuItem(),
+				item("检查更新…", "", plat.CheckUpdates),
 				mygo.Separator(),
 				item("设置…", "CmdOrCtrl+,", a.openSettings),
 				mygo.Separator(),

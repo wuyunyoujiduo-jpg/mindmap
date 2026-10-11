@@ -99,3 +99,25 @@ func TestOverlayColorsAndEnter(t *testing.T) {
 	}
 	_ = act
 }
+
+// A window macOS kept below the menu bar, 30 points down: the shot lies
+// as it was on the screen, and what is framed is what was under it.
+func TestOverlayBelowMenuBar(t *testing.T) {
+	s, sh := newTestSession(800, 600)
+	sh.off = pt{0, 30}
+	tt := ui.NewTester(s.view(sh), 800, 570)
+	tt.Press(100, 100)
+	tt.Release(300, 200)
+	size, sel, _ := sh.exportArea()
+	if sel != (ui.Rect{X: 100, Y: 130, W: 200, H: 100}) || size != (pt{800, 600}) {
+		t.Fatalf("sel %v size %v", sel, size)
+	}
+	img := renderSelection(sh.bmp, size, sel, nil, sh.scale)
+	src := checker(1600, 1200)
+	for _, p := range [][2]int{{10, 10}, {150, 90}} {
+		got, want := img.RGBAAt(p[0], p[1]), src.RGBAAt(200+p[0], 260+p[1])
+		if diff(got.R, want.R) > 8 || diff(got.G, want.G) > 8 {
+			t.Fatalf("at %v: %v, the screen had %v", p, got, want)
+		}
+	}
+}

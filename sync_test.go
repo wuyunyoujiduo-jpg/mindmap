@@ -103,12 +103,6 @@ func TestShotSettings(t *testing.T) {
 	a.openSettings()
 	tt.Frame()
 	snapshot(t, tt, "settings-shot")
-	if err := tt.Click("系统框选"); err != nil {
-		t.Fatal(err)
-	}
-	if !a.cfg.ShotSystem {
-		t.Fatal("not the system's tool")
-	}
 	if !tt.HasText("2026-10-11 15:04:05 截图开始") {
 		t.Fatalf("no log: %q", tt.Texts())
 	}

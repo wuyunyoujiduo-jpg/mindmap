@@ -20,7 +20,11 @@ type screenShot struct {
 	win     *mygo.Window
 	hover   pt
 	drawn   atomic.Bool // its window drew a frame: it shows
-	textKey int         // 每次新开文字输入换一个 key，输入框状态不沿用
+	// off is where the window is on its display: (0, 0) but when macOS
+	// kept it below the menu bar. The shot is drawn that much up and to
+	// the left, so that it lies on the screen as it was.
+	off     pt
+	textKey int // 每次新开文字输入换一个 key，输入框状态不沿用
 }
 
 // session 是一次截图：每块屏幕一个全屏窗口，最先框选的那块屏幕独占编辑。
@@ -99,6 +103,12 @@ func openSession(shots []*screenShot, deliver func([]byte, Action), onEnd func()
 			raiseOverlay(w)
 			w.SetBounds(b)
 			w.ShowInactive()
+			w.SetBounds(b) // again, at the level above the menu bar
+			wb := w.Bounds()
+			sh.off = pt{float32(wb.X - b.X), float32(wb.Y - b.Y)}
+			if sh.off != (pt{}) {
+				Log("屏幕 %d 的截图窗口位置偏了 %v，按偏移对齐", sh.index, sh.off)
+			}
 		})
 	}
 	focus.win.Update(func() {
@@ -131,7 +141,12 @@ func (s *session) view(sh *screenShot) func(c *ui.Context) {
 		root := ui.Box(c).Fill().Cursor(e.cursor(sh.hover))
 		root.HandleInput(func(ev ui.InputEvent) bool { return s.input(sh, ev, avoid) })
 		root.Draw(func(p *ui.Painter, r ui.Rect) {
-			drawShot(p, sh.bmp, pt{r.W, r.H}, e.visibleMarks(), pt{})
+			// The display's shot, where it lies under the window; the
+			// marks in the window's own place.
+			p.Image(sh.bmp, ui.Rect{X: -sh.off.X, Y: -sh.off.Y, W: sh.size().X, H: sh.size().Y}, ui.FillBox)
+			for _, m := range e.visibleMarks() {
+				drawMark(p, m, pt{})
+			}
 			drawChrome(p, e, sh.scale)
 		})
 		root.Children(func() {
@@ -360,8 +375,7 @@ func (s *session) finish(sh *screenShot, act Action) {
 	if s.ended {
 		return
 	}
-	e := sh.ed
-	size, sel, marks := pt{e.bounds.W, e.bounds.H}, e.sel, append([]mark(nil), e.marks...)
+	size, sel, marks := sh.exportArea()
 	s.endThen(func() {
 		var png []byte
 		var err error
@@ -378,6 +392,32 @@ func (s *session) finish(sh *screenShot, act Action) {
 			s.deliver(png, act)
 		}
 	})
+}
+
+// exportArea is the selection and the marks, from the window's place to
+// the shot's, and the shot's size.
+func (sh *screenShot) exportArea() (pt, ui.Rect, []mark) {
+	e := sh.ed
+	sel := e.sel
+	sel.X, sel.Y = sel.X+sh.off.X, sel.Y+sh.off.Y
+	marks := make([]mark, len(e.marks))
+	for i, m := range e.marks {
+		m.pts = append([]pt(nil), m.pts...)
+		for j := range m.pts {
+			m.pts[j] = pt{m.pts[j].X + sh.off.X, m.pts[j].Y + sh.off.Y}
+		}
+		marks[i] = m
+	}
+	return sh.size(), sel, marks
+}
+
+// size is the display's, in points, which its shot covers.
+func (sh *screenShot) size() pt {
+	if sh.display.Bounds.Width == 0 { // a shot made in a test
+		w, h := sh.bmp.Size()
+		return pt{float32(w) / sh.scale, float32(h) / sh.scale}
+	}
+	return pt{float32(sh.display.Bounds.Width), float32(sh.display.Bounds.Height)}
 }
 
 // isEnded tells, from any goroutine, whether the shot is over.

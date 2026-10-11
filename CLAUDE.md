@@ -39,9 +39,7 @@ by AI, and an AI assistant.
 - Screenshots are the app's own (`internal/screenshot`), on OneShot's way:
   every display frozen under a window of its own (`session.go`), a region
   framed there with handles and marked up in colors, the toolbar by it.
-  Should those windows not show and draw within 1.5 s, the shot goes on the
-  system's way (`shoot` in `main.go`): `screencapture -i` on macOS, the
-  Snipping Tool (`ms-screenclip:`) on Windows, then an `Annotator` window.
-  The settings can choose the system's way; each step goes to
-  `screenshot.log`.
+  macOS may keep those windows below the menu bar: the shot is drawn offset
+  by where the window really is (`screenShot.off`). No system tool is used.
+  Each step goes to `screenshot.log`, shown in the settings.
 - The user writes in Chinese; the app's texts are Chinese.

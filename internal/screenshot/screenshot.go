@@ -1,16 +1,13 @@
-// Package screenshot is the app's screenshot: a region of the screen,
-// marked up with boxes, arrows, lines and text, then kept in the library,
-// copied or saved. On macOS the system's tool frames the region and an
-// Annotator marks it up in an ordinary window; elsewhere a window laid over
-// each display does both (session.go).
+// Package screenshot is the app's screenshot: every display frozen under
+// a window of its own, in which a region is framed, marked up with boxes,
+// arrows, lines and text in colors, then kept in the library, copied or
+// saved (session.go).
 package screenshot
 
 import (
 	"errors"
 	"sync"
 	"time"
-
-	"github.com/egoist/mygo"
 )
 
 // Action is what is done with the shot.
@@ -37,18 +34,16 @@ const stuck = 2 * time.Minute
 // Log, when set, is told each step of a shot, to find what went wrong.
 var Log = func(string, ...any) {}
 
-// shown is how long the windows have to show and draw before the shot is
-// handed to fallback.
+// shown is how long the windows have to show and draw before the log
+// tells that they did not.
 const shown = 1500 * time.Millisecond
 
 // Start captures every display and opens the windows to frame a region
 // in. deliver gets the picture and what to do with it, off the main
 // thread, after the windows close; onEnd runs once the shot is over,
-// however it ended. When the windows have not shown and drawn soon after,
-// they close and fallback, when not nil, takes the shot on another way,
-// before onEnd. While a shot is under way, Start returns ErrBusy. Call it
-// from any goroutine.
-func Start(deliver func(png []byte, act Action), onEnd func(), fallback func()) (bool, error) {
+// however it ended. While a shot is under way, Start returns ErrBusy.
+// Call it from any goroutine.
+func Start(deliver func(png []byte, act Action), onEnd func()) (bool, error) {
 	mu.Lock()
 	if !busySince.IsZero() && time.Since(busySince) < stuck {
 		mu.Unlock()
@@ -95,8 +90,7 @@ func Start(deliver func(png []byte, act Action), onEnd func(), fallback func()) 
 			Log("截图窗口已显示")
 			return
 		}
-		Log("截图窗口没有出现（显示 %v，绘制 %v），改用另一种截图方式", visible, drawn)
-		mygo.RunOnMain(func() { s.endThen(fallback) })
+		Log("截图窗口没有出现：显示 %v，绘制 %v", visible, drawn)
 	}()
 	return true, nil
 }
