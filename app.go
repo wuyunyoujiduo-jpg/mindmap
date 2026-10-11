@@ -182,34 +182,38 @@ type app struct {
 	outlineFocus    string                // the node whose line the outline focuses
 
 	// The library of clips.
-	lib          *library.Library
-	libOpen      bool   // the main area shows the library
-	libSel       string // the clip shown
-	libQuery     string
-	libKind      int    // 0 every kind, then text, link, picture, file
-	libCat       string // the category shown, "" all
-	libTag       string // the tag shown, "" all
-	libDraft     string // what is typed to keep
-	libQueue     []clipJob
-	libWorking   string            // the clip being read or sorted out
-	libStatus    map[string]string // what is happening to clips, or went wrong
-	libErr       string
-	libMod       time.Time // of the clips folder, as last read or written
-	libTagText   string    // a tag being typed for the clip shown
-	libConfirm   bool      // deleting the clip shown is being confirmed
-	fetchPage    fetchPager
-	embed        embedFunc
-	qvecs        map[string][]float32 // the vectors of queries, by query
-	qPending     map[string]bool      // queries whose vectors are being made
-	embedBusy    bool                 // clips' vectors are being made
-	embedErr     string               // why making vectors failed, which stops it until the settings change
-	libQueryAt   time.Time            // when the library's search was last typed in
-	dupe         bool                 // the last clip kept was kept before
-	backupBusy   bool
-	backupErr    string
-	embedDrafts  [3]string // the settings' fields of the embedding model: address, key, model
-	embedTest    string    // how testing the embedding model went
-	clipKeyDraft string
+	lib           *library.Library
+	libOpen       bool   // the main area shows the library
+	libSel        string // the clip shown
+	libQuery      string
+	libKind       int    // 0 every kind, then text, link, picture, file
+	libCat        string // the category shown, "" all
+	libTag        string // the tag shown, "" all
+	libDraft      string // what is typed to keep
+	libQueue      []clipJob
+	libWorking    string            // the clip being read or sorted out
+	libStatus     map[string]string // what is happening to clips, or went wrong
+	libErr        string
+	libMod        time.Time // of the clips folder, as last read or written
+	libTagText    string    // a tag being typed for the clip shown
+	libSynText    string    // the synonyms of the clip libSynFor, as edited
+	libSynFor     string
+	libSynEditing bool
+	libConfirm    bool // deleting the clip shown is being confirmed
+	fetchPage     fetchPager
+	embed         embedFunc
+	qvecs         map[string][]float32 // the vectors of queries, by query
+	qPending      map[string]bool      // queries whose vectors are being made
+	embedBusy     bool                 // clips' vectors are being made
+	embedErr      string               // why making vectors failed, which stops it until the settings change
+	libQueryAt    time.Time            // when the library's search was last typed in
+	dupe          bool                 // the last clip kept was kept before
+	backupBusy    bool
+	backupErr     string
+	embedDrafts   [3]string // the settings' fields of the embedding model: address, key, model
+	embedTest     string    // how testing the embedding model went
+	noLocalModel  bool      // tests leave the built-in model out
+	clipKeyDraft  string
 
 	// The presentation.
 	presenting bool

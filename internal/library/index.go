@@ -21,6 +21,8 @@ var fieldWeights = []struct {
 	{func(c *Clip) string { return strings.Join(c.Tags, " ") }, 3},
 	{func(c *Clip) string { return c.Category }, 2},
 	{func(c *Clip) string { return strings.Join(c.Keywords, " ") }, 2},
+	{func(c *Clip) string { return strings.Join(c.Synonyms, " ") }, 2},
+	{func(c *Clip) string { return c.Analysis }, 1.5},
 	{func(c *Clip) string { return c.Desc }, 2.5},
 	{func(c *Clip) string { return c.Summary }, 2},
 	{func(c *Clip) string { return c.Note }, 1.5},

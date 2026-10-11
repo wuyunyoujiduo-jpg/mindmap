@@ -53,6 +53,8 @@ type config struct {
 	EmbedURL   string `json:"embedURL,omitempty"`
 	EmbedKey   string `json:"embedKey,omitempty"`
 	EmbedModel string `json:"embedModel,omitempty"`
+	// NoEmbed turns semantic search off, the built-in model's included.
+	NoEmbed bool `json:"noEmbed,omitempty"`
 	// BackupDir is where the maps and the library are backed up each day,
 	// "" for no backups; BackupLast is when they last were.
 	BackupDir  string    `json:"backupDir,omitempty"`

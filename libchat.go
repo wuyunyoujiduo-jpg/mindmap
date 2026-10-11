@@ -112,7 +112,7 @@ func (a *app) runLibraryTool(call aiCall) (result, shown string) {
 		}
 		return library.Full(c, 20000), "📖 读取资料「" + c.Label() + "」"
 	}
-	text, n := library.SearchText(a.lib, in.Query, in.Category, 8, a.qvecs[strings.TrimSpace(in.Query)], a.cfg.EmbedModel)
+	text, n := library.SearchText(a.lib, in.Query, in.Category, 8, a.qvecs[strings.TrimSpace(in.Query)], a.embedder().Name())
 	return text, fmt.Sprintf("🔎 在资料库中检索「%s」：%d 条结果", in.Query, n)
 }
 

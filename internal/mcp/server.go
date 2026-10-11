@@ -277,7 +277,7 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 					qv = vs[0]
 				}
 			}
-			text, _ := library.SearchText(l, get("query"), get("category"), limit, qv, s.Embedder.Model)
+			text, _ := library.SearchText(l, get("query"), get("category"), limit, qv, s.Embedder.Name())
 			return text, nil
 		case "read_clip":
 			c := l.Find(get("id"))

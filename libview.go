@@ -134,7 +134,7 @@ func (a *app) libHits() []library.Hit {
 		return true
 	}
 	if e := a.embedder(); e.On() {
-		return a.lib.SearchBoth(a.libQuery, a.qvecs[strings.TrimSpace(a.libQuery)], e.Model, keep)
+		return a.lib.SearchBoth(a.libQuery, a.qvecs[strings.TrimSpace(a.libQuery)], e.Name(), keep)
 	}
 	return a.lib.Search(a.libQuery, keep)
 }
@@ -545,6 +545,25 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 			ui.Text(c, library.Excerpt(clip.Text, "", 3000)).FontSize(12).TextColor(t.TextMuted).Wrap().Selectable()
 		})
 	}
+	if clip.Analysis != "" {
+		ui.Field(c, "AI 分析", func() {
+			markdownView(c.Key("clip-analysis"), clip.Analysis, 13)
+		})
+	}
+	if a.libSynFor != clip.ID || !a.libSynEditing {
+		a.libSynFor, a.libSynText = clip.ID, strings.Join(clip.Synonyms, "、")
+	}
+	ui.Field(c, "同义词（用来检索，可修改，用顿号或逗号分隔）", func() {
+		in := ui.TextInput(c.Key("clip-syn"), &a.libSynText).Placeholder("AI 整理时自动生成").Label("资料同义词")
+		if in.Changed() {
+			a.libSynEditing = true
+		}
+		if a.libSynEditing && (in.Submitted() || in.PressedOutside()) {
+			clip.Synonyms = cleanTags(strings.FieldsFunc(a.libSynText, func(r rune) bool { return r == '、' || r == ',' || r == '，' || r == ';' || r == '；' }))
+			a.libSynEditing = false
+			a.saveClip(clip)
+		}
+	})
 	if len(clip.Keywords) > 0 {
 		ui.Text(c, "检索关键词："+strings.Join(clip.Keywords, "、")).FontSize(11).TextColor(t.TextMuted).Wrap()
 	}

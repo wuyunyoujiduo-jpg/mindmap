@@ -70,6 +70,12 @@ func Full(c *Clip, n int) string {
 	if len(c.Keywords) > 0 {
 		b.WriteString("  关键词：" + strings.Join(c.Keywords, "、") + "\n")
 	}
+	if len(c.Synonyms) > 0 {
+		b.WriteString("  同义词：" + strings.Join(c.Synonyms, "、") + "\n")
+	}
+	if c.Analysis != "" {
+		b.WriteString("\n分析：\n" + c.Analysis + "\n")
+	}
 	if c.Note != "" {
 		b.WriteString("\n备注：\n" + c.Note + "\n")
 	}

@@ -27,7 +27,7 @@ func TestLibraryKeepsAndOrganizes(t *testing.T) {
 		return library.Page{Title: "缓存设计的五个原则", Description: "讲缓存", Text: "先读缓存再读库；过期时间加随机，避免雪崩。"}, nil
 	}
 	fake := &fakeClaude{replies: []string{
-		claudeText("```json\n" + `{"title": "缓存设计原则", "desc": "一篇讲缓存读写顺序和防雪崩的实践文章。", "summary": "介绍缓存读写顺序和防雪崩的做法。", "category": "技术", "tags": ["后端", "缓存"], "keywords": ["cache", "Redis", "雪崩"], "text": ""}` + "\n```"),
+		claudeText("```json\n" + `{"title": "缓存设计原则", "desc": "一篇讲缓存读写顺序和防雪崩的实践文章。", "summary": "介绍缓存读写顺序和防雪崩的做法。", "category": "技术", "tags": ["后端", "缓存"], "keywords": ["cache", "Redis", "雪崩"], "synonyms": ["高速缓存", "缓存穿透", "cache avalanche"], "analysis": "- 先读缓存再读库\n- 过期时间加随机值防雪崩", "text": ""}` + "\n```"),
 		claudeText(`{"title": "周会改到周四", "summary": "团队周会时间调整。", "category": "工作", "tags": ["会议"], "keywords": ["例会"], "text": ""}`),
 	}}
 	a.sendAI = fake.send
@@ -81,6 +81,12 @@ func TestLibraryKeepsAndOrganizes(t *testing.T) {
 		t.Fatalf("categories not given: %s", req)
 	}
 
+	if len(c.Synonyms) != 3 || !strings.Contains(c.Analysis, "防雪崩") {
+		t.Fatalf("synonyms %v analysis %q", c.Synonyms, c.Analysis)
+	}
+	if hits := a.lib.Search("高速缓存", nil); len(hits) == 0 || hits[0].Clip != c {
+		t.Fatal("not found by a synonym")
+	}
 	// Found by the search, by a keyword the AI gave.
 	a.libQuery = "redis"
 	tt.Frame()

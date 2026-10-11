@@ -83,6 +83,7 @@ func newTestApp(t *testing.T) (*app, *ui.Tester) {
 	dir := t.TempDir()
 	a := newApp(&fakePlatform{}, config{Dir: dir})
 	a.now = func() time.Time { return testNow }
+	a.noLocalModel = true // the built-in model only where a test asks for it
 	if a.doc == nil {
 		t.Fatal("no map opened")
 	}

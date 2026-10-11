@@ -228,6 +228,8 @@ type clipOrganized struct {
 	Category string   `json:"category"`
 	Tags     []string `json:"tags"`
 	Keywords []string `json:"keywords"`
+	Synonyms []string `json:"synonyms"`
+	Analysis string   `json:"analysis"`
 	Text     string   `json:"text"` // what a picture shows
 }
 
@@ -354,6 +356,12 @@ func applyOrganized(c *library.Clip, o *clipOrganized, now time.Time) {
 		}
 	}
 	c.Keywords = cleanTags(o.Keywords)
+	if syn := cleanTags(o.Synonyms); len(syn) > 0 {
+		c.Synonyms = syn
+	}
+	if s := strings.TrimSpace(o.Analysis); s != "" {
+		c.Analysis = s
+	}
 	if c.Kind == library.KindImage && c.Text == "" {
 		c.Text = strings.TrimSpace(o.Text)
 	}
@@ -381,7 +389,7 @@ func (a *app) organizePrompt() string {
 	}
 	var b strings.Builder
 	b.WriteString(`请整理下面这条资料，输出 JSON：
-{"title": "简短标题，不超过 30 字", "desc": "一句简单的描述说明：这是什么、有什么用，不超过 40 字", "summary": "2–4 句话的摘要，说清它讲了什么、有什么用", "category": "一个分类", "tags": ["1–5 个标签"], "keywords": ["5–12 个检索关键词：同义词、中英文说法、相关概念"], "text": "只有图片才填：图中的文字和内容描述；其他留空字符串"}
+{"title": "简短标题，不超过 30 字", "desc": "一句简单的描述说明：这是什么、有什么用，不超过 40 字", "summary": "2–4 句话的摘要，说清它讲了什么、有什么用", "category": "一个分类", "tags": ["1–5 个标签"], "keywords": ["5–12 个检索关键词：资料里的核心概念和术语"], "synonyms": ["6–15 个同义词和近义说法：别名、中英文对应、缩写、口语说法、上下位概念，用户以后可能用这些词来找它"], "analysis": "简要分析，3–5 条 Markdown 要点：核心观点或结论、适用场景、价值、局限、可以怎么用或下一步", "text": "只有图片才填：图中的文字和内容描述；其他留空字符串"}
 `)
 	if len(cats) > 0 {
 		b.WriteString("\n已有分类：" + strings.Join(cats, "、") + "。合适就沿用已有分类，都不合适才新建；分类要宽泛，比如 技术、产品、设计、学习、工作、灵感、生活、资源。\n")

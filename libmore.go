@@ -3,10 +3,14 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/embed"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
@@ -22,7 +26,10 @@ func embedWith(ctx context.Context, e library.Embedder, texts []string) ([][]flo
 }
 
 func (a *app) embedder() library.Embedder {
-	return library.Embedder{URL: a.cfg.EmbedURL, Key: a.cfg.EmbedKey, Model: a.cfg.EmbedModel}
+	if a.cfg.NoEmbed {
+		return library.Embedder{}
+	}
+	return library.Embedder{URL: a.cfg.EmbedURL, Key: a.cfg.EmbedKey, Model: a.cfg.EmbedModel, Local: a.localModel()}
 }
 
 // embedQueries makes the vectors of queries not made yet, then calls done;
@@ -61,7 +68,7 @@ func (a *app) embedLibrary() {
 	if !e.On() || a.embedBusy || a.lib == nil || a.embedErr != "" {
 		return
 	}
-	ids, texts := a.lib.Unembedded(e.Model)
+	ids, texts := a.lib.Unembedded(e.Name())
 	if len(ids) == 0 {
 		return
 	}
@@ -83,7 +90,7 @@ func (a *app) embedLibrary() {
 		if lib != a.lib {
 			return // another folder since
 		}
-		if err := lib.SetVectors(e.Model, ids, texts, v.([][]float32)); err != nil {
+		if err := lib.SetVectors(e.Name(), ids, texts, v.([][]float32)); err != nil {
 			a.embedErr = err.Error()
 			return
 		}
@@ -112,7 +119,7 @@ func (a *app) searchQueryVector(c *ui.Context) {
 
 // relatedSection lists the clips like the one shown.
 func (a *app) relatedSection(c *ui.Context, clip *library.Clip) {
-	hits := a.lib.Related(clip, a.cfg.EmbedModel, 5)
+	hits := a.lib.Related(clip, a.embedder().Name(), 5)
 	if len(hits) == 0 {
 		return
 	}
@@ -380,9 +387,39 @@ var embedPresets = []struct{ name, url, model, note string }{
 func (a *app) embedSettings(c *ui.Context) {
 	t := c.Theme()
 	d := &a.embedDrafts
-	ui.Field(c, "资料库语义检索（向量模型，可选）", func() {
+	ui.Field(c, "资料库语义检索", func() {
 		ui.Column(c).Gap(8).Children(func() {
-			ui.Text(c, "设置后，资料库按意思检索（如搜「数据库变慢」能找到「SQL 优化」），并能找出相关资料。支持任何 OpenAI 兼容的 /embeddings 接口。").
+			on := !a.cfg.NoEmbed
+			ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
+				if ui.Switch(c, &on).Label("语义检索").Changed() {
+					a.cfg.NoEmbed = !on
+					a.cfg.save()
+					a.embedErr, a.qvecs = "", map[string][]float32{}
+					a.embedLibrary()
+				}
+				ui.Text(c, "按意思检索资料（如搜「数据库变慢」能找到「SQL 优化」），并推荐相关资料").FontSize(13).Wrap().Grow(1)
+			})
+			if a.cfg.NoEmbed {
+				return
+			}
+			switch e := a.embedder(); {
+			case e.Builtin():
+				ui.Text(c, "✓ 正在使用内置模型：离线、免费、不上传任何内容。想要更准，可以在下面换成外部向量模型。").FontSize(12).TextColor(t.Success).Wrap()
+			case a.cfg.EmbedURL != "":
+				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, "正在使用外部向量模型 "+a.cfg.EmbedModel).FontSize(12).TextColor(t.TextMuted).Grow(1)
+					if a.localModel() != nil && ui.Button(c, "改回内置模型").FontSize(12).Clicked() {
+						a.cfg.EmbedURL, a.cfg.EmbedKey, a.cfg.EmbedModel = "", "", ""
+						a.embedDrafts = [3]string{}
+						a.cfg.save()
+						a.embedErr, a.embedTest, a.qvecs = "", "", map[string][]float32{}
+						a.embedLibrary()
+					}
+				})
+			default:
+				ui.Text(c, "这个版本没有内置模型，可以接一个外部向量模型。").FontSize(12).TextColor(t.Warning).Wrap()
+			}
+			ui.Text(c, "外部向量模型（可选，更准）：支持任何 OpenAI 兼容的 /embeddings 接口。").
 				FontSize(12).TextColor(t.TextMuted).Wrap()
 			ui.Row(c).Gap(6).Wrap().GapY(6).Children(func() {
 				for _, p := range embedPresets {
@@ -404,7 +441,7 @@ func (a *app) embedSettings(c *ui.Context) {
 					a.embedErr, a.embedTest = "", "测试中…"
 					a.qvecs = map[string][]float32{}
 					if !a.embedder().On() {
-						a.embedTest = "已关闭语义检索"
+						a.embedTest = "未设置外部向量模型"
 					} else {
 						a.embedQueries([]string{"测试"}, func() {
 							if a.embedErr != "" {
@@ -472,4 +509,38 @@ func (a *app) backupSettings(c *ui.Context) {
 			}
 		})
 	})
+}
+
+// localModelPath finds the built-in embedding model's file: among the
+// app's resources, or where MINDMAP_EMBED_MODEL says. Tests replace it.
+var localModelPath = func() string {
+	if p := os.Getenv("MINDMAP_EMBED_MODEL"); p != "" {
+		return p
+	}
+	if dir := resourcesDir(); dir != "" {
+		return filepath.Join(dir, embed.FileName)
+	}
+	return ""
+}
+
+var (
+	localOnce  sync.Once
+	localModel *embed.Model
+)
+
+// loadLocalModel reads the built-in model once, nil when the app has none.
+func loadLocalModel() *embed.Model {
+	localOnce.Do(func() {
+		if p := localModelPath(); p != "" {
+			localModel, _ = embed.Load(p)
+		}
+	})
+	return localModel
+}
+
+func (a *app) localModel() *embed.Model {
+	if a.noLocalModel {
+		return nil
+	}
+	return loadLocalModel()
 }

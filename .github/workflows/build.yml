@@ -29,7 +29,16 @@ jobs:
         with:
           go-version-file: go.mod
       - run: go vet ./...
+      # The built-in embedding model, made by the Embedding model workflow,
+      # and what Model2Vec gives, which the tests compare against.
+      - name: Get the built-in embedding model
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download embed-model --repo "$GITHUB_REPOSITORY" -p mindmap-embed.bin -p reference.json -D "$RUNNER_TEMP/embed"
       - run: go test ./...
+        env:
+          MINDMAP_EMBED_MODEL: ${{ runner.temp }}/embed/mindmap-embed.bin
+          MINDMAP_EMBED_REF: ${{ runner.temp }}/embed/reference.json
 
   macos:
     needs: test
@@ -78,6 +87,10 @@ jobs:
           jq --arg kc "$kc" '.macos.notarize = {keychainProfile: "mindmap-notary", keychain: $kc}' mygo.json > mygo.signed.json
           mv mygo.signed.json mygo.json
           echo "SIGN_IDENTITY=$APPLE_SIGNING_IDENTITY" >> "$GITHUB_ENV"
+      - name: Get the built-in embedding model
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download embed-model --repo "$GITHUB_REPOSITORY" -p mindmap-embed.bin -D resources --clobber
       - name: Build MindMap.app and the disk image
         run: |
           if [ -n "$SIGN_IDENTITY" ]; then
@@ -110,6 +123,11 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+      - name: Get the built-in embedding model
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download embed-model --repo "$GITHUB_REPOSITORY" -p mindmap-embed.bin -D resources --clobber
       - name: Build MindMap.exe and the installer
         run: go tool mygo build -platform windows/amd64
       - uses: actions/upload-artifact@v7

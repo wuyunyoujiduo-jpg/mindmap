@@ -36,7 +36,10 @@ func serveMCP(args []string) error {
 	}
 	cfg := loadConfig()
 	s := &mcp.Server{Dir: abs, Versions: versions.Store{Dir: versionsDir()}, Version: version, Now: time.Now,
-		Embedder: library.Embedder{URL: cfg.EmbedURL, Key: cfg.EmbedKey, Model: cfg.EmbedModel}}
+		Embedder: library.Embedder{URL: cfg.EmbedURL, Key: cfg.EmbedKey, Model: cfg.EmbedModel, Local: loadLocalModel()}}
+	if cfg.NoEmbed {
+		s.Embedder = library.Embedder{}
+	}
 	return s.Serve(os.Stdin, os.Stdout)
 }
 

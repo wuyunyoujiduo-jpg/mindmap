@@ -17,6 +17,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/embed"
 )
 
 // Semantic search: each clip is turned into a vector by an embedding
@@ -26,18 +28,41 @@ import (
 // they use. The vectors are kept in vectors.json, each with a hash of the
 // text it was made of, so that only clips that changed are made again.
 
-// Embedder makes vectors of texts.
+// Embedder makes vectors of texts: by an API when its address is set, else
+// by the built-in model, Local, when there is one.
 type Embedder struct {
 	URL   string // the API's base, as http://localhost:11434/v1
 	Key   string
 	Model string
+	Local *embed.Model
 }
 
 // On tells whether an embedding model is set up.
-func (e Embedder) On() bool { return e.URL != "" && e.Model != "" }
+func (e Embedder) On() bool { return e.URL != "" && e.Model != "" || e.URL == "" && e.Local != nil }
+
+// Builtin tells whether the built-in model makes the vectors.
+func (e Embedder) Builtin() bool { return e.URL == "" && e.Local != nil }
+
+// Name names the model whose vectors are kept, so that vectors of another
+// are made again.
+func (e Embedder) Name() string {
+	if e.Builtin() {
+		return fmt.Sprintf("builtin:%s:%d", e.Local.Name, e.Local.Dim())
+	}
+	return e.Model
+}
 
 // Embed makes the vectors of texts.
 func (e Embedder) Embed(ctx context.Context, texts []string) ([][]float32, error) {
+	if e.Builtin() {
+		out := make([][]float32, len(texts))
+		for i, t := range texts {
+			if out[i] = e.Local.Embed(t); out[i] == nil {
+				out[i] = make([]float32, e.Local.Dim())
+			}
+		}
+		return out, nil
+	}
 	body, _ := json.Marshal(map[string]any{"model": e.Model, "input": texts})
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
@@ -128,7 +153,7 @@ func Cosine(a, b []float32) float64 {
 // EmbedText is what of a clip its vector is made of.
 func EmbedText(c *Clip) string {
 	var b strings.Builder
-	for _, s := range []string{c.Title, c.Desc, c.Summary, c.Category, strings.Join(c.Tags, " "), strings.Join(c.Keywords, " "), c.Note} {
+	for _, s := range []string{c.Title, c.Desc, c.Summary, c.Category, strings.Join(c.Tags, " "), strings.Join(c.Keywords, " "), strings.Join(c.Synonyms, " "), c.Analysis, c.Note} {
 		if s = strings.TrimSpace(s); s != "" {
 			b.WriteString(s + "\n")
 		}
@@ -342,7 +367,7 @@ func (l *Library) Related(c *Clip, model string, n int) []Hit {
 	if v := l.Vector(c, model); v != nil {
 		hits = l.SearchMeaning(v, model, other, 0.5)
 	} else {
-		q := strings.Join([]string{c.Title, c.Desc, strings.Join(c.Tags, " "), strings.Join(c.Keywords, " ")}, " ")
+		q := strings.Join([]string{c.Title, c.Desc, strings.Join(c.Tags, " "), strings.Join(c.Keywords, " "), strings.Join(c.Synonyms, " ")}, " ")
 		for _, h := range l.Search(q, other) {
 			if h.Coverage >= 0.3 {
 				hits = append(hits, h)

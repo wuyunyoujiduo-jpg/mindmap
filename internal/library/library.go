@@ -46,11 +46,16 @@ type Clip struct {
 	Source string `json:"source,omitempty"`
 	// What the AI made of it: a line saying what it is, a summary, a
 	// category, tags and words to find it by. Organized is when.
-	Desc      string     `json:"desc,omitempty"`
-	Summary   string     `json:"summary,omitempty"`
-	Category  string     `json:"category,omitempty"`
-	Tags      []string   `json:"tags,omitempty"`
-	Keywords  []string   `json:"keywords,omitempty"`
+	Desc     string   `json:"desc,omitempty"`
+	Summary  string   `json:"summary,omitempty"`
+	Category string   `json:"category,omitempty"`
+	Tags     []string `json:"tags,omitempty"`
+	Keywords []string `json:"keywords,omitempty"`
+	// Synonyms are other words for what it is about: synonyms, the English
+	// or Chinese for it, abbreviations, related terms. Analysis is the
+	// AI's reading of it: its points, where it applies, what it is good for.
+	Synonyms  []string   `json:"synonyms,omitempty"`
+	Analysis  string     `json:"analysis,omitempty"`
 	Organized *time.Time `json:"organized,omitempty"`
 	Starred   bool       `json:"starred,omitempty"`
 	// Hash is the SHA-256 of a picture's or file's data, to find it again.
@@ -298,7 +303,9 @@ func counts(clips []*Clip, of func(*Clip) []string) []Count {
 
 // NeedsOrganizing tells whether the AI has yet to sort a clip out, or to
 // say in a line what it is.
-func (c *Clip) NeedsOrganizing() bool { return c.Organized == nil || c.Desc == "" }
+func (c *Clip) NeedsOrganizing() bool {
+	return c.Organized == nil || c.Desc == "" || len(c.Synonyms) == 0 && c.Analysis == ""
+}
 
 // Unorganized are the clips the AI has not sorted yet, oldest first.
 func (l *Library) Unorganized() []*Clip {

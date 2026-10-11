@@ -213,6 +213,15 @@ func (d *desktop) SetFullScreen(on bool) {
 	}
 }
 
+// resourcesDir is where the app's resources are.
+func resourcesDir() string {
+	dir, err := mygo.App.Path(mygo.PathResources)
+	if err != nil {
+		return ""
+	}
+	return dir
+}
+
 //go:embed mygo.json
 var mygoJSON []byte
 

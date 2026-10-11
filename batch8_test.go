@@ -296,3 +296,38 @@ func TestBackups(t *testing.T) {
 }
 
 func jsonDecode(r *http.Request, v any) error { return json.NewDecoder(r.Body).Decode(v) }
+
+// TestBuiltinModel searches by meaning with the built-in model, when it is
+// at hand (MINDMAP_EMBED_MODEL, as in CI).
+func TestBuiltinModel(t *testing.T) {
+	if os.Getenv("MINDMAP_EMBED_MODEL") == "" {
+		t.Skip("no model")
+	}
+	a, tt := newTestApp(t)
+	a.noLocalModel = false
+	if !a.embedder().Builtin() {
+		t.Fatal("built-in model not used")
+	}
+	a.cfg.LibraryManual = true
+	for _, s := range []string{"SQL 优化：联合索引遵循最左前缀", "番茄炒蛋的做法", "下周去东京旅行，记得订机票", "每周三次力量训练"} {
+		a.addClipText(s, "手动")
+	}
+	a.embedLibrary()
+	if ids, _ := a.lib.Unembedded(a.embedder().Name()); len(ids) != 0 {
+		t.Fatalf("%d clips without vectors", len(ids))
+	}
+	for q, want := range map[string]string{"数据库变慢": "SQL", "想吃家常菜": "番茄", "健身": "每周"} {
+		a.showLibrary()
+		a.libQuery, a.libQueryAt = q, testNow.Add(-time.Second)
+		tt.Frame()
+		tt.Frame()
+		hits := a.libHits()
+		if len(hits) == 0 || !strings.HasPrefix(hits[0].Clip.Text, want) {
+			var got []string
+			for _, h := range hits {
+				got = append(got, h.Clip.Text)
+			}
+			t.Errorf("%s: %q", q, got)
+		}
+	}
+}
