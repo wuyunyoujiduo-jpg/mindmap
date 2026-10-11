@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egoist/mygo/ui"
+
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
@@ -387,4 +389,44 @@ func TestTour(t *testing.T) {
 		t.Fatalf("library tab: %q", tt.Texts())
 	}
 	snapshot(t, tt, "settings-library")
+}
+
+func TestTaskCheckAndNotePopover(t *testing.T) {
+	a, tt := newTestApp(t)
+	slow := find(t, a, "列表加载慢")
+	tt.Frame()
+	clickNode(t, tt, a, "列表加载慢") // brings it in view
+	if err := tt.Click("完成任务 列表加载慢"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if slow.Task.Status != model.StatusDone {
+		t.Fatalf("status %v", slow.Task.Status)
+	}
+	if err := tt.Click("取消完成 列表加载慢"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if slow.Task.Status != model.StatusTodo {
+		t.Fatalf("status after uncheck %v", slow.Task.Status)
+	}
+	// A note by the node.
+	a.noteEditing = slow.ID
+	tt.Frame()
+	tt.Frame()
+	if !tt.HasText("支持 Markdown") {
+		t.Fatalf("no popover: %q", tt.Texts())
+	}
+	snapshot(t, tt, "note-popover")
+	tt.Type("。先加分页")
+	tt.Frame()
+	if !strings.HasSuffix(slow.Note, "先加分页") {
+		t.Fatalf("note %q", slow.Note)
+	}
+	tt.Key(0, ui.KeyEscape)
+	tt.Frame()
+	if a.noteEditing != "" {
+		t.Fatal("popover still open")
+	}
+	snapshot(t, tt, "task-checks")
 }

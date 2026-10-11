@@ -26,7 +26,7 @@ const (
 	titleMax   = 260
 	titleMin   = 24
 	markSize   = 11
-	dotSize    = 8
+	checkSize  = 15 // a task's check box
 )
 
 func titleSize(depth int) float32 {
@@ -96,7 +96,7 @@ func (a *app) measure(c *ui.Context) layout.Measure {
 		tw, th := a.titleBox(c, n, depth)
 		w := 2*nodePadX + tw
 		if n.Task != nil {
-			w += dotSize + nodeGap
+			w += checkSize + nodeGap
 			if a.blocked(n) {
 				mw, _ := a.measureText(c, 0, ui.Span{Text: "🔒", Size: markSize})
 				w += mw + nodeGap
@@ -120,8 +120,7 @@ func (a *app) measure(c *ui.Context) layout.Measure {
 			w += nodeGap + markSize + 3 + mw
 		}
 		if p.note {
-			mw, _ := a.measureText(c, 0, ui.Span{Text: "✎", Size: markSize + 1})
-			w += nodeGap + mw
+			w += nodeGap + markSize + 3
 		}
 		if len(n.Links) > 0 {
 			mw, _ := a.measureText(c, 0, ui.Span{Text: "↗", Size: markSize + 1})
@@ -424,22 +423,33 @@ func (a *app) canvasArea(c *ui.Context) {
 		// Zoom and recenter, over the canvas's corner.
 		ui.Row(c).Absolute().Right(12).Bottom(12).Gap(2).Padding(3).Radius(8).
 			Background(t.Surface).Border(1, t.Border).Children(func() {
-			if ui.Button(c, "−").Label("缩小").Tooltip("缩小 ⌘-").Width(30).Clicked() {
+			if iconButton(c, iconMinus, "缩小", "缩小 ⌘-", 30, true).Clicked() {
 				a.setZoom(cam.Zoom / 1.2)
 			}
-			if ui.Button(c, fmt.Sprintf("%d%%", int(cam.Zoom*100+0.5))).Label("缩放比例").Tooltip("实际大小 ⌘0").MinWidth(56).Clicked() {
+			zoom := ui.Box(c.Key("zoom")).Height(30).MinWidth(54).Padding(0, 8).Radius(6).Center().Cursor(ui.CursorPointer).
+				Label("缩放比例").Tooltip("实际大小 ⌘0")
+			if zoom.Hovered() {
+				zoom.Background(t.SurfaceHover)
+			}
+			if zoom.Clicked() {
 				a.setZoom(1)
 			}
-			if ui.Button(c, "+").Label("放大").Tooltip("放大 ⌘=").Width(30).Clicked() {
+			zoom.Children(func() {
+				ui.Text(c, fmt.Sprintf("%d%%", int(cam.Zoom*100+0.5))).FontSize(12).PassThrough()
+			})
+			if iconButton(c, iconPlus, "放大", "放大 ⌘=", 30, true).Clicked() {
 				a.setZoom(cam.Zoom * 1.2)
 			}
-			if ui.Button(c, "◎").Label("回到中心").Tooltip("回到中心 ⌘⇧0").Width(30).Clicked() {
+			ui.Box(c).Width(1).Height(16).Background(t.Border).Margin(0, 2)
+			if iconButton(c, iconTarget, "回到中心", "回到中心 ⌘⇧0", 30, true).Clicked() {
 				a.recenter()
 			}
-			ui.Button(c, "⤓").Label("导出").Tooltip("导出").Width(30).Menu(a.exportMenu)
+			iconButton(c, iconDownload, "导出", "导出图片、Markdown、XMind…", 30, true).Menu(a.exportMenu)
 		})
 	})
 }
+
+func exportingNow(a *app) bool { return a.exportCam != nil }
 
 // nodeCull is how far off the canvas nodes are still built, so that they
 // are there as soon as a pan brings them in.
@@ -737,8 +747,7 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 			a.thumbnail(c, n, iw*z, ih*z).Absolute().Left((box.W - iw) / 2 * z).Top(nodePadY * z)
 		}
 		if n.Task != nil {
-			ui.Box(c.Key("task-dot")).Size(dotSize*z, dotSize*z).Radius(999).Background(statusColor(n.Task.Status)).Shrink(0).
-				Tooltip(a.taskSummary(n.Task))
+			a.taskCheck(c, n, checkSize*z)
 			if a.blocked(n) {
 				var names []string
 				for _, b := range a.file.Blockers(n) {
@@ -844,7 +853,10 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 			ui.Text(c, p.due).FontSize(markSize * z).TextColor(col).NoWrap()
 		}
 		if p.note {
-			ui.Text(c, "✎").FontSize((markSize + 1) * z).TextColor(muted).NoWrap().Tooltip(snippet(n.Note, ""))
+			a.noteMark(c, n, (markSize+3)*z, muted)
+		}
+		if a.noteEditing == n.ID && !exportingNow(a) {
+			a.notePopover(c, el, n)
 		}
 		if m := filesMark(n); m != "" {
 			var names []string
@@ -917,6 +929,9 @@ func (a *app) nodeMenu(m *ui.Menu, n *model.Node, depth int) {
 	}
 	if m.Item("编辑标题").Shortcut(0, ui.KeyF2).Chosen() {
 		a.later(func() { a.startEdit(n.ID) })
+	}
+	if m.Item("编辑备注…").Chosen() {
+		a.noteEditing = n.ID
 	}
 	a.tagMenu(m, n)
 	a.annotationMenu(m, n, depth)

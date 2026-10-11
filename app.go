@@ -160,6 +160,7 @@ type app struct {
 	captureErr      string
 	captureKeyDraft string
 	settingsOpen    bool
+	noteEditing     string // the node whose note the popover over the canvas edits
 	settingsTab     int
 	tourStep        int    // the step of the tour shown, 0 for none
 	ghBusy          bool   // the issues are being synced

@@ -178,7 +178,7 @@ func (a *app) toolbar(c *ui.Context) {
 			mapLabel = "导图"
 		}
 		ui.Segmented(c, &a.mode, mapLabel, "大纲", "看板", "日程", "时间线", "总览").Shrink(0)
-		if ui.Button(c, "▶").Label("开始演说").Tooltip("开始演说 ⌘↩").Width(32).Shrink(0).Clicked() {
+		if iconButton(c, iconPlay, "开始演说", "开始演说 ⌘↩", 32, true).Border(1, t.Border).Clicked() {
 			a.later(func() { a.startPresenting("") })
 		}
 		search := ui.TextInput(c.Key("search"), &a.search).Placeholder("搜索…").Tooltip("搜索标题、备注、标签，回车跳到下一个").Label("搜索").Width(searchWidth(room)).Shrink(1).MinWidth(70)
@@ -204,10 +204,10 @@ func (a *app) toolbar(c *ui.Context) {
 			a.aiOpen = !a.aiOpen
 		}
 		ui.Row(c).Gap(2).Shrink(0).Children(func() {
-			if ui.Button(c, "↶").Label("撤销").Tooltip("撤销 ⌘Z").Width(32).Disabled(!a.hist.CanUndo()).Clicked() {
+			if iconButton(c, iconUndo, "撤销", "撤销 ⌘Z", 32, a.hist.CanUndo()).Clicked() && a.hist.CanUndo() {
 				a.undo()
 			}
-			if ui.Button(c, "↷").Label("重做").Tooltip("重做 ⌘⇧Z").Width(32).Disabled(!a.hist.CanRedo()).Clicked() {
+			if iconButton(c, iconRedo, "重做", "重做 ⌘⇧Z", 32, a.hist.CanRedo()).Clicked() && a.hist.CanRedo() {
 				a.redo()
 			}
 		})

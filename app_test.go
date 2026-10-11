@@ -1304,7 +1304,7 @@ func TestToolbarFitsNarrowWindow(t *testing.T) {
 	for _, w := range []int{1280, 1100, 1000, 920} {
 		tt.SetSize(w, 760)
 		tt.Frame()
-		redo, ok := tt.Find("↷")
+		redo, ok := tt.Find("重做")
 		if !ok {
 			t.Fatalf("width %d: no redo", w)
 		}

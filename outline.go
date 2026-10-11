@@ -93,8 +93,7 @@ func (a *app) outlineLine(c *ui.Context, rows []outlineRow, i int) {
 			}
 		})
 		if n.Task != nil {
-			ui.Box(c.Key("task-dot")).Size(8, 8).Radius(999).Background(statusColor(n.Task.Status)).Shrink(0).
-				Tooltip(a.taskSummary(n.Task))
+			a.taskCheck(c, n, 15)
 		}
 		for _, m := range n.Markers {
 			markerView(c, m, 16)
