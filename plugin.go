@@ -234,7 +234,7 @@ func (a *app) pluginSettings(c *ui.Context) {
 			ui.Text(c, "✓ 正在使用应用自带的模型").FontSize(12).TextColor(t.Success)
 		default:
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, "语义检索插件：离线、免费、不上传内容，按意思搜资料并推荐相关资料。约 21MB，下载一次即可。").
+				ui.Text(c, "语义检索插件：离线、免费、不上传内容，按意思搜资料并推荐相关资料。约 23MB，下载一次即可。").
 					FontSize(12).TextColor(t.TextMuted).Wrap().Grow(1)
 				if ui.PrimaryButton(c, "下载插件").Clicked() {
 					a.downloadPlugin()
@@ -305,7 +305,7 @@ func (a *app) pluginBanner(c *ui.Context) {
 			a.pluginProgress(c)
 			return
 		}
-		ui.Text(c, "✦ 下载语义检索插件（约 21MB，离线免费），就能按意思搜资料，比如搜「数据库变慢」找到「SQL 优化」。").
+		ui.Text(c, "✦ 下载语义检索插件（约 23MB，离线免费），就能按意思搜资料，比如搜「数据库变慢」找到「SQL 优化」。").
 			FontSize(12).Wrap().Grow(1)
 		if a.pluginErr != "" {
 			ui.Text(c, "下载失败，可以重试").FontSize(12).TextColor(t.Danger).Tooltip(a.pluginErr)

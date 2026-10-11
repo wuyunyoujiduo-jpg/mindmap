@@ -22,3 +22,7 @@
 ```
 
 第一次获取脚本的方法见仓库 README 的「一键更新」。
+
+## 语义检索插件
+
+资料库「按意思搜索」用的离线模型不在安装包里，第一次打开资料库时点「下载」（约 23MB，或在 设置 → 资料库 里下载）。模型从公开仓库 [mindmap-models](https://github.com/wuyunyoujiduo-jpg/mindmap-models) 下载，GitHub 不通时自动改用 jsDelivr 镜像，下载后逐块校验。
