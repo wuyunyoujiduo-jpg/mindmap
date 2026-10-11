@@ -10,6 +10,11 @@ by AI, and an AI assistant.
    out, upgrade with `tools/check-mygo.sh -u`, read what it adds (its
    `docs/` in the module cache, `go doc github.com/egoist/mygo`) and use it
    where it helps. Note the upgrade in the commit message.
+   The exception, for now, is `helpers/shot`, the screenshot helper: it
+   stays on MyGo 0.3.3, on which OneShot is known to work on the user's Mac,
+   until a screenshot taken with it is confirmed there; then it is moved to
+   the latest MyGo in a release of its own, to tell whether MyGo was what
+   broke the screenshot.
 2. Make the change, matching the code around it.
 3. Check: `gofmt -l .`, `go vet ./...`, `go test ./...`,
    `GOOS=darwin GOARCH=arm64 go build -o /dev/null .`,
