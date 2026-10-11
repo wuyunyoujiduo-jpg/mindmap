@@ -37,26 +37,35 @@ func moveOldDir(c *config) bool {
 	if _, err := os.Stat(to); err == nil {
 		return false // a folder of the new name is there already
 	}
-	var maps []string
-	_ = filepath.WalkDir(from, func(p string, d os.DirEntry, err error) error {
-		if err == nil && !d.IsDir() && strings.HasSuffix(p, model.Ext) {
-			maps = append(maps, p)
-		}
-		return nil
-	})
 	if err := os.Rename(from, to); err != nil {
 		return false
 	}
+	followPaths(c, from, to)
+	return true
+}
+
+// followPaths takes along what the app keeps by the maps' paths when the
+// maps folder moved from from to to: their versions, their views, the map
+// open last, the favorites and the recent ones. The config is saved.
+func followPaths(c *config, from, to string) {
 	moved := func(p string) string {
-		if rel, err := filepath.Rel(from, p); err == nil && !strings.HasPrefix(rel, "..") {
+		if rel, err := filepath.Rel(from, p); err == nil && rel != "." && !strings.HasPrefix(rel, "..") {
 			return filepath.Join(to, rel)
+		}
+		if filepath.Clean(p) == filepath.Clean(from) {
+			return to
 		}
 		return p
 	}
 	store := versions.Store{Dir: versionsDir()}
-	for _, p := range maps {
-		_ = store.Moved(p, moved(p))
-	}
+	_ = filepath.WalkDir(to, func(p string, d os.DirEntry, err error) error {
+		if err == nil && !d.IsDir() && strings.HasSuffix(p, model.Ext) {
+			if rel, err := filepath.Rel(to, p); err == nil {
+				_ = store.Moved(filepath.Join(from, rel), p)
+			}
+		}
+		return nil
+	})
 	c.Dir, c.File = to, moved(c.File)
 	for i := range c.Favorites {
 		c.Favorites[i] = moved(c.Favorites[i])
@@ -79,5 +88,41 @@ func moveOldDir(c *config) bool {
 			}
 		}
 	}
-	return true
+}
+
+// followDir finds the maps folder again when it was renamed, as in Finder,
+// by its identity among its parent's folders, and goes on in it under its
+// new name. It reports whether it did.
+func (a *app) followDir() bool {
+	if a.dir == "" || a.dirID == (fileID{}) {
+		return false
+	}
+	if _, err := os.Stat(a.dir); err == nil {
+		return false
+	}
+	parent := filepath.Dir(a.dir)
+	entries, err := os.ReadDir(parent)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		p := filepath.Join(parent, e.Name())
+		if id, ok := idOf(p); e.IsDir() && ok && id == a.dirID {
+			from, open := a.dir, ""
+			if rel, err := filepath.Rel(from, a.path); a.path != "" && err == nil && !strings.HasPrefix(rel, "..") {
+				open = filepath.Join(p, rel)
+				a.path = open // saved where it is now, not where it was
+			}
+			a.flush()
+			followPaths(&a.cfg, from, p)
+			a.views = loadViews()
+			a.openDir(p)
+			if open != "" {
+				_ = a.open(open)
+			}
+			a.tell("导图文件夹已改名为「" + e.Name() + "」")
+			return true
+		}
+	}
+	return false
 }

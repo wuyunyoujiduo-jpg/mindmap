@@ -54,3 +54,32 @@ func TestMoveOldDir(t *testing.T) {
 		t.Fatal("moved twice")
 	}
 }
+
+// The maps folder renamed outside the app, as in Finder: the app finds it
+// under its new name and goes on there, with the map that was open.
+func TestFollowRenamedDir(t *testing.T) {
+	a, tt := newTestApp(t)
+	open := a.path
+	from := a.dir
+	to := filepath.Join(filepath.Dir(from), "我的项目")
+	if err := os.Rename(from, to); err != nil {
+		t.Fatal(err)
+	}
+	if !a.followDir() {
+		t.Fatal("not followed")
+	}
+	rel, _ := filepath.Rel(from, open)
+	if a.dir != to || a.cfg.Dir != to || a.path != filepath.Join(to, rel) || a.doc == nil {
+		t.Fatalf("dir %q, map %q", a.dir, a.path)
+	}
+	if _, err := os.Stat(from); err == nil {
+		t.Fatal("the old folder came back")
+	}
+	tt.Frame()
+	if !tt.HasText("我的项目") {
+		t.Fatalf("the new name is not shown: %q", tt.Texts())
+	}
+	if a.followDir() {
+		t.Fatal("followed again")
+	}
+}

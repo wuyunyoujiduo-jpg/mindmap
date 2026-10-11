@@ -264,6 +264,7 @@ type app struct {
 	pluginGet     pluginGetter
 	clipKeyDraft  string
 	shotKeyDraft  string
+	dirID         fileID // the maps folder's identity, to follow it when renamed
 	recordingKey  string // the shortcut being recorded, by its label
 	// What kept a screenshot from being taken, said in the app's window,
 	// which comes to the front for it.
@@ -381,6 +382,7 @@ func (a *app) openDir(dir string) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		a.saveErr = err.Error()
 	}
+	a.dirID, _ = idOf(dir)
 	a.refreshFiles()
 	a.openLibrary()
 	if len(a.files) == 0 {
@@ -559,6 +561,7 @@ func (a *app) tick(c *ui.Context) {
 	}
 	if now.Sub(a.checked) >= 2*time.Second {
 		a.checked = now
+		a.followDir()
 		a.checkLibrary()
 		a.embedLibrary()
 		a.autoBackup()
