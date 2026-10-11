@@ -52,8 +52,9 @@ type platform interface {
 	// taken from the app.
 	SetShotKey(accelerator string) error
 	Screenshot(fromApp bool)
-	// SetAppIcon shows the app's icon in the Dock or the taskbar.
-	SetAppIcon(png []byte)
+	// SetAppIcon shows the app's icon in the Dock or the taskbar, and the
+	// menu bar's.
+	SetAppIcon(app, tray []byte)
 	// CheckUpdates checks for a newer version and offers to install it and
 	// restart; AutoUpdates and SetAutoUpdates are whether it checks by
 	// itself, once a day.
@@ -259,6 +260,8 @@ type app struct {
 	pluginGet     pluginGetter
 	clipKeyDraft  string
 	shotKeyDraft  string
+	recordingKey  string                // the shortcut being recorded, by its label
+	keyErr        map[string]string     // why a shortcut recorded is not used
 	iconBitmaps   map[string]*ui.Bitmap // the app's icons, in the settings
 	// The sync with GitHub (sync.go).
 	syncBusy                       bool
@@ -333,6 +336,7 @@ func newApp(plat platform, cfg config) *app {
 		fetchPage:     library.FetchPage,
 		embed:         embedWith,
 		pluginGet:     httpGet,
+		keyErr:        map[string]string{},
 		syncRun:       ghsync.Sync,
 		syncCheckRepo: ghsync.Check,
 		qvecs:         map[string][]float32{},

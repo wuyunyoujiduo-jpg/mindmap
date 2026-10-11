@@ -53,7 +53,7 @@ func (a *app) libraryView(c *ui.Context) {
 					a.organizeAll()
 				}
 			}
-			if iconButton(c, iconShot, "截图", "截图：框选屏幕、标注后收进资料库（"+a.shotKey()+"）", 30, true).Clicked() {
+			if iconButton(c, iconShot, "截图", "截图：框选屏幕、标注后收进资料库（"+keyLabel(a.shotKey())+"）", 30, true).Clicked() {
 				a.later(a.screenshot)
 			}
 			if iconTextButton(c, iconSparkle, "AI", "AI 助手", "和 AI 聊资料库里的内容，它会检索相关资料来回答", a.aiOpen).Clicked() {
@@ -109,12 +109,6 @@ func (a *app) libraryView(c *ui.Context) {
 		a.noteLibraryWrite()
 		a.libSel = ""
 	}
-}
-
-// keyLabel shows an accelerator as macOS writes it.
-func keyLabel(accel string) string {
-	r := strings.NewReplacer("CmdOrCtrl+", "⌘", "Command+", "⌘", "Cmd+", "⌘", "Control+", "⌃", "Ctrl+", "⌃", "Alt+", "⌥", "Option+", "⌥", "Shift+", "⇧", "Space", "Space")
-	return r.Replace(accel)
 }
 
 // libHits are the clips the search and the filters find.

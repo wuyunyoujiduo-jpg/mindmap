@@ -1,4 +1,4 @@
-# MindMap
+# MyMind
 
 基于思维导图的项目管理桌面工具，使用 [MyGo](https://github.com/egoist/mygo) 原生 UI（Go 编写，GPU 绘制，无 WebView）开发，优先支持 macOS。
 
@@ -38,7 +38,7 @@
 - **前置任务**：任务可以设置「完成后才能开始」的前置任务（防止循环依赖），被阻塞的任务在导图、看板、时间线上显示 🔒，导图上画出依赖箭头
 - **迭代与估时**：在总览里新建迭代（默认两周，可改名改日期），任务排进迭代；任务可填估时（小时），看板和时间线可按迭代筛选并显示剩余工时
 - **到期提醒**：任务今天到期或已逾期时发系统通知，每天一次（总览右上角可关闭）
-- **连接 AI 编程工具（MCP）**：帮助菜单「连接 AI 编程工具」，一键复制命令把 MindMap 接入 Claude Code、Cursor 等。AI 可以读导图、搜索、列任务，添加、修改、移动、删除节点，更新任务状态、补实现备注、把代码文件和 PR 链接到节点。命令行运行 `MindMap mcp [--dir 导图文件夹]` 即为 MCP 服务（stdio）
+- **连接 AI 编程工具（MCP）**：帮助菜单「连接 AI 编程工具」，一键复制命令把 MyMind 接入 Claude Code、Cursor 等。AI 可以读导图、搜索、列任务，添加、修改、移动、删除节点，更新任务状态、补实现备注、把代码文件和 PR 链接到节点。命令行运行 `MyMind mcp [--dir 导图文件夹]` 即为 MCP 服务（stdio）
 - **历史版本**（⌘⇧H）：打开导图时、编辑中每 10 分钟、外部程序或 AI 修改前后自动保留版本（存在应用自己的目录，不污染导图文件夹）。选一个版本即可看到「从那时到现在」的变化：新增、删除、改名、移动、状态、备注、标签；点击变化跳到节点；一键恢复（可撤销）。载入外部修改后提示「查看改动」
 - **冲突保护**：编辑中文件又被其他程序（比如 AI）修改时，不再自动覆盖，而是提示选择保留哪一份，另一份存进历史版本
 - **节点链接**：节点可以链接网页（GitHub PR / issue 自动显示为「仓库 PR #12」）、代码文件（`路径:行号`，相对「项目代码目录」或绝对路径，用 VS Code / Cursor 打开并跳到该行）、其他节点（可跨导图），被链接的节点显示反向链接。节点上的 ↗ 点击打开
@@ -81,10 +81,10 @@
 
 ## 下载安装（macOS）
 
-在 [Releases](https://github.com/wuyunyoujiduo-jpg/mindmap/releases/latest) 下载 `.dmg`（Apple 芯片选 `arm64`，Intel 选 `amd64`），打开后把 MindMap 拖进「应用程序」。应用没有经过苹果公证，第一次打开前在终端执行：
+在 [Releases](https://github.com/wuyunyoujiduo-jpg/mindmap/releases/latest) 下载 `.dmg`（Apple 芯片选 `arm64`，Intel 选 `amd64`），打开后把 MyMind 拖进「应用程序」。应用没有经过苹果公证，第一次打开前在终端执行：
 
 ```sh
-xattr -cr /Applications/MindMap.app
+xattr -cr /Applications/MyMind.app
 ```
 
 ### 一键更新（推荐）
@@ -109,7 +109,7 @@ gh api repos/wuyunyoujiduo-jpg/mindmap/contents/update.sh -H "Accept: applicatio
 ~/mindmap-update.sh -f       # 强制重新安装
 ```
 
-脚本会先让正在运行的 MindMap 退出（退出时会自动保存），再下载 .dmg，替换 /Applications 里的应用，最后重新打开。
+脚本会先让正在运行的 MyMind 退出（退出时会自动保存），再下载 .dmg，替换 /Applications 里的应用，最后重新打开。
 
 ## 发布新版本
 
@@ -190,7 +190,7 @@ go tool mygo build    # 打包：macOS 生成 .app 和 .dmg，位于 build/
 
 ## 文件格式
 
-这是 MindMap 自己的格式（纯文本 JSON），可以通过导入导出和 XMind、Markdown 互通。
+这是 MyMind 自己的格式（纯文本 JSON），可以通过导入导出和 XMind、Markdown 互通。
 
 每个导图保存为一个 `名称.mindmap.json` 文件，内容是缩进格式的 JSON，适合放进 git 管理和比较差异。一个文件包含一个或多个画布（`sheets`），每个画布是一棵节点树：
 

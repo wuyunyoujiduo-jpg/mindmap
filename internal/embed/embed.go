@@ -68,7 +68,7 @@ func Load(path string) (*Model, error) {
 // Parse reads a model from its file's bytes.
 func Parse(data []byte) (*Model, error) {
 	if !bytes.HasPrefix(data, []byte("MMEMB1")) || len(data) < 14 {
-		return nil, errors.New("不是 MindMap 的向量模型文件")
+		return nil, errors.New("不是 MyMind 的向量模型文件")
 	}
 	r := data[6:]
 	n := int(binary.LittleEndian.Uint32(r))

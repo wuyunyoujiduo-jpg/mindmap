@@ -41,7 +41,7 @@ type fakePlatform struct {
 	captureKey  string
 	trayUpdates int
 	shots       int
-	icon        []byte
+	icon, tray  []byte
 	checks      int
 	noAuto      bool
 }
@@ -62,7 +62,7 @@ func (f *fakePlatform) SetTray(on bool)                {}
 func (f *fakePlatform) SetClipKey(key string) error    { return nil }
 func (f *fakePlatform) SetShotKey(key string) error    { return nil }
 func (f *fakePlatform) Screenshot(fromApp bool)        { f.shots++ }
-func (f *fakePlatform) SetAppIcon(png []byte)          { f.icon = png }
+func (f *fakePlatform) SetAppIcon(png, tray []byte)    { f.icon, f.tray = png, tray }
 func (f *fakePlatform) CheckUpdates()                  { f.checks++ }
 func (f *fakePlatform) AutoUpdates() bool              { return !f.noAuto }
 func (f *fakePlatform) SetAutoUpdates(on bool)         { f.noAuto = !on }
@@ -2502,7 +2502,7 @@ func TestTrayAndSettings(t *testing.T) {
 	if a.trayTitle() != "2" {
 		t.Fatalf("title %q", a.trayTitle())
 	}
-	if _, err := png.Decode(bytes.NewReader(trayIcon())); err != nil {
+	if _, err := png.Decode(bytes.NewReader(trayIcon(""))); err != nil {
 		t.Fatal(err)
 	}
 	a.trayAt = time.Time{}
@@ -2516,10 +2516,28 @@ func TestTrayAndSettings(t *testing.T) {
 	if err := tt.Click("快速记录快捷键"); err != nil {
 		t.Fatal(err)
 	}
-	tt.Type("CmdOrCtrl+Shift+M")
-	tt.Key(0, ui.KeyEnter)
-	if fp.captureKey != "CmdOrCtrl+Shift+M" || a.cfg.CaptureKey != "CmdOrCtrl+Shift+M" {
+	if a.recordingKey != "快速记录快捷键" || fp.captureKey != "" || !tt.HasText("请按下新的快捷键…") {
+		t.Fatalf("not recording: %q, %q", a.recordingKey, fp.captureKey)
+	}
+	tt.Key(0, ui.KeyM) // a key without a modifier is not a shortcut
+	tt.Key(ui.Super|ui.Shift, ui.KeyM)
+	if fp.captureKey != "Shift+Command+M" || a.cfg.CaptureKey != "Shift+Command+M" || a.recordingKey != "" {
 		t.Fatalf("key %q", fp.captureKey)
+	}
+	if !tt.HasText(keyLabel("Shift+Command+M")) {
+		t.Fatalf("not shown: %q", tt.Texts())
+	}
+	// Esc cancels, and the default comes back.
+	tt.Click("快速记录快捷键")
+	tt.Key(0, ui.KeyEscape)
+	if fp.captureKey != "Shift+Command+M" || a.recordingKey != "" {
+		t.Fatalf("cancel: %q", fp.captureKey)
+	}
+	if err := tt.Click("恢复默认"); err != nil {
+		t.Fatal(err)
+	}
+	if fp.captureKey != defaultCaptureKey || a.cfg.CaptureKey != "" {
+		t.Fatalf("default: %q", fp.captureKey)
 	}
 	snapshot(t, tt, "settings")
 }
@@ -2936,7 +2954,7 @@ func TestChooseAppIcon(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if a.cfg.Icon != "orbit" || !bytes.Equal(fp.icon, appIconPNG("orbit")) {
+	if a.cfg.Icon != "orbit" || !bytes.Equal(fp.icon, appIconPNG("orbit")) || !bytes.Equal(fp.tray, trayIcon("orbit")) {
 		t.Fatalf("icon %q, %d bytes set", a.cfg.Icon, len(fp.icon))
 	}
 	if err := tt.Click("图标 知识卡片"); err != nil {
@@ -2959,7 +2977,7 @@ func TestUpdateSettings(t *testing.T) {
 	fp := a.plat.(*fakePlatform)
 	a.openSettings()
 	tt.Frame()
-	if !tt.HasText("MindMap " + version) {
+	if !tt.HasText(appName + " " + version) {
 		t.Fatalf("no version: %q", tt.Texts())
 	}
 	if err := tt.Click("检查更新…"); err != nil {
@@ -2973,5 +2991,21 @@ func TestUpdateSettings(t *testing.T) {
 	}
 	if !fp.noAuto {
 		t.Fatal("daily check still on")
+	}
+}
+
+func TestShortcutLabels(t *testing.T) {
+	for _, c := range []struct{ acc, mac, win string }{
+		{"Control+Alt+A", "⌃⌥A", "Ctrl+Alt+A"},
+		{"CmdOrCtrl+Shift+M", "⇧⌘M", "Ctrl+Shift+M"},
+		{"Control+Alt+Space", "⌃⌥Space", "Ctrl+Alt+Space"},
+		{"Option+Command+Left", "⌥⌘←", "Alt+Win+Left"},
+	} {
+		if got := accelLabel(c.acc, "darwin"); got != c.mac {
+			t.Errorf("%s on macOS: %q", c.acc, got)
+		}
+		if got := accelLabel(c.acc, "windows"); got != c.win {
+			t.Errorf("%s on Windows: %q", c.acc, got)
+		}
 	}
 }

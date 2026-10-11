@@ -450,7 +450,7 @@ func syncOnce(ctx context.Context, dir string, cfg Config, progress func(string)
 
 func message(pushed, dropped int) string {
 	host, _ := os.Hostname()
-	m := fmt.Sprintf("MindMap 同步：%d 个文件", pushed)
+	m := fmt.Sprintf("MyMind 同步：%d 个文件", pushed)
 	if dropped > 0 {
 		m += fmt.Sprintf("，删除 %d 个", dropped)
 	}
@@ -642,8 +642,8 @@ func (cfg Config) start(ctx context.Context) (string, error) {
 		Commit struct{ SHA string } `json:"commit"`
 	}
 	err := cfg.call(ctx, "PUT", "/contents/"+marker, map[string]string{
-		"message": "MindMap 同步",
-		"content": base64.StdEncoding.EncodeToString([]byte("MindMap 的导图和资料库，由 MindMap 自动同步。\n")),
+		"message": "MyMind 同步",
+		"content": base64.StdEncoding.EncodeToString([]byte("MyMind 的导图和资料库，由 MyMind 自动同步。\n")),
 		"branch":  cfg.branch(),
 	}, &out)
 	return out.Commit.SHA, err

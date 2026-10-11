@@ -1,5 +1,5 @@
 #!/bin/bash
-# Installs or updates MindMap on macOS from the repository's releases.
+# Installs or updates MyMind on macOS from the repository's releases.
 #
 #   ./update.sh            # the latest release
 #   ./update.sh 0.6.0      # a version of your choice
@@ -13,7 +13,7 @@
 set -euo pipefail
 
 REPO="wuyunyoujiduo-jpg/mindmap"
-APP_NAME="MindMap"
+APP_NAME="MyMind"
 APP_DIR="${APP_DIR:-/Applications}"
 APP="$APP_DIR/$APP_NAME.app"
 
@@ -102,6 +102,13 @@ sudo=""
 $sudo rm -rf "$APP"
 $sudo ditto "$src" "$APP"
 $sudo xattr -cr "$APP" 2>/dev/null || true
+
+# The app was called MindMap before 0.25.2: the old one goes.
+old="$APP_DIR/MindMap.app"
+if [ -d "$old" ] && [ "$old" != "$APP" ]; then
+	osascript -e 'quit app "MindMap"' >/dev/null 2>&1 || true
+	$sudo rm -rf "$old"
+fi
 
 say "完成：$APP_NAME $want"
 open "$APP"

@@ -99,7 +99,10 @@ func openSession(shots []*screenShot, deliver func([]byte, Action), onEnd func()
 			w.ShowInactive()
 		})
 	}
-	focus.win.Update(func() { focus.win.Focus() })
+	focus.win.Update(func() {
+		focus.win.Focus()
+		Log("截图窗口已显示在屏幕 %d", focus.index)
+	})
 	return s
 }
 

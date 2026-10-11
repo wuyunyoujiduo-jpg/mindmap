@@ -47,7 +47,7 @@ func serveMCP(args []string) error {
 func executable() string {
 	p, err := os.Executable()
 	if err != nil {
-		return "/Applications/MindMap.app/Contents/MacOS/MindMap"
+		return "/Applications/MyMind.app/Contents/MacOS/MyMind"
 	}
 	if r, err := filepath.EvalSymlinks(p); err == nil {
 		return r
@@ -63,7 +63,7 @@ func (a *app) mcpView(c *ui.Context) {
 		exe := executable()
 		claude := fmt.Sprintf("claude mcp add mindmap --scope user -- %q mcp", exe)
 		json := fmt.Sprintf("{\n  \"mcpServers\": {\n    \"mindmap\": {\n      \"command\": %q,\n      \"args\": [\"mcp\"]\n    }\n  }\n}", exe)
-		rule := "项目的架构、功能、任务和待优化点记录在 MindMap 导图「" + mapName(a.path) + "」里（通过 mindmap MCP 工具访问）。\n" +
+		rule := "项目的架构、功能、任务和待优化点记录在 MyMind 导图「" + mapName(a.path) + "」里（通过 mindmap MCP 工具访问）。\n" +
 			"- 开始工作前先用 read_map 读一遍，了解结构和约定；\n" +
 			"- 完成或开始一个任务时用 update_node 更新状态，并用 append_note 记下实现要点和决策；\n" +
 			"- 用 update_node 的 add_links 把实现它的代码文件（路径:行号）和 PR 链接到节点上；\n" +

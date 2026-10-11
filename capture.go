@@ -1,12 +1,7 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
-	"image"
-	"image/color"
-	"image/png"
-	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -288,7 +283,7 @@ func (a *app) trayMenu() []trayEntry {
 			}})
 		}
 	}
-	items = append(items, trayEntry{sep: true}, trayEntry{label: "打开 MindMap", run: a.plat.ShowMain})
+	items = append(items, trayEntry{sep: true}, trayEntry{label: "打开 MyMind", run: a.plat.ShowMain})
 	return items
 }
 
@@ -298,40 +293,6 @@ func (a *app) trayTitle() string {
 		return fmt.Sprint(n)
 	}
 	return ""
-}
-
-// trayIcon draws the menu bar's icon: a small mind map, black on clear,
-// which macOS tints.
-func trayIcon() []byte {
-	const s = 36
-	img := image.NewNRGBA(image.Rect(0, 0, s, s))
-	disc := func(cx, cy, r float64) {
-		for y := 0; y < s; y++ {
-			for x := 0; x < s; x++ {
-				d := math.Hypot(float64(x)+0.5-cx, float64(y)+0.5-cy)
-				if a := r + 0.5 - d; a > 0 {
-					img.Set(x, y, color.NRGBA{0, 0, 0, uint8(255 * min(a, 1))})
-				}
-			}
-		}
-	}
-	line := func(x0, y0, x1, y1, w float64) {
-		for i := 0; i <= 60; i++ {
-			f := float64(i) / 60
-			disc(x0+(x1-x0)*f, y0+(y1-y0)*f, w)
-		}
-	}
-	line(18, 18, 6, 8, 1.4)
-	line(18, 18, 6, 28, 1.4)
-	line(18, 18, 30, 8, 1.4)
-	line(18, 18, 30, 28, 1.4)
-	disc(18, 18, 6)
-	for _, p := range [][2]float64{{5, 8}, {5, 28}, {31, 8}, {31, 28}} {
-		disc(p[0], p[1], 3.4)
-	}
-	var b bytes.Buffer
-	_ = png.Encode(&b, img)
-	return b.Bytes()
 }
 
 // openSettings opens the settings, with the fields as saved.
@@ -428,46 +389,32 @@ func (a *app) generalSettings(c *ui.Context) {
 	t := c.Theme()
 	a.iconSettings(c)
 	a.updateSettings(c)
-	ui.Field(c, "快速记录的全局快捷键", func() {
-		ui.Column(c).Gap(6).Children(func() {
-			in := ui.TextInput(c.Key("capture-key"), &a.captureKeyDraft).Placeholder(defaultCaptureKey).Label("快速记录快捷键")
-			if in.Submitted() || in.PressedOutside() && a.captureKeyDraft != a.cfg.CaptureKey {
-				a.cfg.CaptureKey = strings.TrimSpace(a.captureKeyDraft)
-				a.cfg.save()
-				if err := a.plat.SetCaptureKey(a.captureKey()); err != nil {
-					a.saveErr = "快捷键无效：" + err.Error()
-				}
+	ui.Field(c, "全局快捷键", func() {
+		ui.Column(c).Gap(10).Children(func() {
+			rows := []struct {
+				name, what, value, def string
+				save                   func(string)
+				reg                    func(string) error
+				effective              func() string
+			}{
+				{"快速记录快捷键", "快速记录：弹出小窗口记下想法", a.cfg.CaptureKey, defaultCaptureKey,
+					func(v string) { a.cfg.CaptureKey = v }, a.plat.SetCaptureKey, a.captureKey},
+				{"收藏剪贴板快捷键", "收藏剪贴板：复制后按下，直接收进资料库", a.cfg.ClipKey, defaultClipKey,
+					func(v string) { a.cfg.ClipKey = v }, a.plat.SetClipKey, a.clipKey},
+				{"截图快捷键", "截图：框选屏幕、标注，收进资料库或复制", a.cfg.ShotKey, defaultShotKey,
+					func(v string) { a.cfg.ShotKey = v }, a.plat.SetShotKey, a.shotKey},
 			}
-			ui.Text(c, "在任何应用里按下它，弹出一个小窗口记下想法。格式如 Control+Alt+Space、CmdOrCtrl+Shift+M；留空用默认（⌃⌥Space）。").
-				FontSize(12).TextColor(t.TextMuted).Wrap()
-		})
-	})
-	ui.Field(c, "收藏剪贴板的全局快捷键", func() {
-		ui.Column(c).Gap(6).Children(func() {
-			in := ui.TextInput(c.Key("clip-key"), &a.clipKeyDraft).Placeholder(defaultClipKey).Label("收藏剪贴板快捷键")
-			if in.Submitted() || in.PressedOutside() && a.clipKeyDraft != a.cfg.ClipKey {
-				a.cfg.ClipKey = strings.TrimSpace(a.clipKeyDraft)
-				a.cfg.save()
-				if err := a.plat.SetClipKey(a.clipKey()); err != nil {
-					a.saveErr = "快捷键无效：" + err.Error()
-				}
+			for _, r := range rows {
+				ui.Row(c.Key(r.name)).Gap(10).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, r.what).FontSize(textBody).Grow(1).Shrink(1).Wrap()
+					a.shortcutField(c, r.name, r.value, r.def, func(acc string) error {
+						r.save(acc)
+						a.cfg.save()
+						return r.reg(r.effective())
+					}, func() { _ = r.reg("") })
+				})
 			}
-			ui.Text(c, "在任何应用里复制文字、链接、图片或文件后按下它，直接收进资料库。留空用默认（⌃⌥V）。").
-				FontSize(12).TextColor(t.TextMuted).Wrap()
-		})
-	})
-	ui.Field(c, "截图的全局快捷键", func() {
-		ui.Column(c).Gap(6).Children(func() {
-			in := ui.TextInput(c.Key("shot-key"), &a.shotKeyDraft).Placeholder(defaultShotKey).Label("截图快捷键")
-			if in.Submitted() || in.PressedOutside() && a.shotKeyDraft != a.cfg.ShotKey {
-				a.cfg.ShotKey = strings.TrimSpace(a.shotKeyDraft)
-				a.cfg.save()
-				if err := a.plat.SetShotKey(a.shotKey()); err != nil {
-					a.saveErr = "快捷键无效或已被其他应用占用：" + err.Error()
-				}
-			}
-			ui.Text(c, "在任何地方按下它，框选屏幕、加上框线箭头和文字，收进资料库、复制或保存。留空用默认（⌃⌥A）。").
-				FontSize(12).TextColor(t.TextMuted).Wrap()
+			ui.Text(c, "在任何应用里都能用。点快捷键框，再按下新的组合键；Esc 取消。").FontSize(12).TextColor(t.TextMuted).Wrap()
 		})
 	})
 	tray := !a.cfg.NoTray

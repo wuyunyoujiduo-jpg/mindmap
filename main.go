@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	_ "embed"
 	"encoding/json"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/egoist/mygo"
@@ -67,6 +69,9 @@ func (d *desktop) SetCaptureKey(key string) error {
 		mygo.GlobalShortcut.Unregister(d.key)
 	}
 	d.key = ""
+	if key == "" { // let go, while it is being recorded
+		return nil
+	}
 	if err := mygo.GlobalShortcut.Register(key, d.ShowCapture); err != nil {
 		return err
 	}
@@ -79,6 +84,9 @@ func (d *desktop) SetClipKey(key string) error {
 		mygo.GlobalShortcut.Unregister(d.clipKey)
 	}
 	d.clipKey = ""
+	if key == "" { // let go, while it is being recorded
+		return nil
+	}
 	if err := mygo.GlobalShortcut.Register(key, func() { d.win.Update(d.app.clipFromShortcut) }); err != nil {
 		return err
 	}
@@ -91,6 +99,9 @@ func (d *desktop) SetShotKey(key string) error {
 		mygo.GlobalShortcut.Unregister(d.shotKey)
 	}
 	d.shotKey = ""
+	if key == "" { // let go, while it is being recorded
+		return nil
+	}
 	if err := mygo.GlobalShortcut.Register(key, func() { d.Screenshot(false) }); err != nil {
 		return err
 	}
@@ -100,11 +111,14 @@ func (d *desktop) SetShotKey(key string) error {
 
 // Screenshot frames a part of the screen. Taken from the app, the main
 // window steps aside and comes back after; taken from another app, the
-// focus goes back to it.
+// focus goes back to it. Each step is logged to screenshot.log, next to
+// the settings, and what fails is said.
 func (d *desktop) Screenshot(fromApp bool) {
 	inApp := fromApp || d.win.IsFocused()
+	logShot("截图开始：从应用内 %v，应用在前台 %v", fromApp, inApp)
 	go func() {
 		if !screenshot.HasPermission() {
+			logShot("没有屏幕录制权限")
 			screenshot.RequestPermission()
 			res, err := mygo.Dialog.Message(mygo.MessageOptions{
 				Type:    mygo.MessageWarning,
@@ -130,6 +144,7 @@ func (d *desktop) Screenshot(fromApp bool) {
 			}
 		}
 		ok, err := screenshot.Start(func(png []byte, act screenshot.Action) {
+			logShot("截图完成：%d 字节，操作 %d", len(png), act)
 			if act == screenshot.Save {
 				d.saveShot(png)
 				return
@@ -137,12 +152,37 @@ func (d *desktop) Screenshot(fromApp bool) {
 			d.win.Update(func() { d.app.keepShot(png, act, fromApp) })
 		}, end)
 		if err != nil {
-			mygo.Dialog.Error("截图失败", err.Error())
+			logShot("截图失败：%v", err)
+			mygo.Dialog.Error("截图失败", err.Error()+"\n\n详细记录在 "+shotLogPath())
 		}
 		if !ok && fromApp {
 			d.win.Update(d.ShowMain)
 		}
 	}()
+}
+
+// shotLogPath is the log of the screenshots, next to the settings.
+func shotLogPath() string {
+	return filepath.Join(filepath.Dir(configPath()), "screenshot.log")
+}
+
+var shotLogMu sync.Mutex
+
+// logShot adds a line to the screenshots' log, which keeps the last
+// 200 KB.
+func logShot(format string, args ...any) {
+	shotLogMu.Lock()
+	defer shotLogMu.Unlock()
+	p := shotLogPath()
+	if info, err := os.Stat(p); err == nil && info.Size() > 200<<10 {
+		_ = os.Rename(p, p+".old")
+	}
+	f, err := os.OpenFile(p, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	fmt.Fprintf(f, "%s %s\n", time.Now().Format("2006-01-02 15:04:05"), fmt.Sprintf(format, args...))
 }
 
 // saveShot asks where to save a screenshot and saves it there. Off the
@@ -165,13 +205,37 @@ func (d *desktop) saveShot(png []byte) {
 	d.Notify("截图已保存", path)
 }
 
-func (d *desktop) CheckUpdates()          { updater.CheckForUpdates() }
+// CheckUpdates checks as the user asked: the update window, but for when
+// no update was ever published, which is no error to the user.
+func (d *desktop) CheckUpdates() {
+	if !mygo.Updater.Enabled() {
+		updater.CheckForUpdates() // the window says why it cannot update
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		_, err := mygo.Updater.Check(ctx)
+		if err != nil && strings.Contains(err.Error(), "no release is published") {
+			_, _ = mygo.Dialog.Message(mygo.MessageOptions{
+				Message: appName + " " + version + " 已是最新版本",
+				Detail:  "还没有发布过可以自动更新的新版本。",
+				Buttons: []string{"好"},
+			})
+			return
+		}
+		mygo.RunOnMain(updater.CheckForUpdates)
+	}()
+}
 func (d *desktop) AutoUpdates() bool      { return updater.AutomaticChecks() }
 func (d *desktop) SetAutoUpdates(on bool) { updater.SetAutomaticChecks(on) }
 
-func (d *desktop) SetAppIcon(png []byte) {
+func (d *desktop) SetAppIcon(png, tray []byte) {
 	_ = mygo.App.Dock.SetIcon(png)
 	_ = d.win.SetIcon(png)
+	if d.tray != nil {
+		_ = d.tray.SetIcon(tray, true)
+	}
 }
 
 func (d *desktop) SetTray(on bool) {
@@ -183,7 +247,7 @@ func (d *desktop) SetTray(on bool) {
 		return
 	}
 	if d.tray == nil {
-		t, err := mygo.NewTray(mygo.TrayOptions{Icon: trayIcon(), IconIsTemplate: true, ToolTip: "MindMap"})
+		t, err := mygo.NewTray(mygo.TrayOptions{Icon: trayIcon(d.app.cfg.Icon), IconIsTemplate: true, ToolTip: "MyMind"})
 		if err != nil {
 			return
 		}
@@ -319,11 +383,11 @@ func resourcesDir() string {
 //go:embed mygo.json
 var mygoJSON []byte
 
-// version is the app's, from mygo.json.
-var version = func() string {
-	var c struct{ Version string }
+// version is the app's, from mygo.json, and appName its name.
+var version, appName = func() (string, string) {
+	var c struct{ Version, Name string }
 	_ = json.Unmarshal(mygoJSON, &c)
-	return c.Version
+	return c.Version, c.Name
 }()
 
 func main() {
@@ -339,6 +403,7 @@ func main() {
 	// Updates: a window, as Sparkle's, offers a new version once a day and
 	// installs it, then restarts the app (mygo.json's updates).
 	mygo.Use(updaterui.Plugin)
+	screenshot.Log = logShot
 	plat := &desktop{}
 	a := newApp(plat, loadConfig())
 	plat.app = a
@@ -347,7 +412,7 @@ func main() {
 	}
 	mygo.App.WhenReady(func() {
 		win := mygo.NewWindow(mygo.WindowOptions{
-			Title:     "MindMap",
+			Title:     "MyMind",
 			Width:     1280,
 			Height:    800,
 			MinWidth:  900,
@@ -368,10 +433,13 @@ func main() {
 		}
 		if err := plat.SetShotKey(a.shotKey()); err != nil {
 			log.Printf("截图快捷键 %s: %v", a.shotKey(), err)
+			logShot("注册截图快捷键 %s 失败：%v", a.shotKey(), err)
+		} else {
+			logShot("已注册截图快捷键 %s", a.shotKey())
 		}
 		plat.SetTray(!a.cfg.NoTray)
 		if a.cfg.Icon != "" {
-			plat.SetAppIcon(appIconPNG(a.cfg.Icon))
+			plat.SetAppIcon(appIconPNG(a.cfg.Icon), trayIcon(a.cfg.Icon))
 		}
 		a.post = func(fn func()) { win.Update(fn) }
 		a.async = func(work func() (any, error), done func(any, error)) {
@@ -386,7 +454,7 @@ func main() {
 			}}
 		}
 		mygo.App.SetMenu(mygo.NewMenu([]*mygo.MenuItem{
-			{Label: "MindMap", Submenu: []*mygo.MenuItem{
+			{Label: "MyMind", Submenu: []*mygo.MenuItem{
 				{Role: mygo.RoleAbout},
 				updater.MenuItem(),
 				mygo.Separator(),
@@ -465,6 +533,8 @@ func main() {
 			{Label: "帮助", Submenu: []*mygo.MenuItem{
 				item("快捷键", "CmdOrCtrl+Shift+/", func() { a.cheatsOpen = true }),
 				item("连接 AI 编程工具（MCP）…", "", func() { a.mcpOpen = true }),
+				mygo.Separator(),
+				item("在访达中显示截图记录", "", func() { plat.ShowInFolder(shotLogPath()) }),
 			}},
 		}))
 	})

@@ -5,7 +5,11 @@
 // in the library. It came from OneShot, a menu bar screenshot tool.
 package screenshot
 
-import "sync/atomic"
+import (
+	"errors"
+	"sync"
+	"time"
+)
 
 // Action is what is done with the shot.
 type Action int
@@ -13,32 +17,62 @@ type Action int
 const (
 	Copy    Action = iota // to the clipboard
 	Save                  // to a file
-	Library               // into MindMap's library
+	Library               // into MyMind's library
 )
 
-var busy atomic.Bool
+// ErrBusy is Start's error while a shot is under way.
+var ErrBusy = errors.New("上一次截图还没有结束")
+
+var (
+	mu        sync.Mutex
+	busySince time.Time // zero when no shot is under way
+)
+
+// stuck is how long a shot may last before another may start anyway, in
+// case its windows never showed.
+const stuck = 2 * time.Minute
+
+// Log, when set, is told each step of a shot, to find what went wrong.
+var Log = func(string, ...any) {}
 
 // Start captures every display and opens the windows to frame a region
 // in. deliver gets the picture and what to do with it, off the main
 // thread, after the windows close; onEnd runs once the shot is over,
-// however it ended. A shot already under way is left as it is, and Start
-// reports false. Call it from any goroutine.
+// however it ended. While a shot is under way, Start returns ErrBusy.
+// Call it from any goroutine.
 func Start(deliver func(png []byte, act Action), onEnd func()) (bool, error) {
-	if !busy.CompareAndSwap(false, true) {
-		return false, nil
+	mu.Lock()
+	if !busySince.IsZero() && time.Since(busySince) < stuck {
+		mu.Unlock()
+		return false, ErrBusy
 	}
+	busySince = time.Now()
+	mu.Unlock()
 	done := func() {
-		busy.Store(false)
+		mu.Lock()
+		busySince = time.Time{}
+		mu.Unlock()
+		Log("截图结束")
 		if onEnd != nil {
 			onEnd()
 		}
 	}
+	Log("正在截取屏幕…")
 	shots, err := captureScreens()
-	if err != nil || len(shots) == 0 {
+	if err == nil && len(shots) == 0 {
+		err = errors.New("没有找到屏幕")
+	}
+	if err != nil {
+		Log("截取屏幕失败：%v", err)
 		done()
 		return false, err
 	}
+	for _, sh := range shots {
+		w, h := sh.bmp.Size()
+		Log("屏幕 %d：%v，%dx%d 像素", sh.index, sh.display.Bounds, w, h)
+	}
 	openSession(shots, deliver, done)
+	Log("截图窗口已打开")
 	return true, nil
 }
 

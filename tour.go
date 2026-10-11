@@ -52,7 +52,7 @@ func (a *app) tourView(c *ui.Context) {
 			ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, card.icon).FontSize(30)
 				ui.Column(c).Gap(2).Grow(1).Children(func() {
-					ui.Text(c, fmt.Sprintf("欢迎使用 MindMap · %d/%d", a.tourStep, len(tourCards))).FontSize(12).TextColor(t.TextMuted)
+					ui.Text(c, fmt.Sprintf("欢迎使用 MyMind · %d/%d", a.tourStep, len(tourCards))).FontSize(12).TextColor(t.TextMuted)
 					ui.Text(c, card.title).FontSize(18).Bold()
 				})
 			})

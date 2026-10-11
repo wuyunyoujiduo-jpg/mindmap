@@ -101,7 +101,7 @@ func (s *Server) handle(req request) (any, *rpcError) {
 		return map[string]any{
 			"protocolVersion": version,
 			"capabilities":    map[string]any{"tools": map[string]any{"listChanged": false}},
-			"serverInfo":      map[string]any{"name": "mindmap", "title": "MindMap", "version": s.Version},
+			"serverInfo":      map[string]any{"name": "mindmap", "title": "MyMind", "version": s.Version},
 			"instructions":    instructions,
 		}, nil
 	case "ping":
@@ -125,7 +125,7 @@ func (s *Server) handle(req request) (any, *rpcError) {
 	return nil, &rpcError{-32601, "method not found: " + req.Method}
 }
 
-const instructions = `MindMap holds the user's project maps: the architecture, features, implementation notes, tasks and the next optimizations, as trees of nodes. Read the relevant map before working on a project, and keep it current as you work: mark tasks done or in progress, add notes on how things were implemented and decisions made, link nodes to the files (path:line) and PRs that implement them, and add nodes for follow-ups and optimizations you notice. Node IDs appear as {id:…} in read_map's output. Always pass a short "summary" of what you changed; the user reviews changes in the app's history. The user also keeps a library of collected notes, links, pictures and files: search it with search_library when the task may build on what they collected.`
+const instructions = `MyMind holds the user's project maps: the architecture, features, implementation notes, tasks and the next optimizations, as trees of nodes. Read the relevant map before working on a project, and keep it current as you work: mark tasks done or in progress, add notes on how things were implemented and decisions made, link nodes to the files (path:line) and PRs that implement them, and add nodes for follow-ups and optimizations you notice. Node IDs appear as {id:…} in read_map's output. Always pass a short "summary" of what you changed; the user reviews changes in the app's history. The user also keeps a library of collected notes, links, pictures and files: search it with search_library when the task may build on what they collected.`
 
 // tool is a tool as tools/list describes it.
 type tool struct {

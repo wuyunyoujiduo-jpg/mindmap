@@ -35,7 +35,7 @@ func requestCapturePermission() {
 	}
 }
 
-const capturePermissionHelp = "请在“系统设置 › 隐私与安全性 › 录屏与系统录音”中允许 MindMap，然后退出并重新打开 MindMap。"
+const capturePermissionHelp = "请在“系统设置 › 隐私与安全性 › 录屏与系统录音”中允许 MyMind，然后退出并重新打开 MyMind。"
 
 func openCapturePermissionSettings() {
 	_ = mygo.Shell.OpenExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")

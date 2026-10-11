@@ -152,7 +152,7 @@ func (a *app) syncSettings(c *ui.Context) {
 	}
 	ui.Field(c, "GitHub 仓库", func() {
 		ui.Column(c).Gap(6).Children(func() {
-			in := ui.TextInput(c.Key("sync-repo"), &a.syncDrafts[0]).Placeholder("用户名/仓库名，如 wuyunyoujiduo-jpg/mindmap-data").Label("同步仓库")
+			in := ui.TextInput(c.Key("sync-repo"), &a.syncDrafts[0]).Placeholder("用户名/仓库名，如 yourname/mindmap-data").Label("同步仓库")
 			if in.Submitted() || in.PressedOutside() {
 				saveDrafts()
 			}

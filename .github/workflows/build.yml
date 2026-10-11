@@ -105,9 +105,9 @@ jobs:
         run: |
           tag="desktop-v$(jq -r .version mygo.json)"
           gh release view "$tag" --repo "$UPDATES_REPO" >/dev/null 2>&1 ||
-            gh release create "$tag" --repo "$UPDATES_REPO" --draft --target main --title "MindMap $tag" --notes "MindMap $(jq -r .version mygo.json)"
+            gh release create "$tag" --repo "$UPDATES_REPO" --draft --target main --title "MyMind $tag" --notes "MyMind $(jq -r .version mygo.json)"
           echo "UPLOAD=-upload" >> "$GITHUB_ENV"
-      - name: Build MindMap.app and the disk image
+      - name: Build MyMind.app and the disk image
         env:
           MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN || github.token }}
@@ -119,7 +119,7 @@ jobs:
           fi
       - uses: actions/upload-artifact@v7
         with:
-          name: MindMap-macOS
+          name: MyMind-macOS
           path: build/*/*.dmg
       - name: Publish the release
         if: startsWith(github.ref, 'refs/tags/') || inputs.release
@@ -128,7 +128,7 @@ jobs:
         run: |
           tag="v$(jq -r .version mygo.json)"
           gh release create "$tag" build/*/*.dmg --target "$GITHUB_SHA" \
-            --repo "$GITHUB_REPOSITORY" --title "MindMap $tag" \
+            --repo "$GITHUB_REPOSITORY" --title "MyMind $tag" \
             --notes-file .github/release-notes.md --generate-notes
 
   # The Windows app and its installer, made on Windows (NSIS), added to the
@@ -142,7 +142,7 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-      - name: Build MindMap.exe and the installer
+      - name: Build MyMind.exe and the installer
         shell: bash
         env:
           MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
@@ -154,7 +154,7 @@ jobs:
           go tool mygo build -platform windows/amd64 $upload
       - uses: actions/upload-artifact@v7
         with:
-          name: MindMap-Windows
+          name: MyMind-Windows
           path: build/windows-amd64/*.exe
       - name: Add the installer to the release
         if: startsWith(github.ref, 'refs/tags/') || inputs.release

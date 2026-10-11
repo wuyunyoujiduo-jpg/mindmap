@@ -116,7 +116,7 @@ func ICS(f *model.File, calendar string, now time.Time) []byte {
 	line := func(s string) { b.WriteString(fold(s) + "\r\n") }
 	line("BEGIN:VCALENDAR")
 	line("VERSION:2.0")
-	line("PRODID:-//MindMap//CN")
+	line("PRODID:-//MyMind//CN")
 	line("CALSCALE:GREGORIAN")
 	line("X-WR-CALNAME:" + escapeICS(calendar))
 	stamp := now.UTC().Format("20060102T150405Z")

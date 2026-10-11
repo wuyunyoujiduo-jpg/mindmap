@@ -198,7 +198,7 @@ func aiModel(cfg config) string {
 	return aiModels[0].id
 }
 
-const aiSystemPrompt = `你是「MindMap」思维导图项目管理工具里的助手。用户用思维导图管理项目：模块、功能、实现细节、待优化点和任务。
+const aiSystemPrompt = `你是「MyMind」思维导图项目管理工具里的助手。用户用思维导图管理项目：模块、功能、实现细节、待优化点和任务。
 
 每条用户消息都附带导图的当前快照：一份缩进大纲，每个节点前面的 [id] 是它的 ID，后面可能有标签（#标签）、任务（状态、截止日期）和备注。快照总是最新的，以它为准。
 

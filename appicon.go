@@ -16,11 +16,24 @@ import (
 //go:embed appicons/*.png
 var appIconFiles embed.FS
 
-type appIcon struct{ key, name, file string }
+type appIcon struct{ key, name, file, tray string }
 
 var appIcons = []appIcon{
-	{"", "知识卡片", "appicons/cards.png"},
-	{"orbit", "知识星图", "appicons/orbit.png"},
+	{"", "知识卡片", "appicons/cards.png", "appicons/tray-cards.png"},
+	{"orbit", "知识星图", "appicons/orbit.png", "appicons/tray-orbit.png"},
+}
+
+// trayIcon is the menu bar's icon of the key: black on clear, which macOS
+// tints.
+func trayIcon(key string) []byte {
+	ic := appIcons[0]
+	for _, i := range appIcons {
+		if i.key == key {
+			ic = i
+		}
+	}
+	data, _ := appIconFiles.ReadFile(ic.tray)
+	return data
 }
 
 // appIconPNG is the icon of the key, the default for one unknown.
@@ -42,7 +55,7 @@ func (a *app) setIcon(key string) {
 	}
 	a.cfg.Icon = key
 	a.cfg.save()
-	a.plat.SetAppIcon(appIconPNG(key))
+	a.plat.SetAppIcon(appIconPNG(key), trayIcon(key))
 }
 
 // iconBitmap is an icon's picture for the settings, decoded once.
@@ -95,7 +108,7 @@ func (a *app) iconSettings(c *ui.Context) {
 					})
 				}
 			})
-			ui.Text(c, "换上的图标在程序坞（Windows 是任务栏）里显示；访达和启动台里仍是默认的「知识卡片」。").
+			ui.Text(c, "换上的图标在程序坞（Windows 是任务栏）和菜单栏里显示；访达和启动台里仍是默认的「知识卡片」。").
 				FontSize(12).TextColor(t.TextMuted).Wrap()
 		})
 	})
@@ -106,7 +119,7 @@ func (a *app) updateSettings(c *ui.Context) {
 	ui.Field(c, "版本", func() {
 		ui.Column(c).Gap(6).Children(func() {
 			ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, "MindMap "+version).FontSize(textBody).Grow(1)
+				ui.Text(c, appName+" "+version).FontSize(textBody).Grow(1)
 				if ui.Button(c, "检查更新…").Clicked() {
 					a.plat.CheckUpdates()
 				}

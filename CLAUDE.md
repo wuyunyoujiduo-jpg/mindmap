@@ -1,4 +1,4 @@
-# MindMap
+# MyMind
 
 A macOS-first desktop app, in Go on [MyGo](https://github.com/egoist/mygo)
 (native UI): mind maps for managing projects, a library of clips organized

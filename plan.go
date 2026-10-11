@@ -359,5 +359,5 @@ func (a *app) reminderCheck() {
 	if len(due) > 0 {
 		body = append(body, "今天到期："+strings.Join(due, "、"))
 	}
-	a.plat.Notify("MindMap · "+mapName(a.path), strings.Join(body, "\n"))
+	a.plat.Notify("MyMind · "+mapName(a.path), strings.Join(body, "\n"))
 }

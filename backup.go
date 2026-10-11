@@ -15,7 +15,7 @@ import (
 // made each day the app runs, and the last backupsKept are kept.
 
 const (
-	backupPrefix = "MindMap 备份 "
+	backupPrefix = "MyMind 备份 "
 	backupsKept  = 14
 )
 

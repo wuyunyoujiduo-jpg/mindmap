@@ -283,7 +283,7 @@ func Export(w io.Writer, f *model.File, assetsDir string) error {
 	if err := write("content.json", sheets); err != nil {
 		return err
 	}
-	if err := write("metadata.json", map[string]any{"creator": map[string]string{"name": "MindMap"}}); err != nil {
+	if err := write("metadata.json", map[string]any{"creator": map[string]string{"name": "MyMind"}}); err != nil {
 		return err
 	}
 	if err := write("manifest.json", map[string]any{"file-entries": entries}); err != nil {
