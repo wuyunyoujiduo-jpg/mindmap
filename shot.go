@@ -1,6 +1,7 @@
 package main
 
 import (
+	"runtime"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -10,8 +11,14 @@ import (
 // Screenshots, from OneShot: frame a part of the screen, mark it up, and
 // keep it in the library, copy it or save it.
 
-// defaultShotKey takes a screenshot from any app.
-const defaultShotKey = "Control+Alt+A"
+// defaultShotKey takes a screenshot from any app: ⌃⌘A on macOS, as
+// OneShot's, Ctrl+Alt+A elsewhere, as QQ's and WeChat's on Windows.
+var defaultShotKey = func() string {
+	if runtime.GOOS == "darwin" {
+		return "Control+Command+A"
+	}
+	return "Control+Alt+A"
+}()
 
 func (a *app) shotKey() string {
 	if a.cfg.ShotKey != "" {
