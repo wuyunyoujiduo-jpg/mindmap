@@ -97,7 +97,13 @@ func loadConfig() config {
 		}
 	}
 	if c.Dir == "" {
+		// Before 0.25.13 the folder was MindMap, and unsaved as the default.
 		c.Dir = defaultDir()
+		if old := oldDefaultDir(); old != "" {
+			if _, err := os.Stat(old); err == nil {
+				c.Dir = old
+			}
+		}
 	}
 	return c
 }
@@ -127,5 +133,5 @@ func defaultDir() string {
 	if err != nil {
 		return "."
 	}
-	return filepath.Join(home, "Documents", "MindMap")
+	return filepath.Join(home, "Documents", "MyMind")
 }

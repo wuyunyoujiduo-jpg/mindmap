@@ -443,7 +443,11 @@ func main() {
 	mygo.Use(updaterui.Plugin)
 	screenshot.Log = logShot
 	plat := &desktop{}
-	a := newApp(plat, loadConfig())
+	cfg := loadConfig()
+	if moveOldDir(&cfg) {
+		log.Printf("导图文件夹已改名为 %s", cfg.Dir)
+	}
+	a := newApp(plat, cfg)
 	plat.app = a
 	if !a.cfg.TourDone {
 		a.tourStep = 1 // the first run

@@ -173,7 +173,7 @@ func (s *session) shortcuts(c *ui.Context, sh *screenShot) {
 		if e.editing {
 			e.commitText()
 		} else if e.hasSel {
-			s.keep(sh) // 回车收进资料库
+			s.copy(sh) // 回车复制，同 ✓
 		}
 	}
 	if e.editing {
@@ -187,6 +187,9 @@ func (s *session) shortcuts(c *ui.Context, sh *screenShot) {
 	}
 	if c.Shortcut(ui.Cmd, ui.KeyS) && e.hasSel {
 		s.save(sh)
+	}
+	if c.Shortcut(ui.Shift, ui.KeyEnter) && e.hasSel {
+		s.keep(sh)
 	}
 }
 
@@ -211,8 +214,8 @@ func (s *session) input(sh *screenShot, ev ui.InputEvent, avoid []ui.Rect) bool 
 		if ev.Button != 0 || (s.owner != -1 && s.owner != sh.index) {
 			return true
 		}
-		if e.down(p, ev.Clicks) == resultCopy { // 双击选区：收进资料库
-			s.keep(sh)
+		if e.down(p, ev.Clicks) == resultCopy { // 双击选区：复制
+			s.copy(sh)
 		}
 		if e.editing {
 			sh.textKey++
@@ -313,11 +316,11 @@ func (s *session) toolbar(c *ui.Context, sh *screenShot, at pt) {
 			if toolButton(c, iconSave, "保存 "+cmdLabel("S")).TextColor(iconGray).Clicked() {
 				s.save(sh)
 			}
-			if toolButton(c, iconCopy, "复制 "+cmdLabel("C")).TextColor(iconGray).Clicked() {
-				s.copy(sh)
-			}
-			if toolButton(c, iconCheck, "收进资料库 ↩").TextColor(iconConfirm).Clicked() {
+			if toolButton(c, iconLibrary, "收进资料库 ⇧↩").TextColor(iconActive).Clicked() {
 				s.keep(sh)
+			}
+			if toolButton(c, iconCheck, "复制到剪贴板 ↩").TextColor(iconConfirm).Clicked() {
+				s.copy(sh)
 			}
 		})
 }

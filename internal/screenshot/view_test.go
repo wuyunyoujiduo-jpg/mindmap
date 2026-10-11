@@ -78,7 +78,7 @@ func TestOverlayTextAnnotation(t *testing.T) {
 	}
 }
 
-// Marks take the color chosen, and Enter keeps the shot in the library.
+// Marks take the color chosen.
 func TestOverlayColorsAndEnter(t *testing.T) {
 	s, sh := newTestSession(800, 600)
 	var act Action = -1

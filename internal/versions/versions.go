@@ -86,6 +86,21 @@ func (s Store) dirFor(mapPath string) string {
 	return filepath.Join(s.Dir, hex.EncodeToString(h[:8]))
 }
 
+// Moved takes the versions of a map along when its file moved.
+func (s Store) Moved(from, to string) error {
+	if s.Dir == "" {
+		return nil
+	}
+	src, dst := s.dirFor(from), s.dirFor(to)
+	if _, err := os.Stat(src); err != nil {
+		return nil // none kept
+	}
+	if _, err := os.Stat(dst); err == nil {
+		return nil // the new path has its own
+	}
+	return os.Rename(src, dst)
+}
+
 // Save keeps a snapshot of a map, unless it is the same as the last one.
 // It reports whether it wrote one.
 func (s Store) Save(mapPath string, f *model.File, reason, note string, now time.Time) (bool, error) {

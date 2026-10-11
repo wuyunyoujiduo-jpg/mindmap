@@ -79,7 +79,7 @@ func (a *app) shotSettings(c *ui.Context) {
 	t := c.Theme()
 	ui.Field(c, "截图", func() {
 		ui.Column(c).Gap(8).Children(func() {
-			ui.Text(c, "屏幕定格后直接框选，可拖动、拉边调整；框选后加框线、箭头、画笔、文字，可选颜色。回车或双击收进资料库，⌘C 复制，⌘S 保存，Esc 取消。").
+			ui.Text(c, "屏幕定格后直接框选，可拖动、拉边调整；框选后加框线、箭头、画笔、文字，可选颜色。✓、回车或双击复制到剪贴板，书签按钮或 ⇧↩ 收进资料库，⌘S 保存，Esc 取消。").
 				FontSize(12).TextColor(t.TextMuted).Wrap()
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				if ui.Button(c, "试一下").Clicked() {
