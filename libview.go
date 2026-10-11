@@ -256,16 +256,16 @@ func (a *app) clipFilters(c *ui.Context) {
 	})
 }
 
-func kindIcon(kind string) string {
+func kindIcon(kind string) icon {
 	switch kind {
 	case library.KindLink:
-		return "🔗"
+		return iconLink
 	case library.KindImage:
-		return "🖼"
+		return iconImage
 	case library.KindFile:
-		return "📎"
+		return iconFile
 	}
-	return "📝"
+	return iconText
 }
 
 // clipRow is a clip in the list.
@@ -289,10 +289,10 @@ func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 	row.Children(func() {
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(3).Children(func() {
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, kindIcon(clip.Kind)).FontSize(12)
+				glyph(c, kindIcon(clip.Kind), 14, t.TextMuted)
 				ui.Text(c, clip.Label()).FontSize(13).Bold().NoWrap().Ellipsis("…").Shrink(1).MinWidth(0)
 				if clip.Starred {
-					ui.Text(c, "★").FontSize(12).TextColor(t.Warning)
+					glyph(c, iconStarFilled, 12, t.Warning)
 				}
 			})
 			sub := cmpOr(clip.Desc, clip.Summary)
@@ -431,7 +431,10 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 	t := c.Theme()
 	// The bar: what it is and when, and what to do with it.
 	ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
-		pill(c, kindIcon(clip.Kind)+" "+library.KindLabel(clip.Kind), t.Text.Alpha(0.06), t.TextMuted)
+		ui.Row(c.Key("kind-pill")).Padding(2, 8, 2, 6).Gap(4).Radius(999).Background(t.Text.Alpha(0.06)).AlignItems(ui.Center).Shrink(0).Children(func() {
+			glyph(c, kindIcon(clip.Kind), 12, t.TextMuted)
+			ui.Text(c, library.KindLabel(clip.Kind)).FontSize(textCaption).TextColor(t.TextMuted).NoWrap()
+		})
 		ui.Text(c, cmpOr(clip.Source, "手动")+" · "+clip.Created.Format("2006-01-02 15:04")).FontSize(textCaption).
 			TextColor(t.TextMuted).NoWrap().Ellipsis("…").Grow(1).Shrink(1).MinWidth(0).Margin(0, 0, 0, 4)
 		star := iconStar
@@ -450,12 +453,9 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 			a.libSel = ""
 		}
 	})
-	if s, ok := a.libStatus[clip.ID]; ok {
-		col := t.TextMuted
-		if strings.Contains(s, "失败") {
-			col = t.Danger
-		}
-		ui.Text(c, s).FontSize(textSmall).TextColor(col).Wrap()
+	status, failed := a.libStatus[clip.ID], strings.Contains(a.libStatus[clip.ID], "失败")
+	if status != "" && !failed {
+		ui.Text(c, status).FontSize(textSmall).TextColor(t.TextMuted).Wrap()
 	}
 
 	// The title and the line saying what it is, large, edited in place.
@@ -557,8 +557,25 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 				a.organizeClip(clip.ID)
 			}
 		})
+		// What kept it from organizing, said here where it was asked for.
+		if a.libNeedKey == clip.ID && providerKey(a.cfg) == "" {
+			ui.Row(c.Key("need-key")).Padding(8, 10).Gap(8).Radius(8).AlignItems(ui.Center).
+				Background(t.Warning.Alpha(0.12)).Children(func() {
+				ui.Text(c, "AI 整理要先填写 API Key。").FontSize(textSmall).Wrap().Grow(1)
+				if ui.PrimaryButton(c, "填写 API Key").FontSize(textSmall).Clicked() {
+					a.openKeySettings()
+				}
+			})
+		} else if failed {
+			ui.Row(c.Key("org-failed")).Padding(8, 10).Gap(8).Radius(8).AlignItems(ui.Center).
+				Background(t.Danger.Alpha(0.08)).Children(func() {
+				ui.Text(c, status).FontSize(textSmall).TextColor(t.Danger).Wrap().Grow(1).Selectable()
+			})
+		}
 		if clip.Summary == "" && clip.Analysis == "" && len(clip.Synonyms) == 0 {
-			ui.Text(c, "还没整理。点「整理」，AI 会写摘要、分析要点，并生成检索用的同义词。").FontSize(textSmall).TextColor(t.TextMuted).Wrap()
+			if a.libNeedKey != clip.ID && !failed {
+				ui.Text(c, "还没整理。点「整理」，AI 会写摘要、分析要点，并生成检索用的同义词。").FontSize(textSmall).TextColor(t.TextMuted).Wrap()
+			}
 			return
 		}
 		if clip.Summary != "" {

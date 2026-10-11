@@ -246,3 +246,30 @@ func TestAISearchesLibrary(t *testing.T) {
 	}
 	_ = ui.KeyEnter
 }
+
+// Organizing a clip without an API key says so in the clip's AI card,
+// with the way to fill it in.
+func TestOrganizeAsksForKey(t *testing.T) {
+	a, tt := newTestApp(t)
+	if err := a.capture("今天很好", captureLibrary); err != nil {
+		t.Fatal(err)
+	}
+	a.showLibrary()
+	a.libSel = a.lib.Clips[0].ID
+	tt.Frame()
+	if err := tt.Click("整理"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !tt.HasText("AI 整理要先填写 API Key。") || a.libErr != "" {
+		t.Fatalf("not asked beside the card: %q", tt.Texts())
+	}
+	snapshot(t, tt, "library-need-key")
+	if err := tt.Click("填写 API Key"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !a.aiOpen || !tt.HasText("API Key 保存在本机的应用配置文件中（仅当前用户可读）。") {
+		t.Fatalf("settings not shown: %v %q", a.aiOpen, tt.Texts())
+	}
+}

@@ -195,7 +195,7 @@ func (a *app) enqueueClip(id string, organize bool) {
 // organizeAll has the AI sort out every clip it has not.
 func (a *app) organizeAll() {
 	if providerKey(a.cfg) == "" {
-		a.libErr = "AI 整理需要 API Key：在 AI 助手的设置里填写。"
+		a.openKeySettings()
 		return
 	}
 	for _, c := range a.lib.Unorganized() {
@@ -206,10 +206,17 @@ func (a *app) organizeAll() {
 // organizeClip has the AI sort out a clip again.
 func (a *app) organizeClip(id string) {
 	if providerKey(a.cfg) == "" {
-		a.libErr = "AI 整理需要 API Key：在 AI 助手的设置里填写。"
+		a.libNeedKey = id // said beside the button that asked
 		return
 	}
+	a.libNeedKey = ""
 	a.enqueueClip(id, true)
+}
+
+// openKeySettings opens the AI's settings, where its API key goes.
+func (a *app) openKeySettings() {
+	a.aiOpen, a.ai.settings = true, true
+	a.loadKeyDrafts()
 }
 
 // clipResult is what reading a clip's page and asking the AI gave.

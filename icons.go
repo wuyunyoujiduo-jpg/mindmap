@@ -34,7 +34,17 @@ const (
 	iconInbox
 	iconMap
 	iconSearch
+	iconText  // a clip of text: lines on a page
+	iconLink  // two links of a chain
+	iconImage // a picture: a frame, a hill and the sun
+	iconFile  // a page with its corner folded
 )
+
+// glyph is an icon drawn in a box of the given side, as a piece of text.
+func glyph(c *ui.Context, ic icon, size float32, col ui.Color) ui.Element {
+	return ui.Box(c).Size(size, size).Shrink(0).PassThrough().
+		Draw(func(p *ui.Painter, r ui.Rect) { drawIcon(p, r, size, ic, col) })
+}
 
 // drawIcon draws an icon in the square of side s centered in r.
 func drawIcon(p *ui.Painter, r ui.Rect, s float32, ic icon, col ui.Color) {
@@ -137,6 +147,30 @@ func drawIcon(p *ui.Painter, r ui.Rect, s float32, ic icon, col ui.Color) {
 			p.StrokePath(new(ui.Path).MoveTo(cx-h*0.2, cy).CubeTo(cx+h*0.1, cy, cx+h*0.1, cy+dy*h, cx+h*0.45, cy+dy*h), w*0.9, col)
 			p.FillPath(new(ui.Path).Circle(cx+h*0.7, cy+dy*h, h*0.16), col)
 		}
+	case iconText:
+		p.StrokePath(roundedRect(cx-h*0.7, cy-h*0.85, h*1.4, h*1.7, h*0.22), w, col)
+		for i, f := range []float32{-0.35, 0, 0.35} {
+			end := cx + h*0.35
+			if i == 2 {
+				end = cx + h*0.05
+			}
+			p.StrokePath(new(ui.Path).MoveTo(cx-h*0.35, cy+f*h).LineTo(end, cy+f*h), w*0.9, col)
+		}
+	case iconLink:
+		p.StrokePath(new(ui.Path).MoveTo(cx-h*0.05, cy-h*0.25).LineTo(cx-h*0.45, cy+h*0.15).
+			CubeTo(cx-h*0.75, cy+h*0.45, cx-h*0.45, cy+h*0.95, cx-h*0.12, cy+h*0.62).LineTo(cx+h*0.05, cy+h*0.45), w, col)
+		p.StrokePath(new(ui.Path).MoveTo(cx+h*0.05, cy+h*0.25).LineTo(cx+h*0.45, cy-h*0.15).
+			CubeTo(cx+h*0.75, cy-h*0.45, cx+h*0.45, cy-h*0.95, cx+h*0.12, cy-h*0.62).LineTo(cx-h*0.05, cy-h*0.45), w, col)
+		p.StrokePath(new(ui.Path).MoveTo(cx-h*0.22, cy+h*0.22).LineTo(cx+h*0.22, cy-h*0.22), w, col)
+	case iconImage:
+		p.StrokePath(roundedRect(cx-h*0.85, cy-h*0.7, h*1.7, h*1.4, h*0.22), w, col)
+		p.FillPath(new(ui.Path).Circle(cx+h*0.35, cy-h*0.25, h*0.15), col)
+		p.StrokePath(new(ui.Path).MoveTo(cx-h*0.85, cy+h*0.45).LineTo(cx-h*0.3, cy-h*0.05).LineTo(cx+h*0.15, cy+h*0.35).
+			LineTo(cx+h*0.4, cy+h*0.15).LineTo(cx+h*0.85, cy+h*0.5), w, col)
+	case iconFile:
+		p.StrokePath(new(ui.Path).MoveTo(cx-h*0.65, cy-h*0.85).LineTo(cx+h*0.2, cy-h*0.85).LineTo(cx+h*0.65, cy-h*0.4).
+			LineTo(cx+h*0.65, cy+h*0.85).LineTo(cx-h*0.65, cy+h*0.85).Close(), w, col)
+		p.StrokePath(new(ui.Path).MoveTo(cx+h*0.2, cy-h*0.85).LineTo(cx+h*0.2, cy-h*0.4).LineTo(cx+h*0.65, cy-h*0.4), w*0.9, col)
 	case iconSearch:
 		p.StrokePath(new(ui.Path).Circle(cx-h*0.15, cy-h*0.15, h*0.55), w, col)
 		p.StrokePath(new(ui.Path).MoveTo(cx+h*0.25, cy+h*0.25).LineTo(cx+h*0.8, cy+h*0.8), w*1.1, col)

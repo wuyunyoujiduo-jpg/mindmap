@@ -146,7 +146,7 @@ func (a *app) clipLink(c *ui.Context, clip *library.Clip) {
 		a.later(func() { a.showClip(id) })
 	}
 	row.Children(func() {
-		ui.Text(c, kindIcon(clip.Kind)).FontSize(12)
+		glyph(c, kindIcon(clip.Kind), 13, t.Accent)
 		ui.Text(c, clip.Label()).FontSize(12).TextColor(t.Accent).NoWrap().Ellipsis("…").Shrink(1).MinWidth(0)
 		if clip.Desc != "" {
 			ui.Text(c, clip.Desc).FontSize(11).TextColor(t.TextMuted).NoWrap().Ellipsis("…").Shrink(2).MinWidth(0)

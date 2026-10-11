@@ -209,6 +209,7 @@ type app struct {
 	libWorking    string            // the clip being read or sorted out
 	libStatus     map[string]string // what is happening to clips, or went wrong
 	libErr        string
+	libNeedKey    string    // the clip whose organizing waits on an API key
 	libMod        time.Time // of the clips folder, as last read or written
 	libTagText    string    // a tag being typed for the clip shown
 	libSynText    string    // the synonyms of the clip libSynFor, as edited
