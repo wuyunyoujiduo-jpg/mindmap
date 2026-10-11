@@ -80,7 +80,7 @@ func (d *desktop) SetCaptureKey(key string) error {
 	if key == "" { // let go, while it is being recorded
 		return nil
 	}
-	if err := mygo.GlobalShortcut.Register(key, d.ShowCapture); err != nil {
+	if err := mygo.GlobalShortcut.Register(key, func() { logShot("按下快速记录快捷键 %s", key); d.ShowCapture() }); err != nil {
 		return err
 	}
 	d.key = key
@@ -95,7 +95,10 @@ func (d *desktop) SetClipKey(key string) error {
 	if key == "" { // let go, while it is being recorded
 		return nil
 	}
-	if err := mygo.GlobalShortcut.Register(key, func() { d.win.Update(d.app.clipFromShortcut) }); err != nil {
+	if err := mygo.GlobalShortcut.Register(key, func() {
+		logShot("按下收藏剪贴板快捷键 %s", key)
+		d.win.Update(d.app.clipFromShortcut)
+	}); err != nil {
 		return err
 	}
 	d.clipKey = key
@@ -110,7 +113,10 @@ func (d *desktop) SetShotKey(key string) error {
 	if key == "" { // let go, while it is being recorded
 		return nil
 	}
-	if err := mygo.GlobalShortcut.Register(key, func() { d.Screenshot(false) }); err != nil {
+	if err := mygo.GlobalShortcut.Register(key, func() {
+		logShot("按下截图快捷键 %s", key)
+		d.Screenshot(false)
+	}); err != nil {
 		return err
 	}
 	d.shotKey = key
@@ -648,9 +654,15 @@ func main() {
 		plat.win = win
 		if err := plat.SetCaptureKey(a.captureKey()); err != nil {
 			log.Printf("快速记录快捷键 %s: %v", a.captureKey(), err)
+			logShot("注册快速记录快捷键 %s 失败：%v", a.captureKey(), err)
+		} else {
+			logShot("已注册快速记录快捷键 %s", a.captureKey())
 		}
 		if err := plat.SetClipKey(a.clipKey()); err != nil {
 			log.Printf("收藏剪贴板快捷键 %s: %v", a.clipKey(), err)
+			logShot("注册收藏剪贴板快捷键 %s 失败：%v", a.clipKey(), err)
+		} else {
+			logShot("已注册收藏剪贴板快捷键 %s", a.clipKey())
 		}
 		// The last screenshot never ended: the app quit in it, most
 		// likely. The system's tool is offered.
