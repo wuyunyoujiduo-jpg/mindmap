@@ -369,6 +369,9 @@ func (a *app) clipMenu(m *ui.Menu, clip *library.Clip) {
 	if p := a.lib.FilePath(clip); p != "" && m.Item("打开文件").Chosen() {
 		a.plat.OpenPath(p)
 	}
+	if m.Item("生成分享卡片…").Chosen() {
+		a.openCard(clip)
+	}
 	if m.Item("复制资料链接").Chosen() {
 		a.plat.CopyText(clipScheme + clip.ID)
 		a.tell("已复制，可以粘贴到节点的链接里")
@@ -610,6 +613,9 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 		if ui.Button(c, "复制").Clicked() {
 			a.plat.CopyText(clipCopyText(clip))
 			a.tell("已复制")
+		}
+		if ui.Button(c, "分享卡片").Tooltip("把内容排成一张精美的图片").Clicked() {
+			a.openCard(clip)
 		}
 	})
 	a.relatedSection(c, clip)

@@ -62,6 +62,8 @@ type config struct {
 	// PluginDeclined hides the library's offer of the semantic search
 	// plugin.
 	PluginDeclined bool `json:"pluginDeclined,omitempty"`
+	// CardStyle is the style of the clips' cards last chosen.
+	CardStyle int `json:"cardStyle,omitempty"`
 	// TourDone is set once the tour of the first run was seen.
 	TourDone bool `json:"tourDone,omitempty"`
 	// PanelWidth is the width the right panel was dragged to.

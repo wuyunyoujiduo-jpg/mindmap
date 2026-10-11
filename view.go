@@ -70,6 +70,7 @@ func (a *app) view(c *ui.Context) {
 		a.fromTextView(c)
 		a.templatesView(c)
 		a.tourView(c)
+		a.cardWindow(c)
 	})
 	if len(a.pending) > 0 {
 		a.runPending()

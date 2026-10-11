@@ -160,6 +160,12 @@ type app struct {
 	captureErr      string
 	captureKeyDraft string
 	settingsOpen    bool
+	cardOpen        bool // the window of a clip's card
+	cardFor         string
+	cardOpts        cardOpts
+	cardShowDate    bool
+	cardShowSource  bool
+	cardSource      string
 	noteEditing     string // the node whose note the popover over the canvas edits
 	settingsTab     int
 	tourStep        int    // the step of the tour shown, 0 for none
