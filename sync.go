@@ -22,7 +22,7 @@ const (
 )
 
 func (a *app) syncConfig() ghsync.Config {
-	return ghsync.Config{Repo: a.cfg.SyncRepo, Branch: a.cfg.SyncBranch, Token: a.cfg.SyncToken, API: a.cfg.GitHubAPI}
+	return ghsync.Config{Repo: ghsync.Clean(a.cfg.SyncRepo), Branch: a.cfg.SyncBranch, Token: ghsync.Clean(a.cfg.SyncToken), API: a.cfg.GitHubAPI}
 }
 
 // syncReady tells whether a repository and a token are set.
@@ -139,9 +139,9 @@ func (a *app) syncSettings(c *ui.Context) {
 	ui.Text(c, "把导图和资料库同步到你的一个私有 GitHub 仓库：在这台电脑上的修改会自动上传，其他电脑的修改会自动下载。两台电脑改了同一张导图时，两份都会保留。超过 50MB 的文件只留在本机。").
 		FontSize(12).TextColor(t.TextMuted).Wrap()
 	saveDrafts := func() {
-		repo := strings.Trim(strings.TrimSpace(a.syncDrafts[0]), "/")
+		repo := strings.Trim(ghsync.Clean(a.syncDrafts[0]), "/")
 		repo = strings.TrimSuffix(strings.TrimPrefix(repo, "https://github.com/"), ".git")
-		token := strings.TrimSpace(a.syncDrafts[1])
+		token := ghsync.Clean(a.syncDrafts[1])
 		if repo == a.cfg.SyncRepo && token == a.cfg.SyncToken {
 			return
 		}

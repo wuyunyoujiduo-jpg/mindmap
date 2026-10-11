@@ -103,6 +103,8 @@ func (f *fakeGitHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		reply(401, map[string]string{"message": "Bad credentials"})
 	case r.URL.Path == "/user":
 		reply(200, map[string]string{"login": "me"})
+	case r.URL.Path == "/user/repos":
+		reply(200, []map[string]string{{"full_name": "me/notes"}, {"full_name": "me/blog"}})
 	case !strings.HasPrefix(r.URL.Path, "/repos/me/notes"):
 		reply(404, map[string]string{"message": "Not Found"})
 	case p == "" && r.Method == "GET":
@@ -335,7 +337,7 @@ func TestErrors(t *testing.T) {
 	// Not found: a repository of the token's account it may not reach, or
 	// a name of another account mistyped.
 	cfg.Repo = "me/secret"
-	if _, err := Check(context.Background(), cfg); err == nil || !strings.Contains(err.Error(), "没有授权访问 me/secret") {
+	if _, err := Check(context.Background(), cfg); err == nil || !strings.Contains(err.Error(), "没有授权访问 me/secret，只能看到：me/notes、me/blog") {
 		t.Fatalf("err %v", err)
 	}
 	cfg.Repo = "someone/notes"
@@ -372,5 +374,14 @@ func TestLargeFilesSkipped(t *testing.T) {
 	res := sync1(t, a, cfg)
 	if len(res.Skipped) != 1 || f.files()[".library/files/big.mov"] != "" {
 		t.Fatalf("%+v", res)
+	}
+}
+
+func TestClean(t *testing.T) {
+	if got := Clean(" github_pat_ab\u200bc\n"); got != "github_pat_abc" {
+		t.Fatalf("%q", got)
+	}
+	if got := Clean("me/my\u00a0notes\ufeff"); got != "me/mynotes" {
+		t.Fatalf("%q", got)
 	}
 }

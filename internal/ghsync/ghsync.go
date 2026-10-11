@@ -30,6 +30,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 )
 
 // MaxFile is the size of the largest file synced: GitHub refuses files
@@ -121,9 +122,38 @@ func (cfg Config) explain(ctx context.Context, err error) error {
 	if !strings.EqualFold(owner, me.Login) {
 		return fmt.Errorf("令牌属于 %s，找不到 %s：检查仓库名是否写对", me.Login, cfg.Repo)
 	}
-	return fmt.Errorf("令牌有效，但没有授权访问 %s。在 GitHub 编辑这个令牌（Settings → Developer settings → Fine-grained tokens）："+
+	// The repositories the token reaches, which a fine-grained token's
+	// list is limited to.
+	var repos []struct {
+		FullName string `json:"full_name"`
+	}
+	seen := "看不到任何仓库"
+	if cfg.request(ctx, "GET", "/user/repos?per_page=100&affiliation=owner", nil, &repos) == nil && len(repos) > 0 {
+		var names []string
+		for _, r := range repos {
+			if strings.EqualFold(r.FullName, cfg.Repo) {
+				// It is listed, yet not found: the name differs in a way
+				// not seen, as a character that does not show.
+				return fmt.Errorf("令牌能访问 %s，但 GitHub 按填写的名字找不到它：把仓库名删掉重新输入一次", r.FullName)
+			}
+			names = append(names, r.FullName)
+		}
+		seen = "只能看到：" + strings.Join(names, "、")
+	}
+	return fmt.Errorf("令牌（%s）有效，但没有授权访问 %s，%s。在 GitHub 编辑这个令牌（Settings → Developer settings → Fine-grained tokens）："+
 		"Repository access 选「Only select repositories」并勾上这个仓库（仓库在令牌之后新建的，要再勾一次），"+
-		"Repository permissions → Contents 选 Read and write", cfg.Repo)
+		"Repository permissions → Contents 选 Read and write", me.Login, cfg.Repo, seen)
+}
+
+// Clean takes out of a repository's name or a token what pasting brings
+// along and does not show: spaces, line breaks, zero-width characters.
+func Clean(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsSpace(r) || unicode.Is(unicode.Cf, r) || !unicode.IsPrint(r) {
+			return -1
+		}
+		return r
+	}, s)
 }
 
 // Included tells whether a file of the folder, by its slash-separated
