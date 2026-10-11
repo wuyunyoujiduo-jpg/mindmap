@@ -163,6 +163,11 @@ func (d *desktop) saveShot(png []byte) {
 	d.Notify("截图已保存", path)
 }
 
+func (d *desktop) SetAppIcon(png []byte) {
+	_ = mygo.App.Dock.SetIcon(png)
+	_ = d.win.SetIcon(png)
+}
+
 func (d *desktop) SetTray(on bool) {
 	if !on {
 		if d.tray != nil {
@@ -356,6 +361,9 @@ func main() {
 			log.Printf("截图快捷键 %s: %v", a.shotKey(), err)
 		}
 		plat.SetTray(!a.cfg.NoTray)
+		if a.cfg.Icon != "" {
+			plat.SetAppIcon(appIconPNG(a.cfg.Icon))
+		}
 		a.post = func(fn func()) { win.Update(fn) }
 		a.async = func(work func() (any, error), done func(any, error)) {
 			go func() {

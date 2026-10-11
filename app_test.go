@@ -41,6 +41,7 @@ type fakePlatform struct {
 	captureKey  string
 	trayUpdates int
 	shots       int
+	icon        []byte
 }
 
 func (f *fakePlatform) SaveFile(name, ext string, done func(string)) { done(f.savePath) }
@@ -59,6 +60,7 @@ func (f *fakePlatform) SetTray(on bool)                {}
 func (f *fakePlatform) SetClipKey(key string) error    { return nil }
 func (f *fakePlatform) SetShotKey(key string) error    { return nil }
 func (f *fakePlatform) Screenshot(fromApp bool)        { f.shots++ }
+func (f *fakePlatform) SetAppIcon(png []byte)          { f.icon = png }
 func (f *fakePlatform) UpdateTray()                    { f.trayUpdates++ }
 func (f *fakePlatform) Notify(title, body string) {
 	f.notes = append(f.notes, title+"："+body)
@@ -2915,5 +2917,33 @@ func TestTemplates(t *testing.T) {
 	a.newFromTemplate(*mine)
 	if a.doc.Root.Title != "我的项目模板" || mapName(a.path) != "AI 开发管理 2" {
 		t.Fatalf("from mine %q %q", a.path, a.doc.Root.Title)
+	}
+}
+
+// The app's icon is chosen in the settings, and kept.
+func TestChooseAppIcon(t *testing.T) {
+	a, tt := newTestApp(t)
+	fp := a.plat.(*fakePlatform)
+	a.openSettings()
+	tt.Frame()
+	snapshot(t, tt, "settings-icon")
+	if err := tt.Click("图标 知识星图"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.cfg.Icon != "orbit" || !bytes.Equal(fp.icon, appIconPNG("orbit")) {
+		t.Fatalf("icon %q, %d bytes set", a.cfg.Icon, len(fp.icon))
+	}
+	if err := tt.Click("图标 知识卡片"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.cfg.Icon != "" || !bytes.Equal(fp.icon, appIconPNG("")) {
+		t.Fatalf("icon %q", a.cfg.Icon)
+	}
+	for _, ic := range appIcons {
+		if _, err := png.Decode(bytes.NewReader(appIconPNG(ic.key))); err != nil {
+			t.Fatal(ic.name, err)
+		}
 	}
 }

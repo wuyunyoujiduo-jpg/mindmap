@@ -5,6 +5,9 @@
     orbit   knowledge in orbit around the spark, a constellation
 
     python3 tools/icon/concepts.py <concept> out.png
+
+The app's icon, resources/icon.png, is cards; appicons/ holds cards and
+orbit at 512 pixels, the icons to choose from in the settings.
 """
 import math
 import sys

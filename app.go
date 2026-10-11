@@ -51,6 +51,8 @@ type platform interface {
 	// taken from the app.
 	SetShotKey(accelerator string) error
 	Screenshot(fromApp bool)
+	// SetAppIcon shows the app's icon in the Dock or the taskbar.
+	SetAppIcon(png []byte)
 	SetTray(on bool)
 	UpdateTray()
 	ShowInFolder(path string)
@@ -250,6 +252,7 @@ type app struct {
 	pluginGet     pluginGetter
 	clipKeyDraft  string
 	shotKeyDraft  string
+	iconBitmaps   map[string]*ui.Bitmap // the app's icons, in the settings
 
 	// The presentation.
 	presenting bool
