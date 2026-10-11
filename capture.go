@@ -251,6 +251,7 @@ type trayTask struct {
 func (a *app) trayMenu() []trayEntry {
 	items := []trayEntry{{label: "快速记录…", run: a.plat.ShowCapture},
 		{label: "收藏剪贴板到资料库", run: a.clipFromShortcut},
+		{label: "截图…", run: func() { a.plat.Screenshot(false) }},
 		{label: fmt.Sprintf("资料库（%d）", len(a.lib.Clips)), run: func() {
 			a.plat.ShowMain()
 			a.showLibrary()
@@ -337,6 +338,7 @@ func trayIcon() []byte {
 func (a *app) openSettings() {
 	a.settingsOpen = true
 	a.captureKeyDraft, a.ghTokenDraft, a.clipKeyDraft = a.cfg.CaptureKey, a.cfg.GitHubToken, a.cfg.ClipKey
+	a.shotKeyDraft = a.cfg.ShotKey
 	a.embedDrafts = [3]string{a.cfg.EmbedURL, a.cfg.EmbedKey, a.cfg.EmbedModel}
 }
 
@@ -446,6 +448,20 @@ func (a *app) generalSettings(c *ui.Context) {
 				}
 			}
 			ui.Text(c, "在任何应用里复制文字、链接、图片或文件后按下它，直接收进资料库。留空用默认（⌃⌥V）。").
+				FontSize(12).TextColor(t.TextMuted).Wrap()
+		})
+	})
+	ui.Field(c, "截图的全局快捷键", func() {
+		ui.Column(c).Gap(6).Children(func() {
+			in := ui.TextInput(c.Key("shot-key"), &a.shotKeyDraft).Placeholder(defaultShotKey).Label("截图快捷键")
+			if in.Submitted() || in.PressedOutside() && a.shotKeyDraft != a.cfg.ShotKey {
+				a.cfg.ShotKey = strings.TrimSpace(a.shotKeyDraft)
+				a.cfg.save()
+				if err := a.plat.SetShotKey(a.shotKey()); err != nil {
+					a.saveErr = "快捷键无效或已被其他应用占用：" + err.Error()
+				}
+			}
+			ui.Text(c, "在任何地方按下它，框选屏幕、加上框线箭头和文字，收进资料库、复制或保存。留空用默认（⌃⌥A）。").
 				FontSize(12).TextColor(t.TextMuted).Wrap()
 		})
 	})

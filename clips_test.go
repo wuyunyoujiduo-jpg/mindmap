@@ -9,6 +9,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/screenshot"
 )
 
 // claudeText is a reply of Claude with text only.
@@ -271,5 +272,33 @@ func TestOrganizeAsksForKey(t *testing.T) {
 	tt.Frame()
 	if !a.aiOpen || !tt.HasText("API Key 保存在本机的应用配置文件中（仅当前用户可读）。") {
 		t.Fatalf("settings not shown: %v %q", a.aiOpen, tt.Texts())
+	}
+}
+
+// A screenshot kept from the app lands in the library, shown; one kept
+// from another app says so in a notification.
+func TestScreenshotIntoLibrary(t *testing.T) {
+	a, tt := newTestApp(t)
+	plat := a.plat.(*fakePlatform)
+	a.showLibrary()
+	tt.Frame()
+	if err := tt.Click("截图"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if plat.shots != 1 {
+		t.Fatalf("shots %d", plat.shots)
+	}
+	a.libOpen = false
+	a.keepShot(testPNG(t, 40, 30), screenshot.Library, true)
+	if len(a.lib.Clips) != 1 || !a.libOpen || a.libSel != a.lib.Clips[0].ID {
+		t.Fatalf("clips %d open %v sel %q", len(a.lib.Clips), a.libOpen, a.libSel)
+	}
+	if c := a.lib.Clips[0]; c.Kind != library.KindImage || c.Source != "截图" {
+		t.Fatalf("clip %+v", c)
+	}
+	a.keepShot(testPNG(t, 20, 20), screenshot.Library, false)
+	if len(a.lib.Clips) != 2 || len(plat.notes) == 0 || !strings.Contains(plat.notes[len(plat.notes)-1], "截图已收进资料库") {
+		t.Fatalf("clips %d notes %v", len(a.lib.Clips), plat.notes)
 	}
 }

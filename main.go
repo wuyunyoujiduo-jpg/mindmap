@@ -8,11 +8,14 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/transfer"
 	"github.com/egoist/mygo/ui"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/screenshot"
 )
 
 // desktop implements platform with MyGo's dialogs and shell.
@@ -23,6 +26,7 @@ type desktop struct {
 	tray    *mygo.Tray
 	key     string // the capture shortcut registered
 	clipKey string // the shortcut registered to keep the clipboard
+	shotKey string // the shortcut registered to take a screenshot
 }
 
 func (d *desktop) ShowCapture() {
@@ -78,6 +82,85 @@ func (d *desktop) SetClipKey(key string) error {
 	}
 	d.clipKey = key
 	return nil
+}
+
+func (d *desktop) SetShotKey(key string) error {
+	if d.shotKey != "" {
+		mygo.GlobalShortcut.Unregister(d.shotKey)
+	}
+	d.shotKey = ""
+	if err := mygo.GlobalShortcut.Register(key, func() { d.Screenshot(false) }); err != nil {
+		return err
+	}
+	d.shotKey = key
+	return nil
+}
+
+// Screenshot frames a part of the screen. Taken from the app, the main
+// window steps aside and comes back after; taken from another app, the
+// focus goes back to it.
+func (d *desktop) Screenshot(fromApp bool) {
+	inApp := fromApp || d.win.IsFocused()
+	go func() {
+		if !screenshot.HasPermission() {
+			screenshot.RequestPermission()
+			res, err := mygo.Dialog.Message(mygo.MessageOptions{
+				Type:    mygo.MessageWarning,
+				Message: "需要屏幕录制权限",
+				Detail:  screenshot.PermissionHelp,
+				Buttons: []string{"打开系统设置", "取消"},
+			})
+			if err == nil && res.Button == 0 {
+				screenshot.OpenPermissionSettings()
+			}
+			return
+		}
+		if fromApp {
+			d.win.Hide()
+			time.Sleep(250 * time.Millisecond) // till it is off the screen
+		}
+		end := func() {
+			switch {
+			case fromApp:
+				d.win.Update(d.ShowMain)
+			case !inApp:
+				screenshot.ReturnFocus()
+			}
+		}
+		ok, err := screenshot.Start(func(png []byte, act screenshot.Action) {
+			if act == screenshot.Save {
+				d.saveShot(png)
+				return
+			}
+			d.win.Update(func() { d.app.keepShot(png, act, fromApp) })
+		}, end)
+		if err != nil {
+			mygo.Dialog.Error("截图失败", err.Error())
+		}
+		if !ok && fromApp {
+			d.win.Update(d.ShowMain)
+		}
+	}()
+}
+
+// saveShot asks where to save a screenshot and saves it there. Off the
+// main thread.
+func (d *desktop) saveShot(png []byte) {
+	dir, _ := mygo.App.Path(mygo.PathDesktop)
+	path, err := mygo.Dialog.Save(mygo.SaveDialogOptions{
+		Title:             "保存截图",
+		DefaultPath:       filepath.Join(dir, "截图 "+time.Now().Format("2006-01-02 15.04.05")+".png"),
+		Filters:           []mygo.FileFilter{{Name: "PNG 图片", Extensions: []string{"png"}}},
+		CreateDirectories: true,
+	})
+	if err != nil || path == "" {
+		return
+	}
+	if err := os.WriteFile(path, png, 0o644); err != nil {
+		mygo.Dialog.Error("截图没有保存", err.Error())
+		return
+	}
+	d.Notify("截图已保存", path)
 }
 
 func (d *desktop) SetTray(on bool) {
@@ -269,6 +352,9 @@ func main() {
 		if err := plat.SetClipKey(a.clipKey()); err != nil {
 			log.Printf("收藏剪贴板快捷键 %s: %v", a.clipKey(), err)
 		}
+		if err := plat.SetShotKey(a.shotKey()); err != nil {
+			log.Printf("截图快捷键 %s: %v", a.shotKey(), err)
+		}
 		plat.SetTray(!a.cfg.NoTray)
 		a.post = func(fn func()) { win.Update(fn) }
 		a.async = func(work func() (any, error), done func(any, error)) {
@@ -298,6 +384,7 @@ func main() {
 				item("新建导图", "CmdOrCtrl+N", a.newMap),
 				item("从模板新建…", "CmdOrCtrl+Shift+N", func() { a.templatesOpen = true }),
 				item("打开文件夹…", "CmdOrCtrl+O", a.pickWorkspace),
+				item("截图…", "", a.screenshot),
 				item("保存", "CmdOrCtrl+S", a.save),
 				item("历史版本…", "CmdOrCtrl+Shift+H", a.openHistory),
 				mygo.Separator(),

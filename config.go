@@ -45,6 +45,8 @@ type config struct {
 	// ClipKey keeps what is on the clipboard in the library, from any
 	// app; "" is the default.
 	ClipKey string `json:"clipKey,omitempty"`
+	// ShotKey takes a screenshot, from any app.
+	ShotKey string `json:"shotKey,omitempty"`
 	// LibraryManual leaves new clips for the AI to sort out when asked,
 	// rather than at once.
 	LibraryManual bool `json:"libraryManual,omitempty"`

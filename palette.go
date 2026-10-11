@@ -94,6 +94,7 @@ func (a *app) commands() []command {
 		{"移到其他导图…", "", func() { a.openPalette(paletteMove) }, hasDoc},
 		{"打开资料库", "⌘⇧L", a.showLibrary, nil},
 		{"收藏剪贴板到资料库", a.clipKey(), a.clipFromShortcut, nil},
+		{"截图", a.shotKey(), a.screenshot, nil},
 		{"AI 整理资料库", "", func() { a.showLibrary(); a.organizeAll() }, func() bool { return len(a.lib.Unorganized()) > 0 }},
 		{"设置", "⌘,", a.openSettings, nil},
 		{"连接 AI 编程工具（MCP）", "", func() { a.mcpOpen = true }, nil},

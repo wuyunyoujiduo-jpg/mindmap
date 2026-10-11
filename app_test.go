@@ -40,6 +40,7 @@ type fakePlatform struct {
 	capture     bool
 	captureKey  string
 	trayUpdates int
+	shots       int
 }
 
 func (f *fakePlatform) SaveFile(name, ext string, done func(string)) { done(f.savePath) }
@@ -56,6 +57,8 @@ func (f *fakePlatform) ShowMain()                      {}
 func (f *fakePlatform) SetCaptureKey(key string) error { f.captureKey = key; return nil }
 func (f *fakePlatform) SetTray(on bool)                {}
 func (f *fakePlatform) SetClipKey(key string) error    { return nil }
+func (f *fakePlatform) SetShotKey(key string) error    { return nil }
+func (f *fakePlatform) Screenshot(fromApp bool)        { f.shots++ }
 func (f *fakePlatform) UpdateTray()                    { f.trayUpdates++ }
 func (f *fakePlatform) Notify(title, body string) {
 	f.notes = append(f.notes, title+"："+body)

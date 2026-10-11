@@ -38,6 +38,7 @@ const (
 	iconLink  // two links of a chain
 	iconImage // a picture: a frame, a hill and the sun
 	iconFile  // a page with its corner folded
+	iconShot  // a screenshot: the corners of a frame
 )
 
 // glyph is an icon drawn in a box of the given side, as a piece of text.
@@ -171,6 +172,13 @@ func drawIcon(p *ui.Painter, r ui.Rect, s float32, ic icon, col ui.Color) {
 		p.StrokePath(new(ui.Path).MoveTo(cx-h*0.65, cy-h*0.85).LineTo(cx+h*0.2, cy-h*0.85).LineTo(cx+h*0.65, cy-h*0.4).
 			LineTo(cx+h*0.65, cy+h*0.85).LineTo(cx-h*0.65, cy+h*0.85).Close(), w, col)
 		p.StrokePath(new(ui.Path).MoveTo(cx+h*0.2, cy-h*0.85).LineTo(cx+h*0.2, cy-h*0.4).LineTo(cx+h*0.65, cy-h*0.4), w*0.9, col)
+	case iconShot:
+		k := h * 0.4
+		for _, c := range [][4]float32{{-1, -1, 1, 1}, {1, -1, -1, 1}, {-1, 1, 1, -1}, {1, 1, -1, -1}} {
+			x, y := cx+c[0]*h*0.8, cy+c[1]*h*0.8
+			p.StrokePath(new(ui.Path).MoveTo(x+c[2]*k, y).LineTo(x, y).LineTo(x, y+c[3]*k), w, col)
+		}
+		p.FillPath(new(ui.Path).Circle(cx, cy, h*0.18), col)
 	case iconSearch:
 		p.StrokePath(new(ui.Path).Circle(cx-h*0.15, cy-h*0.15, h*0.55), w, col)
 		p.StrokePath(new(ui.Path).MoveTo(cx+h*0.25, cy+h*0.25).LineTo(cx+h*0.8, cy+h*0.8), w*1.1, col)

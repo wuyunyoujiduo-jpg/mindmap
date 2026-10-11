@@ -46,6 +46,11 @@ type platform interface {
 	// SetClipKey sets the shortcut that keeps the clipboard in the
 	// library, from any app.
 	SetClipKey(accelerator string) error
+	// SetShotKey sets the shortcut that takes a screenshot, from any app,
+	// and Screenshot takes one, the main window stepping aside when it is
+	// taken from the app.
+	SetShotKey(accelerator string) error
+	Screenshot(fromApp bool)
 	SetTray(on bool)
 	UpdateTray()
 	ShowInFolder(path string)
@@ -244,6 +249,7 @@ type app struct {
 	pluginCancel  context.CancelFunc
 	pluginGet     pluginGetter
 	clipKeyDraft  string
+	shotKeyDraft  string
 
 	// The presentation.
 	presenting bool
