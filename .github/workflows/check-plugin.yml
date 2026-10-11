@@ -1,0 +1,38 @@
+name: Check plugin downloads
+
+# Downloads the semantic search plugin from every source the app tries
+# (plugin.go's pluginSources) and checks each part against the manifest.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * 1" # every Monday
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download from each source
+        run: |
+          set -u
+          fail=0
+          for base in \
+            https://raw.githubusercontent.com/wuyunyoujiduo-jpg/mindmap-models/main/embed/ \
+            https://cdn.jsdelivr.net/gh/wuyunyoujiduo-jpg/mindmap-models@main/embed/ \
+            https://fastly.jsdelivr.net/gh/wuyunyoujiduo-jpg/mindmap-models@main/embed/; do
+            echo "== $base"
+            rm -rf dl && mkdir dl
+            if ! curl -fsSL --max-time 120 -o dl/manifest.json "${base}manifest.json"; then
+              echo "manifest: FAILED"; fail=1; continue
+            fi
+            for row in $(jq -r '.parts[] | "\(.file),\(.sha256)"' dl/manifest.json); do
+              f=${row%,*}; sum=${row#*,}
+              start=$(date +%s)
+              if curl -fsSL --max-time 300 -o "dl/$f" "${base}$f"; then
+                got=$(sha256sum "dl/$f" | cut -d' ' -f1)
+                [ "$got" = "$sum" ] && echo "$f: ok ($(( $(date +%s) - start ))s)" || { echo "$f: CHECKSUM MISMATCH"; fail=1; }
+              else
+                echo "$f: FAILED"; fail=1
+              fi
+            done
+          done
+          exit $fail
