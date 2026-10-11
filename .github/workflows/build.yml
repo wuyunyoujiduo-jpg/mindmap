@@ -87,6 +87,12 @@ jobs:
           jq --arg kc "$kc" '.macos.notarize = {keychainProfile: "mindmap-notary", keychain: $kc}' mygo.json > mygo.signed.json
           mv mygo.signed.json mygo.json
           echo "SIGN_IDENTITY=$APPLE_SIGNING_IDENTITY" >> "$GITHUB_ENV"
+      # The semantic search model, until it is downloaded on demand from
+      # mindmap-models (see plugin.go): the app takes it from its resources.
+      - name: Get the embedding model
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download embed-model --repo "$GITHUB_REPOSITORY" -p mindmap-embed.bin -D resources --clobber
       - name: Build MindMap.app and the disk image
         run: |
           if [ -n "$SIGN_IDENTITY" ]; then
@@ -119,6 +125,11 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+      - name: Get the embedding model
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download embed-model --repo "$GITHUB_REPOSITORY" -p mindmap-embed.bin -D resources --clobber
       - name: Build MindMap.exe and the installer
         run: go tool mygo build -platform windows/amd64
       - uses: actions/upload-artifact@v7
