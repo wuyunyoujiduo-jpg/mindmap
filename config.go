@@ -47,6 +47,13 @@ type config struct {
 	ClipKey string `json:"clipKey,omitempty"`
 	// ShotKey takes a screenshot, from any app.
 	ShotKey string `json:"shotKey,omitempty"`
+	// SyncRepo is the GitHub repository, owner/name, that the maps and
+	// the library sync with, with the token that may write to it;
+	// SyncOff stops the sync by itself.
+	SyncRepo   string `json:"syncRepo,omitempty"`
+	SyncBranch string `json:"syncBranch,omitempty"`
+	SyncToken  string `json:"syncToken,omitempty"`
+	SyncOff    bool   `json:"syncOff,omitempty"`
 	// Icon is the app's icon chosen, "" for the default.
 	Icon string `json:"icon,omitempty"`
 	// LibraryManual leaves new clips for the AI to sort out when asked,

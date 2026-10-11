@@ -75,6 +75,7 @@ func (a *app) checkLibrary() {
 // noteLibraryWrite takes the library's folder as written by the app.
 func (a *app) noteLibraryWrite() {
 	a.libMod = modTime(filepath.Join(a.lib.Dir, "clips"))
+	a.syncChange()
 }
 
 // kept takes a clip just kept, or the one it repeats: that one is shown

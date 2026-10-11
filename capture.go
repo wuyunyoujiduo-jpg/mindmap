@@ -340,6 +340,7 @@ func (a *app) openSettings() {
 	a.captureKeyDraft, a.ghTokenDraft, a.clipKeyDraft = a.cfg.CaptureKey, a.cfg.GitHubToken, a.cfg.ClipKey
 	a.shotKeyDraft = a.cfg.ShotKey
 	a.embedDrafts = [3]string{a.cfg.EmbedURL, a.cfg.EmbedKey, a.cfg.EmbedModel}
+	a.syncDrafts = [2]string{a.cfg.SyncRepo, a.cfg.SyncToken}
 }
 
 // settingsView is the window of preferences: the capture shortcut, the
@@ -355,7 +356,7 @@ func (a *app) settingsView(c *ui.Context) {
 					a.settingsOpen = false
 				}
 			})
-			tabs := []string{"通用", "资料库", "备份", "连接"}
+			tabs := []string{"通用", "资料库", "备份", "同步", "连接"}
 			if a.file != nil {
 				tabs = append(tabs, "当前导图")
 			}
@@ -374,6 +375,8 @@ func (a *app) settingsView(c *ui.Context) {
 					a.embedSettings(c)
 				case "备份":
 					a.backupSettings(c)
+				case "同步":
+					a.syncSettings(c)
 				case "连接":
 					ui.Field(c, "AI 助手", func() {
 						ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {

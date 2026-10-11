@@ -91,6 +91,8 @@ func (a *app) sidebar(c *ui.Context) {
 			if sideFootButton(c, "+ 文件夹", "在当前文件夹新建文件夹").Clicked() {
 				a.newFolder(a.currentFolder())
 			}
+			ui.Spacer(c)
+			a.syncFoot(c)
 		})
 	})
 	switch ui.AlertDialog(c, &a.confirmDelete, "把「"+mapName(a.deletePath)+"」移到废纸篓？", "可以在废纸篓中找回。", "取消", "移到废纸篓") {

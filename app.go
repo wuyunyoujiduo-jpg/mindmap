@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/ghsync"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/layout"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
@@ -259,6 +260,14 @@ type app struct {
 	clipKeyDraft  string
 	shotKeyDraft  string
 	iconBitmaps   map[string]*ui.Bitmap // the app's icons, in the settings
+	// The sync with GitHub (sync.go).
+	syncBusy                       bool
+	syncMsg, syncErr, syncCheck    string
+	syncAt, syncTried, syncChanged time.Time
+	syncLast                       ghsync.Result
+	syncDrafts                     [2]string
+	syncRun                        func(context.Context, string, ghsync.Config, func(string)) (ghsync.Result, error)
+	syncCheckRepo                  func(context.Context, ghsync.Config) (*ghsync.Repo, error)
 
 	// The presentation.
 	presenting bool
@@ -324,6 +333,8 @@ func newApp(plat platform, cfg config) *app {
 		fetchPage:     library.FetchPage,
 		embed:         embedWith,
 		pluginGet:     httpGet,
+		syncRun:       ghsync.Sync,
+		syncCheckRepo: ghsync.Check,
 		qvecs:         map[string][]float32{},
 		qPending:      map[string]bool{},
 		libStatus:     map[string]string{},
@@ -495,6 +506,7 @@ func (a *app) save() {
 	}
 	a.dirty, a.saveErr = false, ""
 	a.savedAt = a.now()
+	a.syncChange()
 	a.modTime = modTime(a.path)
 	a.refreshFiles()
 	a.keepVersionIfDue()
@@ -536,6 +548,7 @@ func (a *app) tick(c *ui.Context) {
 		a.checkLibrary()
 		a.embedLibrary()
 		a.autoBackup()
+		a.syncDue()
 	}
 	if a.path != "" && a.checked == now {
 		if mt := modTime(a.path); !mt.IsZero() && !mt.Equal(a.modTime) {

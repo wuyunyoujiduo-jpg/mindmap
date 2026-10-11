@@ -39,6 +39,7 @@ const (
 	iconImage // a picture: a frame, a hill and the sun
 	iconFile  // a page with its corner folded
 	iconShot  // a screenshot: the corners of a frame
+	iconCloud // the sync with GitHub
 )
 
 // glyph is an icon drawn in a box of the given side, as a piece of text.
@@ -172,6 +173,12 @@ func drawIcon(p *ui.Painter, r ui.Rect, s float32, ic icon, col ui.Color) {
 		p.StrokePath(new(ui.Path).MoveTo(cx-h*0.65, cy-h*0.85).LineTo(cx+h*0.2, cy-h*0.85).LineTo(cx+h*0.65, cy-h*0.4).
 			LineTo(cx+h*0.65, cy+h*0.85).LineTo(cx-h*0.65, cy+h*0.85).Close(), w, col)
 		p.StrokePath(new(ui.Path).MoveTo(cx+h*0.2, cy-h*0.85).LineTo(cx+h*0.2, cy-h*0.4).LineTo(cx+h*0.65, cy-h*0.4), w*0.9, col)
+	case iconCloud:
+		by := cy + h*0.5
+		p.StrokePath(new(ui.Path).MoveTo(cx-h*0.45, by).
+			CubeTo(cx-h*1.0, by, cx-h*1.0, cy-h*0.2, cx-h*0.5, cy-h*0.12).
+			CubeTo(cx-h*0.42, cy-h*0.8, cx+h*0.38, cy-h*0.8, cx+h*0.42, cy-h*0.18).
+			CubeTo(cx+h*1.0, cy-h*0.18, cx+h*1.0, by, cx+h*0.45, by).Close(), w, col)
 	case iconShot:
 		k := h * 0.4
 		for _, c := range [][4]float32{{-1, -1, 1, 1}, {1, -1, -1, 1}, {-1, 1, 1, -1}, {1, 1, -1, -1}} {

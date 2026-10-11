@@ -30,5 +30,7 @@ by AI, and an AI assistant.
 - Auto-updates: `mygo.json`'s `updates` and MyGo's updater plugin. Releases
   sign the update files and publish them to `mindmap-models`, tagged
   `desktop-v<version>` (secrets `MYGO_UPDATER_PRIVATE_KEY`, `RELEASES_TOKEN`).
+- Sync with GitHub: `internal/ghsync` (a three-way merge over the REST API,
+  state in `<maps folder>/.sync/`), wired in `sync.go`.
 - Screenshots come from OneShot, in `internal/screenshot`.
 - The user writes in Chinese; the app's texts are Chinese.

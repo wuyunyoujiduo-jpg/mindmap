@@ -1,7 +1,7 @@
 {
   "name": "MindMap",
   "identifier": "com.wuyunyoujiduo.mindmap",
-  "version": "0.24.0",
+  "version": "0.25.0",
   "out": "build",
   "updates": {
     "publicKey": "QiqxcF4IRxoXZeYeRcxscPP0HCto8pGMHvdFqvDtx/A=",
