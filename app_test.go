@@ -1324,6 +1324,14 @@ func TestToolbarFitsNarrowWindow(t *testing.T) {
 		if redo.X+redo.W > right {
 			t.Fatalf("width %d: redo ends at %v, past the toolbar's %v", w, redo.X+redo.W, right)
 		}
+		// With room to spare between the views and the search, for fonts
+		// elsewhere, as on CI, are a little wider.
+		if last, ok := tt.Find("表格"); ok && a.mode != viewTable {
+			search, _ := tt.Find("搜索")
+			if spare := search.X - 22 - (last.X + last.W); spare < 30 {
+				t.Fatalf("width %d: %v spare between the views and the search", w, spare)
+			}
+		}
 		if w == 920 {
 			snapshot(t, tt, "toolbar-narrow")
 		}

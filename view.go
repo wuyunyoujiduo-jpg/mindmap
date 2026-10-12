@@ -159,7 +159,7 @@ func (a *app) toolbar(c *ui.Context) {
 	// The toolbar is the window's title bar: it drags the window, and its
 	// title is the map's, with how saving goes below it.
 	gap := float32(10)
-	if room < 760 {
+	if room < 820 { // the seven views take what room there is
 		gap = 4
 	}
 	ui.Row(c.Key("toolbar")).Height(toolbarHeight).Padding(0, 10, 0, 14).Gap(gap).AlignItems(ui.Center).DragWindow().Children(func() {
@@ -193,7 +193,10 @@ func (a *app) toolbar(c *ui.Context) {
 		}
 		views := []string{mapLabel, "大纲", "看板", "日程", "时间线", "总览", "表格"}
 		if room >= 760 {
-			ui.Segmented(c, &a.mode, views...).Shrink(0)
+			seg := ui.Segmented(c, &a.mode, views...).Shrink(0)
+			if room < 900 {
+				seg.FontSize(textSmall) // the seven views in less room
+			}
 		} else { // narrow: a menu of the views
 			ui.MenuButton(c, views[a.mode], func(m *ui.Menu) {
 				for i, v := range views {
@@ -244,8 +247,10 @@ func searchWidth(room float32) float32 {
 	switch {
 	case room >= 900:
 		return 160
-	case room >= 740:
+	case room >= 820:
 		return 130
+	case room >= 740:
+		return 100 // room for the seven views
 	}
 	return 90
 }
