@@ -61,6 +61,8 @@ type config struct {
 	// LibraryManual leaves new clips for the AI to sort out when asked,
 	// rather than at once.
 	LibraryManual bool `json:"libraryManual,omitempty"`
+	// MapAutoOff stops the AI analyzing maps by itself (mapanalysis.go).
+	MapAutoOff bool `json:"mapAutoOff,omitempty"`
 	// The embedding model of the library's semantic search: an
 	// OpenAI-compatible API's address, its key and the model.
 	EmbedURL   string `json:"embedURL,omitempty"`

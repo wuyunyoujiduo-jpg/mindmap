@@ -3029,3 +3029,20 @@ func TestShortcutLabels(t *testing.T) {
 		}
 	}
 }
+
+// A long line of the outline wraps instead of running out of the window.
+func TestOutlineWraps(t *testing.T) {
+	a, tt := newTestApp(t)
+	n := a.doc.Root.Children[0]
+	a.mutate("", func() { n.Title = strings.Repeat("及时高质量完成需求，针对线上问题积极跟进处理。", 6) })
+	a.mode = viewOutline
+	tt.Frame()
+	el, ok := tt.Find("大纲 " + n.Title)
+	if !ok {
+		t.Fatalf("no line: %q", tt.Texts())
+	}
+	if el.H < 40 || el.X+el.W > float32(1280)-a.panelWidth {
+		t.Fatalf("line at %+v", el)
+	}
+	snapshot(t, tt, "outline-wrap")
+}

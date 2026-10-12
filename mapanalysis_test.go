@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
@@ -127,5 +128,53 @@ func TestMapAnalysis(t *testing.T) {
 	entries, _ := os.ReadDir(a.mapMetaDir())
 	if len(entries) != 1 {
 		t.Fatalf("%d analyses kept", len(entries))
+	}
+}
+
+// A map left unedited is analyzed by itself; one that fails stops that
+// until the settings change.
+func TestMapAutoAnalysis(t *testing.T) {
+	a, _ := newTestApp(t)
+	now := testNow
+	a.now = func() time.Time { return now }
+	fake := &fakeClaude{replies: []string{claudeText(`{"desc": "自动分析的说明"}`)}}
+	a.sendAI = fake.send
+	a.cfg.AIKey = "sk-ant-test"
+	a.changed = now
+	a.autoAnalyzeMaps()
+	if len(fake.requests) != 0 {
+		t.Fatal("analyzed while being edited")
+	}
+	now = now.Add(3 * time.Minute)
+	a.autoAnalyzeMaps()
+	if an := a.analysisOf(a.path); an == nil || an.Desc != "自动分析的说明" {
+		t.Fatalf("not analyzed by itself: %+v", an)
+	}
+	now = now.Add(time.Minute)
+	a.autoAnalyzeMaps()
+	if len(fake.requests) != 1 {
+		t.Fatalf("analyzed again unchanged: %d", len(fake.requests))
+	}
+
+	// Changed and failing: stopped until the key changes.
+	a.mutate("", func() { a.doc.Root.Title = "新的中心" })
+	a.dirty, a.changed = false, now
+	now = now.Add(3 * time.Minute)
+	a.autoAnalyzeMaps()
+	if len(fake.requests) != 2 || a.mapAutoFailed == "" {
+		t.Fatalf("requests %d, failed %q", len(fake.requests), a.mapAutoFailed)
+	}
+	a.mapAutoSkip = nil
+	now = now.Add(time.Minute)
+	a.autoAnalyzeMaps()
+	if len(fake.requests) != 2 {
+		t.Fatal("tried again after failing")
+	}
+	a.cfg.MapAutoOff = true
+	a.mapAutoFailed = ""
+	now = now.Add(time.Minute)
+	a.autoAnalyzeMaps()
+	if len(fake.requests) != 2 {
+		t.Fatal("analyzed with auto off")
 	}
 }

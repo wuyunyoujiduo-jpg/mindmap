@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
+	"strings"
 )
 
 // outlineRow is a node shown in the outline, with its depth.
@@ -72,7 +73,7 @@ func (a *app) outlineLine(c *ui.Context, rows []outlineRow, i int) {
 	t := c.Theme()
 	n, depth := rows[i].node, rows[i].depth
 	title := n.Title
-	ui.Row(c).Padding(3, 0, 3, float32(depth)*26).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).Padding(3, 0, 3, float32(depth)*26).Gap(8).AlignItems(ui.Start).Children(func() {
 		// The bullet: a dot, or, for a line with lines under it, an arrow
 		// that folds them.
 		bullet := ui.Box(c).Size(18, 18).Center().Shrink(0)
@@ -107,8 +108,9 @@ func (a *app) outlineLine(c *ui.Context, rows []outlineRow, i int) {
 		if depth == 0 {
 			size = 18
 		}
-		in := ui.TextInputBase(c.Key("line"), &title).FontSize(size).Grow(1).Placeholder("输入内容").
-			FocusBind(&a.outlineFocus, n.ID)
+		// A long line wraps: the field grows to show it all.
+		in := ui.TextAreaBase(c.Key("line"), &title).Lines(1, 30).FontSize(size).Grow(1).Shrink(1).MinWidth(40).
+			Placeholder("输入内容").Label("大纲 "+n.Title).FocusBind(&a.outlineFocus, n.ID)
 		if depth == 0 {
 			in.FontWeight(600)
 		}
@@ -116,6 +118,7 @@ func (a *app) outlineLine(c *ui.Context, rows []outlineRow, i int) {
 			in.TextColor(t.TextMuted)
 		}
 		if in.Changed() {
+			title = strings.ReplaceAll(strings.ReplaceAll(title, "\r", ""), "\n", " ") // a title is one line
 			a.mutate("title:"+n.ID, func() { n.Title = title })
 		}
 		if in.Focused() {
@@ -130,38 +133,43 @@ func (a *app) outlineLine(c *ui.Context, rows []outlineRow, i int) {
 		if i+1 < len(rows) {
 			next = rows[i+1].node.ID
 		}
-		// Backspace on an empty line deletes it. The input takes Backspace
-		// before shortcuts, so its key handler, which comes first, does.
+		// The field takes keys before shortcuts: its key handler, which
+		// comes first, makes the outline's keys. Return adds a line, Tab
+		// indents, the arrows go to the line above or below, Backspace on
+		// an empty line deletes it.
 		in.HandleInput(func(ev ui.InputEvent) bool {
-			if ev.Kind != ui.InputKeyDown || ev.Mods != 0 || ev.Key != ui.KeyBackspace || n.Title != "" || len(n.Children) > 0 {
+			if ev.Kind != ui.InputKeyDown {
 				return false
 			}
-			a.mutate("", func() { _, _ = a.doc.Delete(n.ID) })
-			a.outlineFocus = prev
+			switch {
+			case ev.Mods == 0 && ev.Key == ui.KeyBackspace && n.Title == "" && len(n.Children) == 0:
+				a.mutate("", func() { _, _ = a.doc.Delete(n.ID) })
+				a.outlineFocus = prev
+			case ev.Mods == 0 && ev.Key == ui.KeyEnter:
+				a.later(func() { a.outlineAdd(n.ID, false) })
+			case ev.Mods == 0 && ev.Key == ui.KeyTab:
+				a.later(func() {
+					a.mutate("", func() { _ = a.doc.Indent(n.ID) })
+					a.outlineFocus = n.ID
+				})
+			case ev.Mods == ui.Shift && ev.Key == ui.KeyTab:
+				a.later(func() {
+					a.mutate("", func() { _ = a.doc.Outdent(n.ID) })
+					a.outlineFocus = n.ID
+				})
+			case ev.Mods == 0 && ev.Key == ui.KeyUp:
+				a.outlineFocus = prev
+			case ev.Mods == 0 && ev.Key == ui.KeyDown && next != "":
+				a.outlineFocus = next
+			case ev.Mods == ui.Cmd && ev.Key == ui.KeyUp:
+				a.later(func() { a.mutate("", func() { _ = a.doc.Shift(n.ID, -1) }); a.outlineFocus = n.ID })
+			case ev.Mods == ui.Cmd && ev.Key == ui.KeyDown:
+				a.later(func() { a.mutate("", func() { _ = a.doc.Shift(n.ID, 1) }); a.outlineFocus = n.ID })
+			default:
+				return false
+			}
 			return true
 		})
-		switch {
-		case in.Submitted():
-			a.later(func() { a.outlineAdd(n.ID, false) })
-		case in.Shortcut(0, ui.KeyTab):
-			a.later(func() {
-				a.mutate("", func() { _ = a.doc.Indent(n.ID) })
-				a.outlineFocus = n.ID
-			})
-		case in.Shortcut(ui.Shift, ui.KeyTab):
-			a.later(func() {
-				a.mutate("", func() { _ = a.doc.Outdent(n.ID) })
-				a.outlineFocus = n.ID
-			})
-		case in.Shortcut(0, ui.KeyUp):
-			a.outlineFocus = prev
-		case in.Shortcut(0, ui.KeyDown) && next != "":
-			a.outlineFocus = next
-		case in.Shortcut(ui.Cmd, ui.KeyUp):
-			a.later(func() { a.mutate("", func() { _ = a.doc.Shift(n.ID, -1) }); a.outlineFocus = n.ID })
-		case in.Shortcut(ui.Cmd, ui.KeyDown):
-			a.later(func() { a.mutate("", func() { _ = a.doc.Shift(n.ID, 1) }); a.outlineFocus = n.ID })
-		}
 	})
 }
 

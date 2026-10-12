@@ -220,6 +220,10 @@ type app struct {
 	mapMetaFor     string
 	mapMetaVersion int
 	mapWorking     string
+	mapAuto        bool                 // the analysis running was started by itself
+	mapAutoAt      time.Time            // when the last one by itself started
+	mapAutoFailed  string               // the provider and key with which one failed: no more until they change
+	mapAutoSkip    map[string]time.Time // maps looked at, by path: their file's time then
 	mapErr         string
 	mapClipsSig    string
 	mapClipsList   []*library.Clip
@@ -587,6 +591,7 @@ func (a *app) tick(c *ui.Context) {
 		a.embedLibrary()
 		a.autoBackup()
 		a.syncDue()
+		a.autoAnalyzeMaps()
 		a.keysBack()
 	}
 	if a.path != "" && a.checked == now {

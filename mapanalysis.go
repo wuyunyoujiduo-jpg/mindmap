@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
@@ -208,13 +209,18 @@ func (a *app) analyzeMap(path string) {
 	a.async(func() (any, error) {
 		return askOrganize(context.Background(), cfg, send, sendDS, prompt, nil, "")
 	}, func(v any, err error) {
-		a.mapWorking = ""
+		auto := a.mapAuto
+		a.mapWorking, a.mapAuto = "", false
 		o, _ := v.(*clipOrganized)
 		if err != nil || o == nil {
 			if err == nil {
 				err = plainError("AI 没有回答")
 			}
 			a.mapErr = "AI 分析失败：" + aiError(err)
+			if auto { // no more by itself until the settings change
+				a.mapAutoFailed = cfg.AIProvider + providerKey(cfg)
+				a.mapErr = "自动分析失败，已暂停：" + aiError(err)
+			}
 			return
 		}
 		an := &model.Analysis{Desc: o.Desc, Summary: o.Summary, Category: o.Category, Tags: o.Tags,
@@ -237,6 +243,9 @@ func (a *app) mapAnalysisSection(c *ui.Context) {
 			case a.mapWorking == a.path:
 				ui.Spinner(c)
 				ui.Text(c, "分析中…").FontSize(12).TextColor(t.TextMuted)
+			case a.mapWorking != "":
+				ui.Spinner(c)
+				ui.Text(c, "正在分析「"+mapName(a.mapWorking)+"」").FontSize(12).TextColor(t.TextMuted).NoWrap().MaxWidth(150).Ellipsis("…")
 			case providerKey(a.cfg) != "":
 				label := "分析导图"
 				if an != nil {
@@ -250,6 +259,14 @@ func (a *app) mapAnalysisSection(c *ui.Context) {
 		})
 		if a.mapErr != "" {
 			ui.Text(c, a.mapErr).FontSize(12).TextColor(t.Danger).Wrap()
+		}
+		if providerKey(a.cfg) != "" {
+			auto := !a.cfg.MapAutoOff
+			switchRow(c, &auto, "自动分析导图", "导图停止编辑 2 分钟后，AI 自动分析或更新；其他改过的导图也会依次分析", func() {
+				a.cfg.MapAutoOff = !auto
+				a.mapAutoFailed, a.mapErr = "", ""
+				a.cfg.save()
+			})
 		}
 		if an == nil {
 			msg := "AI 分析这张导图后，搜索时也能按它讲的内容、同义词找到它；资料库和 AI 助手也能检索到。"
@@ -452,4 +469,78 @@ func (a *app) readMapText(key string) (result, shown string) {
 		return text + "\n" + f.Outline(12000), "📖 读取导图「" + mapName(fi.Path) + "」"
 	}
 	return "找不到这张导图：" + key, "没有找到导图 " + key
+}
+
+// Maps are analyzed by themselves, one at a time: the open map when it has
+// been left unedited a while after a change, then the others whose
+// content changed since their analysis. One that fails stops them until
+// the provider or key changes.
+const (
+	mapAutoIdle  = 2 * time.Minute  // the open map unedited this long
+	mapAutoEvery = 20 * time.Second // between two analyses
+	mapAutoNodes = 3                // maps with fewer nodes are left
+)
+
+// autoAnalyzeMaps starts the analysis of a map due, when one is; tick
+// calls it.
+func (a *app) autoAnalyzeMaps() {
+	key := a.cfg.AIProvider + providerKey(a.cfg)
+	now := a.now()
+	if a.cfg.MapAutoOff || providerKey(a.cfg) == "" || a.mapAutoFailed == key ||
+		a.mapWorking != "" || a.libWorking != "" || now.Sub(a.mapAutoAt) < mapAutoEvery {
+		return
+	}
+	if a.mapAutoSkip == nil {
+		a.mapAutoSkip = map[string]time.Time{}
+	}
+	due := func(path string, f *model.File) bool {
+		if f == nil || countNodes(f) < mapAutoNodes {
+			return false
+		}
+		an := a.adoptMapMeta(path, f)
+		return an == nil || an.Hash != f.ContentHash()
+	}
+	// The open map, as edited, once it is left a while.
+	if a.file != nil && a.path != "" && !a.dirty && !a.conflict && now.Sub(a.changed) >= mapAutoIdle &&
+		!a.mapAutoSkip[a.path].Equal(a.changed) {
+		a.mapAutoSkip[a.path] = a.changed
+		if due(a.path, a.file) {
+			a.startAutoAnalysis(a.path)
+			return
+		}
+	}
+	// The others, each looked at again when its file changes.
+	for _, fi := range a.files {
+		if fi.Path == a.path || a.mapAutoSkip[fi.Path].Equal(fi.Modified) {
+			continue
+		}
+		a.mapAutoSkip[fi.Path] = fi.Modified
+		if an := a.analysisOf(fi.Path); an != nil && an.Updated.After(fi.Modified) {
+			continue // analyzed since it was last written
+		}
+		if due(fi.Path, a.indexed(fi.Path)) {
+			a.startAutoAnalysis(fi.Path)
+			return
+		}
+	}
+}
+
+func (a *app) startAutoAnalysis(path string) {
+	a.mapAutoAt, a.mapAuto = a.now(), true
+	a.analyzeMap(path)
+	if a.mapWorking == "" { // not started
+		a.mapAuto = false
+	}
+}
+
+// countNodes counts the nodes of a map, at most up to 100.
+func countNodes(f *model.File) int {
+	n := 0
+	for _, d := range f.Sheets {
+		d.Walk(func(*model.Node, *model.Node, int) bool {
+			n++
+			return n < 100
+		})
+	}
+	return n
 }
