@@ -996,6 +996,26 @@ func TestSidebarFoldersAndFavorites(t *testing.T) {
 		t.Fatalf("new map at %q", a.path)
 	}
 	tt.Key(0, ui.KeyEscape)
+	// A new map left as made is opened again, not made anew; once
+	// changed, the next is a map of its own.
+	blank := a.path
+	_ = a.open(filepath.Join(work, "指南"+model.Ext))
+	a.newMapIn(work)
+	if a.path != blank || a.editing != a.doc.Root.ID {
+		t.Fatalf("new map at %q, blank one %q", a.path, blank)
+	}
+	a.newMapIn(work)
+	if a.path != blank {
+		t.Fatalf("new map at %q, blank one %q", a.path, blank)
+	}
+	tt.Key(0, ui.KeyEscape)
+	a.mutate("", func() { a.doc.AddChild(a.doc.Root.ID, "想法") })
+	a.newMapIn(work)
+	if a.path == blank || mapName(a.path) != "新导图 2" {
+		t.Fatalf("new map at %q", a.path)
+	}
+	tt.Key(0, ui.KeyEscape)
+	_ = a.open(blank)
 	// Many tags make a list with a filter field.
 	a.mutate("", func() {
 		for i := range 12 {

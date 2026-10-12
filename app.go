@@ -470,9 +470,77 @@ func freeMapPath(dir, name string) string {
 	}
 }
 
-// newMapIn creates a map in dir and opens it, editing its root.
+// newMapName is what new maps are called, numbered past those there.
+const newMapName = "新导图"
+
+// blankNewMap is a map in dir that newMapIn made and nobody changed since,
+// or "".
+func (a *app) blankNewMap(dir string) string {
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		name := strings.TrimSuffix(e.Name(), model.Ext)
+		if e.IsDir() || name == e.Name() || !isNewMapName(name) {
+			continue
+		}
+		path := filepath.Join(dir, e.Name())
+		f := a.file
+		if path != a.path || f == nil {
+			var err error
+			if f, err = model.Load(path); err != nil {
+				continue
+			}
+		} else if a.dirty {
+			continue
+		}
+		if isBlankMap(f, name) {
+			return path
+		}
+	}
+	return ""
+}
+
+// isNewMapName reports whether name is one newMapIn gives: "新导图",
+// "新导图 2"…
+func isNewMapName(name string) bool {
+	n, ok := strings.CutPrefix(name, newMapName)
+	if !ok {
+		return false
+	}
+	if n == "" {
+		return true
+	}
+	var i int
+	_, err := fmt.Sscanf(n, " %d", &i)
+	return err == nil && n == fmt.Sprintf(" %d", i) && i >= 2
+}
+
+// isBlankMap reports whether f is a new map named name, as made: its IDs
+// aside, the same as model.NewFile(name).
+func isBlankMap(f *model.File, name string) bool {
+	if len(f.Sheets) != 1 || f.Sheets[0].Root == nil {
+		return false
+	}
+	bare := func(f *model.File) []byte {
+		d, root := *f.Sheets[0], *f.Sheets[0].Root
+		d.ID, root.ID, d.Root = "", "", &root
+		g := *f
+		g.Sheets = []*model.Document{&d}
+		b, _ := g.Marshal()
+		return b
+	}
+	return string(bare(f)) == string(bare(model.NewFile(name)))
+}
+
+// newMapIn creates a map in dir and opens it, editing its root. A new map
+// left as it was made is opened again instead of making another.
 func (a *app) newMapIn(dir string) {
-	path := freeMapPath(dir, "新导图")
+	if path := a.blankNewMap(dir); path != "" {
+		if path == a.path || a.open(path) == nil {
+			a.startEdit(a.doc.Root.ID)
+		}
+		return
+	}
+	path := freeMapPath(dir, newMapName)
 	name := mapName(path)
 	if err := model.NewFile(name).Save(path); err != nil {
 		a.saveErr = err.Error()
