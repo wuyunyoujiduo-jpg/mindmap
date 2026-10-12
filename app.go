@@ -264,6 +264,7 @@ type app struct {
 	pluginGet     pluginGetter
 	clipKeyDraft  string
 	shotKeyDraft  string
+	nameTitle     string // the central topic the open map's name was given after
 	dirID         fileID // the maps folder's identity, to follow it when renamed
 	recordingKey  string // the shortcut being recorded, by its label
 	// What kept a screenshot from being taken, said in the app's window,
@@ -426,6 +427,7 @@ func (a *app) open(path string) error {
 		a.broken = ""
 	}
 	a.path, a.file = path, f
+	a.nameTitle = rootTitle(f)
 	a.conflict = false
 	a.remember(path)
 	a.learnTags(f)
@@ -524,6 +526,7 @@ func (a *app) save() {
 	a.savedAt = a.now()
 	a.syncChange()
 	a.modTime = modTime(a.path)
+	a.followTitle()
 	a.refreshFiles()
 	a.keepVersionIfDue()
 }

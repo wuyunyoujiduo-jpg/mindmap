@@ -83,3 +83,51 @@ func TestFollowRenamedDir(t *testing.T) {
 		t.Fatal("followed again")
 	}
 }
+
+// A map's name follows its central topic, but for a name the user gave.
+func TestMapNameFollowsTopic(t *testing.T) {
+	a, _ := newTestApp(t)
+	// The topic typed as a user types it, in the title's editor.
+	retitle := func(title string) {
+		a.startEdit(a.doc.Root.ID)
+		a.editText = title
+		a.commitEdit()
+		a.save()
+	}
+	a.newMap()
+	if mapName(a.path) != "新导图" {
+		t.Fatalf("new map %q", mapName(a.path))
+	}
+	retitle("发布计划")
+	if mapName(a.path) != "发布计划" {
+		t.Fatalf("named %q", mapName(a.path))
+	}
+	// Taken: numbered, and still following.
+	a.newMap()
+	retitle("发布计划")
+	if mapName(a.path) != "发布计划 2" {
+		t.Fatalf("named %q", mapName(a.path))
+	}
+	retitle("发布计划：二期")
+	if mapName(a.path) != "发布计划：二期" {
+		t.Fatalf("named %q", mapName(a.path))
+	}
+	// Renamed by hand: the name stays.
+	a.rename(a.path, "我的名字")
+	retitle("别的主题")
+	if mapName(a.path) != "我的名字" {
+		t.Fatalf("a name given by hand changed: %q", mapName(a.path))
+	}
+}
+
+func TestNameFor(t *testing.T) {
+	for in, want := range map[string]string{
+		"计划 / 第二版":    "计划 第二版",
+		"a:b*c?\n第二行": "a b c",
+		"  .隐藏. ":     "隐藏",
+	} {
+		if got := nameFor(in); got != want {
+			t.Errorf("nameFor(%q) = %q", in, got)
+		}
+	}
+}
