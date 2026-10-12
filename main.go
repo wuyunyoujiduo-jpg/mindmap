@@ -3,7 +3,6 @@
 package main
 
 import (
-	"context"
 	_ "embed"
 	"encoding/json"
 	"fmt"
@@ -276,30 +275,13 @@ func (d *desktop) saveShot(png []byte) {
 	d.Notify("截图已保存", path)
 }
 
-// CheckUpdates checks as the user asked: the update window, but for when
-// no update was ever published, which is no error to the user.
 func (d *desktop) OpenShotSettings() { screenshot.OpenPermissionSettings() }
 
-func (d *desktop) CheckUpdates() {
-	if !mygo.Updater.Enabled() {
-		updater.CheckForUpdates() // the window says why it cannot update
-		return
-	}
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		_, err := mygo.Updater.Check(ctx)
-		if err != nil && strings.Contains(err.Error(), "no release is published") {
-			_, _ = mygo.Dialog.Message(mygo.MessageOptions{
-				Message: appName + " " + version + " 已是最新版本",
-				Detail:  "还没有发布过可以自动更新的新版本。",
-				Buttons: []string{"好"},
-			})
-			return
-		}
-		mygo.RunOnMain(updater.CheckForUpdates)
-	}()
-}
+// CheckUpdates checks as the user asked: the update window opens at once,
+// saying it is checking, and goes on to what it finds. (The updates are
+// read from a directory always published, desktop-latest.)
+func (d *desktop) CheckUpdates() { updater.CheckForUpdates() }
+
 func (d *desktop) AutoUpdates() bool      { return updater.AutomaticChecks() }
 func (d *desktop) SetAutoUpdates(on bool) { updater.SetAutomaticChecks(on) }
 
