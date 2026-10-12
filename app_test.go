@@ -3205,3 +3205,59 @@ func TestMarkdownSelects(t *testing.T) {
 		t.Fatalf("copied %q", got)
 	}
 }
+
+// Lines select whole, by Shift with the arrows or a drag across them, and
+// copy as indented text.
+func TestOutlineSelectsLines(t *testing.T) {
+	a, tt := newTestApp(t)
+	a.mode = viewOutline
+	front := find(t, a, "前端")
+	a.outlineFocus = front.ID
+	tt.Frame()
+	tt.Key(ui.Shift, ui.KeyUp) // the line
+	tt.Key(ui.Shift, ui.KeyUp) // and the one above
+	tt.Frame()
+	snapshot(t, tt, "outline-select")
+	tt.Key(ui.Cmd, ui.KeyC)
+	fp := a.plat.(*fakePlatform)
+	if fp.copied != "架构\n  前端" {
+		t.Fatalf("copied %q", fp.copied)
+	}
+	fp.copied = ""
+	tt.Command("copy") // the Edit menu's Copy
+	if fp.copied != "架构\n  前端" {
+		t.Fatalf("copied %q from the menu", fp.copied)
+	}
+	if _, ok := tt.TextCaret(); ok {
+		t.Fatal("a line keeps the keys while lines are selected")
+	}
+	// Escape lets them go, back in a line.
+	tt.Key(0, ui.KeyEscape)
+	tt.Frame()
+	if _, ok := tt.TextCaret(); a.outlineSel.anchor != "" || !ok {
+		t.Fatalf("selected %v, a line focused %v", a.outlineSel, ok)
+	}
+	// A drag from 右侧面板写备注、打标签 down to 前端.
+	x := float32(340)
+	tt.Press(x, 202)
+	tt.Move(x, 230)
+	tt.Move(x, 297)
+	tt.Release(x, 297)
+	tt.Frame()
+	lo, hi := a.outlineSelRange(outlineRows(a.doc))
+	if hi-lo != 3 {
+		t.Fatalf("rows %d to %d selected", lo, hi)
+	}
+	tt.Command("copy")
+	if fp.copied != "  右侧面板写备注、打标签\n  把节点设为任务\n架构\n  前端" {
+		t.Fatalf("copied %q", fp.copied)
+	}
+	// Backspace deletes them, as one step.
+	tt.Key(0, ui.KeyBackspace)
+	tt.Frame()
+	if _, err := findIn(a.doc, "前端"); err == nil {
+		t.Fatal("前端 still there")
+	}
+	a.undo()
+	find(t, a, "前端")
+}

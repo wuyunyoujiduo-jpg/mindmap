@@ -216,6 +216,9 @@ type app struct {
 	outlineFocus    string                // the node whose line the outline focuses
 	outlineLines    ui.TextLines          // the rows the focused line wraps onto
 	outlineText     map[string]*outlineText
+	outlineSel      outlineSel            // whole lines selected
+	outlineSelKeys  ui.Handle             // what takes the keys while lines are selected
+	outlineRowH     map[string]*ui.Handle // each line's row, to find the one under the pointer
 
 	// The library of clips.
 	lib           *library.Library
