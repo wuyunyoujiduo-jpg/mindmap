@@ -317,7 +317,7 @@ func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(3).Children(func() {
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 				glyph(c, kindIcon(clip.Kind), 14, t.TextMuted)
-				ui.Text(c, clip.Label()).FontSize(13).Bold().NoWrap().Ellipsis("…").Shrink(1).MinWidth(0)
+				ui.Text(c, clip.Label()).FontSize(13).Bold().SingleLine().Shrink(1).MinWidth(0)
 				if clip.Starred {
 					glyph(c, iconStarFilled, 12, t.Warning)
 				}
@@ -356,7 +356,7 @@ func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 					if strings.Contains(s, "失败") {
 						col = t.Danger
 					}
-					ui.Text(c, s).FontSize(11).TextColor(col).NoWrap().Ellipsis("…").Shrink(1).MinWidth(0)
+					ui.Text(c, s).FontSize(11).TextColor(col).SingleLine().Shrink(1).MinWidth(0)
 				}
 			})
 		})
@@ -464,7 +464,7 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 			ui.Text(c, library.KindLabel(clip.Kind)).FontSize(textCaption).TextColor(t.TextMuted).NoWrap()
 		})
 		ui.Text(c, cmpOr(clip.Source, "手动")+" · "+clip.Created.Format("2006-01-02 15:04")).FontSize(textCaption).
-			TextColor(t.TextMuted).NoWrap().Ellipsis("…").Grow(1).Shrink(1).MinWidth(0).Margin(0, 0, 0, 4)
+			TextColor(t.TextMuted).SingleLine().Grow(1).Shrink(1).MinWidth(0).Margin(0, 0, 0, 4)
 		star := iconStar
 		if clip.Starred {
 			star = iconStarFilled
@@ -754,7 +754,7 @@ func (a *app) categoryList(c *ui.Context) {
 			}
 			r.Children(func() {
 				sideIcon(c, iconCategory, current)
-				ui.Text(c, name).FontSize(13).Grow(1).NoWrap().Ellipsis("…")
+				ui.Text(c, name).FontSize(13).Grow(1).SingleLine()
 				ui.Text(c, fmt.Sprint(k.N)).FontSize(11).TextColor(t.TextMuted)
 			})
 		}

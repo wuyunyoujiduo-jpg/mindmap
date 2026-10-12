@@ -166,7 +166,7 @@ func (a *app) taskCard(c *ui.Context, tn model.TaskNode, showStatus bool) {
 			where = append([]string{tn.Sheet.Title}, where...)
 		}
 		if len(where) > 0 {
-			ui.Text(c, strings.Join(where, " › ")).FontSize(11).TextColor(t.TextMuted).NoWrap().Ellipsis("…")
+			ui.Text(c, strings.Join(where, " › ")).FontSize(11).TextColor(t.TextMuted).SingleLine()
 		}
 		if len(n.Tags) > 0 || task.Start != nil || task.Due != nil || task.Estimate > 0 || task.Iteration != "" {
 			ui.Row(c).Wrap().Gap(6).AlignItems(ui.Center).Children(func() {

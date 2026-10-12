@@ -197,7 +197,7 @@ func (a *app) tableView(c *ui.Context) {
 						} else {
 							ui.Box(c).Size(16, 16)
 						}
-						tx := ui.Text(c, n.Title).FontSize(textBody).NoWrap().Ellipsis("…").Shrink(1).MinWidth(0).PassThrough()
+						tx := ui.Text(c, n.Title).FontSize(textBody).SingleLine().Shrink(1).MinWidth(0).PassThrough()
 						if depth == 0 || len(n.Children) > 0 {
 							tx.Bold()
 						}

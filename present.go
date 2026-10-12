@@ -103,7 +103,7 @@ func (a *app) slideView(c *ui.Context, d *model.Document, s slide, index, count 
 		case slideList, slideTopic:
 			ui.Column(c).Grow(1).Padding(64*k, 80*k).Gap(18 * k).Children(func() {
 				if len(s.path) > 0 {
-					ui.Text(c, strings.Join(s.path, "  ›  ")).FontSize(20 * k).TextColor(col.muted).NoWrap().Ellipsis("…")
+					ui.Text(c, strings.Join(s.path, "  ›  ")).FontSize(20 * k).TextColor(col.muted).SingleLine()
 				}
 				ui.Text(c, s.node.Title).FontSize(54 * k).Bold()
 				ui.Box(c).Size(64*k, 6*k).Radius(3*k).Background(col.accent).Margin(4*k, 0, 18*k)

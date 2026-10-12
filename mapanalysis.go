@@ -382,14 +382,14 @@ func (a *app) mapRow(c *ui.Context, clip *library.Clip) {
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(3).Children(func() {
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 				glyph(c, iconMap, 14, t.Accent)
-				ui.Text(c, clip.Title).FontSize(13).Bold().NoWrap().Ellipsis("…").Shrink(1).MinWidth(0)
+				ui.Text(c, clip.Title).FontSize(13).Bold().SingleLine().Shrink(1).MinWidth(0)
 				ui.Text(c, "导图").FontSize(11).TextColor(t.TextMuted).NoWrap()
 			})
 			sub := cmpOr(clip.Desc, clip.Summary)
 			if sub == "" {
 				sub = "还没有 AI 分析 · " + a.relDir(path)
 			}
-			ui.Text(c, sub).FontSize(12).TextColor(t.TextMuted).NoWrap().Ellipsis("…")
+			ui.Text(c, sub).FontSize(12).TextColor(t.TextMuted).SingleLine()
 		})
 		if clip.Category != "" {
 			ui.Text(c, clip.Category).FontSize(11).TextColor(t.TextMuted).NoWrap().Shrink(0)

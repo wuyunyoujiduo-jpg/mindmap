@@ -147,9 +147,9 @@ func (a *app) clipLink(c *ui.Context, clip *library.Clip) {
 	}
 	row.Children(func() {
 		glyph(c, kindIcon(clip.Kind), 13, t.Accent)
-		ui.Text(c, clip.Label()).FontSize(12).TextColor(t.Accent).NoWrap().Ellipsis("…").Shrink(1).MinWidth(0)
+		ui.Text(c, clip.Label()).FontSize(12).TextColor(t.Accent).SingleLine().Shrink(1).MinWidth(0)
 		if clip.Desc != "" {
-			ui.Text(c, clip.Desc).FontSize(11).TextColor(t.TextMuted).NoWrap().Ellipsis("…").Shrink(2).MinWidth(0)
+			ui.Text(c, clip.Desc).FontSize(11).TextColor(t.TextMuted).SingleLine().Shrink(2).MinWidth(0)
 		}
 	})
 }

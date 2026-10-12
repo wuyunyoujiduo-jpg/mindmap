@@ -345,7 +345,7 @@ func (a *app) notePopover(c *ui.Context, anchor ui.Element, n *model.Node) {
 		panel.Padding(12).Radius(10).Background(t.Surface).Border(1, t.Border).Shadow(0, 8, 28, 0, ui.RGBA(0, 0, 0, 0.22)).
 			Width(380).Gap(8).Children(func() {
 			ui.Row(c).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, "备注 · "+n.Title).FontSize(12).Bold().NoWrap().Ellipsis("…").Grow(1).Shrink(1).MinWidth(0)
+				ui.Text(c, "备注 · "+n.Title).FontSize(12).Bold().SingleLine().Grow(1).Shrink(1).MinWidth(0)
 				ui.Text(c, "支持 Markdown").FontSize(11).TextColor(t.TextMuted)
 			})
 			note := n.Note

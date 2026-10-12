@@ -18,9 +18,15 @@ func TestDocumentsInFolders(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// In no folder: under 未归档, first in the folders.
+	tt.Frame()
+	if len(a.unfiledClips()) != 1 || !tt.HasText("未归档") || !tt.HasText(clip.Label()) {
+		t.Fatalf("未归档: %d, %q", len(a.unfiledClips()), tt.Texts())
+	}
+
 	// Kept in a folder: shown there in the sidebar, beside the maps.
 	a.moveClipTo(clip.ID, dir)
-	if clip.Folder != "项目资料" {
+	if clip.Folder != "项目资料" || len(a.unfiledClips()) != 0 {
 		t.Fatalf("folder %q", clip.Folder)
 	}
 	tt.Frame()
@@ -53,6 +59,13 @@ func TestDocumentsInFolders(t *testing.T) {
 	a.moved(dir, to)
 	if clip.Folder != "资料夹" || len(a.clipsIn(to)) != 1 {
 		t.Fatalf("after the rename: %q", clip.Folder)
+	}
+	// A folder gone, its documents are under 未归档 again.
+	if err := os.RemoveAll(to); err != nil {
+		t.Fatal(err)
+	}
+	if len(a.unfiledClips()) != 1 {
+		t.Fatal("a document of a folder gone is not under 未归档")
 	}
 	a.moveClipTo(clip.ID, "")
 	if clip.Folder != "" || len(a.clipsIn(to)) != 0 {

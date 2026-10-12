@@ -64,7 +64,7 @@ func (a *app) sidebar(c *ui.Context) {
 		})
 		folder.Children(func() {
 			ui.Box(c).Size(16, 16).PassThrough().Draw(func(p *ui.Painter, r ui.Rect) { drawIcon(p, r, 14, iconFolder, t.Accent) })
-			ui.Text(c, filepath.Base(a.dir)).FontSize(textBody).Bold().Grow(1).Shrink(1).MinWidth(0).NoWrap().Ellipsis("…").PassThrough()
+			ui.Text(c, filepath.Base(a.dir)).FontSize(textBody).Bold().Grow(1).Shrink(1).MinWidth(0).SingleLine().PassThrough()
 			ui.Text(c, "⌄").FontSize(textSmall).TextColor(t.TextMuted).PassThrough()
 		})
 		ui.Scroll(c.Key("sidebar")).Grow(1).Padding(0, 6, 12).Gap(2).Children(func() {
@@ -199,6 +199,9 @@ func (a *app) favorites(c *ui.Context) {
 // folderContents shows a folder's folders, then its maps, indented by
 // depth.
 func (a *app) folderContents(c *ui.Context, f model.Folder, depth int) {
+	if depth == 0 {
+		a.unfiledRow(c.Key("unfiled")) // first, always there
+	}
 	for _, sub := range f.Folders {
 		a.folderRow(c.Key("folder:"+sub.Path), sub, depth)
 	}
@@ -256,7 +259,7 @@ func (a *app) folderRow(c *ui.Context, f model.Folder, depth int) {
 			a.renameInput(c)
 			return
 		}
-		ui.Text(c, f.Name).FontSize(13).Grow(1).NoWrap().Ellipsis("…")
+		ui.Text(c, f.Name).FontSize(13).Grow(1).SingleLine()
 		if n := a.docCount(f); n > 0 {
 			ui.Text(c, fmt.Sprint(n)).FontSize(11).TextColor(t.TextMuted)
 		}
@@ -321,7 +324,7 @@ func (a *app) fileRow(c *ui.Context, f model.FileInfo, depth int, inFavorites bo
 			return
 		}
 		sideIcon(c, iconMap, current)
-		text := ui.Text(c, f.Name).FontSize(13).Grow(1).NoWrap().Ellipsis("…")
+		text := ui.Text(c, f.Name).FontSize(13).Grow(1).SingleLine()
 		if current {
 			text.Bold()
 		}
@@ -556,7 +559,7 @@ func (a *app) tagRow(c *ui.Context, tag string, count int) {
 	})
 	row.Children(func() {
 		ui.Box(c).Size(8, 8).Radius(999).Background(tagColor(tag))
-		text := ui.Text(c, tag).FontSize(13).Grow(1).NoWrap().Ellipsis("…")
+		text := ui.Text(c, tag).FontSize(13).Grow(1).SingleLine()
 		if active {
 			text.Bold()
 		}

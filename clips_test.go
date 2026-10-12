@@ -91,7 +91,7 @@ func TestLibraryKeepsAndOrganizes(t *testing.T) {
 	// Found by the search, by a keyword the AI gave.
 	a.libQuery = "redis"
 	tt.Frame()
-	if !tt.HasText("缓存设计的五个原则") || tt.HasText("周会改到周四") {
+	if !tt.HasText("资料 缓存设计的五个原则") || tt.HasText("资料 周会改到周四") {
 		t.Fatalf("search: %q", tt.Texts())
 	}
 	a.libQuery = ""
@@ -99,7 +99,7 @@ func TestLibraryKeepsAndOrganizes(t *testing.T) {
 	if err := tt.Click("工作 1"); err != nil {
 		t.Fatal(err)
 	}
-	if tt.HasText("缓存设计的五个原则") {
+	if tt.HasText("资料 缓存设计的五个原则") {
 		t.Fatal("category filter")
 	}
 	tt.Click("全部分类")

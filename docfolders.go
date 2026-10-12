@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -104,7 +105,7 @@ func (a *app) docRow(c *ui.Context, clip *library.Clip, depth int) {
 	t := c.Theme()
 	current := a.libOpen && a.libSel == clip.ID
 	row := ui.Row(c).Padding(5, 8, 5, 22+float32(depth)*14).Gap(6).Radius(6).AlignItems(ui.Center).
-		Cursor(ui.CursorPointer).Label("文档 " + clip.Label()).Drag(clipDrag{clip.ID})
+		Cursor(ui.CursorPointer).Label("文档 " + clip.Label()).Drag(clipDrag{clip.ID}).FillWidth().MinWidth(0)
 	switch {
 	case current:
 		row.Background(t.Accent.Alpha(0.16))
@@ -121,7 +122,7 @@ func (a *app) docRow(c *ui.Context, clip *library.Clip, depth int) {
 	row.ContextMenu(func(m *ui.Menu) { a.clipMenu(m, clip) })
 	row.Children(func() {
 		sideIcon(c, kindIcon(clip.Kind), current)
-		ui.Text(c, clip.Label()).FontSize(13).Grow(1).Shrink(1).MinWidth(0).NoWrap().Ellipsis("…")
+		ui.Text(c, clip.Label()).FontSize(13).Grow(1).Shrink(1).MinWidth(0).SingleLine()
 	})
 }
 
@@ -170,6 +171,80 @@ func (a *app) docCount(f model.Folder) int {
 		n += a.docCount(sub)
 	}
 	return n
+}
+
+// unfiledKey is 未归档's key in folderClosed.
+const unfiledKey = "\x00unfiled"
+
+// unfiledClips are the documents in no folder: never put in one, or in
+// one no more there.
+func (a *app) unfiledClips() []*library.Clip {
+	var out []*library.Clip
+	for _, c := range a.lib.Clips {
+		if c.Folder == "" {
+			out = append(out, c)
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(a.dir, filepath.FromSlash(c.Folder))); err != nil {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// unfiledMax is how many of 未归档's documents the sidebar lists.
+const unfiledMax = 50
+
+// unfiledRow is the folder of the sidebar, always first, of the documents
+// in no folder; a document dropped on it leaves its folder.
+func (a *app) unfiledRow(c *ui.Context) {
+	t := c.Theme()
+	docs := a.unfiledClips()
+	open := !a.folderClosed[unfiledKey]
+	row := ui.Row(c).Padding(5, 8).Gap(6).Radius(6).AlignItems(ui.Center).Cursor(ui.CursorPointer).
+		Label("未归档").Tooltip("没放进文件夹的文档；把文档拖到文件夹上，或右键「放到文件夹」来归档")
+	switch {
+	case draggedOver(row):
+		row.Background(t.Accent.Alpha(0.15))
+	case row.Hovered():
+		row.Background(t.Text.Alpha(0.06))
+	}
+	if d, ok := ui.Drop[clipDrag](row); ok {
+		a.later(func() { a.moveClipTo(d.ID, "") })
+	}
+	if row.Clicked() {
+		a.folderClosed[unfiledKey] = open
+	}
+	row.Children(func() {
+		arrow := "▾"
+		if !open {
+			arrow = "▸"
+		}
+		ui.Text(c, arrow).FontSize(10).TextColor(t.TextMuted).Width(10)
+		sideIcon(c, iconInbox, false)
+		ui.Text(c, "未归档").FontSize(13).Grow(1).NoWrap()
+		if n := len(docs); n > 0 {
+			ui.Text(c, fmt.Sprint(n)).FontSize(11).TextColor(t.TextMuted)
+		}
+	})
+	if !open {
+		return
+	}
+	for i, clip := range docs {
+		if i == unfiledMax {
+			if ui.Link(c, fmt.Sprintf("查看全部 %d 条…", len(docs)), "").FontSize(12).Margin(2, 0, 4, 36).Clicked() {
+				a.later(func() {
+					a.showLibrary()
+					a.libKind, a.libCat, a.libTag = kindAll, "", ""
+				})
+			}
+			break
+		}
+		a.docRow(c.Key("unfiled:"+clip.ID), clip, 1)
+	}
+	if len(docs) == 0 {
+		ui.Text(c, "所有文档都已归档").FontSize(12).TextColor(t.TextMuted).Margin(2, 0, 4, 36)
+	}
 }
 
 var _ = fmt.Sprint
