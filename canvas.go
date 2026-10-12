@@ -1196,10 +1196,10 @@ func drawEdges(p *ui.Painter, r layout.Result, s model.Structure, ox, oy, z, lin
 	width := max(line*z, 1)
 	switch s {
 	case model.StructureOrg:
-		drawOrgEdges(p, r, ox, oy, z, width, color)
+		drawOrgEdges(p, r, ox, oy, z, width, view, color)
 		return
 	case model.StructureTimeline, model.StructureFishbone:
-		drawLineEdges(p, r, s == model.StructureFishbone, ox, oy, z, width, color)
+		drawLineEdges(p, r, s == model.StructureFishbone, ox, oy, z, width, view, color)
 		return
 	}
 	if s == model.StructureMindMap {
@@ -1213,9 +1213,15 @@ func drawEdges(p *ui.Painter, r layout.Result, s model.Structure, ox, oy, z, lin
 			if outside(view, min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1)) {
 				continue
 			}
+			mid := (x1 - x0) / 2
+			if max(x1-x0, x0-x1, y1-y0, y0-y1) > strokeChunk {
+				l := polyline{{x0, y0}}
+				l.cube(x0+mid, y0, x1-mid, y1, x1, y1)
+				strokeLong(p, view, l, width, color(e.To))
+				continue
+			}
 			var path ui.Path
 			path.MoveTo(x0, y0)
-			mid := (x1 - x0) / 2
 			path.CubeTo(x0+mid, y0, x1-mid, y1, x1, y1)
 			p.StrokePath(&path, width, color(e.To))
 		}
@@ -1256,10 +1262,7 @@ func drawEdges(p *ui.Painter, r layout.Result, s model.Structure, ox, oy, z, lin
 			path.LineTo(tx, py)
 			p.StrokePath(&path, width, col)
 			if len(kids) > 1 {
-				var trunk ui.Path
-				trunk.MoveTo(tx, min(top, py))
-				trunk.LineTo(tx, max(bottom, py))
-				p.StrokePath(&trunk, width, col)
+				strokeLong(p, view, polyline{{tx, min(top, py)}, {tx, max(bottom, py)}}, width, col)
 			}
 			for _, k := range kids {
 				b := r.Boxes[k]
@@ -1276,20 +1279,109 @@ func drawEdges(p *ui.Painter, r layout.Result, s model.Structure, ox, oy, z, lin
 		bx := cx - 10*z // the bracket's spine
 		rad := min(8*z, (bottom-top)/4)
 		mid := min(max(py, top+2*rad), bottom-2*rad)
-		var brace ui.Path
-		brace.MoveTo(bx+rad, top)
-		brace.QuadTo(bx, top, bx, top+rad)
-		brace.LineTo(bx, mid-rad)
-		brace.QuadTo(bx, mid, bx-rad, mid)
-		brace.QuadTo(bx, mid, bx, mid+rad)
-		brace.LineTo(bx, bottom-rad)
-		brace.QuadTo(bx, bottom, bx+rad, bottom)
-		p.StrokePath(&brace, width, col)
-		var stem ui.Path
-		stem.MoveTo(px, py)
-		stem.LineTo(bx-rad, mid)
-		p.StrokePath(&stem, width, col)
+		if bottom-top > strokeChunk { // too tall to draw at once
+			l := polyline{{bx + rad, top}}
+			l.quad(bx, top, bx, top+rad)
+			l = append(l, [2]float32{bx, mid - rad})
+			l.quad(bx, mid, bx-rad, mid)
+			l.quad(bx, mid, bx, mid+rad)
+			l = append(l, [2]float32{bx, bottom - rad})
+			l.quad(bx, bottom, bx+rad, bottom)
+			strokeLong(p, view, l, width, col)
+		} else {
+			var brace ui.Path
+			brace.MoveTo(bx+rad, top)
+			brace.QuadTo(bx, top, bx, top+rad)
+			brace.LineTo(bx, mid-rad)
+			brace.QuadTo(bx, mid, bx-rad, mid)
+			brace.QuadTo(bx, mid, bx, mid+rad)
+			brace.LineTo(bx, bottom-rad)
+			brace.QuadTo(bx, bottom, bx+rad, bottom)
+			p.StrokePath(&brace, width, col)
+		}
+		strokeLong(p, view, polyline{{px, py}, {bx - rad, mid}}, width, col)
 	}
+}
+
+// strokeChunk is the most, in points, a line is drawn in at once: MyGo
+// leaves out a path over 4096 pixels across, which a bracket around a
+// big branch, a few thousand points tall, is on a Retina screen.
+const strokeChunk = 600
+
+// polyline is a line through points, for strokeLong.
+type polyline [][2]float32
+
+// quad adds a quadratic curve from the last point.
+func (l *polyline) quad(cx, cy, x, y float32) {
+	x0, y0 := (*l)[len(*l)-1][0], (*l)[len(*l)-1][1]
+	const n = 6
+	for i := 1; i <= n; i++ {
+		t := float32(i) / n
+		u := 1 - t
+		*l = append(*l, [2]float32{u*u*x0 + 2*u*t*cx + t*t*x, u*u*y0 + 2*u*t*cy + t*t*y})
+	}
+}
+
+// cube adds a cubic curve from the last point, in steps of a few points.
+func (l *polyline) cube(c1x, c1y, c2x, c2y, x, y float32) {
+	x0, y0 := (*l)[len(*l)-1][0], (*l)[len(*l)-1][1]
+	d := float32(math.Hypot(float64(x-x0), float64(y-y0)))
+	n := min(max(int(d/4), 8), 2000)
+	for i := 1; i <= n; i++ {
+		t := float32(i) / float32(n)
+		u := 1 - t
+		a, b, c, e := u*u*u, 3*u*u*t, 3*u*t*t, t*t*t
+		*l = append(*l, [2]float32{a*x0 + b*c1x + c*c2x + e*x, a*y0 + b*c1y + c*c2y + e*y})
+	}
+}
+
+// strokeLong draws a line that may be longer than a path can be: in
+// pieces of at most strokeChunk across, leaving out those outside view.
+func strokeLong(p *ui.Painter, view ui.Rect, l polyline, width float32, col ui.Color) {
+	if len(l) < 2 {
+		return
+	}
+	// Long segments are cut, so that each fits in a piece.
+	pts := polyline{l[0]}
+	for _, pt := range l[1:] {
+		a := pts[len(pts)-1]
+		dx, dy := pt[0]-a[0], pt[1]-a[1]
+		n := int(max(dx, -dx, dy, -dy)/(strokeChunk/2)) + 1
+		for i := 1; i <= n; i++ {
+			t := float32(i) / float32(n)
+			pts = append(pts, [2]float32{a[0] + dx*t, a[1] + dy*t})
+		}
+	}
+	draw := func(piece polyline) {
+		x0, y0, x1, y1 := piece[0][0], piece[0][1], piece[0][0], piece[0][1]
+		for _, pt := range piece {
+			x0, y0, x1, y1 = min(x0, pt[0]), min(y0, pt[1]), max(x1, pt[0]), max(y1, pt[1])
+		}
+		if outside(view, x0, y0, x1, y1) {
+			return
+		}
+		var path ui.Path
+		path.MoveTo(piece[0][0], piece[0][1])
+		for _, pt := range piece[1:] {
+			path.LineTo(pt[0], pt[1])
+		}
+		p.StrokePath(&path, width, col)
+	}
+	start := 0
+	x0, y0, x1, y1 := pts[0][0], pts[0][1], pts[0][0], pts[0][1]
+	for i := 1; i < len(pts); i++ {
+		pt := pts[i]
+		nx0, ny0, nx1, ny1 := min(x0, pt[0]), min(y0, pt[1]), max(x1, pt[0]), max(y1, pt[1])
+		if nx1-nx0 > strokeChunk || ny1-ny0 > strokeChunk { // a new piece, from the last point
+			draw(pts[start:i])
+			start = i - 1
+			a := pts[start]
+			nx0, ny0 = min(a[0], pt[0]), min(a[1], pt[1])
+			nx1, ny1 = max(a[0], pt[0]), max(a[1], pt[1])
+		}
+		x0, y0, x1, y1 = nx0, ny0, nx1, ny1
+	}
+	draw(pts[start:])
 }
 
 // outside tells whether a box, by its corners, is wholly outside view, with
@@ -1304,7 +1396,7 @@ func outside(view ui.Rect, x0, y0, x1, y1 float32) bool {
 
 // drawOrgEdges joins each node to the row of its children: down from its
 // bottom, along a bar over them, and down into each.
-func drawOrgEdges(p *ui.Painter, r layout.Result, ox, oy, z, width float32, color func(string) ui.Color) {
+func drawOrgEdges(p *ui.Painter, r layout.Result, ox, oy, z, width float32, view ui.Rect, color func(string) ui.Color) {
 	kids := map[string][]string{}
 	var order []string
 	for _, e := range r.Edges {
@@ -1326,7 +1418,7 @@ func drawOrgEdges(p *ui.Painter, r layout.Result, ox, oy, z, width float32, colo
 		bar := py + (top-py)/2
 		col := color(kids[id][0])
 		p.StrokePath(new(ui.Path).MoveTo(px, py).LineTo(px, bar), width, col)
-		p.StrokePath(new(ui.Path).MoveTo(left, bar).LineTo(right, bar), width, col)
+		strokeLong(p, view, polyline{{left, bar}, {right, bar}}, width, col)
 		for _, k := range kids[id] {
 			b := r.Boxes[k]
 			x := ox + (b.X+b.W/2)*z
@@ -1338,7 +1430,7 @@ func drawOrgEdges(p *ui.Painter, r layout.Result, ox, oy, z, width float32, colo
 // drawLineEdges draws a timeline's or a fishbone's line from the root, the
 // main branches' links to it, and within each branch's column the lines
 // from a node down (or up) its side to each child.
-func drawLineEdges(p *ui.Painter, r layout.Result, fishbone bool, ox, oy, z, width float32, color func(string) ui.Color) {
+func drawLineEdges(p *ui.Painter, r layout.Result, fishbone bool, ox, oy, z, width float32, view ui.Rect, color func(string) ui.Color) {
 	to := map[string]bool{}
 	for _, e := range r.Edges {
 		to[e.To] = true
@@ -1381,11 +1473,11 @@ func drawLineEdges(p *ui.Painter, r layout.Result, fishbone bool, ox, oy, z, wid
 		p.FillPath(new(ui.Path).Circle(x, spineY, 3.5*z), col)
 	}
 	if fishbone && end < start { // the spine ends in a tail
-		p.StrokePath(new(ui.Path).MoveTo(start, spineY).LineTo(end, spineY), width*2, color(root))
+		strokeLong(p, view, polyline{{start, spineY}, {end, spineY}}, width*2, color(root))
 		p.StrokePath(new(ui.Path).MoveTo(end, spineY).LineTo(end-10*z, spineY-8*z), width*2, color(root))
 		p.StrokePath(new(ui.Path).MoveTo(end, spineY).LineTo(end-10*z, spineY+8*z), width*2, color(root))
 	} else if !fishbone && end > start {
-		p.StrokePath(new(ui.Path).MoveTo(start, spineY).LineTo(end, spineY), width*2, color(root))
+		strokeLong(p, view, polyline{{start, spineY}, {end, spineY}}, width*2, color(root))
 		p.StrokePath(new(ui.Path).MoveTo(end, spineY).LineTo(end-8*z, spineY-6*z), width*2, color(root))
 		p.StrokePath(new(ui.Path).MoveTo(end, spineY).LineTo(end-8*z, spineY+6*z), width*2, color(root))
 	}
@@ -1401,7 +1493,7 @@ func drawLineEdges(p *ui.Painter, r layout.Result, fishbone bool, ox, oy, z, wid
 			y0 = oy + pb.Y*z
 		}
 		y1 := oy + (cb.Y+cb.H/2)*z
-		p.StrokePath(new(ui.Path).MoveTo(x, y0).LineTo(x, y1).LineTo(ox+cb.X*z, y1), width, color(e.To))
+		strokeLong(p, view, polyline{{x, y0}, {x, y1}, {ox + cb.X*z, y1}}, width, color(e.To))
 	}
 }
 
