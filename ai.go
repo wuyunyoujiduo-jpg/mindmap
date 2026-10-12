@@ -982,8 +982,9 @@ func (a *app) chatBubble(c *ui.Context, i int) {
 			if m.text != "" {
 				markdownView(c, m.text, 13)
 				text := m.text
-				if ui.Button(c, "复制").FontSize(11).Padding(1, 8).Tooltip("复制这段回复（Markdown）").AlignSelf(ui.Start).Clicked() {
-					a.plat.CopyText(text)
+				// Copied as it reads, without the Markdown's marks.
+				if iconButton(c, iconCopy, "复制回复", "复制这段回复（纯文字）", 24, true).Clicked() {
+					a.plat.CopyText(markdownPlain(text))
 					a.tell("已复制")
 				}
 			}

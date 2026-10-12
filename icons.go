@@ -40,6 +40,7 @@ const (
 	iconFile  // a page with its corner folded
 	iconShot  // a screenshot: the corners of a frame
 	iconCloud // the sync with GitHub
+	iconCopy  // two pages, one over the other
 )
 
 // glyph is an icon drawn in a box of the given side, as a piece of text.
@@ -173,6 +174,13 @@ func drawIcon(p *ui.Painter, r ui.Rect, s float32, ic icon, col ui.Color) {
 		p.StrokePath(new(ui.Path).MoveTo(cx-h*0.65, cy-h*0.85).LineTo(cx+h*0.2, cy-h*0.85).LineTo(cx+h*0.65, cy-h*0.4).
 			LineTo(cx+h*0.65, cy+h*0.85).LineTo(cx-h*0.65, cy+h*0.85).Close(), w, col)
 		p.StrokePath(new(ui.Path).MoveTo(cx+h*0.2, cy-h*0.85).LineTo(cx+h*0.2, cy-h*0.4).LineTo(cx+h*0.65, cy-h*0.4), w*0.9, col)
+	case iconCopy:
+		// The front page, and of the one behind it what shows above and
+		// right of it.
+		p.StrokePath(new(ui.Path).MoveTo(cx-h*0.75, cy-h*0.35).LineTo(cx+h*0.35, cy-h*0.35).
+			LineTo(cx+h*0.35, cy+h*0.8).LineTo(cx-h*0.75, cy+h*0.8).Close(), w, col)
+		p.StrokePath(new(ui.Path).MoveTo(cx-h*0.35, cy-h*0.35).LineTo(cx-h*0.35, cy-h*0.8).
+			LineTo(cx+h*0.75, cy-h*0.8).LineTo(cx+h*0.75, cy+h*0.4).LineTo(cx+h*0.35, cy+h*0.4), w, col)
 	case iconCloud:
 		by := cy + h*0.5
 		p.StrokePath(new(ui.Path).MoveTo(cx-h*0.45, by).

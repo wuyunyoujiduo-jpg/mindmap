@@ -1305,6 +1305,14 @@ func TestAIProposesEdits(t *testing.T) {
 		t.Fatalf("Enter sent nothing: draft %q", a.ai.draft)
 	}
 	second := fake.requests[1]
+	// A reply copies as it reads.
+	tt.Frame()
+	if err := tt.Click("复制回复"); err != nil {
+		t.Fatal(err)
+	}
+	if fp := a.plat.(*fakePlatform); fp.copied != "我把性能问题拆成了两个任务。" { // the first reply's
+		t.Fatalf("copied %q", fp.copied)
+	}
 	last := second.Messages[len(second.Messages)-1]
 	if len(second.Messages) != 3 || last.Content[0].OfToolResult == nil || last.Content[0].OfToolResult.ToolUseID != "toolu_1" {
 		t.Fatalf("second request %d messages, last %+v", len(second.Messages), last.Content[0])
@@ -3168,4 +3176,32 @@ func TestOutlineKeepsFocus(t *testing.T) {
 	// Below the lines, a click goes to the last one.
 	tt.ClickAt(500, 700)
 	focused("below the lines")
+}
+
+func TestMarkdownPlain(t *testing.T) {
+	src := "Q3\n## 一、陆\n**【技术改进】**\n1. 配送单查询已知`线程`问题清零\n2. WCS 产品化\n   - 模块化\n\n| 人 | 分 |\n|---|---|\n| 陆 | 90 |"
+	want := "Q3\n一、陆\n【技术改进】\n1. 配送单查询已知线程问题清零\n2. WCS 产品化\n  • 模块化\n人\t分\n陆\t90"
+	if got := markdownPlain(src); got != want {
+		t.Fatalf("plain\n%s\nwant\n%s", got, want)
+	}
+}
+
+// A Markdown text selects as one, across its paragraphs.
+func TestMarkdownSelects(t *testing.T) {
+	tt := ui.NewTester(func(c *ui.Context) {
+		ui.Column(c).Padding(20).Width(400).Children(func() {
+			markdownView(c, "一、陆\n\n**【技术改进】**\n\n1. 配送单查询\n2. WCS 产品化", 13)
+		})
+	}, 500, 400)
+	tt.Frame()
+	a, _ := tt.Find("一、陆")
+	b, _ := tt.Find("WCS 产品化")
+	tt.Press(a.X+1, a.Y+a.H/2)
+	tt.Move(a.X+30, a.Y+20)
+	tt.Move(b.X+b.W-1, b.Y+b.H/2)
+	tt.Release(b.X+b.W-1, b.Y+b.H/2)
+	tt.Key(ui.Cmd, ui.KeyC)
+	if got := tt.Clipboard(); got != "一、陆\n【技术改进】\n配送单查询\nWCS 产品化" {
+		t.Fatalf("copied %q", got)
+	}
 }

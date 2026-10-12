@@ -155,7 +155,8 @@ func inlineSpans(text string, size float32, color, accent, codeBg ui.Color, base
 	return spans
 }
 
-// markdownView shows a Markdown text at the font size.
+// markdownView shows a Markdown text at the font size, selectable as one
+// text across its paragraphs.
 func markdownView(c *ui.Context, src string, size float32) {
 	t := c.Theme()
 	codeBg := t.Text.Alpha(0.08)
@@ -164,9 +165,9 @@ func markdownView(c *ui.Context, src string, size float32) {
 		if len(spans) == 0 {
 			spans = []ui.Span{{Text: " ", Size: size}}
 		}
-		return ui.RichText(c, spans...).Wrap().Selectable()
+		return ui.RichText(c, spans...).Wrap()
 	}
-	ui.Column(c).Gap(6).FillWidth().Children(func() {
+	ui.Column(c).Gap(6).FillWidth().Selectable().Children(func() {
 		for i, b := range parseMarkdown(src) {
 			c := c.Key(i)
 			switch b.kind {
@@ -179,7 +180,9 @@ func markdownView(c *ui.Context, src string, size float32) {
 					mark = b.mark
 				}
 				ui.Row(c).Gap(6).Padding(0, 0, 0, float32(b.level)*14).Children(func() {
-					ui.Text(c, mark).FontSize(size).TextColor(t.TextMuted).Shrink(0)
+					// Out of the selection, which would copy it on a line of
+					// its own; the copy button keeps it.
+					ui.Text(c, mark).FontSize(size).TextColor(t.TextMuted).Shrink(0).Unselectable()
 					line(c, b.text, size, t.Text, false).Grow(1)
 				})
 			case "quote":
@@ -188,7 +191,7 @@ func markdownView(c *ui.Context, src string, size float32) {
 				})
 			case "code":
 				ui.Box(c).Padding(8, 10).Radius(6).Background(codeBg).FillWidth().Children(func() {
-					ui.RichText(c, highlight(b.text, b.mark, size-1, t)...).Font("monospace").Wrap().Selectable()
+					ui.RichText(c, highlight(b.text, b.mark, size-1, t)...).Font("monospace").Wrap()
 				})
 			case "hr":
 				ui.Divider(c)
@@ -211,4 +214,43 @@ func markdownView(c *ui.Context, src string, size float32) {
 			}
 		}
 	})
+}
+
+// markdownPlain is a Markdown text as markdownView shows it, without its
+// marks: headings and paragraphs as lines, list items with their bullet or
+// number, indented, and table cells apart by tabs.
+func markdownPlain(src string) string {
+	plain := func(text string) string {
+		var b strings.Builder
+		for _, sp := range inlineSpans(text, 13, ui.Color{}, ui.Color{}, ui.Color{}, mdSpanStyle{}) {
+			b.WriteString(sp.Text)
+		}
+		return b.String()
+	}
+	var lines []string
+	for _, b := range parseMarkdown(src) {
+		switch b.kind {
+		case "li", "ol":
+			mark := "•"
+			if b.kind == "ol" {
+				mark = b.mark
+			}
+			lines = append(lines, strings.Repeat("  ", b.level)+mark+" "+plain(b.text))
+		case "code":
+			lines = append(lines, b.text)
+		case "hr":
+			lines = append(lines, "")
+		case "table":
+			for _, row := range b.rows {
+				cells := make([]string, len(row))
+				for i, cell := range row {
+					cells[i] = plain(cell)
+				}
+				lines = append(lines, strings.Join(cells, "\t"))
+			}
+		default:
+			lines = append(lines, plain(b.text))
+		}
+	}
+	return strings.Join(lines, "\n")
 }
