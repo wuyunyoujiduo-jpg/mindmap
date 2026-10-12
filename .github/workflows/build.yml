@@ -27,6 +27,7 @@ permissions:
 #   MYGO_UPDATER_PRIVATE_KEY  the key that signs updates (mygo-update.key)
 #   RELEASES_TOKEN            a token that may write mindmap-models'
 #                             releases (fine-grained: Contents read/write)
+# They are secrets of the environment mymind, which the build jobs use.
 env:
   UPDATES_REPO: wuyunyoujiduo-jpg/mindmap-models
   RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
@@ -55,6 +56,10 @@ jobs:
     needs: test
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     runs-on: macos-latest
+    # The secrets of auto-updates are the environment mymind's.
+    environment: mymind
+    env:
+      RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -137,6 +142,10 @@ jobs:
     needs: macos
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
+    # The secrets of auto-updates are the environment mymind's.
+    environment: mymind
+    env:
+      RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
