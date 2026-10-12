@@ -3034,7 +3034,9 @@ func TestShortcutLabels(t *testing.T) {
 func TestOutlineWraps(t *testing.T) {
 	a, tt := newTestApp(t)
 	n := a.doc.Root.Children[0]
-	a.mutate("", func() { n.Title = strings.Repeat("及时高质量完成需求，针对线上问题积极跟进处理。", 6) })
+	a.mutate("", func() {
+		n.Title = strings.Repeat("及时高质量完成需求，针对线上问题积极跟进处理。", 6)
+	})
 	a.mode = viewOutline
 	tt.Frame()
 	el, ok := tt.Find("大纲 " + n.Title)
