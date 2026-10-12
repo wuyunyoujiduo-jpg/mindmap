@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -27,10 +28,13 @@ type desktop struct {
 	win     *mygo.Window
 	app     *app
 	capture *mygo.Window // the capture window, made the first time
-	tray    *mygo.Tray
-	key     string // the capture shortcut registered
-	clipKey string // the shortcut registered to keep the clipboard
-	shotKey string // the shortcut registered to take a screenshot
+	// mainHidden is that the main window is hidden for a screenshot taken
+	// from another app, to show again when the app is next active.
+	mainHidden bool
+	tray       *mygo.Tray
+	key        string // the capture shortcut registered
+	clipKey    string // the shortcut registered to keep the clipboard
+	shotKey    string // the shortcut registered to take a screenshot
 }
 
 func (d *desktop) ShowCapture() {
@@ -59,7 +63,21 @@ func (d *desktop) HideCapture() {
 	d.UpdateTray()
 }
 
+// showMainOnReturn shows the main window, hidden for a screenshot taken
+// from another app, when the app is next active.
+func (d *desktop) showMainOnReturn() {
+	var off func()
+	off = mygo.App.OnDidBecomeActive(func() {
+		off()
+		if d.mainHidden {
+			d.mainHidden = false
+			d.win.Show()
+		}
+	})
+}
+
 func (d *desktop) ShowMain() {
+	d.mainHidden = false
 	d.win.Show()
 	d.win.Focus()
 }
@@ -143,6 +161,20 @@ func (d *desktop) overlayShot(fromApp, inApp bool) {
 		d.win.Hide()
 		time.Sleep(250 * time.Millisecond) // till it is off the screen
 	}
+	// Taken from another app: the windows of the screenshot activate the
+	// app, which on macOS brings its main window forward too, a flash of
+	// it over the other app. It is hidden once the screens are captured,
+	// and shown again when the user comes back to the app.
+	hideMain := !inApp && runtime.GOOS == "darwin"
+	screenshot.Captured = nil
+	if hideMain {
+		screenshot.Captured = func() {
+			if d.win.IsVisible() {
+				d.win.Hide()
+				d.mainHidden = true
+			}
+		}
+	}
 	ok, err := screenshot.Start(func(png []byte, act screenshot.Action) {
 		logShot("截图完成：%d 字节，操作 %d", len(png), act)
 		if act == screenshot.Save {
@@ -156,6 +188,9 @@ func (d *desktop) overlayShot(fromApp, inApp bool) {
 			d.win.Update(d.ShowMain)
 		case !inApp:
 			screenshot.ReturnFocus()
+			if d.mainHidden {
+				d.win.Update(d.showMainOnReturn)
+			}
 		}
 	})
 	if err != nil {

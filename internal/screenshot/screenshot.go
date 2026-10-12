@@ -6,6 +6,7 @@ package screenshot
 
 import (
 	"errors"
+	"github.com/egoist/mygo"
 	"sync"
 	"time"
 )
@@ -43,6 +44,11 @@ const shown = 1500 * time.Millisecond
 // thread, after the windows close; onEnd runs once the shot is over,
 // however it ended. While a shot is under way, Start returns ErrBusy.
 // Call it from any goroutine.
+// Captured, when not nil, is called once the screens are captured, before
+// the windows of the screenshot open, on the main thread: the app hides
+// there what should not come forward with them.
+var Captured func()
+
 func Start(deliver func(png []byte, act Action), onEnd func()) (bool, error) {
 	mu.Lock()
 	if !busySince.IsZero() && time.Since(busySince) < stuck {
@@ -73,6 +79,14 @@ func Start(deliver func(png []byte, act Action), onEnd func()) (bool, error) {
 	for _, sh := range shots {
 		w, h := sh.bmp.Size()
 		Log("屏幕 %d：%v，%dx%d 像素", sh.index, sh.display.Bounds, w, h)
+	}
+	if Captured != nil {
+		hidden := make(chan struct{})
+		mygo.RunOnMain(func() {
+			Captured()
+			close(hidden)
+		})
+		<-hidden
 	}
 	s := openSession(shots, deliver, done)
 	Log("截图窗口已打开")
