@@ -38,6 +38,9 @@ func (a *app) view(c *ui.Context) {
 					ui.Divider(c)
 					a.conflictBar(c)
 					a.brokenBar(c)
+					if a.doc != nil && a.mode == viewMap {
+						a.filterBar(c)
+					}
 					switch {
 					case a.doc == nil:
 						a.empty(c)

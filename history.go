@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -66,6 +67,39 @@ func (a *app) conflictBar(c *ui.Context) {
 		}
 		if ui.Button(c, "保留我的版本").Clicked() {
 			a.resolveConflict(true)
+		}
+	})
+}
+
+// filterBar says what the map is filtered by, which dims the nodes that
+// do not match, and clears it.
+func (a *app) filterBar(c *ui.Context) {
+	if !a.filtering() {
+		return
+	}
+	var by []string
+	if a.tagFilter != "" {
+		by = append(by, "标签 #"+a.tagFilter)
+	}
+	if a.search != "" {
+		by = append(by, "搜索「"+a.search+"」")
+	}
+	n := 0
+	a.doc.Walk(func(node, _ *model.Node, _ int) bool {
+		if a.highlighted(node) {
+			n++
+		}
+		return true
+	})
+	msg := fmt.Sprintf("按%s筛选，%d 个节点匹配，其余变淡。", strings.Join(by, "、"), n)
+	if n == 0 {
+		msg = fmt.Sprintf("按%s筛选，这个导图里没有匹配的节点，所以全部变淡。", strings.Join(by, "、"))
+	}
+	t := c.Theme()
+	ui.Row(c.Key("filter")).Padding(8, 12).Gap(10).AlignItems(ui.Center).Background(t.Accent.Alpha(0.1)).Children(func() {
+		ui.Text(c, msg).FontSize(12).Wrap().Grow(1)
+		if ui.Button(c, "清除筛选").Clicked() {
+			a.tagFilter, a.search = "", ""
 		}
 	})
 }

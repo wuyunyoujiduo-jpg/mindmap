@@ -396,7 +396,21 @@ func TestTagFilterAndSearch(t *testing.T) {
 		t.Fatalf("tag filter %q", a.tagFilter)
 	}
 	snapshot(t, tt, "filtered")
-	a.tagFilter = ""
+	// The bar above the map says so, and clears it.
+	if !tt.HasText("清除筛选") {
+		t.Fatalf("texts %q", tt.Texts())
+	}
+	a.tagFilter = "别处的标签" // matches nothing here: all dimmed
+	tt.Frame()
+	if !tt.HasText("按标签 #别处的标签筛选，这个导图里没有匹配的节点，所以全部变淡。") {
+		t.Fatalf("texts %q", tt.Texts())
+	}
+	if err := tt.Click("清除筛选"); err != nil {
+		t.Fatal(err)
+	}
+	if a.filtering() {
+		t.Fatalf("still filtered by %q %q", a.tagFilter, a.search)
+	}
 	a.search = "加载"
 	a.nextMatch()
 	if n, _ := a.selectedNode(); n.Title != "列表加载慢" {
