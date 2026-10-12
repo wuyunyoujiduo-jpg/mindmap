@@ -47,7 +47,7 @@ func TestMapAnalysis(t *testing.T) {
 
 	// One 资料: the sidebar's 资料 lists the maps with the clips, and the
 	// categories are of both.
-	if err := tt.Click("资料"); err != nil {
+	if err := tt.Click("全部资料"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
@@ -73,7 +73,7 @@ func TestMapAnalysis(t *testing.T) {
 	if len(hits) == 0 || hits[0].Clip.Kind != library.KindMap {
 		t.Fatalf("library hits %+v", hits)
 	}
-	a.libQuery, a.libKind = "", 5
+	a.libQuery, a.libKind = "", kindMaps
 	if hits := a.libHits(); len(hits) != len(a.files) {
 		t.Fatalf("maps listed %d of %d", len(hits), len(a.files))
 	}

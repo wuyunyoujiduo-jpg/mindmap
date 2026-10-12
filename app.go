@@ -235,7 +235,7 @@ type app struct {
 	libOpen       bool   // the main area shows the library
 	libSel        string // the clip shown
 	libQuery      string
-	libKind       int    // 0 every kind, then text, link, picture, file
+	libKind       int    // kindAll, kindMaps, kindDocs or kindLinks
 	libCat        string // the category shown, "" all
 	libTag        string // the tag shown, "" all
 	libDraft      string // what is typed to keep

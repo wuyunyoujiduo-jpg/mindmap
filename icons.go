@@ -34,13 +34,14 @@ const (
 	iconInbox
 	iconMap
 	iconSearch
-	iconText  // a clip of text: lines on a page
-	iconLink  // two links of a chain
-	iconImage // a picture: a frame, a hill and the sun
-	iconFile  // a page with its corner folded
-	iconShot  // a screenshot: the corners of a frame
-	iconCloud // the sync with GitHub
-	iconClip  // a paperclip: attach files
+	iconText     // a clip of text: lines on a page
+	iconLink     // two links of a chain
+	iconImage    // a picture: a frame, a hill and the sun
+	iconFile     // a page with its corner folded
+	iconShot     // a screenshot: the corners of a frame
+	iconCloud    // the sync with GitHub
+	iconClip     // a paperclip: attach files
+	iconCategory // a category: four squares
 )
 
 // glyph is an icon drawn in a box of the given side, as a piece of text.
@@ -174,6 +175,12 @@ func drawIcon(p *ui.Painter, r ui.Rect, s float32, ic icon, col ui.Color) {
 		p.StrokePath(new(ui.Path).MoveTo(cx-h*0.65, cy-h*0.85).LineTo(cx+h*0.2, cy-h*0.85).LineTo(cx+h*0.65, cy-h*0.4).
 			LineTo(cx+h*0.65, cy+h*0.85).LineTo(cx-h*0.65, cy+h*0.85).Close(), w, col)
 		p.StrokePath(new(ui.Path).MoveTo(cx+h*0.2, cy-h*0.85).LineTo(cx+h*0.2, cy-h*0.4).LineTo(cx+h*0.65, cy-h*0.4), w*0.9, col)
+	case iconCategory:
+		k := h * 0.62
+		for _, d := range [][2]float32{{-1, -1}, {1, -1}, {-1, 1}, {1, 1}} {
+			x, y := cx+d[0]*h*0.42, cy+d[1]*h*0.42
+			p.StrokePath(roundedRect(x-k/2, y-k/2, k, k, k*0.25), w*0.9, col)
+		}
 	case iconClip:
 		// Drawn upright and turned 40° to the right.
 		sin, cos := float32(math.Sin(40*math.Pi/180)), float32(math.Cos(40*math.Pi/180))

@@ -1,0 +1,175 @@
+package main
+
+import (
+	"fmt"
+	"path/filepath"
+	"strings"
+
+	"github.com/egoist/mygo/ui"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
+)
+
+// Documents (the clips of the library) can be kept in the folders of the
+// maps, beside the maps: the sidebar shows them there. A clip says its
+// folder (Clip.Folder); its files stay in the library.
+
+// clipDrag is the value a clip's row carries while dragged onto a folder.
+type clipDrag struct{ ID string }
+
+// folderKey is a folder's path as a clip keeps it.
+func (a *app) folderKey(dir string) string {
+	rel, err := filepath.Rel(a.dir, dir)
+	if err != nil {
+		return ""
+	}
+	return filepath.ToSlash(rel)
+}
+
+// clipsIn are the clips kept in a folder.
+func (a *app) clipsIn(dir string) []*library.Clip {
+	key := a.folderKey(dir)
+	var clips []*library.Clip
+	for _, c := range a.lib.Clips {
+		if c.Folder != "" && c.Folder == key {
+			clips = append(clips, c)
+		}
+	}
+	return clips
+}
+
+// moveClipTo keeps a clip in a folder, "" taking it out of any.
+func (a *app) moveClipTo(id, dir string) {
+	c := a.lib.Find(id)
+	if c == nil {
+		return
+	}
+	key := ""
+	if dir != "" {
+		key = a.folderKey(dir)
+	}
+	if c.Folder == key {
+		return
+	}
+	c.Folder = key
+	a.saveClip(c)
+	if dir != "" {
+		a.folderClosed[dir] = false
+		a.tell("已放进「" + filepath.Base(dir) + "」")
+	}
+}
+
+// moveClipFolders has the clips follow their folders moved: follow gives
+// a path's new place.
+func (a *app) moveClipFolders(follow func(string) string) {
+	for _, c := range a.lib.Clips {
+		if c.Folder == "" {
+			continue
+		}
+		from := filepath.Join(a.dir, filepath.FromSlash(c.Folder))
+		if to := follow(from); to != from {
+			c.Folder = a.folderKey(to)
+			a.saveClip(c)
+		}
+	}
+}
+
+// folderMenu lists the folders to move a clip to.
+func (a *app) clipFolderMenu(m *ui.Menu, clip *library.Clip) {
+	id := clip.ID
+	m.Submenu("放到文件夹", func(m *ui.Menu) {
+		for _, dir := range a.tree.FolderPaths() {
+			name := filepath.Base(dir)
+			if dir != a.dir {
+				rel, _ := filepath.Rel(a.dir, dir)
+				name = strings.ReplaceAll(rel, string(filepath.Separator), " / ")
+			}
+			if m.Item(name).Checked(clip.Folder == a.folderKey(dir)).Chosen() {
+				to := dir
+				a.later(func() { a.moveClipTo(id, to) })
+			}
+		}
+		if clip.Folder != "" {
+			m.Separator()
+			if m.Item("移出文件夹").Chosen() {
+				a.later(func() { a.moveClipTo(id, "") })
+			}
+		}
+	})
+}
+
+// docRow is a clip in a folder of the sidebar: a click shows it in the
+// list of 资料.
+func (a *app) docRow(c *ui.Context, clip *library.Clip, depth int) {
+	t := c.Theme()
+	current := a.libOpen && a.libSel == clip.ID
+	row := ui.Row(c).Padding(5, 8, 5, 22+float32(depth)*14).Gap(6).Radius(6).AlignItems(ui.Center).
+		Cursor(ui.CursorPointer).Label("文档 " + clip.Label()).Drag(clipDrag{clip.ID})
+	switch {
+	case current:
+		row.Background(t.Accent.Alpha(0.16))
+	case row.Hovered():
+		row.Background(t.Text.Alpha(0.06))
+	}
+	id := clip.ID
+	if row.Clicked() {
+		a.later(func() {
+			a.showLibrary()
+			a.libSel, a.libKind, a.libCat, a.libTag, a.libQuery = id, kindAll, "", "", ""
+		})
+	}
+	row.ContextMenu(func(m *ui.Menu) { a.clipMenu(m, clip) })
+	row.Children(func() {
+		sideIcon(c, kindIcon(clip.Kind), current)
+		ui.Text(c, clip.Label()).FontSize(13).Grow(1).Shrink(1).MinWidth(0).NoWrap().Ellipsis("…")
+	})
+}
+
+// dropOnFolder takes maps and clips dropped on a row into the folder dir.
+func (a *app) dropOnFolder(row ui.Element, dir string) {
+	if d, ok := ui.Drop[fileDrag](row); ok {
+		a.later(func() { a.moveMap(d.Path, dir) })
+	}
+	if d, ok := ui.Drop[clipDrag](row); ok {
+		a.later(func() { a.moveClipTo(d.ID, dir) })
+	}
+}
+
+// draggedOver tells whether a map or a clip is dragged over a row.
+func draggedOver(row ui.Element) bool {
+	_, f := ui.DragOver[fileDrag](row)
+	_, c := ui.DragOver[clipDrag](row)
+	return f || c
+}
+
+// The kinds the list of 资料 shows (app.libKind).
+const (
+	kindAll  = iota
+	kindMaps // the maps
+	kindDocs // text, pictures and files
+	kindLinks
+)
+
+// ofKind tells whether a clip, or a map as one, is of a kind of the list.
+func ofKind(c *library.Clip, kind int) bool {
+	switch kind {
+	case kindMaps:
+		return c.Kind == kindMap
+	case kindDocs:
+		return c.Kind != kindMap && c.Kind != library.KindLink
+	case kindLinks:
+		return c.Kind == library.KindLink
+	}
+	return true
+}
+
+// docCount is how many maps and clips a folder and those in it hold.
+func (a *app) docCount(f model.Folder) int {
+	n := len(f.Files) + len(a.clipsIn(f.Path))
+	for _, sub := range f.Folders {
+		n += a.docCount(sub)
+	}
+	return n
+}
+
+var _ = fmt.Sprint

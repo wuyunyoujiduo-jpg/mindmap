@@ -431,9 +431,11 @@ func TestCollapse(t *testing.T) {
 
 func TestNewMapAndDelete(t *testing.T) {
 	a, tt := newTestApp(t)
-	if err := tt.Click("+ 导图"); err != nil {
+	tt.Click("＋ 新建")
+	if err := tt.ChooseMenuItem("导图"); err != nil {
 		t.Fatal(err)
 	}
+	tt.Frame()
 	if len(a.files) != 2 || mapName(a.path) != "新导图" || a.editing != a.doc.Root.ID {
 		t.Fatalf("files %d, path %q, editing %q", len(a.files), a.path, a.editing)
 	}
@@ -955,9 +957,11 @@ func TestSidebarFoldersAndFavorites(t *testing.T) {
 	a, tt := newTestApp(t)
 	guide := a.path
 	// A folder, renamed as it is made.
-	if err := tt.Click("+ 文件夹"); err != nil {
+	tt.Click("＋ 新建")
+	if err := tt.ChooseMenuItem("文件夹"); err != nil {
 		t.Fatal(err)
 	}
+	tt.Frame()
 	if a.renaming == "" {
 		t.Fatal("new folder not being renamed")
 	}

@@ -161,7 +161,7 @@ func (a *app) showClip(id string) {
 		return
 	}
 	a.showLibrary()
-	a.libSel, a.libQuery, a.libCat, a.libTag, a.libKind = id, "", "", "", 0
+	a.libSel, a.libQuery, a.libCat, a.libTag, a.libKind = id, "", "", "", kindAll
 }
 
 // nodeClips are the clips of the library that the node selected may be

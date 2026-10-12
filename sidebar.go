@@ -68,30 +68,36 @@ func (a *app) sidebar(c *ui.Context) {
 			ui.Text(c, "⌄").FontSize(textSmall).TextColor(t.TextMuted).PassThrough()
 		})
 		ui.Scroll(c.Key("sidebar")).Grow(1).Padding(0, 6, 12).Gap(2).Children(func() {
-			a.libraryRow(c) // all the material: maps and clips
+			a.libraryRow(c) // all the material: maps and documents
 			a.inboxRow(c)
 			a.favorites(c)
-			a.categoryList(c)
 			a.section(c, "文件夹", &a.filesOpen, a.dir, func() {
 				a.folderContents(c, a.tree, 0)
 			})
-			if a.file != nil {
-				a.tagList(c)
+			a.categoryList(c)
+			if a.file != nil && !a.libOpen {
+				a.tagList(c) // the open map's
 			}
 		})
 		ui.Row(c.Key("side-foot")).Padding(6, 8).Gap(2).BorderWidth(1, 0, 0, 0).BorderColor(hairline(t)).Children(func() {
-			newMap := sideFootButton(c, "+ 导图", "在当前文件夹新建导图（右键：从模板新建）")
-			if newMap.Clicked() {
-				a.newMap()
-			}
-			newMap.ContextMenu(func(m *ui.Menu) {
-				if m.Item("从模板新建…").Chosen() {
+			sideFootButton(c, "＋ 新建", "新建导图、文档或文件夹").Shrink(0).Menu(func(m *ui.Menu) {
+				if m.Item("导图").Chosen() {
+					a.later(a.newMap)
+				}
+				if m.Item("从模板新建导图…").Chosen() {
 					a.templatesOpen = true
 				}
+				if m.Item("文档（记点什么、粘贴或拖入文件）").Chosen() {
+					a.later(func() {
+						a.showLibrary()
+						a.libKind, a.libCat, a.libTag = kindAll, "", ""
+					})
+				}
+				m.Separator()
+				if m.Item("文件夹").Chosen() {
+					a.later(func() { a.newFolder(a.currentFolder()) })
+				}
 			})
-			if sideFootButton(c, "+ 文件夹", "在当前文件夹新建文件夹").Clicked() {
-				a.newFolder(a.currentFolder())
-			}
 			ui.Spacer(c)
 			a.syncFoot(c)
 		})
@@ -121,12 +127,10 @@ func (a *app) section(c *ui.Context, title string, open *bool, dropDir string, f
 	t := c.Theme()
 	head := ui.Row(c.Key("section:"+title)).Padding(12, 8, 4).Gap(4).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(title)
 	if dropDir != "" {
-		if _, over := ui.DragOver[fileDrag](head); over {
+		if draggedOver(head) {
 			head.Background(t.Accent.Alpha(0.15)).Radius(6)
 		}
-		if d, ok := ui.Drop[fileDrag](head); ok {
-			a.later(func() { a.moveMap(d.Path, dropDir) })
-		}
+		a.dropOnFolder(head, dropDir)
 	}
 	if head.Clicked() {
 		*open = !*open
@@ -201,8 +205,12 @@ func (a *app) folderContents(c *ui.Context, f model.Folder, depth int) {
 	for _, file := range f.Files {
 		a.fileRow(c.Key("file:"+file.Path), file, depth, false)
 	}
-	if depth == 0 && len(f.Files) == 0 && len(f.Folders) == 0 {
-		ui.Text(c, "还没有导图").FontSize(12).TextColor(c.Theme().TextMuted).Margin(4, 12)
+	docs := a.clipsIn(f.Path) // the documents kept here
+	for _, clip := range docs {
+		a.docRow(c.Key("doc:"+clip.ID), clip, depth)
+	}
+	if depth == 0 && len(f.Files) == 0 && len(f.Folders) == 0 && len(docs) == 0 {
+		ui.Text(c, "还没有导图和文档").FontSize(12).TextColor(c.Theme().TextMuted).Margin(4, 12)
 	}
 }
 
@@ -214,13 +222,10 @@ func (a *app) folderRow(c *ui.Context, f model.Folder, depth int) {
 	if row.Hovered() {
 		row.Background(t.Text.Alpha(0.06))
 	}
-	if _, over := ui.DragOver[fileDrag](row); over {
+	if draggedOver(row) {
 		row.Background(t.Accent.Alpha(0.15))
 	}
-	if d, ok := ui.Drop[fileDrag](row); ok {
-		dir := f.Path
-		a.later(func() { a.moveMap(d.Path, dir) })
-	}
+	a.dropOnFolder(row, f.Path)
 	if row.Clicked() {
 		a.folderClosed[f.Path] = open
 	}
@@ -252,7 +257,7 @@ func (a *app) folderRow(c *ui.Context, f model.Folder, depth int) {
 			return
 		}
 		ui.Text(c, f.Name).FontSize(13).Grow(1).NoWrap().Ellipsis("…")
-		if n := len(f.AllFiles()); n > 0 {
+		if n := a.docCount(f); n > 0 {
 			ui.Text(c, fmt.Sprint(n)).FontSize(11).TextColor(t.TextMuted)
 		}
 	})
@@ -402,6 +407,7 @@ func (a *app) moved(from, to string) {
 		}
 	}
 	a.moveMapMetas(follow) // and their analyses
+	a.moveClipFolders(follow)
 	a.path = follow(a.path)
 	a.renameViews(follow)
 	if a.path != "" {
@@ -457,9 +463,9 @@ func (a *app) tagList(c *ui.Context) {
 			counts[tag]++
 		}
 	})
-	title := "标签"
+	title := "本导图标签"
 	if len(tags) > 0 {
-		title = fmt.Sprintf("标签 %d", len(tags))
+		title = fmt.Sprintf("本导图标签 %d", len(tags))
 	}
 	a.section(c, title, &a.tagsOpen, "", func() {
 		if len(tags) > 8 {

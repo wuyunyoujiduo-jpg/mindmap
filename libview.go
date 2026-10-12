@@ -23,7 +23,7 @@ func (a *app) libraryView(c *ui.Context) {
 		ui.Row(c.Key("lib-head")).Height(toolbarHeight).Padding(0, 10, 0, 16).Gap(10).AlignItems(ui.Center).Shrink(0).
 			DragWindow().Children(func() {
 			ui.Text(c, "资料").Bold().FontSize(textTitle).NoWrap()
-			ui.Text(c, fmt.Sprintf("%d 张导图 · %d 条收藏", len(a.files), len(l.Clips))).FontSize(12).TextColor(t.TextMuted).NoWrap()
+			ui.Text(c, fmt.Sprintf("%d 张导图 · %d 条文档和链接", len(a.files), len(l.Clips))).FontSize(12).TextColor(t.TextMuted).NoWrap()
 			if a.libWorking != "" {
 				ui.Spinner(c)
 				ui.Text(c, fmt.Sprintf("整理中，还有 %d 条", len(a.libQueue)+1)).FontSize(12).TextColor(t.TextMuted).NoWrap()
@@ -81,7 +81,7 @@ func (a *app) libraryView(c *ui.Context) {
 			if len(hits) == 0 {
 				ui.Column(c).Grow(1).Basis(0).Padding(8, 10, 16).Children(func() {
 					msg := "还没有资料。在上面记点什么、粘贴链接，或把图片和文件拖进来。\n在任何应用里复制内容后按 " + keyLabel(a.clipKey()) + "，也能直接收进资料库。"
-					if len(l.Clips) > 0 || a.libKind == 5 {
+					if len(l.Clips) > 0 || a.libKind == kindMaps {
 						msg = "没有符合条件的资料。"
 					}
 					ui.Text(c, msg).FontSize(13).TextColor(t.TextMuted).Wrap().Padding(20, 10)
@@ -143,11 +143,9 @@ type libHitsKey struct {
 }
 
 func (a *app) searchClips() []library.Hit {
-	kinds := []string{"", library.KindText, library.KindLink, library.KindImage, library.KindFile, kindMap}
-	kind := kinds[min(a.libKind, len(kinds)-1)]
 	keep := func(c *library.Clip) bool {
 		switch {
-		case kind != "" && c.Kind != kind:
+		case !ofKind(c, a.libKind):
 			return false
 		case c.Kind == kindMap && (a.libCat == "-" || a.libCat == "★"):
 			return false
@@ -162,7 +160,7 @@ func (a *app) searchClips() []library.Hit {
 		}
 		return true
 	}
-	if kind == kindMap {
+	if a.libKind == kindMaps {
 		return a.searchMaps(a.libQuery, keep)
 	}
 	var hits []library.Hit
@@ -171,7 +169,7 @@ func (a *app) searchClips() []library.Hit {
 	} else {
 		hits = a.lib.Search(a.libQuery, keep)
 	}
-	if kind != "" {
+	if a.libKind != kindAll {
 		return hits
 	}
 	// All is material: the maps are listed with the clips.
@@ -245,7 +243,7 @@ func (a *app) clipFilters(c *ui.Context) {
 	t := c.Theme()
 	l := a.lib
 	ui.Row(c).Padding(0, 12, 8).Gap(6).Wrap().GapY(6).AlignItems(ui.Center).Children(func() {
-		ui.Segmented(c, &a.libKind, "全部", "文字", "链接", "图片", "文件", "导图").FontSize(12).Shrink(0)
+		ui.Segmented(c, &a.libKind, "全部", "导图", "文档", "链接").FontSize(12).Shrink(0)
 		ui.Box(c).Width(4)
 		chip := func(key, label string, active bool) bool {
 			b := ui.Box(c.Key("cat:"+key)).Padding(3, 10).Radius(999).Cursor(ui.CursorPointer).Label(label)
@@ -299,7 +297,8 @@ func kindIcon(kind string) icon {
 // clipRow is a clip in the list.
 func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 	t := c.Theme()
-	row := ui.Row(c).Padding(8, 10).Gap(10).Radius(8).Cursor(ui.CursorPointer).Label("资料 " + clip.Label())
+	row := ui.Row(c).Padding(8, 10).Gap(10).Radius(8).Cursor(ui.CursorPointer).Label("资料 " + clip.Label()).
+		Drag(clipDrag{clip.ID}) // onto a folder of the sidebar
 	switch {
 	case a.libSel == clip.ID:
 		row.Background(t.Accent.Alpha(0.14))
@@ -393,6 +392,7 @@ func (a *app) clipMenu(m *ui.Menu, clip *library.Clip) {
 	if p := a.lib.FilePath(clip); p != "" && m.Item("打开文件").Chosen() {
 		a.plat.OpenPath(p)
 	}
+	a.clipFolderMenu(m, clip)
 	if m.Item("生成分享卡片…").Chosen() {
 		a.openCard(clip)
 	}
@@ -722,36 +722,8 @@ func (a *app) libraryRow(c *ui.Context) {
 			}
 		})
 	}
-	all := a.libOpen && a.libKind == 0 && a.libCat == ""
-	row("library-row", iconLibrary, "资料", len(clips)+len(a.files), 0, all, func() { a.libKind = 0 })
-	kinds := []struct {
-		kind  string
-		ic    icon
-		label string
-		index int
-	}{
-		{kindMap, iconMap, "导图", 5},
-		{library.KindText, iconText, "文字", 1},
-		{library.KindLink, iconLink, "链接", 2},
-		{library.KindImage, iconImage, "图片", 3},
-		{library.KindFile, iconFile, "文件", 4},
-	}
-	for _, k := range kinds {
-		n := len(a.files)
-		if k.kind != kindMap {
-			n = 0
-			for _, cl := range clips {
-				if cl.Kind == k.kind {
-					n++
-				}
-			}
-		}
-		if n == 0 {
-			continue
-		}
-		index := k.index
-		row("library-kind:"+k.kind, k.ic, k.label, n, 14, a.libOpen && a.libKind == index && a.libCat == "", func() { a.libKind = index })
-	}
+	all := a.libOpen && a.libCat == ""
+	row("library-row", iconLibrary, "全部资料", len(clips)+len(a.files), 0, all, func() { a.libKind = kindAll })
 }
 
 // categoryList is the sidebar's section of the categories of all the
@@ -766,7 +738,7 @@ func (a *app) categoryList(c *ui.Context) {
 		for _, k := range cats {
 			name := k.Name
 			current := a.libOpen && a.libCat == name
-			r := ui.Row(c.Key("cat-row:"+name)).Padding(4, 8, 4, 12).Gap(8).Radius(6).AlignItems(ui.Center).
+			r := ui.Row(c.Key("cat-row:"+name)).Padding(5, 8).Gap(8).Radius(6).AlignItems(ui.Center).
 				Cursor(ui.CursorPointer).Label("分类 " + name)
 			switch {
 			case current:
@@ -777,10 +749,11 @@ func (a *app) categoryList(c *ui.Context) {
 			if r.Clicked() {
 				a.later(func() {
 					a.showLibrary()
-					a.libKind, a.libCat, a.libTag = 0, name, ""
+					a.libKind, a.libCat, a.libTag = kindAll, name, ""
 				})
 			}
 			r.Children(func() {
+				sideIcon(c, iconCategory, current)
 				ui.Text(c, name).FontSize(13).Grow(1).NoWrap().Ellipsis("…")
 				ui.Text(c, fmt.Sprint(k.N)).FontSize(11).TextColor(t.TextMuted)
 			})

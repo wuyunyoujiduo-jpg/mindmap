@@ -59,6 +59,10 @@ type Clip struct {
 	Analysis  string     `json:"analysis,omitempty"`
 	Organized *time.Time `json:"organized,omitempty"`
 	Starred   bool       `json:"starred,omitempty"`
+	// Folder is the folder of maps the clip is kept in, as a document
+	// beside the maps: its path relative to the maps folder, with
+	// slashes, "." for the maps folder itself; "" for none.
+	Folder string `json:"folder,omitempty"`
 	// Hash is the SHA-256 of a picture's or file's data, to find it again.
 	Hash    string    `json:"hash,omitempty"`
 	Created time.Time `json:"created"`
@@ -91,7 +95,7 @@ func KindLabel(kind string) string {
 	case KindMap:
 		return "导图"
 	}
-	return "文字"
+	return "文档"
 }
 
 // Library is the clips of a folder, held in memory, newest first.
