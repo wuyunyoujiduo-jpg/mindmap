@@ -25,6 +25,7 @@ const (
 	rootHeight = 46
 	titleMax   = 260
 	titleMin   = 24
+	widthMax   = 600 // the widest a node's title is set to
 	markSize   = 11
 	checkSize  = 15 // a task's check box
 )
@@ -148,8 +149,7 @@ func (a *app) measure(c *ui.Context) layout.Measure {
 // edited wraps the same way, so what is typed first stays in view.
 func (a *app) titleBox(c *ui.Context, n *model.Node, depth int) (w, h float32) {
 	st := styleOf(n)
-	span := ui.Span{Text: a.parts(n).title, Size: fontSize(n, depth), Weight: fontWeight(n, depth),
-		Italic: st.Italic, Font: a.doc.Style.Font}
+	span := a.titleSpan(n, depth)
 	if a.editing == n.ID {
 		// As wide as what is typed (or the placeholder), with room for the
 		// caret: the node keeps its size as editing starts, and grows as
@@ -178,6 +178,18 @@ func (a *app) titleBox(c *ui.Context, n *model.Node, depth int) (w, h float32) {
 		w = titleMax
 	}
 	return max(w, titleMin), h
+}
+
+// titleSpan is a node's title as measured.
+func (a *app) titleSpan(n *model.Node, depth int) ui.Span {
+	return ui.Span{Text: a.parts(n).title, Size: fontSize(n, depth), Weight: fontWeight(n, depth),
+		Italic: styleOf(n).Italic, Font: a.doc.Style.Font}
+}
+
+// titleFits reports whether the node's title is one line in width w.
+func (a *app) titleFits(c *ui.Context, n *model.Node, depth int, w float32) bool {
+	tw, _ := a.measureText(c, 0, a.titleSpan(n, depth))
+	return tw <= w
 }
 
 // styleOf is the node's own style, zero where it follows the canvas.
@@ -808,7 +820,14 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 			}
 			return
 		}
+		// The title is as wide as measured at zoom 1; drawn at another
+		// zoom it can come out a hair wider, which must not wrap it.
 		title := ui.Text(c, n.Title).FontSize(size).FontWeight(fontWeight(n, depth)).Width(tw * z).Shrink(0)
+		if a.titleFits(c, n, depth, tw) {
+			title.NoWrap()
+		} else {
+			title.Width((tw + 2) * z)
+		}
 		if n.Task != nil && n.Task.Status == model.StatusDone || st.Strike {
 			title.Strikethrough()
 		}
@@ -912,6 +931,42 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 			a.selected = n.ID
 			a.later(func() { a.toggleCollapse(n.ID) })
 		}
+	}
+	if selected && !editing && len(a.multi) == 0 && !exportingNow(a) {
+		a.widthHandle(c, n, depth, box)
+	}
+}
+
+// widthHandle is the edge of the selected node, away from its parent,
+// which dragging widens or narrows the node: its title wraps at the width
+// it is given. A double click lets it fit its title again.
+func (a *app) widthHandle(c *ui.Context, n *model.Node, depth int, box layout.Rect) {
+	t := c.Theme()
+	cam := a.cam()
+	z := cam.Zoom
+	left := a.boxes.Left[n.ID]
+	x := cam.X + (box.X+box.W)*z - 5*z
+	if left {
+		x = cam.X + box.X*z - 2*z
+	}
+	h := box.H * z
+	edge := ui.Box(c.Key("width:"+n.ID)).Absolute().Left(x).Top(cam.Y+box.Y*z).Size(7*z, h).
+		Cursor(ui.CursorResizeEW).Label("调整宽度").Tooltip("拖动调整宽度，双击恢复适应文字")
+	if edge.Hovered() || edge.Pressed() {
+		edge.Children(func() {
+			ui.Box(c).Absolute().Left(2*z).Top(h/4).Size(3*z, h/2).Radius(999).Background(t.Accent)
+		})
+	}
+	if dx, _, ok := edge.Dragged(); ok && dx != 0 {
+		if left {
+			dx = -dx
+		}
+		w, _ := a.titleBox(c, n, depth)
+		w = min(max(w+dx/z, titleMin*2), widthMax)
+		a.setNodeStyle(n, "width", func(s *model.NodeStyle) { s.Width = w })
+	}
+	if edge.DoubleClicked() && styleOf(n).Width > 0 {
+		a.setNodeStyle(n, "width", func(s *model.NodeStyle) { s.Width = 0 })
 	}
 }
 

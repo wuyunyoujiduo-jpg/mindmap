@@ -3055,3 +3055,36 @@ func TestShortcutLabels(t *testing.T) {
 		}
 	}
 }
+
+func TestNodeWidthHandle(t *testing.T) {
+	a, tt := newTestApp(t)
+	a.mutate("", func() { a.doc.AddChild(a.doc.Root.ID, "针对TMS、CWM") })
+	n := find(t, a, "针对TMS、CWM")
+	a.selectNode(n.ID)
+	tt.Frame()
+	edge, ok := tt.Find("调整宽度")
+	if !ok {
+		t.Fatalf("no handle; texts %q", tt.Texts())
+	}
+	w0 := a.boxes.Boxes[n.ID].W - 2*nodePadX // a title only
+	x, y := edge.X+edge.W/2, edge.Y+edge.H/2
+	sign := float32(1)
+	if a.boxes.Left[n.ID] {
+		sign = -1
+	}
+	tt.Press(x, y)
+	tt.Move(x+sign*20, y)
+	tt.Move(x+sign*60, y)
+	tt.Release(x+sign*60, y)
+	if w := styleOf(n).Width; w < w0+50 || w > w0+70 {
+		t.Fatalf("width %v, was %v", w, w0)
+	}
+	snapshot(t, tt, "node-width")
+	// A double click lets it fit its title again.
+	edge, _ = tt.Find("调整宽度")
+	tt.ClickAt(edge.X+edge.W/2, edge.Y+edge.H/2)
+	tt.ClickAt(edge.X+edge.W/2, edge.Y+edge.H/2)
+	if w := styleOf(n).Width; w != 0 {
+		t.Fatalf("width %v after a double click", w)
+	}
+}
