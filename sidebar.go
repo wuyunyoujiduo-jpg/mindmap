@@ -508,7 +508,7 @@ func (a *app) tagRow(c *ui.Context, tag string, count int) {
 	}
 	active := a.tagFilter == tag
 	row := ui.Row(c).Padding(4, 8, 4, 12).Gap(8).Radius(6).AlignItems(ui.Center).
-		Cursor(ui.CursorPointer).Label("筛选标签 "+tag).Tooltip("点击筛选，右键重命名、改颜色或删除")
+		Cursor(ui.CursorPointer).Label("筛选标签 " + tag).Tooltip("点击筛选，右键重命名、改颜色或删除")
 	switch {
 	case active:
 		row.Background(tagColor(tag).Alpha(0.18))
