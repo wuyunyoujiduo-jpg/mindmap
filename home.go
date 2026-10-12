@@ -389,3 +389,18 @@ func (a *app) homeRecent(c *ui.Context, now time.Time, maps, clips []*library.Cl
 		}
 	})
 }
+
+// sectionCard is a card of a detail or a panel: a head of a tile and a
+// title in its color, with what right builds at its end, then body.
+func sectionCard(c *ui.Context, ic icon, col ui.Color, title string, right func(), body func()) {
+	pageCard(c.Key("section:"+title)).Padding(12, 14).Gap(10).Radius(14).Children(func() {
+		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+			tile(c, ic, col, 22)
+			ui.Text(c, title).FontSize(13).Bold().TextColor(col).Grow(1)
+			if right != nil {
+				right()
+			}
+		})
+		body()
+	})
+}

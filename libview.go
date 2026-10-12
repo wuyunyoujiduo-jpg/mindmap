@@ -459,10 +459,8 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 	t := c.Theme()
 	// The bar: what it is and when, and what to do with it.
 	ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
-		ui.Row(c.Key("kind-pill")).Padding(2, 8, 2, 6).Gap(4).Radius(999).Background(t.Text.Alpha(0.06)).AlignItems(ui.Center).Shrink(0).Children(func() {
-			glyph(c, kindIcon(clip.Kind), 12, t.TextMuted)
-			ui.Text(c, library.KindLabel(clip.Kind)).FontSize(textCaption).TextColor(t.TextMuted).NoWrap()
-		})
+		tile(c, kindTile(clip.Kind), kindColor(clip.Kind), 22)
+		ui.Text(c, library.KindLabel(clip.Kind)).FontSize(textCaption).Bold().TextColor(kindColor(clip.Kind)).NoWrap().Margin(0, 0, 0, 4)
 		ui.Text(c, cmpOr(clip.Source, "手动")+" · "+clip.Created.Format("2006-01-02 15:04")).FontSize(textCaption).
 			TextColor(t.TextMuted).SingleLine().Grow(1).Shrink(1).MinWidth(0).Margin(0, 0, 0, 4)
 		star := iconStar
@@ -514,7 +512,7 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 	}
 
 	// Properties.
-	ui.Column(c).Gap(2).Children(func() {
+	sectionCard(c, iconTag, tileBlue, "信息", nil, func() {
 		propRow(c, "分类", func() {
 			cat := clip.Category
 			in := inlineInput(c.Key("clip-cat"), &cat, textBody, false, "未分类", "资料分类")
@@ -571,20 +569,17 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 	})
 
 	// What the AI made of it.
-	card(c, t.Accent.Alpha(0.06)).Children(func() {
-		ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-			ui.Box(c).Size(14, 14).Draw(func(p *ui.Painter, r ui.Rect) { drawIcon(p, r, 13, iconSparkle, t.Accent) })
-			ui.Text(c, "AI 整理").FontSize(textSmall).Bold().TextColor(t.Accent).Grow(1)
-			label := "整理"
-			if clip.Organized != nil {
-				label = "重新整理"
-			}
-			if a.libWorking == clip.ID {
-				ui.Spinner(c)
-			} else if ghostButton(c, label, "让 AI 起标题、写说明和摘要、分类、打标签、生成同义词和分析").Clicked() {
-				a.organizeClip(clip.ID)
-			}
-		})
+	sectionCard(c, iconSparkle, tilePurple, "AI 整理", func() {
+		label := "整理"
+		if clip.Organized != nil {
+			label = "重新整理"
+		}
+		if a.libWorking == clip.ID {
+			ui.Spinner(c)
+		} else if ghostButton(c, label, "让 AI 起标题、写说明和摘要、分类、打标签、生成同义词和分析").Clicked() {
+			a.organizeClip(clip.ID)
+		}
+	}, func() {
 		// What kept it from organizing, said here where it was asked for.
 		if a.libNeedKey == clip.ID && providerKey(a.cfg) == "" {
 			ui.Row(c.Key("need-key")).Padding(8, 10).Gap(8).Radius(8).AlignItems(ui.Center).
@@ -630,8 +625,7 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 	})
 
 	// The user's note.
-	card(c, ui.Hex("#f5b942").Alpha(0.1)).Children(func() {
-		sectionHeader(c, "我的备注")
+	sectionCard(c, iconPencil, tileYellow, "我的备注", nil, func() {
 		note := clip.Note
 		if inlineArea(c.Key("clip-note"), &note, textBody, 2, 10, "为什么收藏它、想怎么用…", "资料备注").Margin(0, -8).Changed() {
 			clip.Note = note
@@ -642,8 +636,7 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 	// The content.
 	switch {
 	case clip.Kind == library.KindText:
-		ui.Column(c).Gap(4).Children(func() {
-			sectionHeader(c, "内容")
+		sectionCard(c, iconText, tileOrange, "内容", nil, func() {
 			text := clip.Text
 			if inlineArea(c.Key("clip-text"), &text, textBody+1, 3, 30, "", "资料内容").Margin(0, -8).Changed() {
 				clip.Text = text
@@ -651,8 +644,7 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 			}
 		})
 	case clip.Kind == library.KindLink:
-		ui.Column(c).Gap(4).Children(func() {
-			sectionHeader(c, "网页正文")
+		sectionCard(c, iconLink, tileGreen, "网页正文", nil, func() {
 			text := clip.Text
 			in := inlineArea(c.Key("clip-page"), &text, textBody, 3, 16,
 				"没读到网页正文时（需要登录的页面、公众号文章等），可以把正文复制粘贴到这里", "网页正文").Margin(0, -8)
@@ -669,8 +661,7 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 		if clip.Kind == library.KindImage {
 			label = "图中内容（AI 识别）"
 		}
-		ui.Column(c).Gap(4).Children(func() {
-			sectionHeader(c, label)
+		sectionCard(c, kindTile(clip.Kind), kindColor(clip.Kind), label, nil, func() {
 			ui.Text(c, library.Excerpt(clip.Text, "", 3000)).FontSize(textSmall).LineHeight(1.5).TextColor(t.TextMuted).Wrap().Selectable()
 		})
 	}

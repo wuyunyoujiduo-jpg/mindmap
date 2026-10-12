@@ -128,7 +128,7 @@ func (a *app) relatedSection(c *ui.Context, clip *library.Clip) {
 	if len(hits) == 0 {
 		return
 	}
-	ui.Field(c, "相关资料", func() {
+	sectionCard(c, iconLibrary, tileTeal, "相关资料", nil, func() {
 		ui.Column(c).Gap(4).Children(func() {
 			for _, h := range hits {
 				a.clipLink(c.Key("rel"+h.Clip.ID), h.Clip)
@@ -264,7 +264,7 @@ func (a *app) clipBacklinksSection(c *ui.Context, clip *library.Clip) {
 		return
 	}
 	t := c.Theme()
-	ui.Field(c, fmt.Sprintf("被 %d 个节点引用", len(back)), func() {
+	sectionCard(c, iconMap, tileBlue, fmt.Sprintf("被 %d 个节点引用", len(back)), nil, func() {
 		ui.Column(c).Gap(4).Children(func() {
 			for i, b := range back {
 				row := ui.Row(c.Key(fmt.Sprint("cb", i))).Gap(6).Cursor(ui.CursorPointer).Label("前往 " + b.title)

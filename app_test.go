@@ -292,9 +292,7 @@ func TestPanelEditsNode(t *testing.T) {
 	if !n.HasTag("导出") {
 		t.Fatalf("tags %v", n.Tags)
 	}
-	if err := tt.Click("进行中"); err != nil {
-		t.Fatal(err)
-	}
+	clickInPanel(t, tt, "进行中")
 	if n.Task.Status != model.StatusDoing {
 		t.Fatalf("status %v", n.Task.Status)
 	}

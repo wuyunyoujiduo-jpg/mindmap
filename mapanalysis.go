@@ -236,27 +236,25 @@ func (a *app) analyzeMap(path string) {
 func (a *app) mapAnalysisSection(c *ui.Context) {
 	t := c.Theme()
 	an := a.adoptMapMeta(a.path, a.file)
-	ui.Column(c.Key("map-analysis")).Gap(8).Children(func() {
-		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "AI 分析").FontSize(12).Bold().TextColor(t.TextMuted).Grow(1)
-			switch {
-			case a.mapWorking == a.path:
-				ui.Spinner(c)
-				ui.Text(c, "分析中…").FontSize(12).TextColor(t.TextMuted)
-			case a.mapWorking != "":
-				ui.Spinner(c)
-				ui.Text(c, "正在分析「"+mapName(a.mapWorking)+"」").FontSize(12).TextColor(t.TextMuted).NoWrap().MaxWidth(150).Ellipsis("…")
-			case providerKey(a.cfg) != "":
-				label := "分析导图"
-				if an != nil {
-					label = "重新分析"
-				}
-				if ui.Button(c, label).FontSize(12).Padding(2, 10).Disabled(a.mapWorking != "").
-					Tooltip("让 AI 读这张导图，写一句话说明、摘要、分类、标签和检索用的关键词、同义词，方便以后搜索").Clicked() {
-					a.analyzeMap(a.path)
-				}
+	sectionCard(c.Key("map-analysis"), iconSparkle, tilePurple, "AI 分析", func() {
+		switch {
+		case a.mapWorking == a.path:
+			ui.Spinner(c)
+			ui.Text(c, "分析中…").FontSize(12).TextColor(t.TextMuted)
+		case a.mapWorking != "":
+			ui.Spinner(c)
+			ui.Text(c, "正在分析「"+mapName(a.mapWorking)+"」").FontSize(12).TextColor(t.TextMuted).SingleLine().MaxWidth(150)
+		case providerKey(a.cfg) != "":
+			label := "分析导图"
+			if an != nil {
+				label = "重新分析"
 			}
-		})
+			if ui.Button(c, label).FontSize(12).Padding(2, 10).Disabled(a.mapWorking != "").
+				Tooltip("让 AI 读这张导图，写一句话说明、摘要、分类、标签和检索用的关键词、同义词，方便以后搜索").Clicked() {
+				a.analyzeMap(a.path)
+			}
+		}
+	}, func() {
 		if a.mapErr != "" {
 			ui.Text(c, a.mapErr).FontSize(12).TextColor(t.Danger).Wrap()
 		}

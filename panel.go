@@ -49,10 +49,7 @@ func (a *app) panel(c *ui.Context) {
 			case a.panelTab == tabPresent:
 				a.presentPanel(c)
 			default:
-				ui.Column(c).Padding(16, 16, 0).Gap(12).Children(func() {
-					a.mapAnalysisSection(c)
-					ui.Divider(c)
-				})
+				ui.Column(c).Padding(16, 16, 0).Children(func() { a.mapAnalysisSection(c) })
 				a.canvasPanel(c)
 				ui.Column(c).Padding(0, 16, 16).Gap(12).Children(func() {
 					ui.Divider(c)
@@ -85,17 +82,15 @@ func (a *app) nodePanel(c *ui.Context) {
 			}
 
 			note := n.Note
-			ui.Column(c).Gap(6).Children(func() {
-				ui.Row(c).AlignItems(ui.Center).Children(func() {
-					sectionHeader(c, "备注").Grow(1)
-					mode := 0
-					if a.notePreview && n.Note != "" {
-						mode = 1
-					}
-					if ui.Segmented(c, &mode, "编辑", "预览").FontSize(11).Changed() {
-						a.notePreview = mode == 1
-					}
-				})
+			sectionCard(c, iconPencil, tileYellow, "备注", func() {
+				mode := 0
+				if a.notePreview && n.Note != "" {
+					mode = 1
+				}
+				if ui.Segmented(c, &mode, "编辑", "预览").FontSize(11).Changed() {
+					a.notePreview = mode == 1
+				}
+			}, func() {
 				if a.notePreview && n.Note != "" {
 					// The note as Markdown; a double click edits it.
 					box := ui.Box(c.Key("note-preview")).Padding(10, 12).Radius(10).Background(ui.Hex("#f5b942").Alpha(0.1)).FillWidth().
@@ -111,19 +106,21 @@ func (a *app) nodePanel(c *ui.Context) {
 				}
 			})
 
-			a.imageSection(c, n)
-			a.filesSection(c, n)
-			a.linksSection(c, n)
-			a.nodeClipsSection(c, n)
-			a.annotationsSection(c, n)
+			sectionCard(c, iconImage, tilePink, "图片、附件与链接", nil, func() {
+				a.imageSection(c, n)
+				a.filesSection(c, n)
+				a.linksSection(c, n)
+				a.nodeClipsSection(c, n)
+				a.annotationsSection(c, n)
+			})
 
-			ui.Field(c, "标签", func() { a.tagPicker(c, n) })
-			a.measuresSection(c, n)
+			sectionCard(c, iconTag, tileBlue, "标签与度量", nil, func() {
+				ui.Field(c, "标签", func() { a.tagPicker(c, n) })
+				a.measuresSection(c, n)
+			})
 
-			ui.Box(c).Height(1).FillWidth().Background(hairline(t))
-			a.taskEditor(c, n)
+			sectionCard(c, iconCheck, tileGreen, "任务", nil, func() { a.taskEditor(c, n) })
 
-			ui.Box(c).Height(1).FillWidth().Background(hairline(t))
 			ui.Text(c, a.nodeStats(n)).FontSize(textCaption).TextColor(t.TextMuted)
 			if n != a.doc.Root {
 				if ui.Button(c, "删除节点").TextColor(t.Danger).Clicked() {
