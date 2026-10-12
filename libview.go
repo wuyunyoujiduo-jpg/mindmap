@@ -59,9 +59,6 @@ func (a *app) libraryView(c *ui.Context) {
 			if iconTextButton(c, iconSparkle, "AI", "AI 助手", "和 AI 聊资料库里的内容，它会检索相关资料来回答", a.aiOpen).Clicked() {
 				a.aiOpen = !a.aiOpen
 			}
-			if iconButton(c, iconClose, "关闭资料库", "回到导图", 30, true).Clicked() {
-				a.libOpen = false
-			}
 		})
 		ui.Divider(c)
 		a.pluginBanner(c)
@@ -298,7 +295,7 @@ func kindIcon(kind string) icon {
 func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 	t := c.Theme()
 	row := ui.Row(c).Padding(8, 10).Gap(10).Radius(8).Cursor(ui.CursorPointer).Label("资料 " + clip.Label()).
-		Drag(clipDrag{clip.ID}) // onto a folder of the sidebar
+		Drag(fileDrag{Clip: clip.ID}) // onto a folder of the sidebar
 	switch {
 	case a.libSel == clip.ID:
 		row.Background(t.Accent.Alpha(0.14))

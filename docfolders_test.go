@@ -72,3 +72,40 @@ func TestDocumentsInFolders(t *testing.T) {
 		t.Fatal("not taken out")
 	}
 }
+
+// A map, and a document, dragged onto a folder of the sidebar go into it.
+func TestDragIntoFolder(t *testing.T) {
+	a, tt := newTestApp(t)
+	dir := filepath.Join(a.dir, "team")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	clip, err := a.addClipText("季度评价模板", "手动")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.refreshFiles()
+	tt.Frame()
+	drag := func(from, to string) {
+		t.Helper()
+		src, ok1 := tt.Find(from)
+		dst, ok2 := tt.Find(to)
+		if !ok1 || !ok2 {
+			t.Fatalf("no %q or %q", from, to)
+		}
+		tt.Press(src.X+20, src.Y+src.H/2)
+		for i := 1; i <= 10; i++ {
+			tt.Move(src.X+20, src.Y+src.H/2+(dst.Y-src.Y)*float32(i)/10)
+		}
+		tt.Release(dst.X+20, dst.Y+dst.H/2)
+		tt.Frame()
+	}
+	drag("文档 "+clip.Label(), "team")
+	if clip.Folder != "team" {
+		t.Fatalf("document's folder %q", clip.Folder)
+	}
+	drag("使用指南", "team")
+	if filepath.Dir(a.path) != dir {
+		t.Fatalf("map at %q", a.path)
+	}
+}

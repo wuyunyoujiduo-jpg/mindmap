@@ -151,9 +151,6 @@ func (a *app) homeView(c *ui.Context) {
 			if iconTextButton(c, iconSparkle, "AI", "AI 助手", "问问导图和资料里的内容", a.aiOpen).Clicked() {
 				a.aiOpen = !a.aiOpen
 			}
-			if iconButton(c, iconClose, "关闭概览", "回到导图", 30, true).Clicked() {
-				a.libOpen = false
-			}
 		})
 		ui.Scroll(c.Key("home-scroll")).Grow(1).Padding(8, 24, 28).Gap(16).Children(func() {
 			a.homeStats(c, now, maps, clips)

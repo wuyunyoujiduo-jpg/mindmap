@@ -12,8 +12,13 @@ import (
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
 
-// fileDrag is the value a map's row carries while dragged onto a folder.
-type fileDrag struct{ Path string }
+// fileDrag is the value a map's row, or a clip's, carries while dragged
+// onto a folder: one type for both, as an element takes values of one
+// type only (ui.Drop).
+type fileDrag struct {
+	Path string // a map's
+	Clip string // or a clip's ID
+}
 
 // sidebar is the left side: the starred maps, the maps of the folder and
 // its folders, and the tags of the open map.
@@ -262,7 +267,7 @@ func (a *app) fileRow(c *ui.Context, f model.FileInfo, depth int, inFavorites bo
 	current := f.Path == a.path && !a.libOpen
 	fav := slices.Contains(a.cfg.Favorites, f.Path)
 	row := ui.Row(c).Padding(5, 8, 5, 22+float32(depth)*14).Gap(6).Radius(6).AlignItems(ui.Center).
-		Cursor(ui.CursorPointer).Label(f.Name).Drag(fileDrag{f.Path})
+		Cursor(ui.CursorPointer).Label(f.Name).Drag(fileDrag{Path: f.Path})
 	switch {
 	case current:
 		row.Background(t.Accent.Alpha(0.16))

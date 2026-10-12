@@ -15,9 +15,6 @@ import (
 // maps, beside the maps: the sidebar shows them there. A clip says its
 // folder (Clip.Folder); its files stay in the library.
 
-// clipDrag is the value a clip's row carries while dragged onto a folder.
-type clipDrag struct{ ID string }
-
 // folderKey is a folder's path as a clip keeps it.
 func (a *app) folderKey(dir string) string {
 	rel, err := filepath.Rel(a.dir, dir)
@@ -105,7 +102,7 @@ func (a *app) docRow(c *ui.Context, clip *library.Clip, depth int) {
 	t := c.Theme()
 	current := a.libOpen && a.libSel == clip.ID
 	row := ui.Row(c).Padding(5, 8, 5, 22+float32(depth)*14).Gap(6).Radius(6).AlignItems(ui.Center).
-		Cursor(ui.CursorPointer).Label("文档 " + clip.Label()).Drag(clipDrag{clip.ID}).FillWidth().MinWidth(0)
+		Cursor(ui.CursorPointer).Label("文档 " + clip.Label()).Drag(fileDrag{Clip: clip.ID}).FillWidth().MinWidth(0)
 	switch {
 	case current:
 		row.Background(t.Accent.Alpha(0.16))
@@ -129,18 +126,20 @@ func (a *app) docRow(c *ui.Context, clip *library.Clip, depth int) {
 // dropOnFolder takes maps and clips dropped on a row into the folder dir.
 func (a *app) dropOnFolder(row ui.Element, dir string) {
 	if d, ok := ui.Drop[fileDrag](row); ok {
-		a.later(func() { a.moveMap(d.Path, dir) })
-	}
-	if d, ok := ui.Drop[clipDrag](row); ok {
-		a.later(func() { a.moveClipTo(d.ID, dir) })
+		a.later(func() {
+			if d.Clip != "" {
+				a.moveClipTo(d.Clip, dir)
+			} else {
+				a.moveMap(d.Path, dir)
+			}
+		})
 	}
 }
 
 // draggedOver tells whether a map or a clip is dragged over a row.
 func draggedOver(row ui.Element) bool {
-	_, f := ui.DragOver[fileDrag](row)
-	_, c := ui.DragOver[clipDrag](row)
-	return f || c
+	_, over := ui.DragOver[fileDrag](row)
+	return over
 }
 
 // The kinds the list of 资料 shows (app.libKind).
@@ -209,8 +208,14 @@ func (a *app) unfiledRow(c *ui.Context) {
 	case row.Hovered():
 		row.Background(t.Text.Alpha(0.06))
 	}
-	if d, ok := ui.Drop[clipDrag](row); ok {
-		a.later(func() { a.moveClipTo(d.ID, "") })
+	if d, ok := ui.Drop[fileDrag](row); ok {
+		a.later(func() {
+			if d.Clip != "" {
+				a.moveClipTo(d.Clip, "")
+			} else {
+				a.moveMap(d.Path, a.dir) // a map: to the maps folder itself
+			}
+		})
 	}
 	if row.Clicked() {
 		a.folderClosed[unfiledKey] = open
