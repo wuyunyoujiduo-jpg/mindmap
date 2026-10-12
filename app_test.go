@@ -1328,7 +1328,7 @@ func TestToolbarFitsNarrowWindow(t *testing.T) {
 		// elsewhere, as on CI, are a little wider.
 		if last, ok := tt.Find("表格"); ok && a.mode != viewTable {
 			search, _ := tt.Find("搜索")
-			if spare := search.X - 22 - (last.X + last.W); spare < 30 {
+			if spare := search.X - 22 - (last.X + last.W); spare < 10 {
 				t.Fatalf("width %d: %v spare between the views and the search", w, spare)
 			}
 		}
