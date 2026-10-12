@@ -63,6 +63,20 @@ jobs:
       - name: Check the tag matches the version in mygo.json
         if: startsWith(github.ref, 'refs/tags/')
         run: test "$GITHUB_REF_NAME" = "v$(jq -r .version mygo.json)"
+      # A release without the update files reaches no installed app: it
+      # stops here rather than go out so.
+      - name: Check the secrets of auto-updates
+        if: startsWith(github.ref, 'refs/tags/') || inputs.release
+        env:
+          MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
+        run: |
+          missing=""
+          [ -n "$MYGO_UPDATER_PRIVATE_KEY" ] || missing="$missing MYGO_UPDATER_PRIVATE_KEY"
+          [ -n "$RELEASES_TOKEN" ] || missing="$missing RELEASES_TOKEN"
+          if [ -n "$missing" ]; then
+            echo "::error::缺少 secrets:$missing。没有它们，已安装的 App 收不到这次更新（见本文件开头的说明）"
+            exit 1
+          fi
       # With a Developer ID certificate in the repository's secrets, the app
       # is signed and the disk image notarized, so that macOS opens it
       # without asking; without, it is signed ad hoc, as before.
