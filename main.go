@@ -449,6 +449,7 @@ func main() {
 	// "MindMap mcp" serves the maps to AI coding agents on stdin and
 	// stdout, without a window (see internal/mcp).
 	if len(os.Args) > 1 && os.Args[1] == "mcp" {
+		hideFromDock()
 		if err := serveMCP(os.Args[2:]); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
