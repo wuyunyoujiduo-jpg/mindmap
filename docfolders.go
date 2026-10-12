@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -101,6 +102,7 @@ func (a *app) clipFolderMenu(m *ui.Menu, clip *library.Clip) {
 func (a *app) docRow(c *ui.Context, clip *library.Clip, depth int) {
 	t := c.Theme()
 	current := a.libOpen && a.libSel == clip.ID
+	a.sideItems = append(a.sideItems, sideItem{clip: clip.ID})
 	row := ui.Row(c).Padding(5, 8, 5, 22+float32(depth)*14).Gap(6).Radius(6).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).Label("文档 " + clip.Label()).Drag(fileDrag{Clip: clip.ID}).FillWidth().MinWidth(0).
 		Tooltip(clip.Label())
@@ -115,12 +117,13 @@ func (a *app) docRow(c *ui.Context, clip *library.Clip, depth int) {
 		a.later(func() {
 			a.showLibrary()
 			a.libSel, a.libKind, a.libCat, a.libTag, a.libQuery = id, kindAll, "", "", ""
+			a.sideFocus = "side"
 		})
 	}
 	row.ContextMenu(func(m *ui.Menu) { a.clipMenu(m, clip) })
 	row.Children(func() {
 		sideIcon(c, kindIcon(clip.Kind), current)
-		ui.Text(c, clip.Label()).FontSize(13).Grow(1).Shrink(1).MinWidth(0).SingleLine()
+		ui.Text(c, midEllipsis(clip.Label(), a.sidebarWidth-70-float32(depth)*14)).FontSize(13).Grow(1).Shrink(1).MinWidth(0).SingleLine()
 	})
 }
 
@@ -251,3 +254,59 @@ func (a *app) unfiledRow(c *ui.Context) {
 }
 
 var _ = fmt.Sprint
+
+// sideItem is a map or a document of the sidebar's tree, in its order,
+// for the keys.
+type sideItem struct {
+	path string // a map's
+	clip string // or a clip's ID
+}
+
+// sideKeys are the sidebar's keys, as Finder's, while it has the focus
+// (a click in it gives it): the arrows go to the map or document above or
+// below, Return renames a map, Delete moves it to the trash or deletes a
+// document. They act on the list as drawn the frame before.
+func (a *app) sideKeys(list ui.Element) {
+	items := a.sideDrawn
+	at := slices.IndexFunc(items, func(it sideItem) bool {
+		if a.libOpen {
+			return it.clip != "" && it.clip == a.libSel
+		}
+		return it.path != "" && it.path == a.path
+	})
+	open := func(i int) {
+		if i < 0 || i >= len(items) {
+			return
+		}
+		it := items[i]
+		a.later(func() {
+			if it.clip != "" {
+				a.showLibrary()
+				a.libSel, a.libKind, a.libCat, a.libTag, a.libQuery = it.clip, kindAll, "", "", ""
+				return
+			}
+			a.libOpen = false
+			_ = a.open(it.path)
+		})
+	}
+	switch {
+	case list.Shortcut(0, ui.KeyDown):
+		open(at + 1)
+	case list.Shortcut(0, ui.KeyUp):
+		if at < 0 {
+			at = len(items)
+		}
+		open(at - 1)
+	case at < 0:
+	case list.Shortcut(0, ui.KeyEnter):
+		if p := items[at].path; p != "" {
+			a.renaming, a.renameText = p, mapName(p)
+		}
+	case list.Shortcut(0, ui.KeyBackspace), list.Shortcut(ui.Cmd, ui.KeyBackspace), list.Shortcut(0, ui.KeyDelete):
+		if p := items[at].path; p != "" {
+			a.deletePath, a.confirmDelete = p, true
+		} else {
+			a.libSel, a.libConfirm = items[at].clip, true
+		}
+	}
+}

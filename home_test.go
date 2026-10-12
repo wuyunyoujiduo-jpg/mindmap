@@ -2,8 +2,11 @@ package main
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/egoist/mygo/ui"
 )
 
 func TestHome(t *testing.T) {
@@ -49,5 +52,70 @@ func TestHome(t *testing.T) {
 	tt.Frame()
 	if a.libHome || a.libCat != "" {
 		t.Fatal("显示全部 did not show the list")
+	}
+}
+
+// A day of 概览's dots lists what it holds; the sidebar's keys go through
+// its maps and documents; dark, the pages read as well.
+func TestHomeDaysKeysAndDark(t *testing.T) {
+	a, tt := newTestApp(t)
+	for i := range 3 {
+		clip, err := a.addClipText(fmt.Sprintf("第 %d 条", i), "手动")
+		if err != nil {
+			t.Fatal(err)
+		}
+		clip.Created = testNow.Add(-time.Duration(i) * 24 * time.Hour)
+	}
+	a.showLibrary()
+	a.libHome = true
+	tt.Frame()
+	day := testNow.Add(-24 * time.Hour)
+	if err := tt.Click(fmt.Sprintf("%s：编辑导图 0 张 · 收藏资料 1 条", day.Format("1月2日"))); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if hits := a.libHits(); a.libHome || len(hits) != 1 || hits[0].Clip.Label() != "第 1 条" {
+		t.Fatalf("the day's list: home %v, %d", a.libHome, len(hits))
+	}
+	if !tt.HasText(day.Format("1月2日") + " ✕") {
+		t.Fatal("no chip of the day")
+	}
+
+	// The sidebar's keys: down from the map to the next item.
+	a.unfiledOpen = true
+	a.libOpen = false
+	tt.Frame()
+	if err := tt.Click("使用指南"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Key(0, ui.KeyUp)
+	tt.Frame()
+	if !a.libOpen || a.libSel == "" {
+		t.Fatalf("up from the map: open %v, %q", a.libOpen, a.libSel)
+	}
+	tt.Key(0, ui.KeyBackspace)
+	tt.Frame()
+	if !a.libConfirm {
+		t.Fatal("Delete did not ask to delete the document")
+	}
+	a.libConfirm = false
+
+	tt.SetDark(true)
+	a.libOpen, a.libHome = true, true
+	tt.Frame()
+	snapshot(t, tt, "home-dark")
+	a.libHome = false
+	tt.Frame()
+	snapshot(t, tt, "library-dark")
+}
+
+func TestMidEllipsis(t *testing.T) {
+	if s := midEllipsis("短名字", 200); s != "短名字" {
+		t.Fatalf("short %q", s)
+	}
+	s := midEllipsis("资料 6：关于工作的一些记录和后续安排", 120)
+	if []rune(s)[0] != '资' || !strings.HasSuffix(s, "安排") || !strings.Contains(s, "…") {
+		t.Fatalf("cut %q", s)
 	}
 }

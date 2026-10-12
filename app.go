@@ -235,13 +235,17 @@ type app struct {
 	libOpen       bool   // the main area shows the library
 	libSel        string // the clip shown
 	libQuery      string
-	libKind       int    // kindAll, kindMaps, kindDocs or kindLinks
-	libHome       bool   // 概览 is shown, not the list
-	unfiledOpen   bool   // 未归档 of the sidebar is open
-	panelOff      bool   // the right panel is hidden
-	libCat        string // the category shown, "" all
-	libTag        string // the tag shown, "" all
-	libDraft      string // what is typed to keep
+	libKind       int        // kindAll, kindMaps, kindDocs or kindLinks
+	libHome       bool       // 概览 is shown, not the list
+	libDay        time.Time  // the day the list shows, from 概览's dots; zero for any
+	unfiledOpen   bool       // 未归档 of the sidebar is open
+	panelOff      bool       // the right panel is hidden
+	sideItems     []sideItem // the sidebar's maps and documents, in order
+	sideDrawn     []sideItem // as the frame before drew them
+	sideFocus     string     // "side" while the sidebar has the keys
+	libCat        string     // the category shown, "" all
+	libTag        string     // the tag shown, "" all
+	libDraft      string     // what is typed to keep
 	libQueue      []clipJob
 	libWorking    string            // the clip being read or sorted out
 	libStatus     map[string]string // what is happening to clips, or went wrong

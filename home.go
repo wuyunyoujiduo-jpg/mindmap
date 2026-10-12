@@ -164,7 +164,7 @@ func (a *app) homeView(c *ui.Context) {
 // openList shows the list of 资料, of a kind.
 func (a *app) openList(kind int, cat string) {
 	a.showLibrary()
-	a.libKind, a.libCat, a.libTag, a.libQuery = kind, cat, "", ""
+	a.libKind, a.libCat, a.libTag, a.libQuery, a.libDay = kind, cat, "", "", time.Time{}
 }
 
 // homeStats are the cards of large numbers.
@@ -273,7 +273,10 @@ func (a *app) homeActivity(c *ui.Context, now time.Time, maps, clips []*library.
 				ui.Text(c, fmt.Sprintf("每点 %d 条", per)).FontSize(12).TextColor(t.TextMuted)
 			}
 		})
-		ui.Box(c).Height(130).FillWidth().Radius(10).Background(tileOrange.Alpha(0.06)).
+		// The dots drawn under a column a day, which says what it holds
+		// when hovered and lists it when clicked.
+		chart := ui.Row(c.Key("home-dots")).Height(130).FillWidth().Radius(10).Padding(12, 14).
+			Background(tileOrange.Alpha(0.06)).AlignItems(ui.Stretch).
 			Draw(func(p *ui.Painter, r ui.Rect) {
 				padX, padY := float32(14), float32(12)
 				w, h := r.W-2*padX, r.H-2*padY
@@ -296,6 +299,23 @@ func (a *app) homeActivity(c *ui.Context, now time.Time, maps, clips []*library.
 					}
 				}
 			})
+		chart.Children(func() {
+			for i := range homeDays {
+				d := now.AddDate(0, 0, i-(homeDays-1))
+				tip := fmt.Sprintf("%s：编辑导图 %d 张 · 收藏资料 %d 条", d.Format("1月2日"), mapsOn[i], clipsOn[i])
+				col := ui.Box(c.Key(fmt.Sprint("day", i))).Grow(1).Basis(0).Radius(4).Cursor(ui.CursorPointer).
+					Tooltip(tip).Label(tip)
+				if col.Hovered() {
+					col.Background(t.Text.Alpha(0.06))
+				}
+				if col.Clicked() && mapsOn[i]+clipsOn[i] > 0 {
+					a.later(func() {
+						a.openList(kindAll, "")
+						a.libDay = today(d)
+					})
+				}
+			}
+		})
 		ui.Row(c).Children(func() {
 			ui.Text(c, "30 天前").FontSize(11).TextColor(t.TextMuted)
 			ui.Spacer(c)
@@ -398,4 +418,79 @@ func sectionCard(c *ui.Context, ic icon, col ui.Color, title string, right func(
 		})
 		body()
 	})
+}
+
+// dotRow is a row of the sidebar with a small dot of a color, as Finder's
+// tags: for the categories, many, which tiles would make heavy.
+func dotRow(c *ui.Context, col ui.Color, label, count string, current bool) ui.Element {
+	t := c.Theme()
+	r := ui.Row(c).Padding(5, 8, 5, 14).Gap(10).Radius(8).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(label).FillWidth()
+	switch {
+	case current:
+		r.Background(t.Accent.Alpha(0.16))
+	case r.Hovered():
+		r.Background(t.Text.Alpha(0.06))
+	}
+	r.Children(func() {
+		ui.Box(c).Size(10, 10).Radius(5).Background(col).Shrink(0).Margin(0, 4, 0, 0)
+		text := ui.Text(c, label).FontSize(13).Grow(1).Shrink(1).MinWidth(0).SingleLine()
+		if current {
+			text.Bold()
+		}
+		if count != "" {
+			ui.Text(c, count).FontSize(12).TextColor(t.TextMuted).Shrink(0)
+		}
+	})
+	return r
+}
+
+// midEllipsis cuts a name too long for width points in its middle,
+// keeping its end, where names that begin alike differ: "资料 6：关于…记录".
+func midEllipsis(s string, width float32) string {
+	r := []rune(s)
+	w := func(r rune) float32 {
+		if r < 0x2E80 {
+			return 0.55
+		}
+		return 1
+	}
+	total := float32(0)
+	for _, x := range r {
+		total += w(x)
+	}
+	room := width / 13 // ems of 13 pt
+	if total <= room || room < 4 {
+		return s
+	}
+	keep := room - 1 // for the ellipsis
+	var head, tail []rune
+	hw, tw := float32(0), float32(0)
+	i, j := 0, len(r)-1
+	for i <= j {
+		if hw <= tw {
+			if hw+w(r[i]) > keep*0.55 {
+				break
+			}
+			hw += w(r[i])
+			head = append(head, r[i])
+			i++
+		} else {
+			if tw+w(r[j]) > keep*0.45 {
+				break
+			}
+			tw += w(r[j])
+			tail = append([]rune{r[j]}, tail...)
+			j--
+		}
+	}
+	return string(head) + "…" + string(tail)
+}
+
+// dayOf is the day a clip counts on in 概览's dots: a map's last change,
+// a clip's keeping.
+func dayOf(c *library.Clip) time.Time {
+	if c.Kind == kindMap {
+		return c.Updated
+	}
+	return c.Created
 }

@@ -5,6 +5,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
@@ -119,7 +120,7 @@ func (a *app) libHits() []library.Hit {
 	e := a.embedder()
 	q := strings.TrimSpace(a.libQuery)
 	a.mapClips()
-	k := libHitsKey{a.libQuery, a.libKind, a.libCat, a.libTag, a.lib, a.lib.Version, e.Name(), a.qvecs[q] != nil, a.mapClipsSig}
+	k := libHitsKey{a.libQuery, a.libKind, a.libCat, a.libTag, a.lib, a.lib.Version, e.Name(), a.qvecs[q] != nil, a.mapClipsSig, a.libDay}
 	if a.libHitsFor == k {
 		return a.libHitsList
 	}
@@ -137,12 +138,15 @@ type libHitsKey struct {
 	model    string
 	vector   bool
 	maps     string // the maps' state (mapClips)
+	day      time.Time
 }
 
 func (a *app) searchClips() []library.Hit {
 	keep := func(c *library.Clip) bool {
 		switch {
 		case !ofKind(c, a.libKind):
+			return false
+		case !a.libDay.IsZero() && !sameDay(dayOf(c).In(a.libDay.Location()), a.libDay):
 			return false
 		case c.Kind == kindMap && (a.libCat == "-" || a.libCat == "★"):
 			return false
@@ -276,6 +280,9 @@ func (a *app) clipFilters(c *ui.Context) {
 		}
 		if k := len(l.Unorganized()); k > 0 && chip("-", fmt.Sprintf("未整理 %d", k), a.libCat == "-") {
 			a.libCat = "-"
+		}
+		if !a.libDay.IsZero() && tagChip(c.Key("lib-day"), "day", a.libDay.Format("1月2日")+" ✕", true, 12).Tooltip("不再只看这一天").Clicked() {
+			a.libDay = time.Time{}
 		}
 		if a.libTag != "" && tagChip(c.Key("lib-tag"), a.libTag, "#"+a.libTag+" ✕", true, 12).Tooltip("不再按这个标签筛选").Clicked() {
 			a.libTag = ""
@@ -713,7 +720,7 @@ func (a *app) categoryList(c *ui.Context) {
 	a.section(c, "分类", &a.catsOpen, "", func() {
 		for _, k := range cats {
 			name := k.Name
-			r := navRow(c.Key("cat-row:"+name), iconTag, catColor(name), name, fmt.Sprint(k.N), a.libOpen && !a.libHome && a.libCat == name)
+			r := dotRow(c.Key("cat-row:"+name), catColor(name), name, fmt.Sprint(k.N), a.libOpen && !a.libHome && a.libCat == name)
 			r.Label("分类 " + name)
 			if r.Clicked() {
 				a.later(func() { a.openList(kindAll, name) })

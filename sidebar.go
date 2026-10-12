@@ -75,14 +75,20 @@ func (a *app) sidebar(c *ui.Context) {
 			ui.Text(c, filepath.Base(a.dir)).FontSize(textBody).Bold().Grow(1).Shrink(1).MinWidth(0).SingleLine().PassThrough()
 			ui.Text(c, "⌄").FontSize(textSmall).TextColor(t.TextMuted).PassThrough()
 		})
-		ui.Scroll(c.Key("sidebar")).Grow(1).Padding(0, 6, 12).Gap(2).Children(func() {
-			a.libraryRow(c) // all the material: maps and documents
-			a.inboxRow(c)
-			a.favorites(c)
-			a.section(c, "文件夹", &a.filesOpen, a.dir, func() {
-				a.folderContents(c, a.tree, 0)
+		a.sideDrawn, a.sideItems = a.sideItems, nil // the keys go by the list drawn
+		ui.Scroll(c.Key("sidebar")).Grow(1).Children(func() {
+			// The keys on a column in the scroll, which takes the arrows first.
+			list := ui.Column(c.Key("side-list")).Padding(0, 6, 12).Gap(2).FillWidth().Label("侧栏").FocusBind(&a.sideFocus, "side")
+			a.sideKeys(list)
+			list.Children(func() {
+				a.libraryRow(c) // all the material: maps and documents
+				a.inboxRow(c)
+				a.favorites(c)
+				a.section(c, "文件夹", &a.filesOpen, a.dir, func() {
+					a.folderContents(c, a.tree, 0)
+				})
+				a.categoryList(c)
 			})
-			a.categoryList(c)
 		})
 		ui.Row(c.Key("side-foot")).Padding(6, 8).Gap(2).BorderWidth(1, 0, 0, 0).BorderColor(hairline(t)).Children(func() {
 			ui.Spacer(c)
@@ -251,6 +257,9 @@ func (a *app) fileRow(c *ui.Context, f model.FileInfo, depth int, inFavorites bo
 	t := c.Theme()
 	current := f.Path == a.path && !a.libOpen
 	fav := slices.Contains(a.cfg.Favorites, f.Path)
+	if !inFavorites {
+		a.sideItems = append(a.sideItems, sideItem{path: f.Path})
+	}
 	row := ui.Row(c).Padding(5, 8, 5, 22+float32(depth)*14).Gap(6).Radius(6).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).Label(f.Name).Drag(fileDrag{Path: f.Path})
 	switch {
@@ -259,9 +268,14 @@ func (a *app) fileRow(c *ui.Context, f model.FileInfo, depth int, inFavorites bo
 	case row.Hovered():
 		row.Background(t.Text.Alpha(0.06))
 	}
-	if row.Pressed() && !current && a.renaming != f.Path {
+	if row.Pressed() && a.renaming != f.Path {
 		path := f.Path
-		a.later(func() { _ = a.open(path) })
+		a.later(func() {
+			if !current {
+				_ = a.open(path)
+			}
+			a.sideFocus = "side" // its keys go to the sidebar
+		})
 	}
 	path := f.Path
 	row.ContextMenu(func(m *ui.Menu) {
@@ -302,7 +316,7 @@ func (a *app) fileRow(c *ui.Context, f model.FileInfo, depth int, inFavorites bo
 			return
 		}
 		sideIcon(c, iconMap, current)
-		text := ui.Text(c, f.Name).FontSize(13).Grow(1).SingleLine()
+		text := ui.Text(c, midEllipsis(f.Name, a.sidebarWidth-90-float32(depth)*14)).FontSize(13).Grow(1).Shrink(1).MinWidth(0).SingleLine()
 		if current {
 			text.Bold()
 		}
