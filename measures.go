@@ -147,7 +147,7 @@ func (a *app) tableView(c *ui.Context) {
 					FontSize(textBody).TextColor(t.TextMuted).Wrap().MaxWidth(420)
 				ui.Row(c).Gap(8).Children(func() {
 					for _, s := range measureSuggestions {
-						if ui.Button(c, "+ "+s).Label("添加度量 "+s).Clicked() {
+						if ui.Button(c, "+ "+s).Label("添加度量 " + s).Clicked() {
 							name := s
 							a.later(func() { a.addMeasure(name) })
 						}
@@ -203,7 +203,7 @@ func (a *app) tableView(c *ui.Context) {
 						}
 					})
 					for _, m := range measures {
-						ui.Column(c.Key("c:"+m)).Width(tableCol).Children(func() {
+						ui.Column(c.Key("c:" + m)).Width(tableCol).Children(func() {
 							if len(n.Children) > 0 && n.Measured(m) {
 								// A total, with the node's own value under it to edit.
 								ui.Text(c, model.FormatValue(n.Total(m))).FontSize(textBody).Bold().Padding(0, 6).

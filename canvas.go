@@ -853,7 +853,7 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 			})
 		}
 		if p.measures != "" {
-			ui.Box(c.Key("measures")).Padding(1*z, 5*z).Radius(4*z).Background(muted.Alpha(0.12)).PassThrough().
+			ui.Box(c.Key("measures")).Padding(1*z, 5*z).Radius(4 * z).Background(muted.Alpha(0.12)).PassThrough().
 				Children(func() { ui.Text(c, p.measures).FontSize(markSize * z).TextColor(muted).NoWrap() })
 		}
 		if p.due != "" {
