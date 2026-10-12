@@ -34,7 +34,7 @@ func TestLibraryKeepsAndOrganizes(t *testing.T) {
 	a.sendAI = fake.send
 	a.cfg.AIKey = "sk-ant-test"
 
-	if err := tt.Click("资料库"); err != nil {
+	if err := tt.Click("资料"); err != nil {
 		t.Fatal(err)
 	}
 	if !a.libOpen || !tt.HasText("0 条") {

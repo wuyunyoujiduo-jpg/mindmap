@@ -68,10 +68,11 @@ func (a *app) sidebar(c *ui.Context) {
 			ui.Text(c, "⌄").FontSize(textSmall).TextColor(t.TextMuted).PassThrough()
 		})
 		ui.Scroll(c.Key("sidebar")).Grow(1).Padding(0, 6, 12).Gap(2).Children(func() {
-			a.libraryRow(c)
+			a.libraryRow(c) // all the material: maps and clips
 			a.inboxRow(c)
 			a.favorites(c)
-			a.section(c, "导图", &a.filesOpen, a.dir, func() {
+			a.categoryList(c)
+			a.section(c, "文件夹", &a.filesOpen, a.dir, func() {
 				a.folderContents(c, a.tree, 0)
 			})
 			if a.file != nil {

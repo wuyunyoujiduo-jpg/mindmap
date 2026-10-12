@@ -291,6 +291,17 @@ func (l *Library) Categories() []Count {
 	})
 }
 
+// CategoriesOf are the categories of clips, the most used first, with
+// counts.
+func CategoriesOf(clips []*Clip) []Count {
+	return counts(clips, func(c *Clip) []string {
+		if c.Category == "" {
+			return nil
+		}
+		return []string{c.Category}
+	})
+}
+
 // Tags are the tags in use, the most used first, with counts.
 func (l *Library) Tags() []Count {
 	return counts(l.Clips, func(c *Clip) []string { return c.Tags })

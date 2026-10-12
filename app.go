@@ -323,6 +323,7 @@ type app struct {
 	panelWidth    float32
 	resizingPanel bool
 	filesOpen     bool
+	catsOpen      bool
 	tagsOpen      bool
 	favoritesOpen bool
 	folderClosed  map[string]bool // folders of the sidebar shown closed
@@ -354,6 +355,7 @@ func newApp(plat platform, cfg config) *app {
 		sidebarWidth:  220,
 		panelWidth:    300,
 		filesOpen:     true,
+		catsOpen:      true,
 		tagsOpen:      true,
 		favoritesOpen: true,
 		folderClosed:  map[string]bool{},
