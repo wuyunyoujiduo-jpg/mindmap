@@ -75,9 +75,6 @@ func (a *app) sidebar(c *ui.Context) {
 				a.folderContents(c, a.tree, 0)
 			})
 			a.categoryList(c)
-			if a.file != nil && !a.libOpen {
-				a.tagList(c) // the open map's
-			}
 		})
 		ui.Row(c.Key("side-foot")).Padding(6, 8).Gap(2).BorderWidth(1, 0, 0, 0).BorderColor(hairline(t)).Children(func() {
 			sideFootButton(c, "＋ 新建", "新建导图、文档或文件夹").Shrink(0).Menu(func(m *ui.Menu) {
@@ -461,7 +458,7 @@ func (a *app) tagList(c *ui.Context) {
 	if len(tags) > 0 {
 		title = fmt.Sprintf("本导图标签 %d", len(tags))
 	}
-	a.section(c, title, &a.tagsOpen, "", func() {
+	sectionCard(c, iconTag, tileBlue, title, nil, func() {
 		if len(tags) > 8 {
 			ui.TextInput(c.Key("tag-query"), &a.tagQuery).Placeholder("筛选标签").Margin(2, 6, 4)
 		}
@@ -511,7 +508,7 @@ func (a *app) tagRow(c *ui.Context, tag string, count int) {
 	}
 	active := a.tagFilter == tag
 	row := ui.Row(c).Padding(4, 8, 4, 12).Gap(8).Radius(6).AlignItems(ui.Center).
-		Cursor(ui.CursorPointer).Label(tag).Tooltip("点击筛选，右键重命名、改颜色或删除")
+		Cursor(ui.CursorPointer).Label("筛选标签 "+tag).Tooltip("点击筛选，右键重命名、改颜色或删除")
 	switch {
 	case active:
 		row.Background(tagColor(tag).Alpha(0.18))

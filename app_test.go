@@ -387,7 +387,9 @@ func TestBoardAndAgenda(t *testing.T) {
 
 func TestTagFilterAndSearch(t *testing.T) {
 	a, tt := newTestApp(t)
-	if err := tt.Click("核心"); err != nil { // the sidebar's row comes first
+	a.panelTab = tabCanvas // the map's tags are there
+	tt.Frame()
+	if err := tt.Click("筛选标签 核心"); err != nil {
 		t.Fatal(err)
 	}
 	if a.tagFilter != "核心" {
@@ -1005,9 +1007,10 @@ func TestSidebarFoldersAndFavorites(t *testing.T) {
 			n.Tags = []string{fmt.Sprintf("标签%02d", i)}
 		}
 	})
+	a.panelTab = tabCanvas // the map's tags are there
 	tt.Frame()
 	snapshot(t, tt, "sidebar")
-	if !tt.HasText("标签 17") { // the guide's 5 and these 12
+	if !tt.HasText("本导图标签 17") { // the guide's 5 and these 12
 		t.Fatalf("texts %q", tt.Texts())
 	}
 	if got := filterTags(a.file.AllTags(), "标签1"); !slices.Equal(got, []string{"标签10", "标签11"}) {
@@ -1647,7 +1650,9 @@ func TestGlobalTags(t *testing.T) {
 	if a.libraryIndex("核心") < 0 {
 		t.Fatalf("library %v", a.cfg.Tags)
 	}
-	// A tag made in the sidebar is in the library before any node has it.
+	// A tag made in the map's tags is in the library before any node has it.
+	a.panelTab = tabCanvas
+	tt.Frame()
 	if err := tt.Click("＋ 新建标签"); err != nil {
 		t.Fatal(err)
 	}
@@ -1659,6 +1664,7 @@ func TestGlobalTags(t *testing.T) {
 	tt.Key(0, ui.KeyEscape)
 
 	// The node panel puts it on with a click, and takes it off.
+	a.panelTab = tabNode
 	if err := clickNode(t, tt, a, "支持导出图片"); err != nil {
 		t.Fatal(err)
 	}

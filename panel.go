@@ -49,7 +49,10 @@ func (a *app) panel(c *ui.Context) {
 			case a.panelTab == tabPresent:
 				a.presentPanel(c)
 			default:
-				ui.Column(c).Padding(16, 16, 0).Children(func() { a.mapAnalysisSection(c) })
+				ui.Column(c).Padding(16, 16, 0).Gap(12).Children(func() {
+					a.mapAnalysisSection(c)
+					a.tagList(c) // the map's tags, which filter its nodes
+				})
 				a.canvasPanel(c)
 				ui.Column(c).Padding(0, 16, 16).Gap(12).Children(func() {
 					ui.Divider(c)

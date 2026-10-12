@@ -30,7 +30,7 @@ func TestDocumentsInFolders(t *testing.T) {
 		t.Fatalf("folder %q", clip.Folder)
 	}
 	tt.Frame()
-	if !tt.HasText(clip.Label()) || !tt.HasText("本导图标签 5") {
+	if !tt.HasText(clip.Label()) || tt.HasText("本导图标签 5") { // the map's tags are in the panel
 		t.Fatalf("sidebar %q", tt.Texts())
 	}
 	snapshot(t, tt, "sidebar-docs")
