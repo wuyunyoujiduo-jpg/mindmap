@@ -393,15 +393,24 @@ func (a *app) canvasArea(c *ui.Context) {
 			}
 			return col
 		}
-		a.drawBoundaries(p, r, shown, rect.X+cam.X, rect.Y+cam.Y, z, color)
 		view := rect
 		if exporting {
 			view = ui.Rect{} // all of it
 		}
-		drawEdges(p, r, a.doc.Structure, rect.X+cam.X, rect.Y+cam.Y, z, lk.line, view, color)
-		a.drawSummaries(p, r, shown, rect.X+cam.X, rect.Y+cam.Y, z, color)
-		a.drawDependencies(p, r, rect.X+cam.X, rect.Y+cam.Y, z)
-		a.drawRelations(p, r, rect.X+cam.X, rect.Y+cam.Y, z, ui.Hex("#6366f1"))
+		lines := func() {
+			a.drawBoundaries(p, r, shown, rect.X+cam.X, rect.Y+cam.Y, z, color)
+			drawEdges(p, r, a.doc.Structure, rect.X+cam.X, rect.Y+cam.Y, z, lk.line, view, color)
+			a.drawSummaries(p, r, shown, rect.X+cam.X, rect.Y+cam.Y, z, color)
+			a.drawDependencies(p, r, rect.X+cam.X, rect.Y+cam.Y, z)
+			a.drawRelations(p, r, rect.X+cam.X, rect.Y+cam.Y, z, ui.Hex("#6366f1"))
+		}
+		if exporting {
+			lines()
+		} else {
+			// Within the canvas: a line running off it would cross the
+			// toolbar.
+			p.Clip(rect, 0, lines)
+		}
 	})
 	cv.Children(func() {
 		floating := a.floatingTree()
@@ -451,6 +460,7 @@ func (a *app) canvasArea(c *ui.Context) {
 			if iconButton(c, iconTarget, "回到中心", "回到中心 ⌘⇧0", 30, true).Clicked() {
 				a.recenter()
 			}
+			iconButton(c, iconLevels, "层级", "折叠 / 展开到第几层", 30, true).Menu(a.levelMenu)
 			iconButton(c, iconDownload, "导出", "导出图片、Markdown、XMind…", 30, true).Menu(a.exportMenu)
 		})
 	})

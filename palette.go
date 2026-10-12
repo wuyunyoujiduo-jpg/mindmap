@@ -67,6 +67,7 @@ func (a *app) commands() []command {
 		{"粘贴为子节点", "⌘V", func() { a.paste() }, hasDoc},
 		{"聚焦所选分支", "⌥↩", func() { a.focusOn(a.selected) }, hasDoc},
 		{"退出聚焦", "Esc", func() { a.focusOn("") }, func() bool { return a.focusNode() != nil }},
+		{"全部折叠（只看中心主题）", "", a.foldAll, hasDoc},
 		{"全部展开", "⌥0", func() { a.expandTo(0) }, hasDoc},
 		{"展开到第 1 层", "⌥1", func() { a.expandTo(1) }, hasDoc},
 		{"展开到第 2 层", "⌥2", func() { a.expandTo(2) }, hasDoc},

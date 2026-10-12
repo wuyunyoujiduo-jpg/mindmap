@@ -43,6 +43,7 @@ const (
 	iconClip     // a paperclip: attach files
 	iconCategory // a category: four squares
 	iconTag      // a tag: a label with a hole
+	iconLevels   // levels shown: an outline, each row further in
 )
 
 // glyph is an icon drawn in a box of the given side, as a piece of text.
@@ -146,6 +147,12 @@ func drawIcon(p *ui.Painter, r ui.Rect, s float32, ic icon, col ui.Color) {
 		p.StrokePath(roundedRect(cx-h*0.85, cy-h*0.65, h*1.7, h*1.3, h*0.2), w, col)
 		p.StrokePath(new(ui.Path).MoveTo(cx-h*0.85, cy+h*0.1).LineTo(cx-h*0.35, cy+h*0.1).LineTo(cx-h*0.2, cy+h*0.35).
 			LineTo(cx+h*0.2, cy+h*0.35).LineTo(cx+h*0.35, cy+h*0.1).LineTo(cx+h*0.85, cy+h*0.1), w, col)
+	case iconLevels: // an outline, each row further in
+		for i, dy := range []float32{-0.6, 0, 0.6} {
+			x := cx - h*0.8 + float32(i)*h*0.4
+			p.FillPath(new(ui.Path).Circle(x, cy+dy*h, h*0.13), col)
+			p.Line(x+h*0.3, cy+dy*h, cx+h*0.85, cy+dy*h, w, col)
+		}
 	case iconMap: // a node with three branches
 		p.FillPath(new(ui.Path).Circle(cx-h*0.45, cy, h*0.28), col)
 		for _, dy := range []float32{-0.6, 0, 0.6} {

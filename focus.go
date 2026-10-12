@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -388,6 +389,36 @@ func (a *app) expandTo(depth int) {
 			break
 		}
 	}
+}
+
+// levelMenu folds the map to a level, or opens it all (⌥1–9, ⌥0).
+func (a *app) levelMenu(m *ui.Menu) {
+	if m.Item("全部折叠（只看中心主题）").Chosen() {
+		a.later(a.foldAll)
+	}
+	for i := 1; i <= 4; i++ {
+		if m.Item(fmt.Sprintf("展开到第 %d 层", i)).Shortcut(ui.Alt, ui.Key0+ui.Key(i)).Chosen() {
+			a.later(func() { a.expandTo(i) })
+		}
+	}
+	if m.Item("全部展开").Shortcut(ui.Alt, ui.Key0).Chosen() {
+		a.later(func() { a.expandTo(0) })
+	}
+}
+
+// foldAll folds the map to its center topic.
+func (a *app) foldAll() {
+	if a.doc == nil {
+		return
+	}
+	d := a.shownDoc()
+	a.mutate("", func() {
+		d.ExpandTo(1)
+		d.Root.Collapsed = len(d.Root.Children) > 0
+	})
+	a.cam().placed = false
+	a.multi = nil
+	a.selected = d.Root.ID
 }
 
 // setCollapsedBelow opens or folds every node under one.

@@ -574,6 +574,7 @@ func main() {
 				item("聚焦所选分支", "Alt+Enter", func() { a.focusOn(a.selected) }),
 				item("退出聚焦", "", func() { a.focusOn("") }),
 				mygo.Separator(),
+				item("全部折叠", "", func() { a.foldAll() }),
 				item("全部展开", "Alt+0", func() { a.expandTo(0) }),
 				item("展开到第 1 层", "Alt+1", func() { a.expandTo(1) }),
 				item("展开到第 2 层", "Alt+2", func() { a.expandTo(2) }),
