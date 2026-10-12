@@ -59,6 +59,12 @@ type dsRequest struct {
 	Tools     []dsTool    `json:"tools,omitempty"`
 	MaxTokens int         `json:"max_tokens,omitempty"`
 	Stream    bool        `json:"stream"`
+	// ResponseFormat asks for a JSON object: {"type": "json_object"}.
+	ResponseFormat *dsFormat `json:"response_format,omitempty"`
+}
+
+type dsFormat struct {
+	Type string `json:"type"`
 }
 
 type dsResponse struct {

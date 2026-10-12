@@ -302,3 +302,28 @@ func TestScreenshotIntoLibrary(t *testing.T) {
 		t.Fatalf("clips %d notes %v", len(a.lib.Clips), plat.notes)
 	}
 }
+
+// DeepSeek's thinking models, as V4 Pro, are given room to think and asked
+// for JSON; an answer cut short says so.
+func TestOrganizeWithDeepSeek(t *testing.T) {
+	var got dsRequest
+	reply := `{"choices":[{"message":{"role":"assistant","content":"{\"title\":\"标题\",\"category\":\"技术\"}"},"finish_reason":"stop"}]}`
+	send := func(_ context.Context, _ config, req dsRequest, _ func(string)) (*dsResponse, error) {
+		got = req
+		var r dsResponse
+		err := json.Unmarshal([]byte(reply), &r)
+		return &r, err
+	}
+	cfg := config{AIProvider: providerDeepSeek, DSModel: "deepseek-v4-pro"}
+	o, err := askOrganize(context.Background(), cfg, nil, send, "整理", nil, "")
+	if err != nil || o.Title != "标题" {
+		t.Fatalf("organized %+v, %v", o, err)
+	}
+	if got.ResponseFormat == nil || got.ResponseFormat.Type != "json_object" || got.MaxTokens < 8000 {
+		t.Fatalf("request %+v", got)
+	}
+	reply = `{"choices":[{"message":{"role":"assistant","content":"","reasoning_content":"想了很久"},"finish_reason":"length"}]}`
+	if _, err := askOrganize(context.Background(), cfg, nil, send, "整理", nil, ""); err == nil || strings.HasPrefix(aiError(err), "网络错误") {
+		t.Fatalf("cut short: %v", err)
+	}
+}

@@ -619,8 +619,17 @@ func aiError(err error) string {
 	if errors.Is(err, context.Canceled) {
 		return "已停止。"
 	}
+	var plain plainError
+	if errors.As(err, &plain) {
+		return string(plain)
+	}
 	return "网络错误：" + err.Error()
 }
+
+// plainError is an error shown as it is: not of the network.
+type plainError string
+
+func (e plainError) Error() string { return string(e) }
 
 // answerProposal applies or discards the proposal of message i, and
 // prepares the tool result the next request starts with.

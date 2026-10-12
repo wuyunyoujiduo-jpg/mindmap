@@ -454,13 +454,17 @@ func cmpOr(s, def string) string {
 func askOrganize(ctx context.Context, cfg config, send aiSender, sendDS deepseekSender, prompt string, image []byte, file string) (*clipOrganized, error) {
 	var text string
 	if cfg.AIProvider == providerDeepSeek {
-		resp, err := sendDS(ctx, cfg, dsRequest{Model: deepseekModel(cfg), MaxTokens: 2000, Messages: []dsMessage{
+		// Room for the thinking of the models that think first, as V4 Pro.
+		resp, err := sendDS(ctx, cfg, dsRequest{Model: deepseekModel(cfg), MaxTokens: 16000, Messages: []dsMessage{
 			{Role: "system", Content: organizeSystem}, {Role: "user", Content: prompt},
-		}}, nil)
+		}, ResponseFormat: &dsFormat{Type: "json_object"}}, nil)
 		if err != nil {
 			return nil, err
 		}
 		text = resp.Choices[0].Message.Content
+		if strings.TrimSpace(text) == "" && resp.Choices[0].FinishReason == "length" {
+			return nil, plainError("回答超出长度，没有写完，请重试或换用 Flash 模型")
+		}
 	} else {
 		var blocks []anthropic.BetaContentBlockParamUnion
 		if mt := imageMediaType(file); len(image) > 0 && mt != "" {
@@ -495,11 +499,11 @@ func askOrganize(ctx context.Context, cfg config, send aiSender, sendDS deepseek
 func parseOrganized(text string) (*clipOrganized, error) {
 	i, j := strings.Index(text, "{"), strings.LastIndex(text, "}")
 	if i < 0 || j < i {
-		return nil, errors.New("AI 没有按格式回答")
+		return nil, plainError("AI 没有按格式回答，请重试")
 	}
 	var o clipOrganized
 	if err := json.Unmarshal([]byte(text[i:j+1]), &o); err != nil {
-		return nil, errors.New("AI 的回答无法解析")
+		return nil, plainError("AI 的回答无法解析，请重试")
 	}
 	return &o, nil
 }
