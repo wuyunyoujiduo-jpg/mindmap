@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/egoist/mygo/ui"
 )
 
 func pngBytes(t *testing.T) []byte {
@@ -98,5 +100,32 @@ func TestAIAttachments(t *testing.T) {
 	tt.Frame()
 	if !tt.HasText(errNoImages.Error()) || len(a.ai.attach) != 1 {
 		t.Fatalf("deepseek with a picture: %q", tt.Texts())
+	}
+}
+
+// Return sends the message; Shift+Return is a new line in it.
+func TestAIReturnSends(t *testing.T) {
+	a, tt := newTestApp(t)
+	fake := &fakeClaude{replies: []string{claudeText("好的")}}
+	a.sendAI = fake.send
+	a.cfg.AIKey = "sk-ant-test"
+	if err := tt.Click("AI 助手"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if err := tt.Click("AI 消息"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Type("第一行")
+	tt.Key(ui.Shift, ui.KeyEnter)
+	tt.Type("第二行")
+	tt.Frame()
+	if a.ai.draft != "第一行\n第二行" || len(fake.requests) != 0 {
+		t.Fatalf("draft %q, sent %d", a.ai.draft, len(fake.requests))
+	}
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if len(fake.requests) != 1 || a.ai.draft != "" {
+		t.Fatalf("Return did not send: %d, draft %q", len(fake.requests), a.ai.draft)
 	}
 }

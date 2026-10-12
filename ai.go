@@ -962,10 +962,21 @@ func (a *app) aiPanel(c *ui.Context) {
 			attachRow(c, ai.attach, nil, func(i int) {
 				a.later(func() { ai.attach = slices.Delete(ai.attach, i, i+1) })
 			})
-			in := ui.TextAreaBase(c.Key("draft"), &ai.draft).Lines(2, 6).Placeholder("输入消息，⌘↩ 发送，可粘贴图片").
+			in := ui.TextAreaBase(c.Key("draft"), &ai.draft).Lines(2, 6).Placeholder("输入消息，↩ 发送，⇧↩ 换行，可粘贴图片").Label("AI 消息").
 				Padding(8).Radius(8).Border(1, t.Border).Background(t.Background).FontSize(13).
 				OnPaste(func(text string) bool { return text == "" && a.pasteAttach() })
-			send := in.Shortcut(ui.Cmd, ui.KeyEnter)
+			// Return sends, as in chats; Shift+Return, the field's own, is
+			// a new line. The field takes keys before shortcuts: its key
+			// handler, which comes first, takes Return. A Return that ends
+			// an input method's composition never reaches it.
+			send := false
+			in.HandleInput(func(ev ui.InputEvent) bool {
+				if ev.Kind == ui.InputKeyDown && ev.Key == ui.KeyEnter && (ev.Mods == 0 || ev.Mods == ui.Cmd) {
+					a.later(a.aiSend)
+					return true
+				}
+				return false
+			})
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 				if iconButton(c, iconClip, "添加附件", "添加图片或文件（PDF、Word、文本、代码…）", 28, len(ai.attach) < aiAttachMax).Clicked() {
 					a.plat.OpenFile("添加附件", aiAttachExts, func(path string) {
