@@ -214,6 +214,8 @@ type app struct {
 	historyDiff     []model.Change        // from it to now
 	index           map[string]indexEntry // maps read for the search, by path
 	outlineFocus    string                // the node whose line the outline focuses
+	outlineLines    ui.TextLines          // the rows the focused line wraps onto
+	outlineText     map[string]*outlineText
 
 	// The library of clips.
 	lib           *library.Library

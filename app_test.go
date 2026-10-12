@@ -3088,3 +3088,35 @@ func TestNodeWidthHandle(t *testing.T) {
 		t.Fatalf("width %v after a double click", w)
 	}
 }
+
+func TestOutlineWraps(t *testing.T) {
+	a, tt := newTestApp(t)
+	long := "针对管家TMS、CWM等老项目需求开发一如既往的稳定，交付质量高。硬件部分除了完成产品的设计与验证，还配合生产解决了量产中的问题"
+	front := find(t, a, "前端")
+	a.mutate("", func() { front.Title = long })
+	if err := tt.Click("大纲"); err != nil {
+		t.Fatal(err)
+	}
+	a.outlineFocus = front.ID
+	tt.Frame()
+	snapshot(t, tt, "outline-wrap")
+	if rows := a.outlineLines.Rows(0); len(rows) < 2 {
+		t.Fatalf("rows %v: the line does not wrap", rows)
+	}
+	// Up from the last row goes to the row above in the line, then from
+	// its first row to the line before.
+	tt.Key(0, ui.KeyEnd)
+	tt.Key(0, ui.KeyUp)
+	tt.Frame()
+	if a.outlineFocus != front.ID {
+		t.Fatalf("Up left the wrapped line for %q", a.outlineFocus)
+	}
+	tt.Key(0, ui.KeyUp) // on the first row now: the line before
+	tt.Frame()
+	if a.outlineFocus == front.ID {
+		t.Fatal("Up from the first row stayed")
+	}
+	if front.Title != long {
+		t.Fatalf("title %q", front.Title)
+	}
+}

@@ -1,9 +1,15 @@
 package main
 
 import (
+	"strings"
+
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
+
+// outlineText is the text of an outline line, and the title it was last
+// seen to be.
+type outlineText struct{ text, seen string }
 
 // outlineRow is a node shown in the outline, with its depth.
 type outlineRow struct {
@@ -71,52 +77,77 @@ func (a *app) outlineView(c *ui.Context) {
 func (a *app) outlineLine(c *ui.Context, rows []outlineRow, i int) {
 	t := c.Theme()
 	n, depth := rows[i].node, rows[i].depth
-	title := n.Title
-	ui.Row(c).Padding(3, 0, 3, float32(depth)*26).Gap(8).AlignItems(ui.Center).Children(func() {
-		// The bullet: a dot, or, for a line with lines under it, an arrow
-		// that folds them.
-		bullet := ui.Box(c).Size(18, 18).Center().Shrink(0)
-		if len(n.Children) > 0 {
-			bullet.Cursor(ui.CursorPointer).Label("折叠")
-			if bullet.Clicked() {
-				a.later(func() { a.toggleCollapse(n.ID) })
-			}
+	// The line's text stays from frame to frame: the area writes what is
+	// typed into it as it comes, after the frame that built it.
+	line := a.outlineText[n.ID]
+	if line == nil {
+		line = &outlineText{text: n.Title, seen: n.Title}
+		if a.outlineText == nil {
+			a.outlineText = map[string]*outlineText{}
 		}
-		bullet.Children(func() {
-			switch {
-			case len(n.Children) > 0 && n.Collapsed:
-				ui.Text(c, "▸").FontSize(13).TextColor(t.TextMuted)
-			case len(n.Children) > 0:
-				ui.Text(c, "▾").FontSize(13).TextColor(t.TextMuted)
-			default:
-				ui.Box(c).Size(6, 6).Radius(999).Background(t.Text)
+		a.outlineText[n.ID] = line
+	}
+	switch {
+	case n.Title != line.seen: // changed elsewhere, as by undo
+		line.text, line.seen = n.Title, n.Title
+	case line.text != line.seen: // typed
+		if strings.ContainsAny(line.text, "\r\n\t") { // pasted lines join: a title has no line breaks
+			line.text = strings.Join(strings.Fields(strings.ReplaceAll(line.text, "\r", "\n")), " ")
+		}
+		line.seen = line.text
+		a.mutate("title:"+n.ID, func() { n.Title = line.text })
+	}
+	size := float32(16)
+	if depth == 0 {
+		size = 18
+	}
+	// The marks before the title sit by its first row, as high as a row.
+	_, rowH := a.measureText(c, 0, ui.Span{Text: "国", Size: size})
+	ui.Row(c).Padding(3, 0, 3, float32(depth)*26).Gap(8).AlignItems(ui.Start).Children(func() {
+		ui.Row(c).Height(rowH).Gap(8).AlignItems(ui.Center).Shrink(0).Children(func() {
+			// The bullet: a dot, or, for a line with lines under it, an arrow
+			// that folds them.
+			bullet := ui.Box(c).Size(18, 18).Center().Shrink(0)
+			if len(n.Children) > 0 {
+				bullet.Cursor(ui.CursorPointer).Label("折叠")
+				if bullet.Clicked() {
+					a.later(func() { a.toggleCollapse(n.ID) })
+				}
+			}
+			bullet.Children(func() {
+				switch {
+				case len(n.Children) > 0 && n.Collapsed:
+					ui.Text(c, "▸").FontSize(13).TextColor(t.TextMuted)
+				case len(n.Children) > 0:
+					ui.Text(c, "▾").FontSize(13).TextColor(t.TextMuted)
+				default:
+					ui.Box(c).Size(6, 6).Radius(999).Background(t.Text)
+				}
+			})
+			if n.Task != nil {
+				a.taskCheck(c, n, 15)
+			}
+			for _, m := range n.Markers {
+				markerView(c, m, 16)
+			}
+			if n.Image != nil {
+				if ui.Text(c, "🖼").FontSize(14).Cursor(ui.CursorPointer).Tooltip("查看图片").Clicked() {
+					a.lightbox = n.ID
+				}
 			}
 		})
-		if n.Task != nil {
-			a.taskCheck(c, n, 15)
-		}
-		for _, m := range n.Markers {
-			markerView(c, m, 16)
-		}
-		if n.Image != nil {
-			if ui.Text(c, "🖼").FontSize(14).Cursor(ui.CursorPointer).Tooltip("查看图片").Clicked() {
-				a.lightbox = n.ID
-			}
-		}
-		size := float32(16)
-		if depth == 0 {
-			size = 18
-		}
-		in := ui.TextInputBase(c.Key("line"), &title).FontSize(size).Grow(1).Placeholder("输入内容").
+		// A text area, wrapping a long title onto more rows, rather than a
+		// line that hides what does not fit.
+		in := ui.TextAreaBase(c.Key("line"), &line.text).FontSize(size).Grow(1).Lines(1, 50).Placeholder("输入内容").
 			FocusBind(&a.outlineFocus, n.ID)
+		if a.outlineFocus == n.ID {
+			in.TrackLines(&a.outlineLines)
+		}
 		if depth == 0 {
 			in.FontWeight(600)
 		}
 		if n.Task != nil && n.Task.Status == model.StatusDone {
 			in.TextColor(t.TextMuted)
-		}
-		if in.Changed() {
-			a.mutate("title:"+n.ID, func() { n.Title = title })
 		}
 		if in.Focused() {
 			a.selected = n.ID
@@ -130,38 +161,48 @@ func (a *app) outlineLine(c *ui.Context, rows []outlineRow, i int) {
 		if i+1 < len(rows) {
 			next = rows[i+1].node.ID
 		}
-		// Backspace on an empty line deletes it. The input takes Backspace
-		// before shortcuts, so its key handler, which comes first, does.
+		// The area takes its keys before shortcuts: its key handler, which
+		// comes first, does the outline's. Enter adds a line, Backspace on
+		// an empty one deletes it, Tab indents, and Up and Down go to the
+		// line before or after from the first or last row of a wrapped one.
+		composing := in.Composing()
+		caret, _ := in.TextSelection()
+		wrapped := a.outlineLines.Rows(0)
+		first := a.outlineFocus != n.ID || len(wrapped) < 2 || caret < wrapped[1]
+		last := a.outlineFocus != n.ID || len(wrapped) < 2 || caret >= wrapped[len(wrapped)-1]
 		in.HandleInput(func(ev ui.InputEvent) bool {
-			if ev.Kind != ui.InputKeyDown || ev.Mods != 0 || ev.Key != ui.KeyBackspace || n.Title != "" || len(n.Children) > 0 {
+			if ev.Kind != ui.InputKeyDown || composing {
 				return false
 			}
-			a.mutate("", func() { _, _ = a.doc.Delete(n.ID) })
-			a.outlineFocus = prev
+			switch {
+			case ev.Mods == 0 && ev.Key == ui.KeyBackspace && n.Title == "" && len(n.Children) == 0:
+				a.mutate("", func() { _, _ = a.doc.Delete(n.ID) })
+				a.outlineFocus = prev
+			case ev.Mods&^ui.Shift == 0 && ev.Key == ui.KeyEnter:
+				a.later(func() { a.outlineAdd(n.ID, false) })
+			case ev.Mods == 0 && ev.Key == ui.KeyTab:
+				a.later(func() {
+					a.mutate("", func() { _ = a.doc.Indent(n.ID) })
+					a.outlineFocus = n.ID
+				})
+			case ev.Mods == ui.Shift && ev.Key == ui.KeyTab:
+				a.later(func() {
+					a.mutate("", func() { _ = a.doc.Outdent(n.ID) })
+					a.outlineFocus = n.ID
+				})
+			case ev.Mods == 0 && ev.Key == ui.KeyUp && first:
+				a.outlineFocus = prev
+			case ev.Mods == 0 && ev.Key == ui.KeyDown && last && next != "":
+				a.outlineFocus = next
+			case ev.Mods == ui.Cmd && ev.Key == ui.KeyUp:
+				a.later(func() { a.mutate("", func() { _ = a.doc.Shift(n.ID, -1) }); a.outlineFocus = n.ID })
+			case ev.Mods == ui.Cmd && ev.Key == ui.KeyDown:
+				a.later(func() { a.mutate("", func() { _ = a.doc.Shift(n.ID, 1) }); a.outlineFocus = n.ID })
+			default:
+				return false
+			}
 			return true
 		})
-		switch {
-		case in.Submitted():
-			a.later(func() { a.outlineAdd(n.ID, false) })
-		case in.Shortcut(0, ui.KeyTab):
-			a.later(func() {
-				a.mutate("", func() { _ = a.doc.Indent(n.ID) })
-				a.outlineFocus = n.ID
-			})
-		case in.Shortcut(ui.Shift, ui.KeyTab):
-			a.later(func() {
-				a.mutate("", func() { _ = a.doc.Outdent(n.ID) })
-				a.outlineFocus = n.ID
-			})
-		case in.Shortcut(0, ui.KeyUp):
-			a.outlineFocus = prev
-		case in.Shortcut(0, ui.KeyDown) && next != "":
-			a.outlineFocus = next
-		case in.Shortcut(ui.Cmd, ui.KeyUp):
-			a.later(func() { a.mutate("", func() { _ = a.doc.Shift(n.ID, -1) }); a.outlineFocus = n.ID })
-		case in.Shortcut(ui.Cmd, ui.KeyDown):
-			a.later(func() { a.mutate("", func() { _ = a.doc.Shift(n.ID, 1) }); a.outlineFocus = n.ID })
-		}
 	})
 }
 
