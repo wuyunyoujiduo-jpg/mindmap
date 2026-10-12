@@ -30,8 +30,11 @@ by AI, and an AI assistant.
 - The semantic search model is a plugin downloaded from the public
   `mindmap-models` repository (`plugin.go`).
 - Auto-updates: `mygo.json`'s `updates` and MyGo's updater plugin. Releases
-  sign the update files and publish them to `mindmap-models`, tagged
-  `desktop-v<version>` (secrets `MYGO_UPDATER_PRIVATE_KEY`, `RELEASES_TOKEN`).
+  sign the update files and publish them (`.github/publish-updates.sh`) to
+  `mindmap-models`' release `desktop-latest`, which apps read from
+  github.com with no API call (`updates.url`), and to `desktop-v<version>`
+  for apps before 0.30.1. The secrets `MYGO_UPDATER_PRIVATE_KEY` and
+  `RELEASES_TOKEN` are the GitHub environment `mymind`'s.
 - macOS builds are per chip, `darwin/arm64` and `darwin/amd64`, a disk
   image each; each updates from its own manifest.
 - Sync with GitHub: `internal/ghsync` (a three-way merge over the REST API,

@@ -21,9 +21,11 @@ permissions:
   contents: write # creating the release
 
 # Auto-updates (mygo.json's updates): with these secrets, releases also
-# sign the update files and publish them, with the installers, to the
-# public repository mindmap-models, tagged desktop-v<version>, where the
-# app looks for new versions.
+# sign the update files and publish them to the public repository
+# mindmap-models: to its release desktop-latest, whose files the app reads
+# from github.com with no API call (mygo.json's updates.url), and, for the
+# versions before 0.30.1, which look through the API for the newest
+# desktop-v<version> release, to that release too.
 #   MYGO_UPDATER_PRIVATE_KEY  the key that signs updates (mygo-update.key)
 #   RELEASES_TOKEN            a token that may write mindmap-models'
 #                             releases (fine-grained: Contents read/write)
@@ -111,17 +113,24 @@ jobs:
           tag="desktop-v$(jq -r .version mygo.json)"
           gh release view "$tag" --repo "$UPDATES_REPO" >/dev/null 2>&1 ||
             gh release create "$tag" --repo "$UPDATES_REPO" --draft --target main --title "MyMind $tag" --notes "MyMind $(jq -r .version mygo.json)"
-          echo "UPLOAD=-upload" >> "$GITHUB_ENV"
+          gh release view desktop-latest --repo "$UPDATES_REPO" >/dev/null 2>&1 ||
+            gh release create desktop-latest --repo "$UPDATES_REPO" --target main --latest=false \
+              --title "MyMind 自动更新" --notes "MyMind 的自动更新文件：应用从这里读取最新版本，请勿删除。"
       - name: Build MyMind.app and the disk image
         env:
           MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN || github.token }}
         run: |
           if [ -n "$SIGN_IDENTITY" ]; then
-            go tool mygo build -platform darwin/arm64,darwin/amd64 -sign "$SIGN_IDENTITY" $UPLOAD
+            go tool mygo build -platform darwin/arm64,darwin/amd64 -sign "$SIGN_IDENTITY"
           else
-            go tool mygo build -platform darwin/arm64,darwin/amd64 $UPLOAD
+            go tool mygo build -platform darwin/arm64,darwin/amd64
           fi
+      - name: Publish the update files
+        if: (startsWith(github.ref, 'refs/tags/') || inputs.release) && env.RELEASES_TOKEN != ''
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+        run: bash .github/publish-updates.sh build/darwin-*
       - uses: actions/upload-artifact@v7
         with:
           name: MyMind-macOS
@@ -158,9 +167,13 @@ jobs:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN || github.token }}
           RELEASE: ${{ startsWith(github.ref, 'refs/tags/') || inputs.release }}
         run: |
-          upload=""
-          if [ "$RELEASE" = true ] && [ -n "$RELEASES_TOKEN" ]; then upload=-upload; fi
-          go tool mygo build -platform windows/amd64 $upload
+          go tool mygo build -platform windows/amd64
+      - name: Publish the update files
+        if: (startsWith(github.ref, 'refs/tags/') || inputs.release) && env.RELEASES_TOKEN != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+        run: bash .github/publish-updates.sh build/windows-amd64
       - uses: actions/upload-artifact@v7
         with:
           name: MyMind-Windows
