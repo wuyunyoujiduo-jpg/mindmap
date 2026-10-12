@@ -91,6 +91,7 @@ const (
 	viewAgenda
 	viewTimeline
 	viewOverview
+	viewTable
 )
 
 // autosaveDelay is how long after the last change the map is saved.
@@ -265,8 +266,12 @@ type app struct {
 	clipKeyDraft  string
 	shotKeyDraft  string
 	nameTitle     string // the central topic the open map's name was given after
-	dirID         fileID // the maps folder's identity, to follow it when renamed
-	recordingKey  string // the shortcut being recorded, by its label
+	dirID         fileID
+	// The measures being edited (measures.go).
+	cellKey, cellDraft            string
+	renamingMeasure, measureDraft string
+	newMeasure                    string // the maps folder's identity, to follow it when renamed
+	recordingKey                  string // the shortcut being recorded, by its label
 	// What kept a screenshot from being taken, said in the app's window,
 	// which comes to the front for it.
 	shotAlert                    bool

@@ -5,6 +5,7 @@ package model
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -145,6 +146,9 @@ type Node struct {
 	// Boundary a frame around the node and all below it.
 	Summary  *Mark `json:"summary,omitempty"`
 	Boundary *Mark `json:"boundary,omitempty"`
+	// Values are the node's own measures (File.Measures), by name; a
+	// node's total adds those of the nodes below it (Total).
+	Values map[string]float64 `json:"values,omitempty"`
 	// Pos is where a floating topic is (Document.Floating).
 	Pos      *Point  `json:"pos,omitempty"`
 	Children []*Node `json:"children,omitempty"`
@@ -484,6 +488,7 @@ func (n *Node) clone() *Node {
 	c.Markers = slices.Clone(n.Markers)
 	c.Links = slices.Clone(n.Links)
 	c.Files = slices.Clone(n.Files)
+	c.Values = maps.Clone(n.Values)
 	if n.Summary != nil {
 		m := *n.Summary
 		c.Summary = &m

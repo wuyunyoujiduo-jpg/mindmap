@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
@@ -126,6 +127,13 @@ func (a *app) canvasPanel(c *ui.Context) {
 		ui.Text(c, title).FontSize(12).Bold().TextColor(t.TextMuted)
 	}
 	ui.Column(c.Key("canvas-style")).Padding(16).Gap(12).Children(func() {
+		if len(a.file.Measures) > 0 {
+			show := !a.cfg.HideMeasures
+			switchRow(c, &show, "在导图上显示度量", "节点旁显示"+strings.Join(a.file.Measures, "、")+"的合计；在「表格」视图里填写", func() {
+				a.cfg.HideMeasures = !show
+				a.cfg.save()
+			})
+		}
 		section("结构")
 		ui.Grid(c).Columns(3).Gap(6).Children(func() {
 			for _, s := range model.Structures {

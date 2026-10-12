@@ -114,6 +114,7 @@ func (a *app) nodePanel(c *ui.Context) {
 			a.annotationsSection(c, n)
 
 			ui.Field(c, "标签", func() { a.tagPicker(c, n) })
+			a.measuresSection(c, n)
 
 			ui.Box(c).Height(1).FillWidth().Background(hairline(t))
 			a.taskEditor(c, n)

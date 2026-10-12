@@ -36,6 +36,8 @@ type config struct {
 	CaptureKey string `json:"captureKey,omitempty"`
 	// NoTray hides the menu bar icon.
 	NoTray bool `json:"noTray,omitempty"`
+	// HideMeasures keeps the measures' totals off the map.
+	HideMeasures bool `json:"hideMeasures,omitempty"`
 	// GitHubToken reads the issues of private repositories; GitHubAPI is
 	// the API's address, for GitHub Enterprise ("" is github.com's).
 	GitHubToken string `json:"githubToken,omitempty"`

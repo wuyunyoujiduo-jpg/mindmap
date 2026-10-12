@@ -55,6 +55,8 @@ func (a *app) view(c *ui.Context) {
 						a.timelineView(c)
 					case a.mode == viewOverview:
 						a.overviewView(c)
+					case a.mode == viewTable:
+						a.tableView(c)
 					default:
 						a.agendaView(c)
 					}
@@ -189,7 +191,7 @@ func (a *app) toolbar(c *ui.Context) {
 		if room < 960 {
 			mapLabel = "导图"
 		}
-		views := []string{mapLabel, "大纲", "看板", "日程", "时间线", "总览"}
+		views := []string{mapLabel, "大纲", "看板", "日程", "时间线", "总览", "表格"}
 		if room >= 760 {
 			ui.Segmented(c, &a.mode, views...).Shrink(0)
 		} else { // narrow: a menu of the views

@@ -46,6 +46,8 @@ type nodeParts struct {
 	more  int      // tags not shown
 	due   string
 	note  bool
+	// measures are the node's totals, as "工时 12 · 成本 300".
+	measures string
 }
 
 func (a *app) parts(n *model.Node) nodeParts {
@@ -63,6 +65,7 @@ func (a *app) parts(n *model.Node) nodeParts {
 	if n.Task != nil && n.Task.Due != nil {
 		p.due = n.Task.Due.Format("1/2")
 	}
+	p.measures = a.measuresText(n)
 	return p
 }
 
@@ -118,6 +121,10 @@ func (a *app) measure(c *ui.Context) layout.Measure {
 		if pg := a.progress[n.ID]; pg[1] > 0 {
 			mw, _ := a.measureText(c, 0, ui.Span{Text: progressText(pg), Size: markSize})
 			w += nodeGap + markSize + 3 + mw
+		}
+		if p.measures != "" {
+			mw, _ := a.measureText(c, 0, ui.Span{Text: p.measures, Size: markSize})
+			w += nodeGap + mw + 10
 		}
 		if p.note {
 			w += nodeGap + markSize + 3
@@ -844,6 +851,10 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 				progressRing(c, pg, markSize*z, onFill, accent)
 				ui.Text(c, progressText(pg)).FontSize(markSize * z).TextColor(muted).NoWrap()
 			})
+		}
+		if p.measures != "" {
+			ui.Box(c.Key("measures")).Padding(1*z, 5*z).Radius(4*z).Background(muted.Alpha(0.12)).PassThrough().
+				Children(func() { ui.Text(c, p.measures).FontSize(markSize * z).TextColor(muted).NoWrap() })
 		}
 		if p.due != "" {
 			col := muted

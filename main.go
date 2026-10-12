@@ -568,6 +568,7 @@ func main() {
 				item("日程", "CmdOrCtrl+4", func() { a.mode = viewAgenda }),
 				item("时间线", "CmdOrCtrl+5", func() { a.mode = viewTimeline }),
 				item("总览", "CmdOrCtrl+6", func() { a.mode = viewOverview }),
+				item("表格", "CmdOrCtrl+7", func() { a.mode = viewTable }),
 				mygo.Separator(),
 				item("放大", "CmdOrCtrl+=", func() { a.setZoom(a.cam().Zoom * 1.2) }),
 				item("缩小", "CmdOrCtrl+-", func() { a.setZoom(a.cam().Zoom / 1.2) }),
