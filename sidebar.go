@@ -42,6 +42,9 @@ func (a *app) sidebar(c *ui.Context) {
 				if m.Item("从模板新建…").Chosen() {
 					a.templatesOpen = true
 				}
+				if m.Item("新建文档").Chosen() { // written in the list of 资料
+					a.later(func() { a.openList(kindAll, "") })
+				}
 				if m.Item("新建文件夹").Chosen() {
 					a.later(func() { a.newFolder(a.currentFolder()) })
 				}
@@ -82,24 +85,6 @@ func (a *app) sidebar(c *ui.Context) {
 			a.categoryList(c)
 		})
 		ui.Row(c.Key("side-foot")).Padding(6, 8).Gap(2).BorderWidth(1, 0, 0, 0).BorderColor(hairline(t)).Children(func() {
-			sideFootButton(c, "＋ 新建", "新建导图、文档或文件夹").Shrink(0).Menu(func(m *ui.Menu) {
-				if m.Item("导图").Chosen() {
-					a.later(a.newMap)
-				}
-				if m.Item("从模板新建导图…").Chosen() {
-					a.templatesOpen = true
-				}
-				if m.Item("文档（记点什么、粘贴或拖入文件）").Chosen() {
-					a.later(func() {
-						a.showLibrary()
-						a.libKind, a.libCat, a.libTag = kindAll, "", ""
-					})
-				}
-				m.Separator()
-				if m.Item("文件夹").Chosen() {
-					a.later(func() { a.newFolder(a.currentFolder()) })
-				}
-			})
 			ui.Spacer(c)
 			a.syncFoot(c)
 		})

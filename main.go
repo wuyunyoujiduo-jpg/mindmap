@@ -605,6 +605,8 @@ func main() {
 				item("总览", "CmdOrCtrl+6", func() { a.mode = viewOverview }),
 				item("表格", "CmdOrCtrl+7", func() { a.mode = viewTable }),
 				mygo.Separator(),
+				item("显示/隐藏右侧面板", "CmdOrCtrl+Alt+I", func() { a.panelOff = !a.panelOff }),
+				mygo.Separator(),
 				item("放大", "CmdOrCtrl+=", func() { a.setZoom(a.cam().Zoom * 1.2) }),
 				item("缩小", "CmdOrCtrl+-", func() { a.setZoom(a.cam().Zoom / 1.2) }),
 				item("实际大小", "CmdOrCtrl+0", func() { a.setZoom(1) }),

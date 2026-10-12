@@ -237,6 +237,8 @@ type app struct {
 	libQuery      string
 	libKind       int    // kindAll, kindMaps, kindDocs or kindLinks
 	libHome       bool   // 概览 is shown, not the list
+	unfiledOpen   bool   // 未归档 of the sidebar is open
+	panelOff      bool   // the right panel is hidden
 	libCat        string // the category shown, "" all
 	libTag        string // the tag shown, "" all
 	libDraft      string // what is typed to keep

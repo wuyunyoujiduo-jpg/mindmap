@@ -102,7 +102,8 @@ func (a *app) docRow(c *ui.Context, clip *library.Clip, depth int) {
 	t := c.Theme()
 	current := a.libOpen && a.libSel == clip.ID
 	row := ui.Row(c).Padding(5, 8, 5, 22+float32(depth)*14).Gap(6).Radius(6).AlignItems(ui.Center).
-		Cursor(ui.CursorPointer).Label("文档 " + clip.Label()).Drag(fileDrag{Clip: clip.ID}).FillWidth().MinWidth(0)
+		Cursor(ui.CursorPointer).Label("文档 " + clip.Label()).Drag(fileDrag{Clip: clip.ID}).FillWidth().MinWidth(0).
+		Tooltip(clip.Label())
 	switch {
 	case current:
 		row.Background(t.Accent.Alpha(0.16))
@@ -172,9 +173,6 @@ func (a *app) docCount(f model.Folder) int {
 	return n
 }
 
-// unfiledKey is 未归档's key in folderClosed.
-const unfiledKey = "\x00unfiled"
-
 // unfiledClips are the documents in no folder: never put in one, or in
 // one no more there.
 func (a *app) unfiledClips() []*library.Clip {
@@ -199,7 +197,10 @@ const unfiledMax = 50
 func (a *app) unfiledRow(c *ui.Context) {
 	t := c.Theme()
 	docs := a.unfiledClips()
-	open := !a.folderClosed[unfiledKey]
+	if len(docs) == 0 {
+		return // nothing to file: no row
+	}
+	open := a.unfiledOpen // closed at first: a count, not a long list
 	row := ui.Row(c).Padding(5, 8).Gap(6).Radius(6).AlignItems(ui.Center).Cursor(ui.CursorPointer).
 		Label("未归档").Tooltip("没放进文件夹的文档；把文档拖到文件夹上，或右键「放到文件夹」来归档")
 	switch {
@@ -218,7 +219,7 @@ func (a *app) unfiledRow(c *ui.Context) {
 		})
 	}
 	if row.Clicked() {
-		a.folderClosed[unfiledKey] = open
+		a.unfiledOpen = !open
 	}
 	row.Children(func() {
 		arrow := "▾"
@@ -246,9 +247,6 @@ func (a *app) unfiledRow(c *ui.Context) {
 			break
 		}
 		a.docRow(c.Key("unfiled:"+clip.ID), clip, 1)
-	}
-	if len(docs) == 0 {
-		ui.Text(c, "所有文档都已归档").FontSize(12).TextColor(t.TextMuted).Margin(2, 0, 4, 36)
 	}
 }
 

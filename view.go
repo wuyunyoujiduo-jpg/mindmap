@@ -65,8 +65,10 @@ func (a *app) view(c *ui.Context) {
 						a.agendaView(c)
 					}
 				})
-				a.panelResizer(c)
-				a.panel(c)
+				if a.panelShown(c) {
+					a.panelResizer(c)
+					a.panel(c)
+				}
 			})
 		}).Fill()
 		if a.lightbox != "" && a.doc != nil {
@@ -257,4 +259,18 @@ func searchWidth(room float32) float32 {
 		return 100 // room for the seven views
 	}
 	return 90
+}
+
+// panelMinCanvas is the narrowest the map is left beside the panel: a
+// window narrower hides the panel, as Finder hides its preview.
+const panelMinCanvas = 420
+
+// panelShown tells whether the right panel shows: not turned off (⌥⌘I),
+// and with room for the map, unless the AI is asked.
+func (a *app) panelShown(c *ui.Context) bool {
+	if a.aiOpen {
+		return true
+	}
+	w, _ := c.Size()
+	return !a.panelOff && w-a.sidebarWidth-a.panelWidth >= panelMinCanvas
 }

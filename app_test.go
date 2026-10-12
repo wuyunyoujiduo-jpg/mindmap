@@ -431,8 +431,8 @@ func TestCollapse(t *testing.T) {
 
 func TestNewMapAndDelete(t *testing.T) {
 	a, tt := newTestApp(t)
-	tt.Click("＋ 新建")
-	if err := tt.ChooseMenuItem("导图"); err != nil {
+	tt.Click("新建")
+	if err := tt.ChooseMenuItem("新建导图"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
@@ -957,8 +957,8 @@ func TestSidebarFoldersAndFavorites(t *testing.T) {
 	a, tt := newTestApp(t)
 	guide := a.path
 	// A folder, renamed as it is made.
-	tt.Click("＋ 新建")
-	if err := tt.ChooseMenuItem("文件夹"); err != nil {
+	tt.Click("新建")
+	if err := tt.ChooseMenuItem("新建文件夹"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
@@ -1325,7 +1325,10 @@ func TestToolbarFitsNarrowWindow(t *testing.T) {
 		if !ok {
 			t.Fatalf("width %d: no redo", w)
 		}
-		right := float32(w) - a.panelWidth
+		right := float32(w) // the panel hides in a narrow window
+		if float32(w)-a.sidebarWidth-a.panelWidth >= panelMinCanvas {
+			right -= a.panelWidth
+		}
 		if redo.X+redo.W > right {
 			t.Fatalf("width %d: redo ends at %v, past the toolbar's %v", w, redo.X+redo.W, right)
 		}

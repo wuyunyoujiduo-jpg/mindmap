@@ -305,7 +305,7 @@ func (a *app) linksSection(c *ui.Context, n *model.Node) {
 					}
 				})
 			}
-			in := ui.TextInput(c.Key("new-link"), &a.linkDraft).Placeholder("粘贴网址、文件路径（可带 :行号），回车添加").FontSize(12).Label("添加链接")
+			in := ui.TextInput(c.Key("new-link"), &a.linkDraft).Placeholder("粘贴网址或文件路径").Tooltip("网址、文件或文件夹的路径（可带 :行号），回车添加").FontSize(12).Label("添加链接")
 			if in.Submitted() && strings.TrimSpace(a.linkDraft) != "" {
 				a.addLink(n, a.linkDraft)
 				a.linkDraft = ""

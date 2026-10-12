@@ -190,7 +190,18 @@ func (a *app) clipComposer(c *ui.Context) {
 	t := c.Theme()
 	ui.Row(c).Padding(8, 12, 6).Gap(8).AlignItems(ui.End).Children(func() {
 		in := ui.TextAreaBase(c.Key("lib-draft"), &a.libDraft).Lines(1, 5).
-			Placeholder("记点什么，或粘贴一个链接…（⌘↩ 收藏）").Label("新资料").
+			Placeholder("记点什么、粘贴链接、图片或文件…（⌘↩ 收藏）").Label("新资料").
+			OnPaste(func(text string) bool { // a picture or files copied: kept at once
+				if text != "" {
+					return false
+				}
+				clips, err := a.clipClipboard("剪贴板")
+				if err != nil {
+					return false
+				}
+				a.libSel = clips[0].ID
+				return true
+			}).
 			Padding(8).Radius(8).Border(1, t.Border).Background(t.Background).FontSize(13).Grow(1)
 		keep := in.Shortcut(ui.Cmd, ui.KeyEnter)
 		if ui.PrimaryButton(c, "收藏").Disabled(strings.TrimSpace(a.libDraft) == "").Shrink(0).Clicked() {
@@ -201,13 +212,6 @@ func (a *app) clipComposer(c *ui.Context) {
 				a.libErr = err.Error()
 			} else {
 				a.libDraft, a.libSel = "", clip.ID
-			}
-		}
-		if ui.Button(c, "粘贴").Tooltip("把剪贴板里的文字、链接、图片或文件收进来（任何应用里按 " + keyLabel(a.clipKey()) + "）").Shrink(0).Clicked() {
-			if clips, err := a.clipClipboard("剪贴板"); err != nil {
-				a.libErr = err.Error()
-			} else {
-				a.libSel = clips[0].ID
 			}
 		}
 		if ui.Button(c, "文件…").Tooltip("收藏图片或文件（也可以直接拖进来）").Shrink(0).Clicked() {
@@ -624,7 +628,7 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 	// The user's note.
 	sectionCard(c, iconPencil, tileYellow, "我的备注", nil, func() {
 		note := clip.Note
-		if inlineArea(c.Key("clip-note"), &note, textBody, 2, 10, "为什么收藏它、想怎么用…", "资料备注").Margin(0, -8).Changed() {
+		if inlineArea(c.Key("clip-note"), &note, textBody, 1, 10, "为什么收藏它、想怎么用…", "资料备注").Margin(0, -8).Changed() {
 			clip.Note = note
 			a.saveClip(clip)
 		}

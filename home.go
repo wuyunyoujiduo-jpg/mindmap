@@ -48,23 +48,21 @@ func tile(c *ui.Context, ic icon, col ui.Color, size float32) {
 func navRow(c *ui.Context, ic icon, col ui.Color, label, count string, current bool) ui.Element {
 	t := c.Theme()
 	r := ui.Row(c).Padding(5, 8).Gap(10).Radius(8).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(label).FillWidth()
-	fg, muted := t.Text, t.TextMuted
+	// Selected as the other rows of the sidebar are: a light accent.
 	switch {
 	case current:
-		r.Background(t.Accent)
-		fg, muted = t.AccentText, t.AccentText.Alpha(0.85)
+		r.Background(t.Accent.Alpha(0.16))
 	case r.Hovered():
 		r.Background(t.Text.Alpha(0.06))
 	}
 	r.Children(func() {
-		tc := col
+		tile(c, ic, col, 22)
+		text := ui.Text(c, label).FontSize(13).Grow(1).Shrink(1).MinWidth(0).SingleLine()
 		if current {
-			tc = t.AccentText.Alpha(0.25)
+			text.Bold()
 		}
-		tile(c, ic, tc, 22)
-		ui.Text(c, label).FontSize(13).TextColor(fg).Grow(1).Shrink(1).MinWidth(0).SingleLine()
 		if count != "" {
-			ui.Text(c, count).FontSize(12).TextColor(muted).Shrink(0)
+			ui.Text(c, count).FontSize(12).TextColor(t.TextMuted).Shrink(0)
 		}
 	})
 	return r
@@ -83,7 +81,7 @@ func cardHead(c *ui.Context, ic icon, col ui.Color, title, more string) bool {
 	clicked := false
 	ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
 		tile(c, ic, col, 26)
-		ui.Text(c, title).FontSize(15).Bold().TextColor(col).Grow(1)
+		ui.Text(c, title).FontSize(15).Bold().Grow(1) // the tile says the color
 		if more != "" {
 			l := ui.Row(c.Key("more:" + title)).Gap(2).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(more + " " + title)
 			if l.Clicked() {
@@ -393,7 +391,7 @@ func sectionCard(c *ui.Context, ic icon, col ui.Color, title string, right func(
 	pageCard(c.Key("section:"+title)).Padding(12, 14).Gap(10).Radius(14).Children(func() {
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 			tile(c, ic, col, 22)
-			ui.Text(c, title).FontSize(13).Bold().TextColor(col).Grow(1)
+			ui.Text(c, title).FontSize(13).Bold().Grow(1)
 			if right != nil {
 				right()
 			}

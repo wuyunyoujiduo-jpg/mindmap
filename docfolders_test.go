@@ -18,7 +18,12 @@ func TestDocumentsInFolders(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// In no folder: under 未归档, first in the folders.
+	// In no folder: under 未归档, first in the folders, closed at first.
+	tt.Frame()
+	if tt.HasText(clip.Label()) {
+		t.Fatal("未归档 is open at first")
+	}
+	a.unfiledOpen = true
 	tt.Frame()
 	if len(a.unfiledClips()) != 1 || !tt.HasText("未归档") || !tt.HasText(clip.Label()) {
 		t.Fatalf("未归档: %d, %q", len(a.unfiledClips()), tt.Texts())
@@ -85,6 +90,7 @@ func TestDragIntoFolder(t *testing.T) {
 		t.Fatal(err)
 	}
 	a.refreshFiles()
+	a.unfiledOpen = true
 	tt.Frame()
 	drag := func(from, to string) {
 		t.Helper()
