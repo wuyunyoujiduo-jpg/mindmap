@@ -927,9 +927,19 @@ func (a *app) aiPanel(c *ui.Context) {
 			} else {
 				ui.Segmented(c, &ai.scope, "当前画布", "选中节点", "整个文件").FillWidth()
 			}
-			in := ui.TextAreaBase(c.Key("draft"), &ai.draft).Lines(2, 6).Placeholder("输入消息，⌘↩ 发送").
+			in := ui.TextAreaBase(c.Key("draft"), &ai.draft).Lines(2, 6).Placeholder("输入消息，↩ 发送，⇧↩ 换行").Label("消息").
 				Padding(8).Radius(8).Border(1, t.Border).Background(t.Background).FontSize(13)
 			send := in.Shortcut(ui.Cmd, ui.KeyEnter)
+			// Enter sends; Shift+Enter, which the area takes as Enter,
+			// starts a new line. An input method's Enter is its own.
+			composing := in.Composing()
+			in.HandleInput(func(ev ui.InputEvent) bool {
+				if ev.Kind != ui.InputKeyDown || ev.Key != ui.KeyEnter || ev.Mods != 0 || composing {
+					return false
+				}
+				a.later(a.aiSend)
+				return true
+			})
 			ui.Row(c).Children(func() {
 				ui.Text(c, providerModelName(a.cfg)).FontSize(11).TextColor(t.TextMuted).Grow(1)
 				if ui.PrimaryButton(c, "发送").Disabled(ai.busy || strings.TrimSpace(ai.draft) == "").Clicked() {

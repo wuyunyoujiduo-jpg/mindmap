@@ -1286,9 +1286,24 @@ func TestAIProposesEdits(t *testing.T) {
 		t.Fatalf("texts %q", tt.Texts())
 	}
 
-	// The next message answers the tool call first.
+	// The next message answers the tool call first. Shift+Enter starts a
+	// line, Enter sends.
+	if err := tt.Click("消息"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Type("谢")
+	tt.Key(ui.Shift, ui.KeyEnter)
+	tt.Type("谢")
+	if a.ai.draft != "谢\n谢" || len(fake.requests) != 1 {
+		t.Fatalf("draft %q, %d requests", a.ai.draft, len(fake.requests))
+	}
 	a.ai.draft = "谢谢"
-	a.aiSend()
+	tt.Frame()
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if len(fake.requests) != 2 {
+		t.Fatalf("Enter sent nothing: draft %q", a.ai.draft)
+	}
 	second := fake.requests[1]
 	last := second.Messages[len(second.Messages)-1]
 	if len(second.Messages) != 3 || last.Content[0].OfToolResult == nil || last.Content[0].OfToolResult.ToolUseID != "toolu_1" {
@@ -3119,4 +3134,38 @@ func TestOutlineWraps(t *testing.T) {
 	if front.Title != long {
 		t.Fatalf("title %q", front.Title)
 	}
+}
+
+// A line of the outline keeps the keyboard, or input methods compose in
+// the corner of the screen with nowhere to put the text.
+func TestOutlineKeepsFocus(t *testing.T) {
+	a, tt := newTestApp(t)
+	a.mode = viewOutline
+	front := find(t, a, "前端")
+	a.outlineFocus = front.ID
+	tt.Frame()
+	focused := func(what string) {
+		t.Helper()
+		tt.Frame()
+		if _, ok := tt.TextCaret(); !ok {
+			t.Fatalf("%s: no line has the focus", what)
+		}
+	}
+	// Folding the branch of the focused line: the folded line takes it.
+	arch := find(t, a, "架构")
+	a.toggleCollapse(arch.ID)
+	focused("folding")
+	if a.outlineFocus != arch.ID {
+		t.Fatalf("focus on %q", a.outlineFocus)
+	}
+	a.toggleCollapse(arch.ID)
+	// A fold arrow clicked keeps a line focused.
+	tt.ClickAt(269, 170) // 使用指南's arrow
+	focused("the arrow")
+	if !find(t, a, "使用指南").Collapsed {
+		t.Fatal("the arrow did not fold")
+	}
+	// Below the lines, a click goes to the last one.
+	tt.ClickAt(500, 700)
+	focused("below the lines")
 }

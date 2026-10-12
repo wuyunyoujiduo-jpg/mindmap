@@ -41,6 +41,7 @@ func outlineRows(d *model.Document) []outlineRow {
 func (a *app) outlineView(c *ui.Context) {
 	t := c.Theme()
 	rows := outlineRows(a.doc)
+	a.keepOutlineFocus(rows)
 	ui.Scroll(c.Key("outline:" + a.doc.ID)).Grow(1).Children(func() {
 		ui.Column(c).Padding(32, 40).Gap(4).MaxWidth(860).Margin(0, ui.Auto).FillWidth().Children(func() {
 			root := a.doc.Root
@@ -70,8 +71,42 @@ func (a *app) outlineView(c *ui.Context) {
 			if len(rows) == 0 {
 				ui.Text(c, "在标题上按回车，开始写第一行").TextColor(t.TextMuted).Margin(8, 14)
 			}
+			// Below the lines: a click there writes on in the last one,
+			// rather than leave no line to type in.
+			end := ui.Box(c.Key("outline-end")).FillWidth().Height(240).Cursor(ui.CursorText)
+			if end.Pressed() {
+				a.outlineFocus = root.ID
+				if len(rows) > 0 {
+					a.outlineFocus = rows[len(rows)-1].node.ID
+				}
+			}
 		})
 	})
+}
+
+// keepOutlineFocus moves the focus off a line that folding its parent hid,
+// to the nearest line still shown: without it no line would take what is
+// typed, and input methods would compose in the corner of the screen.
+func (a *app) keepOutlineFocus(rows []outlineRow) {
+	if a.outlineFocus == "" || a.outlineFocus == a.doc.Root.ID {
+		return
+	}
+	path := a.doc.Path(a.outlineFocus)
+	if len(path) == 0 {
+		return
+	}
+	shown := make(map[string]bool, len(rows))
+	for _, r := range rows {
+		shown[r.node.ID] = true
+	}
+	for i := len(path) - 1; i >= 0; i-- {
+		if id := path[i].ID; id == a.doc.Root.ID || shown[id] {
+			if id != a.outlineFocus {
+				a.outlineFocus = id
+			}
+			return
+		}
+	}
 }
 
 func (a *app) outlineLine(c *ui.Context, rows []outlineRow, i int) {
@@ -112,6 +147,7 @@ func (a *app) outlineLine(c *ui.Context, rows []outlineRow, i int) {
 				bullet.Cursor(ui.CursorPointer).Label("折叠")
 				if bullet.Clicked() {
 					a.later(func() { a.toggleCollapse(n.ID) })
+					a.outlineFocus = n.ID // the click takes the focus: give it to the line
 				}
 			}
 			bullet.Children(func() {
