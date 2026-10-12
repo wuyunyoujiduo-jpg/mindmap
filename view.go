@@ -26,7 +26,11 @@ func (a *app) view(c *ui.Context) {
 		ui.Split(c, &a.sidebarWidth, func() { a.sidebar(c) }, func() {
 			ui.Row(c).Fill().AlignItems(ui.Stretch).Background(t.Background).Children(func() {
 				if a.libOpen {
-					a.libraryView(c)
+					if a.libHome {
+						a.homeView(c)
+					} else {
+						a.libraryView(c)
+					}
 					if a.aiOpen {
 						a.panelResizer(c)
 						a.panel(c)

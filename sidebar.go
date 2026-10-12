@@ -125,7 +125,7 @@ func (a *app) pickWorkspace() {
 // it move into dropDir, when it is not "".
 func (a *app) section(c *ui.Context, title string, open *bool, dropDir string, fn func()) {
 	t := c.Theme()
-	head := ui.Row(c.Key("section:"+title)).Padding(12, 8, 4).Gap(4).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(title)
+	head := ui.Row(c.Key("section:"+title)).Padding(14, 10, 4).Gap(4).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(title)
 	if dropDir != "" {
 		if draggedOver(head) {
 			head.Background(t.Accent.Alpha(0.15)).Radius(6)
@@ -135,13 +135,16 @@ func (a *app) section(c *ui.Context, title string, open *bool, dropDir string, f
 	if head.Clicked() {
 		*open = !*open
 	}
+	hovered := head.Hovered()
 	head.Children(func() {
-		arrow := "▾"
-		if !*open {
-			arrow = "▸"
+		ui.Text(c, title).FontSize(11).Bold().TextColor(t.TextMuted.Alpha(0.85)).Grow(1)
+		if hovered || !*open { // as Finder's: the arrow shows when it is wanted
+			arrow := "⌄"
+			if !*open {
+				arrow = "›"
+			}
+			ui.Text(c, arrow).FontSize(12).TextColor(t.TextMuted)
 		}
-		ui.Text(c, arrow).FontSize(10).TextColor(t.TextMuted).Width(10)
-		ui.Text(c, title).FontSize(textCaption).Bold().TextColor(t.TextMuted)
 	})
 	if *open {
 		fn()
@@ -150,32 +153,20 @@ func (a *app) section(c *ui.Context, title string, open *bool, dropDir string, f
 
 // inboxRow leads to the inbox, with how many items wait in it.
 func (a *app) inboxRow(c *ui.Context) {
-	t := c.Theme()
 	path := a.inboxPath()
 	if _, err := os.Stat(path); err != nil {
 		return
 	}
 	k := a.inboxCount()
-	row := ui.Row(c.Key("inbox")).Padding(5, 8).Gap(8).Radius(6).AlignItems(ui.Center).Cursor(ui.CursorPointer).
-		Label("收件箱").Tooltip("快速记录的内容（" + keyLabel(a.captureKey()) + "），整理后用右键「移到其他导图…」")
-	switch {
-	case a.path == path && !a.libOpen:
-		row.Background(t.Accent.Alpha(0.14))
-	case row.Hovered():
-		row.Background(t.Text.Alpha(0.06))
+	count := ""
+	if k > 0 {
+		count = fmt.Sprint(k)
 	}
+	row := navRow(c.Key("inbox"), iconInbox, tileOrange, "收件箱", count, a.path == path && !a.libOpen).
+		Tooltip("快速记录的内容（" + keyLabel(a.captureKey()) + "），整理后用右键「移到其他导图…」")
 	if row.Clicked() {
 		a.later(func() { _ = a.open(path) })
 	}
-	row.Children(func() {
-		sideIcon(c, iconInbox, a.path == path && !a.libOpen)
-		ui.Text(c, "收件箱").FontSize(13).Grow(1)
-		if k > 0 {
-			ui.Box(c).Padding(0, 6).Radius(999).Background(t.Accent).Children(func() {
-				ui.Text(c, fmt.Sprint(k)).FontSize(11).TextColor(t.AccentText)
-			})
-		}
-	})
 }
 
 // favorites is the section of starred maps, which stays at the top.

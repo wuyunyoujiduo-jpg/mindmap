@@ -42,6 +42,7 @@ const (
 	iconCloud    // the sync with GitHub
 	iconClip     // a paperclip: attach files
 	iconCategory // a category: four squares
+	iconTag      // a tag: a label with a hole
 )
 
 // glyph is an icon drawn in a box of the given side, as a piece of text.
@@ -175,6 +176,10 @@ func drawIcon(p *ui.Painter, r ui.Rect, s float32, ic icon, col ui.Color) {
 		p.StrokePath(new(ui.Path).MoveTo(cx-h*0.65, cy-h*0.85).LineTo(cx+h*0.2, cy-h*0.85).LineTo(cx+h*0.65, cy-h*0.4).
 			LineTo(cx+h*0.65, cy+h*0.85).LineTo(cx-h*0.65, cy+h*0.85).Close(), w, col)
 		p.StrokePath(new(ui.Path).MoveTo(cx+h*0.2, cy-h*0.85).LineTo(cx+h*0.2, cy-h*0.4).LineTo(cx+h*0.65, cy-h*0.4), w*0.9, col)
+	case iconTag:
+		p.StrokePath(new(ui.Path).MoveTo(cx-h*0.75, cy-h*0.75).LineTo(cx+h*0.05, cy-h*0.75).LineTo(cx+h*0.8, cy).
+			LineTo(cx+h*0.05, cy+h*0.75).LineTo(cx-h*0.75, cy+h*0.75).Close(), w, col)
+		p.FillPath(new(ui.Path).Circle(cx-h*0.35, cy-h*0.35, h*0.14), col)
 	case iconCategory:
 		k := h * 0.62
 		for _, d := range [][2]float32{{-1, -1}, {1, -1}, {-1, 1}, {1, 1}} {

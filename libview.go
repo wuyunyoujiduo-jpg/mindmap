@@ -316,7 +316,7 @@ func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 	row.Children(func() {
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(3).Children(func() {
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-				glyph(c, kindIcon(clip.Kind), 14, t.TextMuted)
+				tile(c, kindTile(clip.Kind), kindColor(clip.Kind), 20)
 				ui.Text(c, clip.Label()).FontSize(13).Bold().SingleLine().Shrink(1).MinWidth(0)
 				if clip.Starred {
 					glyph(c, iconStarFilled, 12, t.Warning)
@@ -697,33 +697,18 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 
 // libraryRow is the library's entry in the sidebar.
 func (a *app) libraryRow(c *ui.Context) {
-	t := c.Theme()
-	clips := a.lib.Clips
-	row := func(key string, ic icon, label string, n int, indent float32, current bool, open func()) {
-		r := ui.Row(c.Key(key)).Padding(5, 8, 5, 8+indent).Gap(8).Radius(6).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(label)
-		switch {
-		case current:
-			r.Background(t.Accent.Alpha(0.14))
-		case r.Hovered():
-			r.Background(t.Text.Alpha(0.06))
-		}
-		if r.Clicked() {
-			a.later(func() {
-				a.showLibrary()
-				a.libCat, a.libTag = "", ""
-				open()
-			})
-		}
-		r.Children(func() {
-			sideIcon(c, ic, current)
-			ui.Text(c, label).FontSize(13).Grow(1)
-			if n > 0 {
-				ui.Text(c, fmt.Sprint(n)).FontSize(11).TextColor(t.TextMuted)
-			}
+	home := navRow(c.Key("home-row"), iconCategory, tilePurple, "概览", "", a.libOpen && a.libHome)
+	if home.Clicked() {
+		a.later(func() {
+			a.showLibrary()
+			a.libHome = true
 		})
 	}
-	all := a.libOpen && a.libCat == ""
-	row("library-row", iconLibrary, "全部资料", len(clips)+len(a.files), 0, all, func() { a.libKind = kindAll })
+	all := navRow(c.Key("library-row"), iconLibrary, tileBlue, "全部资料", fmt.Sprint(len(a.lib.Clips)+len(a.files)),
+		a.libOpen && !a.libHome && a.libCat == "")
+	if all.Clicked() {
+		a.later(func() { a.openList(kindAll, "") })
+	}
 }
 
 // categoryList is the sidebar's section of the categories of all the
@@ -733,30 +718,14 @@ func (a *app) categoryList(c *ui.Context) {
 	if len(cats) == 0 {
 		return
 	}
-	t := c.Theme()
 	a.section(c, "分类", &a.catsOpen, "", func() {
 		for _, k := range cats {
 			name := k.Name
-			current := a.libOpen && a.libCat == name
-			r := ui.Row(c.Key("cat-row:"+name)).Padding(5, 8).Gap(8).Radius(6).AlignItems(ui.Center).
-				Cursor(ui.CursorPointer).Label("分类 " + name)
-			switch {
-			case current:
-				r.Background(t.Accent.Alpha(0.14))
-			case r.Hovered():
-				r.Background(t.Text.Alpha(0.06))
-			}
+			r := navRow(c.Key("cat-row:"+name), iconTag, catColor(name), name, fmt.Sprint(k.N), a.libOpen && !a.libHome && a.libCat == name)
+			r.Label("分类 " + name)
 			if r.Clicked() {
-				a.later(func() {
-					a.showLibrary()
-					a.libKind, a.libCat, a.libTag = kindAll, name, ""
-				})
+				a.later(func() { a.openList(kindAll, name) })
 			}
-			r.Children(func() {
-				sideIcon(c, iconCategory, current)
-				ui.Text(c, name).FontSize(13).Grow(1).SingleLine()
-				ui.Text(c, fmt.Sprint(k.N)).FontSize(11).TextColor(t.TextMuted)
-			})
 		}
 	})
 }
@@ -770,5 +739,5 @@ func (a *app) allCategories() []library.Count {
 func (a *app) showLibrary() {
 	a.commitEditIfAny()
 	a.lightbox, a.presenting = "", false
-	a.libOpen = true
+	a.libOpen, a.libHome = true, false
 }

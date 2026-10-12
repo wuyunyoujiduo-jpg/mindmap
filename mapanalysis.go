@@ -381,7 +381,7 @@ func (a *app) mapRow(c *ui.Context, clip *library.Clip) {
 	row.Children(func() {
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(3).Children(func() {
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-				glyph(c, iconMap, 14, t.Accent)
+				tile(c, iconMap, tileBlue, 20)
 				ui.Text(c, clip.Title).FontSize(13).Bold().SingleLine().Shrink(1).MinWidth(0)
 				ui.Text(c, "导图").FontSize(11).TextColor(t.TextMuted).NoWrap()
 			})
