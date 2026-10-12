@@ -39,7 +39,7 @@ func (a *app) libraryView(c *ui.Context) {
 				ui.Text(c, "语义检索不可用").FontSize(12).TextColor(t.Warning).NoWrap().Tooltip(a.embedErr + "（在设置里检查向量模型）")
 			}
 			ui.Spacer(c)
-			search := searchBox(c, "lib-search", &a.libQuery, "搜索资料", "搜索资料库", "按标题、内容、摘要、标签和关键词查找", 200)
+			search := searchBox(c, "lib-search", &a.libQuery, "搜索资料", "搜索资料库", "按标题、内容、摘要、标签和关键词查找资料和导图", 200)
 			if a.libQuery != "" && search.Shortcut(0, ui.KeyEscape) {
 				a.libQuery = ""
 			}
@@ -81,7 +81,7 @@ func (a *app) libraryView(c *ui.Context) {
 			if len(hits) == 0 {
 				ui.Column(c).Grow(1).Basis(0).Padding(8, 10, 16).Children(func() {
 					msg := "还没有资料。在上面记点什么、粘贴链接，或把图片和文件拖进来。\n在任何应用里复制内容后按 " + keyLabel(a.clipKey()) + "，也能直接收进资料库。"
-					if len(l.Clips) > 0 {
+					if len(l.Clips) > 0 || a.libKind == 5 {
 						msg = "没有符合条件的资料。"
 					}
 					ui.Text(c, msg).FontSize(13).TextColor(t.TextMuted).Wrap().Padding(20, 10)
@@ -90,7 +90,13 @@ func (a *app) libraryView(c *ui.Context) {
 				// A virtual list: only the rows in view are built.
 				ui.List(c.Key("clips"), nil, len(hits)).Grow(1).Basis(0).ItemKey(func(i int) any { return hits[i].Clip.ID }).
 					Rows(func(r ui.ListRow) {
-						ui.Box(r.Context).Padding(3, 10).Children(func() { a.clipRow(r.Context, hits[r.Index].Clip) })
+						ui.Box(r.Context).Padding(3, 10).Children(func() {
+							if clip := hits[r.Index].Clip; clip.Kind == kindMap {
+								a.mapRow(r.Context, clip)
+							} else {
+								a.clipRow(r.Context, clip)
+							}
+						})
 					})
 			}
 			if clip := l.Find(a.libSel); clip != nil {
@@ -115,7 +121,8 @@ func (a *app) libraryView(c *ui.Context) {
 func (a *app) libHits() []library.Hit {
 	e := a.embedder()
 	q := strings.TrimSpace(a.libQuery)
-	k := libHitsKey{a.libQuery, a.libKind, a.libCat, a.libTag, a.lib, a.lib.Version, e.Name(), a.qvecs[q] != nil}
+	a.mapClips()
+	k := libHitsKey{a.libQuery, a.libKind, a.libCat, a.libTag, a.lib, a.lib.Version, e.Name(), a.qvecs[q] != nil, a.mapClipsSig}
 	if a.libHitsFor == k {
 		return a.libHitsList
 	}
@@ -132,14 +139,17 @@ type libHitsKey struct {
 	version  int
 	model    string
 	vector   bool
+	maps     string // the maps' state (mapClips)
 }
 
 func (a *app) searchClips() []library.Hit {
-	kinds := []string{"", library.KindText, library.KindLink, library.KindImage, library.KindFile}
+	kinds := []string{"", library.KindText, library.KindLink, library.KindImage, library.KindFile, kindMap}
 	kind := kinds[min(a.libKind, len(kinds)-1)]
 	keep := func(c *library.Clip) bool {
 		switch {
 		case kind != "" && c.Kind != kind:
+			return false
+		case c.Kind == kindMap && (a.libCat == "-" || a.libCat == "★"):
 			return false
 		case a.libCat == "-" && !c.NeedsOrganizing():
 			return false
@@ -152,10 +162,26 @@ func (a *app) searchClips() []library.Hit {
 		}
 		return true
 	}
-	if e := a.embedder(); e.On() {
-		return a.lib.SearchBoth(a.libQuery, a.qvecs[strings.TrimSpace(a.libQuery)], e.Name(), keep)
+	if kind == kindMap {
+		return a.searchMaps(a.libQuery, keep)
 	}
-	return a.lib.Search(a.libQuery, keep)
+	var hits []library.Hit
+	if e := a.embedder(); e.On() {
+		hits = a.lib.SearchBoth(a.libQuery, a.qvecs[strings.TrimSpace(a.libQuery)], e.Name(), keep)
+	} else {
+		hits = a.lib.Search(a.libQuery, keep)
+	}
+	if kind == "" && strings.TrimSpace(a.libQuery) != "" {
+		// The maps that match well come first: all is material.
+		var maps []library.Hit
+		for _, h := range a.searchMaps(a.libQuery, keep) {
+			if h.Coverage >= 0.5 && len(maps) < 3 {
+				maps = append(maps, h)
+			}
+		}
+		hits = append(maps, hits...)
+	}
+	return hits
 }
 
 // clipComposer is the field to keep text or a link, and the buttons to
@@ -214,7 +240,7 @@ func (a *app) clipFilters(c *ui.Context) {
 	t := c.Theme()
 	l := a.lib
 	ui.Row(c).Padding(0, 12, 8).Gap(6).Wrap().GapY(6).AlignItems(ui.Center).Children(func() {
-		ui.Segmented(c, &a.libKind, "全部", "文字", "链接", "图片", "文件").FontSize(12).Shrink(0)
+		ui.Segmented(c, &a.libKind, "全部", "文字", "链接", "图片", "文件", "导图").FontSize(12).Shrink(0)
 		ui.Box(c).Width(4)
 		chip := func(key, label string, active bool) bool {
 			b := ui.Box(c.Key("cat:"+key)).Padding(3, 10).Radius(999).Cursor(ui.CursorPointer).Label(label)

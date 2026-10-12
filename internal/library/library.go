@@ -25,6 +25,7 @@ const (
 	KindLink  = "link"
 	KindImage = "image"
 	KindFile  = "file"
+	KindMap   = "map" // a map of the app, found with the clips; never kept as one
 )
 
 // Clip is a thing collected.
@@ -87,6 +88,8 @@ func KindLabel(kind string) string {
 		return "图片"
 	case KindFile:
 		return "文件"
+	case KindMap:
+		return "导图"
 	}
 	return "文字"
 }

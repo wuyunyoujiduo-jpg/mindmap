@@ -242,7 +242,7 @@ func TestAISearchesLibrary(t *testing.T) {
 	for _, tool := range fake.requests[3].Tools {
 		names = append(names, tool.OfTool.Name)
 	}
-	if strings.Join(names, ",") != "propose_edits,search_library,read_clip" {
+	if strings.Join(names, ",") != "propose_edits,search_library,read_clip,search_maps,read_map" {
 		t.Fatalf("tools %v", names)
 	}
 	_ = ui.KeyEnter

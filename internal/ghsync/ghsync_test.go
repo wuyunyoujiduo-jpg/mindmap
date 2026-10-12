@@ -385,3 +385,20 @@ func TestClean(t *testing.T) {
 		t.Fatalf("%q", got)
 	}
 }
+
+// The maps' analyses, kept as clips are, take the newer of two edits
+// rather than a conflict.
+func TestNewerMapAnalysis(t *testing.T) {
+	dir := t.TempDir()
+	p := ".library/maps/abc.json"
+	if err := os.MkdirAll(filepath.Join(dir, ".library", "maps"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, filepath.FromSlash(p)), []byte(`{"path":"a.mindmap.json","updated":"2026-10-01T00:00:00Z"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	newer, ok := newerClip(dir, p, []byte(`{"path":"a.mindmap.json","updated":"2026-10-02T00:00:00Z"}`))
+	if !ok || !newer {
+		t.Fatalf("newer %v ok %v", newer, ok)
+	}
+}

@@ -10,7 +10,8 @@ import (
 )
 
 // Analysis is what the AI made of a map, as of the library's clips: what
-// it is about, and words to find it by, which the search looks in.
+// it is about, and words to find it by, which the search looks in. The
+// app keeps it beside the map, not in it.
 type Analysis struct {
 	Desc     string    `json:"desc,omitempty"`
 	Summary  string    `json:"summary,omitempty"`

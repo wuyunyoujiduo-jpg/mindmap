@@ -13,15 +13,24 @@ import (
 // calls search_library and read_clip, which the app answers at once from
 // the local index, and goes on.
 
-const libraryPrompt = `用户还有一个本地「资料库」，收藏了文字、链接（网页正文）、图片和文件，每条有标题、摘要、分类和标签。当问题可能和用户收藏过的资料有关（“我之前存过…”、“资料里…”、查找某个主题的资料、引用资料来写东西等），先调用 search_library 检索（可以换不同关键词多搜几次），需要全文时用 read_clip 读取。回答时说明依据的是哪几条资料（写出标题），不要编造资料库里没有的内容；没找到就直说。`
+const libraryPrompt = `用户还有一个本地「资料库」，收藏了文字、链接（网页正文）、图片和文件，每条有标题、摘要、分类和标签。当问题可能和用户收藏过的资料有关（“我之前存过…”、“资料里…”、查找某个主题的资料、引用资料来写东西等），先调用 search_library 检索（可以换不同关键词多搜几次），需要全文时用 read_clip 读取。回答时说明依据的是哪几条资料（写出标题），不要编造资料库里没有的内容；没找到就直说。
+用户的导图（项目、计划、知识整理）也是资料：问题可能和其他导图有关时，用 search_maps 按关键词找导图，用 read_map 读取某张导图的内容（当前打开的导图已在快照里，不用再读）。`
 
 // Tools of the library.
 const (
 	toolSearchLibrary = "search_library"
 	toolReadClip      = "read_clip"
+	toolSearchMaps    = "search_maps"
+	toolReadMap       = "read_map"
 )
 
-func isLibraryTool(name string) bool { return name == toolSearchLibrary || name == toolReadClip }
+func isLibraryTool(name string) bool {
+	switch name {
+	case toolSearchLibrary, toolReadClip, toolSearchMaps, toolReadMap:
+		return true
+	}
+	return false
+}
 
 func librarySchemas() []struct {
 	name, desc string
@@ -47,6 +56,20 @@ func librarySchemas() []struct {
 				"type":                 "object",
 				"properties":           map[string]any{"id": str("资料的 ID，来自 search_library 的结果")},
 				"required":             []string{"id"},
+				"additionalProperties": false,
+			}},
+		{toolSearchMaps, "在用户的所有导图中按关键词检索，返回最相关的导图：路径、名称、AI 分析的说明和分类，以及匹配的节点。",
+			map[string]any{
+				"type":                 "object",
+				"properties":           map[string]any{"query": str("检索词：几个关键词，空格分隔；中英文都可以")},
+				"required":             []string{"query"},
+				"additionalProperties": false,
+			}},
+		{toolReadMap, "读取一张导图的内容：各画布的节点大纲、任务状态和备注。",
+			map[string]any{
+				"type":                 "object",
+				"properties":           map[string]any{"path": str("导图的路径，来自 search_maps 的结果")},
+				"required":             []string{"path"},
 				"additionalProperties": false,
 			}},
 	}
@@ -87,7 +110,7 @@ func toolQuery(call aiCall) string {
 	var in struct {
 		Query string `json:"query"`
 	}
-	if call.name != toolSearchLibrary || json.Unmarshal([]byte(call.input), &in) != nil {
+	if call.name != toolSearchLibrary && call.name != toolSearchMaps || json.Unmarshal([]byte(call.input), &in) != nil {
 		return ""
 	}
 	return strings.TrimSpace(in.Query)
@@ -98,9 +121,17 @@ func (a *app) runLibraryTool(call aiCall) (result, shown string) {
 		Query    string `json:"query"`
 		Category string `json:"category"`
 		ID       string `json:"id"`
+		Path     string `json:"path"`
 	}
 	if err := json.Unmarshal([]byte(call.input), &in); err != nil {
 		return "参数无法解析。", "资料库检索失败"
+	}
+	switch call.name {
+	case toolSearchMaps:
+		text, n := a.searchMapsText(in.Query, 8)
+		return text, fmt.Sprintf("🔎 在导图中检索「%s」：%d 张导图", in.Query, n)
+	case toolReadMap:
+		return a.readMapText(in.Path)
 	}
 	if a.lib == nil || len(a.lib.Clips) == 0 {
 		return "资料库是空的。", "资料库是空的"

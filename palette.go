@@ -157,12 +157,31 @@ func (a *app) paletteItems() []paletteItem {
 		}
 	}
 	if a.paletteMode == paletteAll && q != "" || a.paletteMode == paletteMaps {
-		for _, f := range a.recentFiles() {
-			name := mapName(f.Path)
-			if match(name) {
-				path := f.Path
-				items = append(items, paletteItem{"导图", name, a.relDir(path), func() { a.openMap(path) }})
+		files := a.recentFiles()
+		if q != "" {
+			files = a.files // all of them, by name or by what their analysis says
+		}
+		for _, f := range files {
+			name, path := mapName(f.Path), f.Path
+			an := a.analysisOf(path)
+			if match(name) || an.Matches(q) {
+				where := a.relDir(path)
+				if an != nil && an.Desc != "" {
+					where = an.Desc
+				}
+				items = append(items, paletteItem{"导图", name, where, func() { a.openMap(path) }})
 			}
+		}
+	}
+	if a.paletteMode == paletteAll && q != "" && a.lib != nil {
+		for i, h := range a.lib.Search(a.paletteQuery, nil) {
+			if i == 5 || h.Coverage < 0.5 {
+				break
+			}
+			id := h.Clip.ID
+			items = append(items, paletteItem{"资料", h.Clip.Label(), cmpOr(h.Clip.Desc, h.Clip.Category), func() {
+				a.libOpen, a.libSel = true, id
+			}})
 		}
 	}
 	if a.paletteMode == paletteMove && q == "" { // the maps' roots

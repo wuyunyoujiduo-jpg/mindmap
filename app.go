@@ -214,7 +214,17 @@ type app struct {
 	historyFile     *model.File           // the version chosen
 	historyDiff     []model.Change        // from it to now
 	index           map[string]indexEntry // maps read for the search, by path
-	outlineFocus    string                // the node whose line the outline focuses
+	// The maps' AI analyses (mapanalysis.go), by key; the map analyzed.
+	mapMetas       map[string]*model.Analysis
+	mapMetaMod     time.Time
+	mapMetaFor     string
+	mapMetaVersion int
+	mapWorking     string
+	mapErr         string
+	mapClipsSig    string
+	mapClipsList   []*library.Clip
+	mapIndex       *library.Index
+	outlineFocus   string // the node whose line the outline focuses
 
 	// The library of clips.
 	lib           *library.Library
@@ -500,6 +510,7 @@ func (a *app) deleteMap(path string) {
 		a.saveErr = err.Error()
 		return
 	}
+	a.removeMapMeta(path)
 	if _, err := os.Stat(model.AssetsDir(path)); err == nil {
 		_ = a.plat.Trash(model.AssetsDir(path)) // its pictures go with it
 	}

@@ -1221,7 +1221,7 @@ func TestAIProposesEdits(t *testing.T) {
 
 	// The request: the model, the tool, and the map with its IDs.
 	req := fake.requests[0]
-	if req.Model != "claude-opus-5-5" || len(req.Tools) != 3 || req.Tools[0].OfTool.Name != "propose_edits" {
+	if req.Model != "claude-opus-5-5" || len(req.Tools) != 5 || req.Tools[0].OfTool.Name != "propose_edits" {
 		t.Fatalf("request %+v", req)
 	}
 	body, _ := json.Marshal(req)

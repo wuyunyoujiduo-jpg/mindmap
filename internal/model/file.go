@@ -21,8 +21,6 @@ type File struct {
 	// Measures are the numbers nodes are measured by, as hours or cost,
 	// in the order they show (Node.Values).
 	Measures []string `json:"measures,omitempty"`
-	// Analysis is what the AI made of the map, for the search.
-	Analysis *Analysis `json:"analysis,omitempty"`
 }
 
 // Iteration is a period of work, as a sprint or a milestone.
@@ -150,7 +148,7 @@ func (f *File) MoveSheet(from, to int) {
 // Clone returns a deep copy of the file.
 func (f *File) Clone() *File {
 	c := &File{Version: f.Version, Project: f.Project, GitHub: f.GitHub, Sheets: make([]*Document, len(f.Sheets)),
-		Measures: slices.Clone(f.Measures), Analysis: f.Analysis} // an analysis is replaced, not changed
+		Measures: slices.Clone(f.Measures)}
 	for _, it := range f.Iterations {
 		if it.Start != nil {
 			s := *it.Start

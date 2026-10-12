@@ -400,6 +400,7 @@ func (a *app) moved(from, to string) {
 			a.versions.Rename(f.Path, to)
 		}
 	}
+	a.moveMapMetas(follow) // and their analyses
 	a.path = follow(a.path)
 	a.renameViews(follow)
 	if a.path != "" {
