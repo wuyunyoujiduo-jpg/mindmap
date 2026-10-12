@@ -316,7 +316,7 @@ func (s *session) toolbar(c *ui.Context, sh *screenShot, at pt) {
 			if toolButton(c, iconSave, "保存 "+cmdLabel("S")).TextColor(iconGray).Clicked() {
 				s.save(sh)
 			}
-			if toolButton(c, iconLibrary, "收进资料库 ⇧↩").TextColor(iconActive).Clicked() {
+			if toolButton(c, iconLibrary, "收进资料库 ⇧↩").TextColor(iconGray).Clicked() {
 				s.keep(sh)
 			}
 			if toolButton(c, iconCheck, "复制到剪贴板 ↩").TextColor(iconConfirm).Clicked() {
