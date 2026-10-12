@@ -97,7 +97,9 @@ type chatMsg struct {
 	proposal  *aiProposal
 	toolUseID string
 	state     int
-	result    string // what applying did
+	result    string     // what applying did
+	files     []aiAttach // attached to a message of the user's
+	names     []string   // of the files, of a conversation kept
 }
 
 // aiState is the conversation of the AI panel.
@@ -107,6 +109,7 @@ type aiState struct {
 	ds        []dsMessage                  // or to DeepSeek
 	msgs      []chatMsg
 	draft     string
+	attach    []aiAttach // attached to the draft
 	busy      bool
 	scope     int
 	settings  bool   // the settings form is shown
@@ -330,11 +333,14 @@ func (a *app) snapshot(scope int) string {
 // aiSend sends the draft, with the map, or what the library holds when it
 // is shown, and waits for the reply in the background.
 func (a *app) aiSend() {
-	draft, extra := a.ai.draft, a.ai.extra
+	draft, extra, files := a.ai.draft, a.ai.extra, a.ai.attach
 	a.switchChat() // the conversation about what is shown
-	a.ai.draft, a.ai.extra = draft, extra
+	a.ai.draft, a.ai.extra, a.ai.attach = draft, extra, files
 	ai := &a.ai
 	text := strings.TrimSpace(ai.draft)
+	if text == "" && len(files) > 0 {
+		text = "请看附件。"
+	}
 	if text == "" || ai.busy || a.doc == nil && !a.libOpen {
 		return
 	}
@@ -344,7 +350,11 @@ func (a *app) aiSend() {
 		return
 	}
 	if ai.provider != a.cfg.AIProvider && len(ai.claude)+len(ai.ds) > 0 {
-		*ai = aiState{scope: ai.scope, draft: ai.draft, key: ai.key} // another provider: a new conversation
+		*ai = aiState{scope: ai.scope, draft: ai.draft, attach: ai.attach, key: ai.key} // another provider: a new conversation
+	}
+	if a.cfg.AIProvider == providerDeepSeek && len(claudeImages(files)) > 0 {
+		ai.msgs = append(ai.msgs, chatMsg{role: "error", text: errNoImages.Error()})
+		return
 	}
 	ai.provider = a.cfg.AIProvider
 	ai.rounds = 0
@@ -364,14 +374,14 @@ func (a *app) aiSend() {
 		snapshot += "\n\n" + ai.extra
 		ai.extra = ""
 	}
-	ai.msgs = append(ai.msgs, chatMsg{role: "user", text: text})
-	ai.draft = ""
-	a.aiTurn(snapshot, text)
+	ai.msgs = append(ai.msgs, chatMsg{role: "user", text: text, files: files})
+	ai.draft, ai.attach = "", nil
+	a.aiTurn(snapshot, text, files)
 }
 
 // aiTurn sends the answers to the last reply's tool calls, and the user's
-// message when there is one, and waits for the reply in the background.
-func (a *app) aiTurn(snapshot, text string) {
+// message when there is one, with its files, and waits for the reply in the background.
+func (a *app) aiTurn(snapshot, text string, files []aiAttach) {
 	ai := &a.ai
 	answers := ai.answers
 	ai.answers = nil
@@ -410,7 +420,11 @@ func (a *app) aiTurn(snapshot, text string) {
 			ai.ds = append(ai.ds, dsMessage{Role: "tool", ToolCallID: an.id, Content: an.text})
 		}
 		if text != "" {
-			ai.ds = append(ai.ds, dsMessage{Role: "user", Content: snapshot + "\n\n" + text})
+			content := snapshot + "\n\n" + text
+			if t := attachText(files); t != "" {
+				content = snapshot + "\n\n" + t + "\n\n" + text
+			}
+			ai.ds = append(ai.ds, dsMessage{Role: "user", Content: content})
 		}
 		req := a.deepseekRequest()
 		send := a.sendDeepSeek
@@ -428,7 +442,12 @@ func (a *app) aiTurn(snapshot, text string) {
 		blocks = append(blocks, anthropic.NewBetaToolResultBlock(an.id, an.text, an.isError))
 	}
 	if text != "" {
-		blocks = append(blocks, anthropic.NewBetaTextBlock(snapshot), anthropic.NewBetaTextBlock(text))
+		blocks = append(blocks, anthropic.NewBetaTextBlock(snapshot))
+		if t := attachText(files); t != "" {
+			blocks = append(blocks, anthropic.NewBetaTextBlock(t))
+		}
+		blocks = append(blocks, claudeImages(files)...)
+		blocks = append(blocks, anthropic.NewBetaTextBlock(text))
 	}
 	ai.claude = append(ai.claude, anthropic.NewBetaUserMessage(blocks...))
 	params := a.aiParams()
@@ -571,7 +590,7 @@ func (a *app) answerLibraryCalls(calls []aiCall) {
 	}
 	if ai.rounds < 8 {
 		ai.rounds++
-		a.aiTurn("", "")
+		a.aiTurn("", "", nil)
 	} else {
 		ai.msgs = append(ai.msgs, chatMsg{role: "error", text: "检索次数太多，已停下。可以换个问法再试。"})
 	}
@@ -828,7 +847,11 @@ func (a *app) aiPanel(c *ui.Context) {
 	a.switchChat()
 	t := c.Theme()
 	ai := &a.ai
-	ui.Column(c.Key("ai")).Fill().Children(func() {
+	panel := ui.Column(c.Key("ai")).Fill()
+	if files := panel.DroppedFiles(); len(files) > 0 {
+		a.later(func() { a.addAttach(files) })
+	}
+	panel.Children(func() {
 		ui.Row(c.Key("ai-head")).Height(toolbarHeight).Padding(0, 10, 0, 16).Gap(6).AlignItems(ui.Center).Shrink(0).
 			BorderWidth(0, 0, 1, 0).BorderColor(hairline(t)).DragWindow().Children(func() {
 			ui.Box(c).Size(16, 16).Draw(func(p *ui.Painter, r ui.Rect) { drawIcon(p, r, 14, iconSparkle, t.Accent) })
@@ -927,12 +950,23 @@ func (a *app) aiPanel(c *ui.Context) {
 			} else {
 				ui.Segmented(c, &ai.scope, "当前画布", "选中节点", "整个文件").FillWidth()
 			}
-			in := ui.TextAreaBase(c.Key("draft"), &ai.draft).Lines(2, 6).Placeholder("输入消息，⌘↩ 发送").
-				Padding(8).Radius(8).Border(1, t.Border).Background(t.Background).FontSize(13)
+			attachRow(c, ai.attach, nil, func(i int) {
+				a.later(func() { ai.attach = slices.Delete(ai.attach, i, i+1) })
+			})
+			in := ui.TextAreaBase(c.Key("draft"), &ai.draft).Lines(2, 6).Placeholder("输入消息，⌘↩ 发送，可粘贴图片").
+				Padding(8).Radius(8).Border(1, t.Border).Background(t.Background).FontSize(13).
+				OnPaste(func(text string) bool { return text == "" && a.pasteAttach() })
 			send := in.Shortcut(ui.Cmd, ui.KeyEnter)
-			ui.Row(c).Children(func() {
+			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+				if iconButton(c, iconClip, "添加附件", "添加图片或文件（PDF、Word、文本、代码…）", 28, len(ai.attach) < aiAttachMax).Clicked() {
+					a.plat.OpenFile("添加附件", aiAttachExts, func(path string) {
+						if path != "" {
+							a.addAttach([]string{path})
+						}
+					})
+				}
 				ui.Text(c, providerModelName(a.cfg)).FontSize(11).TextColor(t.TextMuted).Grow(1)
-				if ui.PrimaryButton(c, "发送").Disabled(ai.busy || strings.TrimSpace(ai.draft) == "").Clicked() {
+				if ui.PrimaryButton(c, "发送").Disabled(ai.busy || strings.TrimSpace(ai.draft) == "" && len(ai.attach) == 0).Clicked() {
 					send = true
 				}
 			})
@@ -959,7 +993,8 @@ func (a *app) chatBubble(c *ui.Context, i int) {
 	case "user":
 		ui.Row(c).Children(func() {
 			ui.Spacer(c)
-			ui.Box(c).Padding(8, 12).Radius(12).Background(t.Accent).MaxWidth(a.panelWidth * 0.8).Children(func() {
+			ui.Column(c).Gap(6).Padding(8, 12).Radius(12).Background(t.Accent).MaxWidth(a.panelWidth * 0.8).Children(func() {
+				attachRow(c, m.files, m.names, nil)
 				ui.Text(c, m.text).FontSize(13).TextColor(t.AccentText).Wrap().Selectable()
 			})
 		})

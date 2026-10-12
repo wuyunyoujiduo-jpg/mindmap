@@ -40,6 +40,7 @@ const (
 	iconFile  // a page with its corner folded
 	iconShot  // a screenshot: the corners of a frame
 	iconCloud // the sync with GitHub
+	iconClip  // a paperclip: attach files
 )
 
 // glyph is an icon drawn in a box of the given side, as a piece of text.
@@ -173,6 +174,24 @@ func drawIcon(p *ui.Painter, r ui.Rect, s float32, ic icon, col ui.Color) {
 		p.StrokePath(new(ui.Path).MoveTo(cx-h*0.65, cy-h*0.85).LineTo(cx+h*0.2, cy-h*0.85).LineTo(cx+h*0.65, cy-h*0.4).
 			LineTo(cx+h*0.65, cy+h*0.85).LineTo(cx-h*0.65, cy+h*0.85).Close(), w, col)
 		p.StrokePath(new(ui.Path).MoveTo(cx+h*0.2, cy-h*0.85).LineTo(cx+h*0.2, cy-h*0.4).LineTo(cx+h*0.65, cy-h*0.4), w*0.9, col)
+	case iconClip:
+		// Drawn upright and turned 40° to the right.
+		sin, cos := float32(math.Sin(40*math.Pi/180)), float32(math.Cos(40*math.Pi/180))
+		pt := func(x, y float32) (float32, float32) { return cx + h*(x*cos-y*sin), cy + h*(x*sin+y*cos) }
+		path := new(ui.Path)
+		path.MoveTo(pt(0.32, -0.25))
+		path.LineTo(pt(0.32, 0.5))
+		x1, y1 := pt(0.32, 0.95)
+		x2, y2 := pt(-0.32, 0.95)
+		x3, y3 := pt(-0.32, 0.5)
+		path.CubeTo(x1, y1, x2, y2, x3, y3)
+		path.LineTo(pt(-0.32, -0.55))
+		x1, y1 = pt(-0.32, -0.95)
+		x2, y2 = pt(0.12, -0.95)
+		x3, y3 = pt(0.12, -0.55)
+		path.CubeTo(x1, y1, x2, y2, x3, y3)
+		path.LineTo(pt(0.12, 0.4))
+		p.StrokePath(path, w, col)
 	case iconCloud:
 		by := cy + h*0.5
 		p.StrokePath(new(ui.Path).MoveTo(cx-h*0.45, by).

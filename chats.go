@@ -30,6 +30,7 @@ type savedMsg struct {
 	Proposal *aiProposal `json:"proposal,omitempty"`
 	State    int         `json:"state,omitempty"`
 	Result   string      `json:"result,omitempty"`
+	Files    []string    `json:"files,omitempty"` // the names of the files attached
 }
 
 // savedChat is a conversation kept.
@@ -91,7 +92,8 @@ func (a *app) saveChat() {
 		if chat.Title == "" && m.role == "user" {
 			chat.Title = m.text
 		}
-		chat.Msgs = append(chat.Msgs, savedMsg{Role: m.role, Text: m.text, Proposal: m.proposal, State: m.state, Result: m.result})
+		chat.Msgs = append(chat.Msgs, savedMsg{Role: m.role, Text: m.text, Proposal: m.proposal, State: m.state, Result: m.result,
+			Files: append(attachNames(m.files), m.names...)})
 	}
 	if r := []rune(strings.Join(strings.Fields(chat.Title), " ")); len(r) > 40 {
 		chat.Title = string(r[:40]) + "…"
@@ -129,7 +131,7 @@ func (a *app) switchChat() {
 
 // newChat starts a conversation, the one shown being kept.
 func (a *app) newChat() {
-	a.ai = aiState{scope: a.ai.scope, key: a.chatKey()}
+	a.ai = aiState{scope: a.ai.scope, key: a.chatKey(), attach: a.ai.attach}
 }
 
 // restoreChat shows a conversation kept, and gives it to the provider
@@ -139,12 +141,15 @@ func (a *app) restoreChat(key string, chat savedChat) {
 	type turn struct{ role, text string }
 	var turns []turn
 	for _, m := range chat.Msgs {
-		msg := chatMsg{role: m.Role, text: m.Text, proposal: m.Proposal, state: m.State, result: m.Result}
+		msg := chatMsg{role: m.Role, text: m.Text, proposal: m.Proposal, state: m.State, result: m.Result, names: m.Files}
 		if msg.proposal != nil && msg.state == proposalPending {
 			msg.state = proposalDiscarded // its tool call is gone
 		}
 		ai.msgs = append(ai.msgs, msg)
 		text := m.Text
+		if len(m.Files) > 0 { // the files themselves are not kept
+			text = "（附件：" + strings.Join(m.Files, "、") + "）\n" + text
+		}
 		if m.Proposal != nil {
 			done := map[int]string{proposalApplied: "用户已应用", proposalDiscarded: "用户没有应用", proposalPending: "用户没有应用", proposalFailed: "应用失败"}[m.State]
 			text = strings.TrimSpace(text + "\n\n（提出了修改：" + m.Proposal.Summary + "，" + done + "）")
