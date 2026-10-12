@@ -197,7 +197,7 @@ func (d *desktop) overlayShot(fromApp, inApp bool) {
 		logShot("截图失败：%v", err)
 		d.win.Update(func() {
 			d.ShowMain()
-			d.app.showShotAlert("截图失败", err.Error()+"\n\n可以在 设置 → 通用 → 截图 里把截图记录复制发给开发者。", false)
+			d.app.showShotAlert("截图失败", err.Error()+"\n\n截图记录在「帮助 → 在访达中显示截图记录」里，可以发给开发者。", false)
 		})
 	}
 	if !ok && fromApp {
@@ -519,7 +519,7 @@ func main() {
 		if log := plat.ShotLog(); shotUnfinished(log) {
 			logShot("上次截图没有完成")
 			a.showShotAlert("上次截图没有完成",
-				"截图时 MyMind 可能意外退出了。可以在 设置 → 通用 → 截图 里改用「系统截图」，并把那里的截图记录复制发给开发者。", false)
+				"截图时 MyMind 可能意外退出了。截图记录在「帮助 → 在访达中显示截图记录」里，可以发给开发者。", false)
 		}
 		if err := plat.SetShotKey(a.shotKey()); err != nil {
 			log.Printf("截图快捷键 %s: %v", a.shotKey(), err)

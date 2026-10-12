@@ -101,7 +101,7 @@ func (s *Server) handle(req request) (any, *rpcError) {
 		return map[string]any{
 			"protocolVersion": version,
 			"capabilities":    map[string]any{"tools": map[string]any{"listChanged": false}},
-			"serverInfo":      map[string]any{"name": "mindmap", "title": "MyMind", "version": s.Version},
+			"serverInfo":      map[string]any{"name": "mymind", "title": "MyMind", "version": s.Version},
 			"instructions":    instructions,
 		}, nil
 	case "ping":

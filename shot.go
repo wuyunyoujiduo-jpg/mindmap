@@ -2,7 +2,6 @@ package main
 
 import (
 	"runtime"
-	"strings"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/screenshot"
@@ -73,8 +72,8 @@ func (a *app) keepShot(png []byte, act screenshot.Action, fromApp bool) {
 	}
 }
 
-// shotSettings says how screenshots are taken, tries one, and shows the
-// end of their log, to be copied when one goes wrong.
+// shotSettings says how screenshots are taken, and tries one. Their log
+// is a menu item away (帮助 → 在访达中显示截图记录), not shown.
 func (a *app) shotSettings(c *ui.Context) {
 	t := c.Theme()
 	ui.Field(c, "截图", func() {
@@ -86,16 +85,7 @@ func (a *app) shotSettings(c *ui.Context) {
 					a.settingsOpen = false
 					a.later(a.screenshot)
 				}
-				if ui.Button(c, "复制截图记录").Tooltip("截图不成功时，把这段记录发给开发者").Clicked() {
-					a.plat.CopyText(a.plat.ShotLog())
-					a.tell("截图记录已复制")
-				}
 			})
-			if log := strings.TrimSpace(a.plat.ShotLog()); log != "" {
-				ui.Box(c.Key("shot-log")).Padding(8, 10).Radius(8).Background(t.Text.Alpha(0.05)).FillWidth().Children(func() {
-					ui.Text(c, log).FontSize(11).TextColor(t.TextMuted).Wrap().Selectable()
-				})
-			}
 		})
 	})
 }

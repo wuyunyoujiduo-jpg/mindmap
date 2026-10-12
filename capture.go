@@ -323,7 +323,9 @@ func (a *app) settingsView(c *ui.Context) {
 			}
 			a.settingsTab = min(a.settingsTab, len(tabs)-1)
 			ui.Segmented(c, &a.settingsTab, tabs...).FillWidth()
-			ui.Scroll(c.Key(fmt.Sprint("settings", a.settingsTab))).Gap(16).MaxHeight(h-200).Padding(0, 10, 0, 0).Children(func() {
+			// The same height for every tab, so that the window does not
+			// jump when switching; a long tab scrolls.
+			ui.Scroll(c.Key(fmt.Sprint("settings", a.settingsTab))).Gap(16).Height(max(min(560, h-200), 200)).Padding(0, 10, 0, 0).Label("设置内容").Children(func() {
 				switch tabs[a.settingsTab] {
 				case "通用":
 					a.generalSettings(c)

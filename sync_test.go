@@ -103,14 +103,23 @@ func TestShotSettings(t *testing.T) {
 	a.openSettings()
 	tt.Frame()
 	snapshot(t, tt, "settings-shot")
-	if !tt.HasText("2026-10-11 15:04:05 截图开始") {
-		t.Fatalf("no log: %q", tt.Texts())
+	// The screenshots' log is not shown (帮助 → 在访达中显示截图记录 has it).
+	if tt.HasText("2026-10-11 15:04:05 截图开始") || tt.HasText("复制截图记录") {
+		t.Fatal("the log is shown")
 	}
-	if err := tt.Click("复制截图记录"); err != nil {
-		t.Fatal(err)
+	// Every tab is as high: the window does not jump.
+	general, ok := tt.Find("设置内容")
+	if !ok {
+		t.Fatal("no settings")
 	}
-	if a.plat.ClipboardText() != "2026-10-11 15:04:05 截图开始" {
-		t.Fatalf("copied %q", a.plat.ClipboardText())
+	for _, tab := range []string{"备份", "同步", "连接", "资料库"} {
+		if err := tt.Click(tab); err != nil {
+			t.Fatal(err)
+		}
+		tt.Frame()
+		if r, _ := tt.Find("设置内容"); r.H != general.H || r.Y != general.Y {
+			t.Fatalf("%s: %v, 通用 %v", tab, r, general)
+		}
 	}
 }
 
