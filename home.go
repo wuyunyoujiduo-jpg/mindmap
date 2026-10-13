@@ -170,15 +170,12 @@ func (a *app) openList(kind int, cat string) {
 // homeStats are the cards of large numbers.
 func (a *app) homeStats(c *ui.Context, now time.Time, maps, clips []*library.Clip) {
 	t := c.Theme()
-	docs, links, recent, waiting := 0, 0, 0, len(a.lib.Unorganized())
+	docs, links, waiting := 0, 0, len(a.lib.Unorganized())
 	for _, cl := range clips {
 		if cl.Kind == library.KindLink {
 			links++
 		} else {
 			docs++
-		}
-		if now.Sub(cl.Updated) < 7*24*time.Hour {
-			recent++
 		}
 	}
 	analyzed := 0
@@ -187,9 +184,6 @@ func (a *app) homeStats(c *ui.Context, now time.Time, maps, clips []*library.Cli
 			analyzed++
 		} else {
 			waiting++
-		}
-		if now.Sub(m.Updated) < 7*24*time.Hour {
-			recent++
 		}
 	}
 	stat := func(ic icon, col ui.Color, label string, n int, unit, sub string, open func()) {
@@ -215,7 +209,10 @@ func (a *app) homeStats(c *ui.Context, now time.Time, maps, clips []*library.Cli
 	ui.Row(c.Key("home-stats")).Gap(16).Children(func() {
 		stat(iconMap, tileBlue, "导图", len(maps), "张", fmt.Sprintf("AI 已分析 %d 张", analyzed), func() { a.openList(kindMaps, "") })
 		stat(iconFile, tileOrange, "文档", docs, "份", fmt.Sprintf("另有链接 %d 条", links), func() { a.openList(kindDocs, "") })
-		stat(iconPencil, tileGreen, "近 7 天更新", recent, "条", "导图和资料", func() { a.openList(kindAll, "") })
+		stat(iconInbox, tileGreen, "待归档", len(a.unfiledClips()), "条", "没进文件夹，也没挂到导图", func() {
+			a.unfiledOpen = true // listed in the sidebar
+			a.openList(kindDocs, "")
+		})
 		stat(iconSparkle, tilePurple, "待 AI 整理", waiting, "条", "资料未整理、导图未分析", func() {
 			if k := len(a.lib.Unorganized()); k > 0 && providerKey(a.cfg) != "" {
 				a.openList(kindAll, "-")

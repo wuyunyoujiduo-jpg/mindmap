@@ -226,14 +226,25 @@ func (a *app) clipBacklinks(id string) []backlink {
 	return a.refIndex().to[clipScheme+id]
 }
 
-// clipBacklinksSection lists the nodes that link to a clip.
-func (a *app) clipBacklinksSection(c *ui.Context, clip *library.Clip) {
-	back := a.clipBacklinks(clip.ID)
-	if len(back) == 0 {
-		return
-	}
+// clipPlacesSection tells where a clip is used: the nodes linking to it,
+// or, when none does, where it may go, a click linking it there.
+func (a *app) clipPlacesSection(c *ui.Context, clip *library.Clip) {
 	t := c.Theme()
-	sectionCard(c, iconMap, tileBlue, fmt.Sprintf("被 %d 个节点引用", len(back)), nil, func() {
+	back := a.clipBacklinks(clip.ID)
+	title := "还没放进导图"
+	if len(back) > 0 {
+		title = fmt.Sprintf("用在 %d 处", len(back))
+	}
+	ref := clipScheme + clip.ID
+	place := func() {
+		a.attachRef = ref
+		a.openPalette(paletteAttach)
+	}
+	sectionCard(c, iconMap, tileBlue, title, func() {
+		if ui.Button(c, "放到导图…").FontSize(12).Tooltip("挂到某张导图的某个节点上").Clicked() {
+			a.later(place)
+		}
+	}, func() {
 		ui.Column(c).Gap(4).Children(func() {
 			for i, b := range back {
 				row := ui.Row(c.Key(fmt.Sprint("cb", i))).Gap(6).Cursor(ui.CursorPointer).Label("前往 " + b.title)
@@ -243,15 +254,42 @@ func (a *app) clipBacklinksSection(c *ui.Context, clip *library.Clip) {
 				}
 				row.Children(func() {
 					ui.Text(c, "↩").FontSize(12).TextColor(t.TextMuted)
-					label := b.title
-					if b.path != a.path {
-						label = mapName(b.path) + " › " + label
+					ui.Text(c, mapName(b.path)+" › "+b.title).FontSize(12).TextColor(t.Accent).MaxLines(1)
+				})
+			}
+			if len(back) > 0 {
+				return
+			}
+			places := a.placesOf(clip)
+			if len(places) == 0 {
+				ui.Text(c, "挂到导图的节点上，资料就和项目、主题串起来了").FontSize(12).TextColor(t.TextMuted).Wrap()
+				return
+			}
+			for i, p := range places {
+				ui.Row(c.Key(fmt.Sprint("place", i))).Gap(6).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, "建议："+p.title).FontSize(12).Grow(1).Shrink(1).MinWidth(0).MaxLines(2)
+					if ui.Button(c.Key("attach"), "挂上").FontSize(11).Tooltip("把这条资料挂到「"+p.title+"」").Clicked() {
+						p := p
+						a.later(func() {
+							if err := a.attachTo(p.path, p.id, ref, "资料"); err != nil {
+								a.libErr = err.Error()
+							}
+						})
 					}
-					ui.Text(c, label).FontSize(12).TextColor(t.Accent).MaxLines(1)
 				})
 			}
 		})
 	})
+}
+
+// placesOf are where a clip may go, worked out again as the clips or the
+// maps change.
+func (a *app) placesOf(clip *library.Clip) []place {
+	key := fmt.Sprint(clip.ID, a.lib.Version, a.refIndex().sig)
+	if a.placesKey != key {
+		a.placesKey, a.placesList = key, a.placesFor(clip, 3)
+	}
+	return a.placesList
 }
 
 // recentClips are the clips kept in the last days, newest first.

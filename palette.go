@@ -21,10 +21,11 @@ const (
 	paletteAll = iota
 	paletteMaps
 	paletteSearch
-	paletteLink  // a node to link the node a.linkFrom to
-	paletteAfter // a task for the task a.linkFrom to wait on
-	paletteMove  // a node to move the nodes selected under
-	paletteClip  // a clip of the library to link the node a.linkFrom to
+	paletteLink   // a node to link the node a.linkFrom to
+	paletteAfter  // a task for the task a.linkFrom to wait on
+	paletteMove   // a node to move the nodes selected under
+	paletteClip   // a clip of the library to link the node a.linkFrom to
+	paletteAttach // a node, of any map, to link a.attachRef to
 )
 
 // paletteItem is a line of the palette.
@@ -127,6 +128,38 @@ func (a *app) paletteItems() []paletteItem {
 		}
 		if q != "" && a.file != nil {
 			items = append(items, a.nodeItems(a.path, a.file, q, 30, a.goToNode)...)
+		}
+	}
+	if a.paletteMode == paletteAttach {
+		ref := a.attachRef
+		attach := func(path, _, id string) {
+			if err := a.attachTo(path, id, ref, "资料"); err != nil {
+				a.saveErr = err.Error()
+			}
+		}
+		if q == "" { // the likeliest places first
+			if c := a.lib.Find(strings.TrimPrefix(ref, clipScheme)); c != nil {
+				for _, p := range a.placesFor(c, 8) {
+					p := p
+					items = append(items, paletteItem{"建议", p.title, "", func() { attach(p.path, p.sheet, p.id) }})
+				}
+			}
+		}
+		for _, f := range a.files {
+			file := a.mapFile(f.Path)
+			if file == nil {
+				continue
+			}
+			if q == "" { // and every map's center
+				d := file.Sheets[0]
+				path, sheet, id := f.Path, d.ID, d.Root.ID
+				items = append(items, paletteItem{"导图", d.Root.Title, mapName(path), func() { attach(path, sheet, id) }})
+				continue
+			}
+			items = append(items, a.nodeItems(f.Path, file, q, 200-len(items), attach)...)
+			if len(items) >= 200 {
+				break
+			}
 		}
 	}
 	if a.paletteMode == paletteClip && a.lib != nil {
@@ -380,6 +413,7 @@ func (a *app) paletteView(c *ui.Context) {
 			paletteAfter:  "选择要先完成的任务…",
 			paletteMove:   "移到哪个节点下？输入关键词查找，或选择导图的中心主题…",
 			paletteClip:   "在资料库里查找要链接的资料…",
+			paletteAttach: "把资料挂到哪个节点？输入关键词查找，或选择建议的节点…",
 		}[a.paletteMode]
 		w, _ := c.Size()
 		ui.Column(c).Width(min(640, w-80)).Gap(8).Children(func() {

@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 	"strings"
 	"testing"
 )
@@ -106,5 +107,59 @@ func TestAIMergeMaterial(t *testing.T) {
 	}
 	if len(slow.Links) != 1 || slow.Links[0] != clipScheme+c.ID {
 		t.Fatalf("links %v", slow.Links)
+	}
+}
+
+// A clip not in any map yet is told where it may go: under the node its
+// like is linked to, or the node of the map most about it; a click links it.
+func TestClipPlaces(t *testing.T) {
+	a, tt := newTestApp(t)
+	other, _, kid := newMapFile(t, a, "Go 学习", "并发编程")
+	f, _ := model.Load(other)
+	n := f.Node(kid.ID)
+	n.Note = "goroutine 和 channel 的并发模式"
+	f.Save(other)
+	a.refreshFiles()
+	clip, err := a.addClipText("Go 并发模式：goroutine 与 channel", "手动")
+	if err != nil {
+		t.Fatal(err)
+	}
+	clip.Title, clip.Tags = "Go 并发模式", []string{"并发", "goroutine"}
+	places := a.placesFor(clip, 3)
+	if len(places) == 0 || places[0].id != kid.ID || places[0].title != "Go 学习 › 并发编程" {
+		t.Fatalf("places %+v", places)
+	}
+	a.showClip(clip.ID)
+	tt.Frame()
+	if !tt.HasText("还没放进导图") || !tt.HasText("建议：Go 学习 › 并发编程") {
+		t.Fatalf("texts %q", tt.Texts())
+	}
+	snapshot(t, tt, "clip-places")
+	if err := tt.Click("挂上"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	g, _ := model.Load(other)
+	if links := g.Node(kid.ID).Links; len(links) != 1 || links[0] != clipScheme+clip.ID {
+		t.Fatalf("links %v", links)
+	}
+	if !tt.HasText("用在 1 处") {
+		t.Fatalf("texts %q", tt.Texts())
+	}
+
+	// Another clip like it goes where it went, through the palette.
+	like, _ := a.addClipText("channel 关闭的几种写法", "手动")
+	like.Tags = []string{"并发", "goroutine"}
+	a.attachRef = clipScheme + like.ID
+	a.openPalette(paletteAttach)
+	tt.Frame()
+	items := a.paletteItems()
+	if len(items) == 0 || items[0].kind != "建议" {
+		t.Fatalf("items %+v", items)
+	}
+	items[0].run()
+	g, _ = model.Load(other)
+	if len(g.Node(kid.ID).Links) != 2 {
+		t.Fatalf("links %v", g.Node(kid.ID).Links)
 	}
 }

@@ -28,7 +28,7 @@ func TestHome(t *testing.T) {
 	if !a.libOpen || !a.libHome {
 		t.Fatal("概览 not shown")
 	}
-	for _, want := range []string{"导图", "文档", "近 7 天更新", "待 AI 整理", "最近 30 天", "分类分布", "最近更新", "分类 技术"} {
+	for _, want := range []string{"导图", "文档", "待归档", "待 AI 整理", "最近 30 天", "分类分布", "最近更新", "分类 技术"} {
 		if !tt.HasText(want) {
 			t.Fatalf("no %q: %q", want, tt.Texts())
 		}

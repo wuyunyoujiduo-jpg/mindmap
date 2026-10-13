@@ -176,11 +176,15 @@ func (a *app) docCount(f model.Folder) int {
 	return n
 }
 
-// unfiledClips are the documents in no folder: never put in one, or in
-// one no more there.
+// unfiledClips are the documents not put anywhere yet: in no folder (never
+// put in one, or in one no more there), and linked from no map.
 func (a *app) unfiledClips() []*library.Clip {
 	var out []*library.Clip
+	refs := a.refIndex()
 	for _, c := range a.lib.Clips {
+		if len(refs.to[clipScheme+c.ID]) > 0 {
+			continue // placed in a map
+		}
 		if c.Folder == "" {
 			out = append(out, c)
 			continue
@@ -205,7 +209,7 @@ func (a *app) unfiledRow(c *ui.Context) {
 	}
 	open := a.unfiledOpen // closed at first: a count, not a long list
 	row := ui.Row(c).Padding(5, 8).Gap(6).Radius(6).AlignItems(ui.Center).Cursor(ui.CursorPointer).
-		Label("未归档").Tooltip("没放进文件夹的文档；把文档拖到文件夹上，或右键「放到文件夹」来归档")
+		Label("未归档").Tooltip("还没放进文件夹、也没挂到导图上的文档；拖到文件夹或导图的节点上来归档")
 	switch {
 	case draggedOver(row):
 		row.Background(t.Accent.Alpha(0.15))

@@ -520,6 +520,9 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 		}
 	}
 
+	// Where it is used, or where it may go.
+	a.clipPlacesSection(c, clip)
+
 	// Properties.
 	sectionCard(c, iconTag, tileBlue, "信息", nil, func() {
 		propRow(c, "分类", func() {
@@ -692,7 +695,6 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 		ui.Text(c, "检索关键词："+strings.Join(clip.Keywords, "、")).FontSize(textCaption).TextColor(t.TextMuted).Wrap()
 	}
 	a.relatedSection(c, clip)
-	a.clipBacklinksSection(c, clip)
 }
 
 // libraryRow is the library's entry in the sidebar.

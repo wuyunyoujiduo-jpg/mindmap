@@ -139,7 +139,7 @@ func TestNodeLinksToClips(t *testing.T) {
 		t.Fatal("link did not show the clip")
 	}
 	tt.Frame()
-	if !tt.HasText("被 1 个节点引用") {
+	if !tt.HasText("用在 1 处") {
 		t.Fatalf("detail: %q", tt.Texts())
 	}
 

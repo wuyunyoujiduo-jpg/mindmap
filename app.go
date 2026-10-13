@@ -214,6 +214,11 @@ type app struct {
 	codeStat        codeStatus            // how far the code has gone since the baseline
 	refs            *refs                 // the links of every map (refs.go)
 	edits           int                   // counts the open map's changes, for what is worked out from it
+	nodeIdx         map[string]*nodeIndex // maps' nodes by their words (matcher.go)
+	qpending        map[string]bool       // queries whose vectors are being made
+	attachRef       string                // the material the palette places (paletteAttach)
+	placesKey       string                // what placesList was worked out for
+	placesList      []place
 	index           map[string]indexEntry // maps read for the search, by path
 	// The maps' AI analyses (mapanalysis.go), by key; the map analyzed.
 	mapMetas       map[string]*model.Analysis
