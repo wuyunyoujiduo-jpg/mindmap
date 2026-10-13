@@ -234,7 +234,7 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 		}
 		text := readMap(s.rel(path), f, get("sheet"))
 		if f.Project != "" || f.Baseline != nil {
-			text += baselineText(path, f)
+			text += BaselineText(path, f)
 		}
 		return text, nil
 	case "search":

@@ -214,6 +214,7 @@ type app struct {
 	historyFile     *model.File           // the version chosen
 	historyDiff     []model.Change        // what it changed, or from it to now
 	historyToNow    bool                  // the changes from the version to now
+	codeStat        codeStatus            // how far the code has gone since the baseline
 	index           map[string]indexEntry // maps read for the search, by path
 	// The maps' AI analyses (mapanalysis.go), by key; the map analyzed.
 	mapMetas       map[string]*model.Analysis

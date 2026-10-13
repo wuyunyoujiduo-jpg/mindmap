@@ -135,3 +135,22 @@ func short(commit string) string {
 
 // Short is a commit's hash as people write it.
 func Short(commit string) string { return short(commit) }
+
+// Patch is what changed in the code from base to the working tree, as a
+// diff of at most max bytes; lock files and the like are left out.
+func Patch(dir, base string, max int) (string, error) {
+	out, err := git(dir, "diff", "-M", "--no-color", base, "--", ".",
+		":(exclude)*.lock", ":(exclude)go.sum", ":(exclude)package-lock.json", ":(exclude)pnpm-lock.yaml",
+		":(exclude)*.min.js", ":(exclude)*.svg", ":(exclude)*.png", ":(exclude)*.jpg")
+	if err != nil {
+		return "", err
+	}
+	if len(out) > max {
+		cut := strings.LastIndex(out[:max], "\n")
+		if cut < 0 {
+			cut = max
+		}
+		out = out[:cut] + fmt.Sprintf("\n…（diff 太长，后面 %d KB 没有附上）\n", (len(out)-cut)/1024)
+	}
+	return out, nil
+}

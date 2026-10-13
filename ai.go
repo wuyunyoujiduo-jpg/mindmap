@@ -14,6 +14,7 @@ import (
 	"github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/anthropics/anthropic-sdk-go/shared/constant"
 	"github.com/egoist/mygo/ui"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/gitbase"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
 
@@ -100,6 +101,9 @@ type chatMsg struct {
 	result    string     // what applying did
 	files     []aiAttach // attached to a message of the user's
 	names     []string   // of the files, of a conversation kept
+	// baseline is the commit of the code a proposal brings the map up to
+	// date with: applying it records it as the map's code baseline.
+	baseline *model.Baseline
 }
 
 // aiState is the conversation of the AI panel.
@@ -121,7 +125,11 @@ type aiState struct {
 	streaming string // the text of the reply coming
 	// answers answer the proposals of the last reply; the next message
 	// sends them first, as the APIs require.
-	answers   []toolAnswer
+	answers []toolAnswer
+	// syncBase is the commit of the code the request is about (see
+	// syncWithCode), which its proposals bring the map up to date with.
+	syncBase  *model.Baseline
+	nextSync  *model.Baseline // the next request's syncBase
 	cancel    context.CancelFunc
 	scroll    ui.ScrollState
 	keyDraft  string
@@ -284,6 +292,9 @@ func (a *app) snapshot(scope int) string {
 			}
 			b.WriteString("）")
 		}
+		for _, l := range n.Links {
+			b.WriteString(" <" + l + ">")
+		}
 		if n.Image != nil {
 			b.WriteString("（附图片）")
 		}
@@ -333,7 +344,8 @@ func (a *app) snapshot(scope int) string {
 // aiSend sends the draft, with the map, or what the library holds when it
 // is shown, and waits for the reply in the background.
 func (a *app) aiSend() {
-	draft, extra, files := a.ai.draft, a.ai.extra, a.ai.attach
+	draft, extra, files, sync := a.ai.draft, a.ai.extra, a.ai.attach, a.ai.nextSync
+	a.ai.nextSync = nil
 	a.switchChat() // the conversation about what is shown
 	a.ai.draft, a.ai.extra, a.ai.attach = draft, extra, files
 	ai := &a.ai
@@ -358,6 +370,7 @@ func (a *app) aiSend() {
 	}
 	ai.provider = a.cfg.AIProvider
 	ai.rounds = 0
+	ai.syncBase = sync // nil for a message of the user's, about something else
 	// Proposals left unanswered are discarded by sending on.
 	for i := range ai.msgs {
 		if ai.msgs[i].proposal != nil && ai.msgs[i].state == proposalPending {
@@ -561,7 +574,7 @@ func (a *app) aiReceive(r aiReply, err error) {
 			ai.answers = append(ai.answers, toolAnswer{id: call.id, text: "无法解析修改，未应用。", isError: true})
 			continue
 		}
-		msg := chatMsg{role: "assistant", proposal: &p, toolUseID: call.id}
+		msg := chatMsg{role: "assistant", proposal: &p, toolUseID: call.id, baseline: ai.syncBase}
 		if !shown {
 			msg.text, shown = text, true
 		}
@@ -644,12 +657,19 @@ func (a *app) answerProposal(i int, apply bool) {
 		m.state, m.result = proposalFailed, "没有打开的导图"
 		result = "应用失败：没有打开的导图。"
 	} else if apply {
-		n, err := a.applyEdits(m.proposal.Operations)
-		if err != nil {
+		n, err := a.applyEdits(m.proposal.Operations, m.baseline)
+		switch {
+		case err != nil:
 			m.state, m.result = proposalFailed, err.Error()
 			result = "应用失败：" + err.Error()
-		} else {
+		case n == 0:
+			m.state, m.result = proposalApplied, "导图已与代码一致，代码基线已更新到 "+gitbase.Short(m.baseline.Commit)
+			result = "用户已确认导图与代码一致。"
+		default:
 			m.state, m.result = proposalApplied, fmt.Sprintf("已应用 %d 项修改（可撤销）", n)
+			if m.baseline != nil {
+				m.result += "，代码基线已更新到 " + gitbase.Short(m.baseline.Commit)
+			}
 			result = fmt.Sprintf("用户已应用这 %d 项修改。", n)
 		}
 	} else {
@@ -660,16 +680,24 @@ func (a *app) answerProposal(i int, apply bool) {
 }
 
 // applyEdits makes the proposed edits, all or none, as one step of the
-// history, and returns how many it made.
-func (a *app) applyEdits(ops []aiEdit) (int, error) {
-	if len(ops) == 0 {
+// history, and returns how many it made. With a baseline, the map is up
+// to date with that code: it is recorded in the same step, which undo
+// takes back with the edits.
+func (a *app) applyEdits(ops []aiEdit, base *model.Baseline) (int, error) {
+	if len(ops) == 0 && base == nil {
 		return 0, errors.New("没有修改")
 	}
 	if _, err := editFile(a.file.Clone(), ops); err != nil { // all or none
 		return 0, err
 	}
 	var done []aiEdit
-	a.mutate("", func() { done, _ = editFile(a.file, ops) })
+	a.mutate("", func() {
+		done, _ = editFile(a.file, ops)
+		if base != nil {
+			b := *base
+			a.file.Baseline = &b
+		}
+	})
 	ops = done
 	// The canvas object stays; show the one with the last node touched.
 	for i := len(ops) - 1; i >= 0; i-- {
@@ -1051,6 +1079,9 @@ func (a *app) proposalCard(c *ui.Context, i int) {
 		added := map[string]string{}
 		for j, op := range p.Operations {
 			ui.Text(c.Key(j), a.describeEdit(op, added)).FontSize(12).Wrap()
+		}
+		if b := m.baseline; b != nil && m.state == proposalPending {
+			ui.Text(c, "应用后，代码基线更新到 "+baselineLabel(b)).FontSize(11).TextColor(t.TextMuted).Wrap()
 		}
 		switch m.state {
 		case proposalPending:

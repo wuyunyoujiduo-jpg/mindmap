@@ -1279,7 +1279,7 @@ func TestAIEditsAllOrNone(t *testing.T) {
 	_, err := a.applyEdits([]aiEdit{
 		{Op: "update", ID: a.doc.Root.ID, Title: "改了"},
 		{Op: "delete", ID: "no-such-node"},
-	})
+	}, nil)
 	if err == nil {
 		t.Fatal("bad edit applied")
 	}

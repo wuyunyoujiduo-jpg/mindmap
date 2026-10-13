@@ -31,9 +31,9 @@ func projectDir(path string, f *model.File) string {
 	return filepath.Dir(path)
 }
 
-// baselineText is read_map's part on the code: the baseline, and what
+// BaselineText is read_map's part on the code: the baseline, and what
 // changed since it, by node.
-func baselineText(path string, f *model.File) string {
+func BaselineText(path string, f *model.File) string {
 	var b strings.Builder
 	b.WriteString("\n## 代码基线\n\n")
 	bl := f.Baseline
