@@ -212,7 +212,8 @@ type app struct {
 	historyList     []versions.Version
 	historySel      int
 	historyFile     *model.File           // the version chosen
-	historyDiff     []model.Change        // from it to now
+	historyDiff     []model.Change        // what it changed, or from it to now
+	historyToNow    bool                  // the changes from the version to now
 	index           map[string]indexEntry // maps read for the search, by path
 	// The maps' AI analyses (mapanalysis.go), by key; the map analyzed.
 	mapMetas       map[string]*model.Analysis
@@ -617,14 +618,16 @@ func (a *app) reloadFromDisk(c *ui.Context) {
 		a.conflict = true // conflictBar asks which to keep
 		return
 	}
-	a.keepVersion(versions.BeforeExternal)
+	before := a.file.Clone()
 	a.reload()
-	a.keepVersion(versions.External)
+	// An AI changing it through MCP kept the versions before and after
+	// already: they are not kept twice.
+	if !a.versions.IsLatest(a.path, a.file) {
+		a.keepVersionOf(before, versions.BeforeExternal)
+		a.keepVersion(versions.External)
+	}
 	c.ToastAction("已载入外部修改", "查看改动", func() {
-		a.openHistory()
-		if len(a.historyList) > 1 {
-			a.historyPick(1) // the version before it
-		}
+		a.openHistory() // the newest version, with what it changed
 	})
 }
 

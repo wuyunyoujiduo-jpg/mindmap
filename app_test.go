@@ -2160,6 +2160,33 @@ func changeOnDisk(t *testing.T, a *app, fn func(f *model.File), after time.Durat
 	a.checked = time.Time{}
 }
 
+// A map an AI changed through MCP, which kept the versions before and
+// after, isn't kept twice when the app loads it.
+func TestReloadAfterAI(t *testing.T) {
+	a, tt := newTestApp(t)
+	os.RemoveAll(a.versions.Dir)
+	a.lastSnap = nil
+	a.keepVersion(versions.Open)
+	changeOnDisk(t, a, func(f *model.File) {
+		a.versions.Save(a.path, f.Clone(), versions.BeforeAI, "", testNow.Add(time.Second))
+		d := f.Sheets[0]
+		n, _ := d.AddChild(d.Root.ID, "AI 加的")
+		n.Links = []string{"src/ai.go"}
+		a.versions.Save(a.path, f, versions.AI, "加模块", testNow.Add(2*time.Second))
+	}, time.Minute)
+	tt.Frame()
+	find(t, a, "AI 加的")
+	vs := a.versions.List(a.path)
+	if len(vs) != 2 || vs[0].Reason != versions.AI {
+		t.Fatalf("versions %+v", vs)
+	}
+	a.openHistory()
+	tt.Frame()
+	if sum := model.Summary(a.historyDiff); sum != "新增 1" {
+		t.Fatalf("summary %q", sum)
+	}
+}
+
 func TestHistoryAndConflict(t *testing.T) {
 	a, tt := newTestApp(t)
 	os.RemoveAll(a.versions.Dir) // kept as opened, on the clock of the test
@@ -2182,8 +2209,9 @@ func TestHistoryAndConflict(t *testing.T) {
 	if len(vs) != 2 || vs[0].Reason != versions.External {
 		t.Fatalf("versions %+v", vs)
 	}
+	// The newest version shows what it changed; the one before, compared
+	// with now, the same.
 	a.openHistory()
-	a.historyPick(1)
 	tt.Frame()
 	if sum := model.Summary(a.historyDiff); sum != "新增 1 · 状态 1" {
 		t.Fatalf("summary %q", sum)
@@ -2192,6 +2220,18 @@ func TestHistoryAndConflict(t *testing.T) {
 		t.Fatalf("texts %q", tt.Texts())
 	}
 	snapshot(t, tt, "history")
+	a.historyPick(1)
+	if sum := model.Summary(a.historyDiff); sum != "没有变化" {
+		t.Fatalf("the version before changed %q", sum)
+	}
+	tt.Frame()
+	if err := tt.Click("到现在的变化"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if sum := model.Summary(a.historyDiff); !a.historyToNow || sum != "新增 1 · 状态 1" {
+		t.Fatalf("to now %q", sum)
+	}
 	// Restoring the version before brings the map back, as a step undo
 	// takes back.
 	if err := tt.Click("恢复到这个版本"); err != nil {

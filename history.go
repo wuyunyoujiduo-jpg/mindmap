@@ -149,7 +149,8 @@ func (a *app) openHistory() {
 	a.historyOpen = true
 }
 
-// historyPick shows what changed from a version to now.
+// historyPick shows what a version changed from the one before it, or
+// what changed from it to now.
 func (a *app) historyPick(i int) {
 	a.historySel = i
 	a.historyFile, a.historyDiff = nil, nil
@@ -162,7 +163,26 @@ func (a *app) historyPick(i int) {
 		return
 	}
 	a.historyFile = f
-	a.historyDiff = model.Diff(f, a.file)
+	switch {
+	case a.historyToNow:
+		a.historyDiff = model.Diff(f, a.file)
+	case i+1 < len(a.historyList):
+		if prev, err := a.versions.Load(a.historyList[i+1]); err == nil {
+			a.historyDiff = model.Diff(prev, f)
+		}
+	}
+}
+
+// historyTitle says what the changes shown are of.
+func (a *app) historyTitle() string {
+	v := a.historyList[a.historySel]
+	if a.historyToNow {
+		return "从 " + whenLabel(v.Time, a.now()) + " 到现在：" + model.Summary(a.historyDiff)
+	}
+	if a.historySel == len(a.historyList)-1 {
+		return "最早的版本"
+	}
+	return "这一版的改动（和上一版比）：" + model.Summary(a.historyDiff)
 }
 
 // restoreVersion brings back a version, as a step that undo takes back,
@@ -244,8 +264,17 @@ func (a *app) historyView(c *ui.Context) {
 				if a.historyFile == nil {
 					return
 				}
-				v := a.historyList[a.historySel]
-				ui.Text(c, "从 "+whenLabel(v.Time, a.now())+" 到现在："+model.Summary(a.historyDiff)).FontSize(13).Bold().Wrap()
+				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, a.historyTitle()).FontSize(13).Bold().Wrap().Grow(1).Basis(0).MinWidth(0)
+					mode := 0
+					if a.historyToNow {
+						mode = 1
+					}
+					if ui.Segmented(c.Key("history-mode"), &mode, "这一版的改动", "到现在的变化").Changed() {
+						a.historyToNow = mode == 1
+						a.historyPick(a.historySel)
+					}
+				})
 				ui.Scroll(c.Key("changes")).Grow(1).Children(func() {
 					ui.Column(c).Gap(4).Children(func() {
 						for i, ch := range a.historyDiff {

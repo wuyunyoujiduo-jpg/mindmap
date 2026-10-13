@@ -138,6 +138,22 @@ func (s Store) Save(mapPath string, f *model.File, reason, note string, now time
 	return true, nil
 }
 
+// IsLatest tells whether f is what the newest version of a map holds, as
+// when the AI that changed the file kept it already.
+func (s Store) IsLatest(mapPath string, f *model.File) bool {
+	last := s.List(mapPath)
+	if len(last) == 0 || f == nil {
+		return false
+	}
+	prev, err := s.Load(last[0])
+	if err != nil {
+		return false
+	}
+	a, _ := json.Marshal(prev)
+	b, _ := json.Marshal(f)
+	return bytes.Equal(a, b)
+}
+
 // List returns a map's versions, the newest first.
 func (s Store) List(mapPath string) []Version {
 	if s.Dir == "" {

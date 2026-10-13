@@ -17,6 +17,8 @@ const (
 	StatusSet  ChangeKind = "状态"
 	NoteSet    ChangeKind = "备注"
 	TagsSet    ChangeKind = "标签"
+	LinksSet   ChangeKind = "链接"
+	Settings   ChangeKind = "设置" // of the map: its project folder, code baseline…
 	TaskSet    ChangeKind = "任务"
 	SheetAdded ChangeKind = "新画布"
 	SheetGone  ChangeKind = "删除画布"
@@ -33,9 +35,10 @@ type Change struct {
 }
 
 // Diff lists what changed from one version of a map to another, matching
-// nodes by their IDs: canvases and nodes added and removed, then the
-// nodes renamed, moved, and whose task, note or tags changed. Nodes under
-// one added or removed are not listed by themselves.
+// nodes by their IDs: the map's settings, canvases and nodes added and
+// removed, then the nodes renamed, moved, and whose task, note, tags or
+// links changed. Nodes under one added or removed are not listed by
+// themselves.
 func Diff(old, new *File) []Change {
 	type entry struct {
 		node   *Node
@@ -58,7 +61,7 @@ func Diff(old, new *File) []Change {
 		return m
 	}
 	before, after := index(old), index(new)
-	var out []Change
+	out := settingsDiff(old, new)
 	sheets := func(f *File) map[string]string {
 		m := map[string]string{}
 		for _, d := range f.Sheets {
@@ -155,9 +158,47 @@ func Diff(old, new *File) []Change {
 			if !slices.Equal(o.node.Tags, n.Tags) {
 				add(TagsSet, tagDiff(o.node.Tags, n.Tags))
 			}
+			if !slices.Equal(o.node.Links, n.Links) {
+				add(LinksSet, tagDiff(o.node.Links, n.Links))
+			}
 			return true
 		})
 	}
+	return out
+}
+
+// settingsDiff lists the changes of the map's own settings.
+func settingsDiff(old, new *File) []Change {
+	var out []Change
+	set := func(what, o, n string) {
+		if o == n {
+			return
+		}
+		if o == "" {
+			o = "无"
+		}
+		if n == "" {
+			n = "无"
+		}
+		out = append(out, Change{Kind: Settings, Title: what, Detail: o + " → " + n})
+	}
+	set("项目代码目录", old.Project, new.Project)
+	set("GitHub 仓库", old.GitHub, new.GitHub)
+	commit := func(b *Baseline) string {
+		if b == nil {
+			return ""
+		}
+		c := b.Commit
+		if len(c) > 7 {
+			c = c[:7]
+		}
+		if b.Branch != "" {
+			c = b.Branch + " " + c
+		}
+		return c
+	}
+	set("代码基线", commit(old.Baseline), commit(new.Baseline))
+	set("度量", strings.Join(old.Measures, "、"), strings.Join(new.Measures, "、"))
 	return out
 }
 
@@ -213,7 +254,7 @@ func tagDiff(old, new []string) string {
 
 // Summary counts changes by kind, as "新增 3 · 删除 1 · 状态 2".
 func Summary(changes []Change) string {
-	order := []ChangeKind{SheetAdded, SheetGone, Added, Removed, Renamed, Moved, StatusSet, TaskSet, NoteSet, TagsSet}
+	order := []ChangeKind{Settings, SheetAdded, SheetGone, Added, Removed, Renamed, Moved, StatusSet, TaskSet, NoteSet, TagsSet, LinksSet}
 	count := map[ChangeKind]int{}
 	for _, c := range changes {
 		count[c.Kind]++
