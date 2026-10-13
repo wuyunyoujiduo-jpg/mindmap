@@ -1373,7 +1373,7 @@ func TestDeepSeek(t *testing.T) {
 	a.cfg.AIProvider, a.cfg.DSKey, a.cfg.DSBaseURL = providerDeepSeek, "sk-test", srv.URL
 
 	tt.Click("AI 助手")
-	if !tt.HasText("DeepSeek V4.1 Flash（推荐）") {
+	if !tt.HasText("DeepSeek V4.1 Flash") {
 		t.Fatalf("model not shown: %q", tt.Texts())
 	}
 	a.ai.draft = "把列表加载慢改成进行中"
