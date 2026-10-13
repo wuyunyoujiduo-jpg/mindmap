@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/gitbase"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/versions"
 )
 
 // The AI panel chats with Claude or DeepSeek about the map. Each message
@@ -43,6 +45,7 @@ const (
 	scopeCanvas  = iota // the canvas shown
 	scopeSubtree        // the selected node and what is below it
 	scopeFile           // every canvas of the file
+	scopeNone           // no map: a question of its own, or a new map
 )
 
 // aiEdit is one change the AI proposes.
@@ -62,6 +65,14 @@ type aiEdit struct {
 type aiProposal struct {
 	Summary    string   `json:"summary"`
 	Operations []aiEdit `json:"operations"`
+	// NewMap, instead, is a map to create (propose_new_map).
+	NewMap *aiNewMap `json:"newMap,omitempty"`
+}
+
+// aiNewMap is a new map the AI proposes: its name and its nodes.
+type aiNewMap struct {
+	Name    string `json:"name"`
+	Outline string `json:"outline"` // a Markdown list, nested by two spaces
 }
 
 // Proposal states.
@@ -220,7 +231,9 @@ const aiSystemPrompt = `你是「MyMind」思维导图项目管理工具里的�
 - 新增的节点给一个 ref（如 "r1"），后面的修改可以用这个 ref 作为父节点。
 - 标题保持简短，细节写进备注。
 - 不需要修改的字段留空字符串（tags 留空数组）。
-- 不要删除用户没有要求删除的内容。`
+- 不要删除用户没有要求删除的内容。
+
+当用户要新建一张导图（而不是改当前这张）时，调用 propose_new_map：给导图起个简短的名字，节点写成 Markdown 列表（两个空格缩进一层，"- [ ] 文字" 是待做任务）。用户确认后才会创建并打开它。`
 
 const proposeEditsDescription = "向用户提出对导图的一组修改。用户确认后才会应用。一次请求的所有修改放在一次调用里。"
 
@@ -380,6 +393,8 @@ func (a *app) aiSend() {
 	var snapshot string
 	if a.libOpen || a.doc == nil {
 		snapshot = "资料库：\n" + a.librarySnapshot()
+	} else if ai.scope == scopeNone {
+		snapshot = "（这次没有附带导图内容。要新建导图时用 propose_new_map。）"
 	} else {
 		snapshot = "导图快照：\n" + a.snapshot(ai.scope)
 	}
@@ -493,6 +508,7 @@ func (a *app) aiParams() anthropic.BetaMessageNewParams {
 			Effort: anthropic.BetaOutputConfigEffortMedium,
 		},
 	}
+	p.Tools = append([]anthropic.BetaToolUnionParam{newMapToolClaude()}, p.Tools...)
 	if a.aiEdits() {
 		p.Tools = append([]anthropic.BetaToolUnionParam{proposeEditsTool()}, p.Tools...)
 	}
@@ -569,7 +585,16 @@ func (a *app) aiReceive(r aiReply, err error) {
 	shown := false
 	for _, call := range r.calls {
 		var p aiProposal
-		if call.name != "propose_edits" || json.Unmarshal([]byte(call.input), &p) != nil {
+		if call.name == "propose_new_map" {
+			var nm aiNewMap
+			if json.Unmarshal([]byte(call.input), &nm) != nil || strings.TrimSpace(nm.Name) == "" {
+				ai.msgs = append(ai.msgs, chatMsg{role: "error", text: "无法读取 AI 提出的新导图"})
+				ai.answers = append(ai.answers, toolAnswer{id: call.id, text: "无法解析，没有创建。", isError: true})
+				continue
+			}
+			nm.Name = strings.TrimSpace(nm.Name)
+			p = aiProposal{Summary: "新建导图「" + nm.Name + "」", NewMap: &nm}
+		} else if call.name != "propose_edits" || json.Unmarshal([]byte(call.input), &p) != nil {
 			ai.msgs = append(ai.msgs, chatMsg{role: "error", text: "无法读取 AI 提出的修改"})
 			ai.answers = append(ai.answers, toolAnswer{id: call.id, text: "无法解析修改，未应用。", isError: true})
 			continue
@@ -656,6 +681,14 @@ func (a *app) answerProposal(i int, apply bool) {
 	if apply && a.file == nil {
 		m.state, m.result = proposalFailed, "没有打开的导图"
 		result = "应用失败：没有打开的导图。"
+	} else if apply && m.proposal.NewMap != nil {
+		if name, err := a.createMapFromAI(m.proposal.NewMap); err != nil {
+			m.state, m.result = proposalFailed, err.Error()
+			result = "创建失败：" + err.Error()
+		} else {
+			m.state, m.result = proposalApplied, "已新建导图「"+name+"」并打开"
+			result = "用户已创建导图「" + name + "」，现在打开的就是它。"
+		}
 	} else if apply {
 		n, err := a.applyEdits(m.proposal.Operations, m.baseline)
 		switch {
@@ -985,7 +1018,8 @@ func (a *app) aiPanel(c *ui.Context) {
 			if a.libOpen {
 				ui.Text(c, "基于资料库对话；导图里提问时也能检索资料库").FontSize(11).TextColor(t.TextMuted)
 			} else {
-				ui.Segmented(c, &ai.scope, "当前画布", "选中节点", "整个文件").FillWidth()
+				ui.Segmented(c, &ai.scope, "本画布", "选中节点", "全部画布", "不带导图").FillWidth().FontSize(11).
+					Tooltip("AI 看到的内容：当前画布、选中的节点及其下级、这个文件的全部画布，或不带导图（如新建导图）")
 			}
 			attachRow(c, ai.attach, nil, func(i int) {
 				a.later(func() { ai.attach = slices.Delete(ai.attach, i, i+1) })
@@ -1075,6 +1109,14 @@ func (a *app) proposalCard(c *ui.Context, i int) {
 		ui.Text(c, "建议的修改").FontSize(11).Bold().TextColor(t.TextMuted)
 		if p.Summary != "" {
 			ui.Text(c, p.Summary).FontSize(13).Bold().Wrap()
+		}
+		if nm := p.NewMap; nm != nil {
+			lines := strings.Split(strings.TrimSpace(nm.Outline), "\n")
+			if len(lines) > 12 {
+				lines = append(lines[:12], fmt.Sprintf("…还有 %d 行", len(lines)-12))
+			}
+			ui.Text(c, strings.Join(lines, "\n")).FontSize(12).Wrap()
+			ui.Text(c, "应用后在「"+filepath.Base(a.currentFolder())+"」里新建并打开").FontSize(11).TextColor(t.TextMuted).Wrap()
 		}
 		added := map[string]string{}
 		for j, op := range p.Operations {
@@ -1191,4 +1233,56 @@ func (a *app) aiSettings(c *ui.Context) {
 			}
 		})
 	})
+}
+
+const newMapDescription = "向用户提议新建一张导图（不改当前导图）。用户确认后才会创建并打开它。"
+
+// newMapSchema is the JSON schema of propose_new_map's input.
+func newMapSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"name":    map[string]any{"type": "string", "description": "导图的名字，简短，也是文件名"},
+			"outline": map[string]any{"type": "string", "description": "中心主题下的节点，Markdown 列表：两个空格缩进一层，\"- [ ] 文字\" 是待做任务"},
+		},
+		"required":             []string{"name", "outline"},
+		"additionalProperties": false,
+	}
+}
+
+// newMapToolClaude is the tool Claude proposes a new map with.
+func newMapToolClaude() anthropic.BetaToolUnionParam {
+	schema := newMapSchema()
+	return anthropic.BetaToolUnionParam{OfTool: &anthropic.BetaToolParam{
+		Name:        "propose_new_map",
+		Description: anthropic.String(newMapDescription),
+		Strict:      anthropic.Bool(true),
+		InputSchema: anthropic.BetaToolInputSchemaParam{
+			Properties:  schema["properties"],
+			Required:    schema["required"].([]string),
+			ExtraFields: map[string]any{"additionalProperties": false},
+		},
+	}}
+}
+
+// createMapFromAI creates the map the AI proposed, in the folder of the
+// open map, and opens it.
+func (a *app) createMapFromAI(nm *aiNewMap) (string, error) {
+	name := strings.NewReplacer("/", "-", "\\", "-").Replace(strings.TrimSpace(nm.Name))
+	if name == "" {
+		name = "新导图"
+	}
+	path := freeMapPath(a.currentFolder(), name)
+	f := model.NewFile(mapName(path))
+	f.Sheets[0].Root.Children = model.ParseOutline(nm.Outline)
+	if err := f.Save(path); err != nil {
+		return "", err
+	}
+	_, _ = a.versions.Save(path, f, versions.AI, "AI 新建导图", a.now())
+	a.refreshFiles()
+	if err := a.open(path); err != nil {
+		return "", err
+	}
+	a.tell("已新建导图「" + mapName(path) + "」")
+	return mapName(path), nil
 }

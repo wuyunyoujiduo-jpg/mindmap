@@ -201,7 +201,7 @@ func TestAISearchesLibrary(t *testing.T) {
 	a.showLibrary()
 	a.aiOpen = true
 	tt.Frame()
-	if tt.HasText("当前画布") {
+	if tt.HasText("本画布") {
 		t.Fatal("map scopes shown in the library")
 	}
 	a.ai.draft = "我之前存的数据库索引资料说了什么？"
@@ -242,7 +242,7 @@ func TestAISearchesLibrary(t *testing.T) {
 	for _, tool := range fake.requests[3].Tools {
 		names = append(names, tool.OfTool.Name)
 	}
-	if strings.Join(names, ",") != "propose_edits,search_library,read_clip,search_maps,read_map" {
+	if strings.Join(names, ",") != "propose_edits,propose_new_map,search_library,read_clip,search_maps,read_map" {
 		t.Fatalf("tools %v", names)
 	}
 	_ = ui.KeyEnter

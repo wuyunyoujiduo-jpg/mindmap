@@ -162,6 +162,11 @@ func (a *app) deepseekRequest() dsRequest {
 	tool.Function.Parameters = editsSchema()
 	msgs := append([]dsMessage{{Role: "system", Content: aiSystem()}}, a.ai.ds...)
 	tools := libraryToolsDeepSeek()
+	nm := dsTool{Type: "function"}
+	nm.Function.Name = "propose_new_map"
+	nm.Function.Description = newMapDescription
+	nm.Function.Parameters = newMapSchema()
+	tools = append([]dsTool{nm}, tools...)
 	if a.aiEdits() {
 		tools = append([]dsTool{tool}, tools...)
 	}
