@@ -16,6 +16,10 @@ on:
         description: "发布 Release（版本号取自 mygo.json，并创建同名标签）"
         type: boolean
         default: false
+      all:
+        description: "也打 Intel Mac 和 Windows 的包（默认只打 Apple 芯片的 Mac 包）"
+        type: boolean
+        default: false
 
 permissions:
   contents: write # creating the release
@@ -133,11 +137,17 @@ jobs:
         env:
           MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN || github.token }}
+          ALL: ${{ startsWith(github.ref, 'refs/tags/') || inputs.all }}
         run: |
+          # Apple silicon alone, unless all is asked (or a tag is pushed).
+          platforms=darwin/arm64
+          if [ "$ALL" = "true" ]; then
+            platforms=darwin/arm64,darwin/amd64
+          fi
           if [ -n "$SIGN_IDENTITY" ]; then
-            go tool mygo build -platform darwin/arm64,darwin/amd64 -sign "$SIGN_IDENTITY"
+            go tool mygo build -platform "$platforms" -sign "$SIGN_IDENTITY"
           else
-            go tool mygo build -platform darwin/arm64,darwin/amd64
+            go tool mygo build -platform "$platforms"
           fi
       - name: Publish the update files
         if: (startsWith(github.ref, 'refs/tags/') || inputs.release) && env.RELEASES_TOKEN != ''
@@ -157,12 +167,19 @@ jobs:
           gh release create "$tag" build/*/*.dmg --target "$GITHUB_SHA" \
             --repo "$GITHUB_REPOSITORY" --title "MyMind $tag" \
             --notes-file .github/release-notes.md --generate-notes
+      # Without the Windows job, which publishes it otherwise: the update
+      # release of the apps before 0.30.1.
+      - name: Publish the update release
+        if: inputs.release && !inputs.all && env.RELEASES_TOKEN != ''
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+        run: gh release edit "desktop-v$(jq -r .version mygo.json)" --repo "$UPDATES_REPO" --draft=false --latest=false
 
   # The Windows app and its installer, made on Windows (NSIS), added to the
   # release the macOS job publishes.
   windows:
     needs: macos
-    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' && inputs.all
     runs-on: windows-latest
     # The secrets of auto-updates are the environment mymind's.
     environment: mymind
