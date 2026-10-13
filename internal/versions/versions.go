@@ -9,7 +9,6 @@
 package versions
 
 import (
-	"bytes"
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
@@ -107,16 +106,11 @@ func (s Store) Save(mapPath string, f *model.File, reason, note string, now time
 	if s.Dir == "" || f == nil {
 		return false, nil
 	}
-	body, err := json.Marshal(f)
-	if err != nil {
-		return false, err
-	}
 	dir := s.dirFor(mapPath)
-	if last := s.List(mapPath); len(last) > 0 {
-		if prev, err := s.Load(last[0]); err == nil {
-			if b, _ := json.Marshal(prev); bytes.Equal(b, body) && reason != BeforeRestore {
-				return false, nil
-			}
+	// Nothing changed but folding: not a version of its own.
+	if last := s.List(mapPath); len(last) > 0 && reason != BeforeRestore {
+		if prev, err := s.Load(last[0]); err == nil && model.SameContent(prev, f) {
+			return false, nil
 		}
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -146,12 +140,7 @@ func (s Store) IsLatest(mapPath string, f *model.File) bool {
 		return false
 	}
 	prev, err := s.Load(last[0])
-	if err != nil {
-		return false
-	}
-	a, _ := json.Marshal(prev)
-	b, _ := json.Marshal(f)
-	return bytes.Equal(a, b)
+	return err == nil && model.SameContent(prev, f)
 }
 
 // List returns a map's versions, the newest first.

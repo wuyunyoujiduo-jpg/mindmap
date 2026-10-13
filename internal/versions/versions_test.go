@@ -20,6 +20,12 @@ func TestStore(t *testing.T) {
 	if ok, _ := s.Save(path, f, Auto, "", now.Add(time.Minute)); ok {
 		t.Fatal("duplicate kept")
 	}
+	// Folding alone is not kept either.
+	f.Sheets[0].Root.Collapsed = true
+	if ok, _ := s.Save(path, f, Auto, "", now.Add(90*time.Second)); ok {
+		t.Fatal("folding kept")
+	}
+	f.Sheets[0].Root.Collapsed = false
 	f.Sheets[0].AddChild(f.Sheets[0].Root.ID, "新")
 	if ok, _ := s.Save(path, f, AI, "加了一个节点", now.Add(2*time.Minute)); !ok {
 		t.Fatal("not kept")

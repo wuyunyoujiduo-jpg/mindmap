@@ -58,3 +58,33 @@ func TestDiff(t *testing.T) {
 		t.Error("no change")
 	}
 }
+
+// What Diff has no kind of its own for is told of too; folding is not.
+func TestDiffOthers(t *testing.T) {
+	f := NewFile("项目")
+	d := f.Sheets[0]
+	n, _ := d.AddChild(d.Root.ID, "模块")
+	old := f.Clone()
+	n.Collapsed = true
+	if ch := Diff(old, f); len(ch) != 0 {
+		t.Fatalf("folding: %+v", ch)
+	}
+	n.Markers = []string{"flag:red"}
+	n.Style = &NodeStyle{}
+	d.Structure = StructureLogic
+	var got []string
+	for _, c := range Diff(old, f) {
+		got = append(got, string(c.Kind)+":"+c.Title+":"+c.Detail)
+	}
+	s := strings.Join(got, "\n")
+	for _, want := range []string{"其他:模块:标记、样式", "其他:画布「画布 1」:结构"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("no %q in\n%s", want, s)
+		}
+	}
+	n.Markers, n.Style, d.Structure = nil, nil, old.Sheets[0].Structure
+	f.Iterations = []Iteration{{ID: "i1", Name: "一"}}
+	if sum := Summary(Diff(old, f)); sum != "其他 1" {
+		t.Errorf("the rest: %q", sum)
+	}
+}

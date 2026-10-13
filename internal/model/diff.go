@@ -1,6 +1,7 @@
 package model
 
 import (
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
@@ -19,6 +20,7 @@ const (
 	TagsSet    ChangeKind = "标签"
 	LinksSet   ChangeKind = "链接"
 	Settings   ChangeKind = "设置" // of the map: its project folder, code baseline…
+	Others     ChangeKind = "其他" // styles, markers, pictures… of a node or a canvas
 	TaskSet    ChangeKind = "任务"
 	SheetAdded ChangeKind = "新画布"
 	SheetGone  ChangeKind = "删除画布"
@@ -161,10 +163,101 @@ func Diff(old, new *File) []Change {
 			if !slices.Equal(o.node.Links, n.Links) {
 				add(LinksSet, tagDiff(o.node.Links, n.Links))
 			}
+			if d := otherFields(o.node, n); d != "" {
+				add(Others, d)
+			}
 			return true
 		})
 	}
+	// The canvases' own: their titles, structures, styles, lines.
+	oldDocs := map[string]*Document{}
+	for _, d := range old.Sheets {
+		oldDocs[d.ID] = d
+	}
+	for _, d := range new.Sheets {
+		o := oldDocs[d.ID]
+		if o == nil {
+			continue
+		}
+		var parts []string
+		if o.Title != d.Title {
+			parts = append(parts, fmt.Sprintf("改名「%s」→「%s」", o.Title, d.Title))
+		}
+		if o.Structure != d.Structure {
+			parts = append(parts, "结构 "+o.Structure.Label()+" → "+d.Structure.Label())
+		}
+		if !sameJSON(o.Style, d.Style) {
+			parts = append(parts, "画布样式")
+		}
+		if !sameJSON(o.Present, d.Present) {
+			parts = append(parts, "演说设置")
+		}
+		if !sameJSON(o.Relations, d.Relations) {
+			parts = append(parts, "关联线")
+		}
+		if len(parts) > 0 {
+			out = append(out, Change{Kind: Others, Sheet: d.Title, Title: "画布「" + d.Title + "」", Detail: strings.Join(parts, "、")})
+		}
+	}
+	// Anything else that differs, folding aside, is told of, as a version
+	// is never kept with nothing to show.
+	if len(out) == 0 && !SameContent(old, new) {
+		out = append(out, Change{Kind: Others, Title: "其他调整", Detail: "导图的其他设置"})
+	}
 	return out
+}
+
+// otherFields names the node's own fields that changed beyond those Diff
+// tells of by themselves; folding is how the map is seen, not a change.
+func otherFields(o, n *Node) string {
+	var parts []string
+	for _, f := range []struct {
+		name string
+		a, b any
+	}{
+		{"标记", o.Markers, n.Markers}, {"样式", o.Style, n.Style}, {"图片", o.Image, n.Image},
+		{"附件", o.Files, n.Files}, {"概要", o.Summary, n.Summary}, {"外框", o.Boundary, n.Boundary},
+		{"度量", o.Values, n.Values}, {"位置", o.Pos, n.Pos},
+	} {
+		if !sameJSON(f.a, f.b) {
+			parts = append(parts, f.name)
+		}
+	}
+	if o.Task != nil && n.Task != nil && (o.Task.Estimate != n.Task.Estimate || !slices.Equal(o.Task.After, n.Task.After) || o.Task.Iteration != n.Task.Iteration) {
+		parts = append(parts, "任务的估时、依赖或迭代")
+	}
+	return strings.Join(parts, "、")
+}
+
+func sameJSON(a, b any) bool {
+	x, _ := json.Marshal(a)
+	y, _ := json.Marshal(b)
+	return string(x) == string(y)
+}
+
+// SameContent tells whether two versions of a map hold the same, folding
+// aside: folding and unfolding change how it is seen, not what it says.
+func SameContent(a, b *File) bool {
+	unfold := func(f *File) []byte {
+		c := f.Clone()
+		for _, d := range c.Sheets {
+			d.Walk(func(n, _ *Node, _ int) bool { n.Collapsed = false; return true })
+			for _, fl := range d.Floating {
+				var walk func(n *Node)
+				walk = func(n *Node) {
+					n.Collapsed = false
+					for _, k := range n.Children {
+						walk(k)
+					}
+				}
+				walk(fl)
+			}
+		}
+		c.Version = 0
+		j, _ := json.Marshal(c)
+		return j
+	}
+	return string(unfold(a)) == string(unfold(b))
 }
 
 // settingsDiff lists the changes of the map's own settings.
@@ -254,7 +347,7 @@ func tagDiff(old, new []string) string {
 
 // Summary counts changes by kind, as "新增 3 · 删除 1 · 状态 2".
 func Summary(changes []Change) string {
-	order := []ChangeKind{Settings, SheetAdded, SheetGone, Added, Removed, Renamed, Moved, StatusSet, TaskSet, NoteSet, TagsSet, LinksSet}
+	order := []ChangeKind{Settings, SheetAdded, SheetGone, Added, Removed, Renamed, Moved, StatusSet, TaskSet, NoteSet, TagsSet, LinksSet, Others}
 	count := map[ChangeKind]int{}
 	for _, c := range changes {
 		count[c.Kind]++
