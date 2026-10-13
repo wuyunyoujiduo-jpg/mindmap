@@ -111,6 +111,8 @@ type Library struct {
 	// Version counts the changes, for what is worked out from the clips
 	// to be kept until it changes.
 	Version int
+	byID    map[string]*Clip // Find's index, as of byIDVer
+	byIDVer int
 }
 
 // Open reads the library of a folder, which need not exist yet.
@@ -171,7 +173,18 @@ func (l *Library) FilePath(c *Clip) string {
 
 // Find returns the clip of an ID.
 func (l *Library) Find(id string) *Clip {
-	for _, c := range l.Clips {
+	// By an index of the IDs, made again as the clips change: links to
+	// clips are looked up for every node drawn.
+	if l.byIDVer != l.Version || len(l.byID) != len(l.Clips) {
+		l.byID, l.byIDVer = make(map[string]*Clip, len(l.Clips)), l.Version
+		for _, c := range l.Clips {
+			l.byID[c.ID] = c
+		}
+	}
+	if c := l.byID[id]; c != nil && c.ID == id {
+		return c
+	}
+	for _, c := range l.Clips { // changed in place since
 		if c.ID == id {
 			return c
 		}

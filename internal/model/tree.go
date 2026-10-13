@@ -6,6 +6,11 @@ import (
 
 // Copy returns a deep copy of the node and all below it, with new IDs, to
 // paste elsewhere.
+// Clone copies a node and all below it, keeping their IDs, as a node moved
+// to another map is the same node: links to it, and tasks waiting on it,
+// still find it.
+func (n *Node) Clone() *Node { return n.clone() }
+
 func (n *Node) Copy() *Node {
 	c := n.clone()
 	c.renew()
@@ -86,8 +91,10 @@ func ParseOutline(text string) []*Node {
 		case strings.HasPrefix(trimmed, "[x] "), strings.HasPrefix(trimmed, "[X] "):
 			task, trimmed = &Task{Status: StatusDone}, trimmed[4:]
 		}
-		n := NewNode(strings.TrimSpace(trimmed))
+		title, links := trailingLinks(strings.TrimSpace(trimmed))
+		n := NewNode(title)
 		n.Task = task
+		n.Links = links
 		for len(stack) > 0 && stack[len(stack)-1].indent >= indent {
 			stack = stack[:len(stack)-1]
 		}
@@ -100,6 +107,27 @@ func ParseOutline(text string) []*Node {
 		stack = append(stack, level{indent, n})
 	}
 	return roots
+}
+
+// trailingLinks takes the links written at a line's end, after a space,
+// as "<clip:id>", "<mindmap:map#id>" or "<https://…>", off its title, as
+// the AI writes them in outlines; "List<String>" stays a title.
+func trailingLinks(line string) (string, []string) {
+	var links []string
+	for strings.HasSuffix(line, ">") {
+		i := strings.LastIndex(line, " <")
+		if i < 0 {
+			break
+		}
+		l := line[i+2 : len(line)-1]
+		if strings.ContainsAny(l, " <>") || !(strings.HasPrefix(l, "clip:") || strings.HasPrefix(l, "mindmap:") ||
+			strings.HasPrefix(l, "http://") || strings.HasPrefix(l, "https://")) {
+			break
+		}
+		links = append([]string{l}, links...)
+		line = strings.TrimSpace(line[:i])
+	}
+	return line, links
 }
 
 // WalkShown calls fn for the nodes shown: the root, the floating topics

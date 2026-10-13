@@ -46,7 +46,7 @@ func (a *app) parseLink(link string) (kind int, target string, line int) {
 		if rel != "" {
 			path = filepath.Join(a.dir, filepath.FromSlash(rel)+model.Ext)
 		}
-		return linkNode, path + "#" + id, 0
+		return linkNode, a.resolveNode(path, id) + "#" + id, 0
 	case strings.HasPrefix(link, "http://"), strings.HasPrefix(link, "https://"), strings.HasPrefix(link, "mailto:"):
 		return linkWeb, link, 0
 	case strings.HasPrefix(link, "file://"):
@@ -119,6 +119,9 @@ func (a *app) openLink(link string) {
 				return
 			}
 		}
+		if id == "" { // the whole map
+			return
+		}
 		if d := a.file.SheetOf(id); d != nil {
 			a.goToNode(a.path, d.ID, id)
 		} else {
@@ -167,6 +170,9 @@ func (a *app) linkLabel(link string) (icon, label string) {
 		f := a.file
 		if path != a.path {
 			f = a.indexed(path)
+		}
+		if f != nil && (id == "" || len(f.Sheets) > 0 && f.Sheets[0].Root.ID == id) {
+			return "🗺", mapName(path) // the whole map
 		}
 		if f != nil {
 			if d := f.SheetOf(id); d != nil {
@@ -236,44 +242,8 @@ type backlink struct {
 }
 
 // backlinks are the nodes of every map linking to a node of the open map.
-// They are found again when the node selected changes.
 func (a *app) backlinks(id string) []backlink {
-	if a.backlinkFor == id && a.backlinkMod == a.modTime {
-		return a.backlinkList
-	}
-	var out []backlink
-	for _, f := range a.files {
-		file := a.file
-		if f.Path != a.path {
-			file = a.indexed(f.Path)
-		}
-		if file == nil {
-			continue
-		}
-		mine := nodeScheme + "#" + id
-		other := a.nodeLinkTo(a.path, id)
-		if f.Path != a.path {
-			rel, _ := filepath.Rel(a.dir, a.path)
-			other = nodeScheme + filepath.ToSlash(strings.TrimSuffix(rel, model.Ext)) + "#" + id
-		}
-		for _, d := range file.Sheets {
-			d.Walk(func(n, _ *model.Node, _ int) bool {
-				for _, l := range n.Links {
-					if f.Path == a.path && (l == mine || l == other) || f.Path != a.path && l == other {
-						title := n.Title
-						if f.Path != a.path {
-							title = mapName(f.Path) + " › " + title
-						}
-						out = append(out, backlink{f.Path, d.ID, n.ID, title})
-						break
-					}
-				}
-				return true
-			})
-		}
-	}
-	a.backlinkFor, a.backlinkMod, a.backlinkList = id, a.modTime, out
-	return out
+	return a.refIndex().to["node:"+a.path+"#"+id]
 }
 
 // linksSection is the links part of the node panel.

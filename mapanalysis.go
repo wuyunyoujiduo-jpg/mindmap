@@ -314,7 +314,7 @@ func (a *app) mapClips() []*library.Clip {
 		sig += f.Path + f.Modified.String()
 	}
 	if a.path != "" && a.file != nil {
-		sig += a.changed.String() // the open map, as edited
+		sig += a.changed.String() + fmt.Sprint(a.edits) // the open map, as edited
 	}
 	if sig == a.mapClipsSig {
 		return a.mapClipsList

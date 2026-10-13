@@ -252,7 +252,7 @@ func editsSchema() map[string]any {
 			"tags":   map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "update 时替换为这些标签，add 时设置的标签；不改留空数组"},
 			"status": map[string]any{"type": "string", "enum": []string{"", "none", "idea", "todo", "doing", "done"}, "description": "任务状态：idea 想法，todo 待做，doing 进行中，done 完成，none 取消任务；不改留空"},
 			"due":    str("截止日期 YYYY-MM-DD，none 表示清除；不改留空"),
-			"links":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "要添加的链接：网址，或代码文件的相对路径（可带 :行号）；没有留空数组"},
+			"links":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "要添加的链接：网址；代码文件的相对路径（可带 :行号）；资料库的资料 clip:<资料ID>；导图或其节点 mindmap:<导图路径>#<节点ID>。没有留空数组"},
 		},
 		"required":             []string{"op", "id", "parent", "ref", "title", "note", "tags", "status", "due", "links"},
 		"additionalProperties": false,
@@ -1245,7 +1245,7 @@ func newMapSchema() map[string]any {
 		"type": "object",
 		"properties": map[string]any{
 			"name":    map[string]any{"type": "string", "description": "导图的名字，简短，也是文件名"},
-			"outline": map[string]any{"type": "string", "description": "中心主题下的节点，Markdown 列表：两个空格缩进一层，\"- [ ] 文字\" 是待做任务"},
+			"outline": map[string]any{"type": "string", "description": "中心主题下的节点，Markdown 列表：两个空格缩进一层，\"- [ ] 文字\" 是待做任务；行尾空一格写 <clip:资料ID> 或 <mindmap:导图路径#节点ID> 把资料或导图挂到这个节点上"},
 		},
 		"required":             []string{"name", "outline"},
 		"additionalProperties": false,

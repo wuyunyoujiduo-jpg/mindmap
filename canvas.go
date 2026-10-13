@@ -130,7 +130,7 @@ func (a *app) measure(c *ui.Context) layout.Measure {
 			w += nodeGap + markSize + 3
 		}
 		if len(n.Links) > 0 {
-			mw, _ := a.measureText(c, 0, ui.Span{Text: "↗", Size: markSize + 1})
+			mw, _ := a.measureText(c, 0, ui.Span{Text: linksMark(n), Size: markSize + 1})
 			w += nodeGap + mw
 		}
 		if m := filesMark(n); m != "" {
@@ -740,12 +740,21 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 			// Other nodes are dropped on a node to move under it.
 			el.Drag(nodeDrag{n.ID}).Cursor(ui.CursorPointer)
 		}
-		if d, over := ui.DragOver[nodeDrag](el); over && d.ID != n.ID {
-			el.Border(2*z, t.Accent).BorderStyle(ui.BorderDashed)
+		// A node dropped on it moves under it; a document or a map from
+		// the sidebar is linked to it.
+		if d, over := ui.DragOver[canvasDrop](el); over {
+			if nd, ok := d.(nodeDrag); !ok || nd.ID != n.ID {
+				el.Border(2*z, t.Accent).BorderStyle(ui.BorderDashed)
+			}
 		}
-		if d, ok := ui.Drop[nodeDrag](el); ok {
+		if d, ok := ui.Drop[canvasDrop](el); ok {
 			id := n.ID
-			a.later(func() { a.moveNode(d.ID, id) })
+			switch d := d.(type) {
+			case nodeDrag:
+				a.later(func() { a.moveNode(d.ID, id) })
+			case fileDrag:
+				a.later(func() { a.dropMaterial(id, d) })
+			}
 		}
 		el.ContextMenu(func(m *ui.Menu) { a.nodeMenu(m, n, depth) })
 		if files := el.DroppedFiles(); len(files) > 0 {
@@ -893,19 +902,44 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 			clip.Children(func() { ui.Text(c, m).FontSize(markSize * z).TextColor(muted).NoWrap() })
 		}
 		if len(n.Links) > 0 {
-			var tips []string
-			for _, l := range n.Links {
-				_, label := a.linkLabel(l)
-				tips = append(tips, label)
+			// One link opens; several are listed. Their names are worked
+			// out under the pointer only, as each looks up a clip or a map.
+			mark := ui.Box(c.Key("links")).Cursor(ui.CursorPointer).Label("打开链接")
+			if mark.Hovered() {
+				var tips []string
+				for _, l := range n.Links {
+					_, label := a.linkLabel(l)
+					tips = append(tips, label)
+				}
+				if len(n.Links) == 1 {
+					mark.Tooltip("点击打开：" + tips[0])
+				} else {
+					mark.Tooltip(fmt.Sprintf("%d 个链接：%s", len(n.Links), strings.Join(tips, "、")))
+				}
 			}
-			mark := ui.Box(c.Key("links")).Cursor(ui.CursorPointer).Label("打开链接").
-				Tooltip("点击打开：" + strings.Join(tips, "、"))
-			if mark.Clicked() {
-				link := n.Links[0]
-				a.later(func() { a.openLink(link) })
+			if len(n.Links) == 1 {
+				if mark.Clicked() {
+					link := n.Links[0]
+					a.later(func() { a.openLink(link) })
+				}
+			} else {
+				links := slices.Clone(n.Links)
+				mark.Menu(func(m *ui.Menu) {
+					for _, l := range links {
+						icon, label := a.linkLabel(l)
+						if strings.HasPrefix(label, "（") { // gone
+							m.Item("⚠︎ " + label).Disabled(true)
+							continue
+						}
+						if m.Item(strings.TrimSpace(icon + " " + label)).Chosen() {
+							link := l
+							a.later(func() { a.openLink(link) })
+						}
+					}
+				})
 			}
 			mark.Children(func() {
-				ui.Text(c, "↗").FontSize((markSize + 1) * z).TextColor(accentOn(filled, onFill, t.Accent)).NoWrap()
+				ui.Text(c, linksMark(n)).FontSize((markSize + 1) * z).TextColor(accentOn(filled, onFill, t.Accent)).NoWrap()
 			})
 		}
 	})

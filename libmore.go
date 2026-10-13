@@ -223,38 +223,7 @@ const clipScheme = "clip:"
 
 // clipBacklinks are the nodes of every map that link to a clip.
 func (a *app) clipBacklinks(id string) []backlink {
-	// Found again at most every few seconds: every map is read.
-	if a.clipBackFor == id && a.now().Sub(a.clipBackAt) < 3*time.Second && !a.clipBackAt.After(a.now()) {
-		return a.clipBackList
-	}
-	a.clipBackFor, a.clipBackAt = id, a.now()
-	a.clipBackList = a.findClipBacklinks(id)
-	return a.clipBackList
-}
-
-func (a *app) findClipBacklinks(id string) []backlink {
-	var out []backlink
-	for _, f := range a.files {
-		file := a.file
-		if f.Path != a.path {
-			file = a.indexed(f.Path)
-		}
-		if file == nil {
-			continue
-		}
-		for _, d := range file.Sheets {
-			d.Walk(func(n, _ *model.Node, _ int) bool {
-				for _, l := range n.Links {
-					if l == clipScheme+id {
-						out = append(out, backlink{f.Path, d.ID, n.ID, n.Title})
-						break
-					}
-				}
-				return true
-			})
-		}
-	}
-	return out
+	return a.refIndex().to[clipScheme+id]
 }
 
 // clipBacklinksSection lists the nodes that link to a clip.

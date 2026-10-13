@@ -97,3 +97,17 @@ func TestFloating(t *testing.T) {
 		t.Fatalf("shown %v", seen)
 	}
 }
+
+// Links at a line's end become the node's links.
+func TestParseOutlineLinks(t *testing.T) {
+	ns := ParseOutline("- 解析器 <clip:ab12> <mindmap:项目/ergora#n1>\n- 用 List<String> 存\n- 文档 <https://go.dev>")
+	if len(ns) != 3 || ns[0].Title != "解析器" || len(ns[0].Links) != 2 || ns[0].Links[1] != "mindmap:项目/ergora#n1" {
+		t.Fatalf("%+v", ns[0])
+	}
+	if ns[1].Title != "用 List<String> 存" || ns[1].Links != nil {
+		t.Fatalf("%+v", ns[1])
+	}
+	if ns[2].Title != "文档" || ns[2].Links[0] != "https://go.dev" {
+		t.Fatalf("%+v", ns[2])
+	}
+}

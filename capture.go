@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -71,19 +72,19 @@ func (a *app) capture(text string, where int) error {
 		a.tell("已记到收件箱")
 		return nil
 	}
-	f, err := model.Load(path)
-	if err != nil {
-		if !os.IsNotExist(err) {
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		f := model.NewFile(inboxName)
+		f.Sheets[0].Root.Note = "随手记下的想法和待办，之后整理到对应的导图里（右键节点「移到其他导图…」）。"
+		if err := f.Save(path); err != nil {
 			return err
 		}
-		f = model.NewFile(inboxName)
-		f.Sheets[0].Root.Note = "随手记下的想法和待办，之后整理到对应的导图里（右键节点「移到其他导图…」）。"
 	}
-	f.Sheets[0].Root.Children = append(f.Sheets[0].Root.Children, nodes...)
-	if err := f.Save(path); err != nil {
+	if err := a.editMapAt(path, "随手记", func(f *model.File) error {
+		f.Sheets[0].Root.Children = append(f.Sheets[0].Root.Children, nodes...)
+		return nil
+	}); err != nil {
 		return err
 	}
-	a.refreshFiles()
 	a.tell("已记到收件箱")
 	return nil
 }
@@ -180,30 +181,31 @@ func (a *app) moveToMap(path, sheet, id string) {
 		a.tell("已移动")
 		return
 	}
-	f, err := model.Load(path)
+	// The nodes keep their IDs, as links to them and tasks waiting on
+	// them follow them to the other map.
+	var title string
+	from := model.AssetsDir(a.path)
+	err := a.editMapAt(path, "从「"+mapName(a.path)+"」移来", func(f *model.File) error {
+		d := f.SheetOf(id)
+		if d == nil {
+			return errors.New("目标节点已不存在")
+		}
+		target, _ := d.Find(id)
+		title = target.Title
+		for _, n := range nodes {
+			c := n.Clone()
+			copyAssets(c, from, model.AssetsDir(path))
+			target.Children = append(target.Children, c)
+		}
+		target.Collapsed = false
+		return nil
+	})
 	if err != nil {
 		a.saveErr = err.Error()
 		return
 	}
-	d := f.SheetOf(id)
-	if d == nil {
-		a.saveErr = "目标节点已不存在"
-		return
-	}
-	target, _ := d.Find(id)
-	from := model.AssetsDir(a.path)
-	for _, n := range nodes {
-		c := n.Copy()
-		copyAssets(c, from, model.AssetsDir(path))
-		target.Children = append(target.Children, c)
-	}
-	target.Collapsed = false
-	if err := f.Save(path); err != nil {
-		a.saveErr = err.Error()
-		return
-	}
 	a.deleteSelection()
-	a.tell(fmt.Sprintf("已移到「%s」的「%s」下", mapName(path), target.Title))
+	a.tell(fmt.Sprintf("已移到「%s」的「%s」下", mapName(path), title))
 }
 
 // trayEntry is a line of the menu bar icon's menu.

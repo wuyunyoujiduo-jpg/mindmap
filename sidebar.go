@@ -268,7 +268,7 @@ func (a *app) fileRow(c *ui.Context, f model.FileInfo, depth int, inFavorites bo
 	case row.Hovered():
 		row.Background(t.Text.Alpha(0.06))
 	}
-	if row.Pressed() && a.renaming != f.Path {
+	if row.Clicked() && a.renaming != f.Path { // not on a press, which may start dragging it
 		path := f.Path
 		a.later(func() {
 			if !current {

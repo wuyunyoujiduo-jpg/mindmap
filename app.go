@@ -206,15 +206,14 @@ type app struct {
 	linkFrom        string // the node a link to a node is being chosen for
 	relFrom         string // the node a relation line is being drawn from
 	justFloated     bool   // a double click just made a floating topic, whose release should not end its editing
-	backlinkFor     string // the node backlinkList is of, as of backlinkMod
-	backlinkMod     time.Time
-	backlinkList    []backlink
 	historyList     []versions.Version
 	historySel      int
 	historyFile     *model.File           // the version chosen
 	historyDiff     []model.Change        // what it changed, or from it to now
 	historyToNow    bool                  // the changes from the version to now
 	codeStat        codeStatus            // how far the code has gone since the baseline
+	refs            *refs                 // the links of every map (refs.go)
+	edits           int                   // counts the open map's changes, for what is worked out from it
 	index           map[string]indexEntry // maps read for the search, by path
 	// The maps' AI analyses (mapanalysis.go), by key; the map analyzed.
 	mapMetas       map[string]*model.Analysis
@@ -270,9 +269,6 @@ type app struct {
 	libHitsList   []library.Hit
 	relatedFor    string // the clip and library version relatedList is of
 	relatedList   []library.Hit
-	clipBackFor   string // the clip clipBackList is of, as of clipBackAt
-	clipBackAt    time.Time
-	clipBackList  []backlink
 	dupe          bool // the last clip kept was kept before
 	backupBusy    bool
 	backupErr     string
@@ -665,6 +661,7 @@ func (a *app) mutate(key string, fn func()) {
 	fn()
 	a.dirty = true
 	a.changed = a.now()
+	a.edits++
 }
 
 func (a *app) undo() {
@@ -687,6 +684,7 @@ func (a *app) state() model.State {
 
 // restore shows a state of the history, or a file read again.
 func (a *app) restore(s model.State) {
+	a.edits++
 	a.file, a.doc = s.File, nil
 	a.editing, a.lastEdit = "", ""
 	if d, _ := a.file.Sheet(s.Sheet); d == nil {
