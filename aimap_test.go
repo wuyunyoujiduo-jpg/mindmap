@@ -24,7 +24,10 @@ func TestAINewMap(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if err := tt.Click("不带导图"); err != nil {
+	if err := tt.Click("AI 范围"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.ChooseMenuItem("不带导图  ·  不发送导图，问别的或新建导图"); err != nil {
 		t.Fatal(err)
 	}
 	a.ai.draft = "帮我建一个旅行计划导图"

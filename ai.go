@@ -1017,14 +1017,11 @@ func (a *app) aiPanel(c *ui.Context) {
 		ui.Column(c).Padding(10, 16, 14).Gap(8).Children(func() {
 			if a.libOpen {
 				ui.Text(c, "基于资料库对话；导图里提问时也能检索资料库").FontSize(11).TextColor(t.TextMuted)
-			} else {
-				ui.Segmented(c, &ai.scope, "本画布", "选中节点", "全部画布", "不带导图").FillWidth().FontSize(11).
-					Tooltip("AI 看到的内容：当前画布、选中的节点及其下级、这个文件的全部画布，或不带导图（如新建导图）")
 			}
 			attachRow(c, ai.attach, nil, func(i int) {
 				a.later(func() { ai.attach = slices.Delete(ai.attach, i, i+1) })
 			})
-			in := ui.TextAreaBase(c.Key("draft"), &ai.draft).Lines(2, 6).Placeholder("输入消息，↩ 发送，⇧↩ 换行，可粘贴图片").Label("AI 消息").
+			in := ui.TextAreaBase(c.Key("draft"), &ai.draft).Lines(2, 6).Placeholder("输入消息，↩ 发送，⇧↩ 换行").Label("AI 消息").
 				Padding(8).Radius(8).Border(1, t.Border).Background(t.Background).FontSize(13).
 				OnPaste(func(text string) bool { return text == "" && a.pasteAttach() })
 			// Return sends, as in chats; Shift+Return, the field's own, is
@@ -1047,7 +1044,12 @@ func (a *app) aiPanel(c *ui.Context) {
 						}
 					})
 				}
-				ui.Text(c, providerModelName(a.cfg)).FontSize(11).TextColor(t.TextMuted).Grow(1)
+				if !a.libOpen {
+					a.scopeChip(c)
+				}
+				model, _, _ := strings.Cut(providerModelName(a.cfg), "（")
+				ui.Text(c, model).FontSize(11).TextColor(t.TextMuted).SingleLine().Ellipsis("…").Grow(1).Shrink(1).MinWidth(0).
+					Tooltip(providerModelName(a.cfg) + "（在 AI 设置里更换）")
 				if ui.PrimaryButton(c, "发送").Disabled(ai.busy || strings.TrimSpace(ai.draft) == "" && len(ai.attach) == 0).Clicked() {
 					send = true
 				}
@@ -1285,4 +1287,42 @@ func (a *app) createMapFromAI(nm *aiNewMap) (string, error) {
 	}
 	a.tell("已新建导图「" + mapName(path) + "」")
 	return mapName(path), nil
+}
+
+// aiScopes name what the AI sees of the map, and tell of it.
+var aiScopes = []struct{ name, desc string }{
+	{"本画布", "当前画布的全部节点"},
+	{"选中节点", "选中的节点和它下面的分支"},
+	{"全部画布", "这个文件的所有画布"},
+	{"不带导图", "不发送导图，问别的或新建导图"},
+}
+
+// scopeChip is the small button by the message that chooses what the AI
+// sees of the map, from a menu.
+func (a *app) scopeChip(c *ui.Context) {
+	t := c.Theme()
+	ai := &a.ai
+	chip := ui.Row(c.Key("ai-scope")).Gap(4).Padding(3, 8).Radius(999).AlignItems(ui.Center).Shrink(0).Border(1, t.Border).
+		Cursor(ui.CursorPointer).Label("AI 范围").Tooltip("AI 能看到的内容：" + aiScopes[ai.scope].desc)
+	if chip.Hovered() {
+		chip.Background(t.SurfaceHover)
+	} else {
+		chip.Background(t.Surface)
+	}
+	chip.Menu(func(m *ui.Menu) {
+		for i, s := range aiScopes {
+			if m.Item(s.name + "  ·  " + s.desc).Checked(ai.scope == i).Chosen() {
+				ai.scope = i
+			}
+		}
+	})
+	chip.Children(func() {
+		ic := iconMap
+		if ai.scope == scopeNone {
+			ic = iconText
+		}
+		glyph(c, ic, 12, t.TextMuted)
+		ui.Text(c, aiScopes[ai.scope].name).FontSize(11).TextColor(t.Text).NoWrap().PassThrough()
+		ui.Text(c, "▾").FontSize(9).TextColor(t.TextMuted).PassThrough()
+	})
 }
