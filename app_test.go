@@ -2180,8 +2180,14 @@ func TestReloadAfterAI(t *testing.T) {
 	if len(vs) != 2 || vs[0].Reason != versions.AI {
 		t.Fatalf("versions %+v", vs)
 	}
-	a.openHistory()
 	tt.Frame()
+	if err := tt.Click("历史版本"); err != nil { // the saving status under the title
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !a.historyOpen {
+		t.Fatal("history not opened")
+	}
 	if sum := model.Summary(a.historyDiff); sum != "新增 1" {
 		t.Fatalf("summary %q", sum)
 	}

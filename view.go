@@ -188,8 +188,18 @@ func (a *app) toolbar(c *ui.Context) {
 				status = "已保存 " + a.savedAt.Format("15:04")
 			}
 			if room >= 700 || a.saveErr != "" || col == t.Accent {
-				ui.Text(c, status).FontSize(textCaption).TextColor(col).NoWrap().MaxWidth(240).Ellipsis("…").
-					Tooltip("编辑停顿后自动保存到文件，无需手动保存")
+				// A click on how saving goes shows the versions kept.
+				st := ui.Box(c.Key("save-status")).Cursor(ui.CursorPointer).Label("历史版本").
+					Tooltip("自动保存，无需手动保存 · 点击查看历史版本 ⌘⇧H")
+				if st.Hovered() && col == t.TextMuted {
+					col = t.Text
+				}
+				if st.Clicked() {
+					a.later(a.openHistory)
+				}
+				st.Children(func() {
+					ui.Text(c, status).FontSize(textCaption).TextColor(col).NoWrap().MaxWidth(240).Ellipsis("…").PassThrough()
+				})
 			}
 		})
 		ui.Spacer(c)
