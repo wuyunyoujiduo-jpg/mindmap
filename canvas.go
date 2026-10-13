@@ -173,7 +173,16 @@ func (a *app) titleBox(c *ui.Context, n *model.Node, depth int) (w, h float32) {
 			_, h = a.measureText(c, wrap, span)
 			w = wrap
 		}
-		return max(w, titleMin) + 4, h
+		// It grows by steps, and never narrows while edited: the map does
+		// not shift with every character typed.
+		const step = 32
+		switch {
+		case a.editW == 0: // as it was
+			a.editW = w
+		case w > a.editW: // room for the next characters too
+			a.editW = min(w+step, max(wrap, titleMin))
+		}
+		return max(a.editW, titleMin) + 4, h
 	}
 	w, h = a.measureText(c, 0, span)
 	if st.Width > 0 { // a width of its own, at which the title wraps
@@ -807,8 +816,11 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 			// A text area, wrapping as the title will, rather than a line
 			// that scrolls what was typed first out of view. Enter ends
 			// the edit; a title has no line breaks.
+			// On a light ground of its own, whatever the node's fill: the
+			// caret, drawn in the accent color, and the selection show.
 			in := ui.TextAreaBase(c.Key("edit"), &a.editText).FontSize(size).FontWeight(fontWeight(n, depth)).
-				Placeholder("新主题").Width(tw*z).Lines(1, 50).AutoFocus()
+				Placeholder("新主题").Width(tw*z).Lines(1, 50).AutoFocus().
+				Background(t.Background).TextColor(t.Text).Radius(4*z).Margin(-2*z, -3*z).Padding(2*z, 3*z)
 			in.HandleInput(func(ev ui.InputEvent) bool {
 				if ev.Kind != ui.InputKeyDown || ev.Key != ui.KeyEnter || ev.Mods&^ui.Shift != 0 || a.editing != n.ID {
 					return false
@@ -826,7 +838,10 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 				a.cancelEdit()
 			} else if in.Focused() {
 				if !a.editFocus {
-					in.SetTextSelection(0, utf8.RuneCountInString(a.editText)) // typing replaces the title
+					// The caret at the end: a selection replaced by an input
+					// method's text puts its candidates at the screen's corner.
+					n := utf8.RuneCountInString(a.editText)
+					in.SetTextSelection(n, n)
 				}
 				a.editFocus = true
 			} else if a.editFocus {

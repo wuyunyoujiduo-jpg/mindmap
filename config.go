@@ -11,8 +11,8 @@ import (
 type config struct {
 	Dir  string `json:"dir"`  // the folder of mind maps shown in the sidebar
 	File string `json:"file"` // the map open last
-	// Favorites are the maps shown first in the sidebar, in the order they
-	// were starred.
+	// Favorites are 快捷访问, first in the sidebar, in the order put there:
+	// maps by their paths, documents as "clip:<id>".
 	Favorites []string `json:"favorites,omitempty"`
 	// The AI assistant: an Anthropic API key, the model, and the API's
 	// address when it goes through a proxy.

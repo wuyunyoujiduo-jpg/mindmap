@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -239,4 +240,39 @@ func TestDropClipOnMap(t *testing.T) {
 	if len(root.Links) != 1 || root.Links[0] != clipScheme+clip.ID {
 		t.Fatalf("root links %v", root.Links)
 	}
+}
+
+// 快捷访问 takes maps and documents dragged in, leaving them where they are.
+func TestQuickAccess(t *testing.T) {
+	a, tt := newTestApp(t)
+	clip, _ := a.addClipText("周会纪要模板", "手动")
+	a.unfiledOpen = true
+	a.favoritesOpen = true
+	tt.Frame()
+	if !tt.HasText("把导图或文档拖到这里，方便随时切换") {
+		t.Fatalf("texts %q", tt.Texts())
+	}
+	drag := func(from string) {
+		t.Helper()
+		src, ok1 := tt.Find(from)
+		dst, ok2 := tt.Find("快捷访问")
+		if !ok1 || !ok2 {
+			t.Fatalf("no %q", from)
+		}
+		tt.Press(src.X+30, src.Y+src.H/2)
+		for i := 1; i <= 10; i++ {
+			tt.Move(src.X+30, src.Y+src.H/2+(dst.Y+dst.H/2-src.Y-src.H/2)*float32(i)/10)
+		}
+		tt.Release(src.X+30, dst.Y+dst.H/2)
+		tt.Frame()
+	}
+	drag("文档 " + clip.Label())
+	drag("使用指南")
+	if len(a.cfg.Favorites) != 2 || a.cfg.Favorites[0] != clipScheme+clip.ID || a.cfg.Favorites[1] != a.path {
+		t.Fatalf("quick %v", a.cfg.Favorites)
+	}
+	if clip.Folder != "" || filepath.Dir(a.path) != a.dir {
+		t.Fatal("moved")
+	}
+	snapshot(t, tt, "quick-access")
 }

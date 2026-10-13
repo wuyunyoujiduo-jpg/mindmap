@@ -133,6 +133,7 @@ type app struct {
 	editing   string // the node whose title is edited on the canvas
 	editText  string
 	editFocus bool              // the title input has had the focus
+	editW     float32           // the widest the title edited has been
 	reveal    bool              // scroll the selected node into view in the next frame
 	multi     map[string]bool   // nodes selected besides a.selected, with Shift or Cmd
 	focus     map[string]string // the branch each canvas is focused on, by canvas
@@ -733,7 +734,10 @@ func (a *app) startEdit(id string) {
 	if n == nil {
 		return
 	}
-	a.selected, a.editing, a.editText, a.editFocus = id, id, n.Title, false
+	a.selected, a.editing, a.editText, a.editFocus, a.editW = id, id, n.Title, false, 0
+	if n.Title == "新主题" || n.Title == "新导图" || strings.HasPrefix(n.Title, "新导图 ") {
+		a.editText = "" // a title given for now: typing starts it afresh, the old one kept if none is typed
+	}
 	a.reveal = true
 }
 
@@ -747,7 +751,7 @@ func (a *app) commitEdit() {
 	}
 	title := a.editText
 	if title == "" {
-		title = "新主题"
+		title = cmpOr(n.Title, "新主题")
 	}
 	if title != n.Title {
 		a.mutate("", func() { n.Title = title })

@@ -399,6 +399,10 @@ func (a *app) fileBitmap(path string) *ui.Bitmap {
 
 // clipMenu is the menu of a clip.
 func (a *app) clipMenu(m *ui.Menu, clip *library.Clip) {
+	quick := slices.Contains(a.cfg.Favorites, clipScheme+clip.ID)
+	if m.Item(map[bool]string{true: "从快捷访问移除", false: "加入快捷访问"}[quick]).Chosen() {
+		a.toggleFavorite(clipScheme + clip.ID)
+	}
 	if clip.URL != "" && m.Item("打开链接").Chosen() {
 		a.plat.OpenURL(clip.URL)
 	}

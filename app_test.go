@@ -985,7 +985,7 @@ func TestSidebarFoldersAndFavorites(t *testing.T) {
 	// Starred maps show first.
 	a.toggleFavorite(a.path)
 	tt.Frame()
-	if !tt.HasText("★ 收藏") || !slices.Contains(a.cfg.Favorites, a.path) {
+	if !tt.HasText("快捷访问") || !slices.Contains(a.cfg.Favorites, a.path) {
 		t.Fatalf("favorites %v", a.cfg.Favorites)
 	}
 	// Renaming keeps the favorite and the open map.

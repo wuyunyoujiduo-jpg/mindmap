@@ -162,22 +162,52 @@ func (a *app) inboxRow(c *ui.Context) {
 	}
 }
 
-// favorites is the section of starred maps, which stays at the top.
+// favorites is 快捷访问: maps and documents put there to be at hand, by
+// dragging them in or from their menus; where they are stays as it was.
 func (a *app) favorites(c *ui.Context) {
-	var favs []model.FileInfo
-	for _, p := range a.cfg.Favorites {
-		if i := slices.IndexFunc(a.files, func(f model.FileInfo) bool { return f.Path == p }); i >= 0 {
-			favs = append(favs, a.files[i])
-		}
+	t := c.Theme()
+	box := ui.Column(c.Key("quick")).Gap(2).Radius(6)
+	if _, over := ui.DragOver[fileDrag](box); over {
+		box.Background(t.Accent.Alpha(0.12))
 	}
-	if len(favs) == 0 {
+	if d, ok := ui.Drop[fileDrag](box); ok {
+		a.later(func() { a.addQuick(d) })
+	}
+	box.Children(func() {
+		a.section(c, "快捷访问", &a.favoritesOpen, "", func() {
+			n := 0
+			for _, p := range a.cfg.Favorites {
+				if id, ok := strings.CutPrefix(p, clipScheme); ok {
+					if clip := a.lib.Find(id); clip != nil {
+						a.docRow(c.Key("quick:"+id), clip, 0)
+						n++
+					}
+					continue
+				}
+				if i := slices.IndexFunc(a.files, func(f model.FileInfo) bool { return f.Path == p }); i >= 0 {
+					a.fileRow(c.Key("fav:"+p), a.files[i], 0, true)
+					n++
+				}
+			}
+			if n == 0 {
+				ui.Text(c, "把导图或文档拖到这里，方便随时切换").FontSize(12).TextColor(t.TextMuted).Margin(2, 12, 4).Wrap()
+			}
+		})
+	})
+}
+
+// addQuick puts a map or a document dropped in 快捷访问 there.
+func (a *app) addQuick(d fileDrag) {
+	key := d.Path
+	if d.Clip != "" {
+		key = clipScheme + d.Clip
+	}
+	if key == "" || slices.Contains(a.cfg.Favorites, key) {
 		return
 	}
-	a.section(c, "★ 收藏", &a.favoritesOpen, "", func() {
-		for _, f := range favs {
-			a.fileRow(c.Key("fav:"+f.Path), f, 0, true)
-		}
-	})
+	a.cfg.Favorites = append(a.cfg.Favorites, key)
+	a.favoritesOpen = true
+	a.cfg.save()
 }
 
 // folderContents shows a folder's folders, then its maps, indented by
@@ -262,11 +292,15 @@ func (a *app) fileRow(c *ui.Context, f model.FileInfo, depth int, inFavorites bo
 	}
 	row := ui.Row(c).Padding(5, 8, 5, 22+float32(depth)*14).Gap(6).Radius(6).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).Label(f.Name).Drag(fileDrag{Path: f.Path})
-	// A clip, or another map, dropped on a map goes under its center.
-	_, over := ui.DragOver[fileDrag](row)
-	if d, ok := ui.Drop[fileDrag](row); ok && d.Path != f.Path {
-		path := f.Path
-		a.later(func() { a.dropOnMap(path, d) })
+	// A clip, or another map, dropped on a map goes under its center;
+	// in 快捷访问, it joins it instead.
+	over := false
+	if !inFavorites {
+		_, over = ui.DragOver[fileDrag](row)
+		if d, ok := ui.Drop[fileDrag](row); ok && d.Path != f.Path {
+			path := f.Path
+			a.later(func() { a.dropOnMap(path, d) })
+		}
 	}
 	switch {
 	case over:
@@ -287,9 +321,9 @@ func (a *app) fileRow(c *ui.Context, f model.FileInfo, depth int, inFavorites bo
 	}
 	path := f.Path
 	row.ContextMenu(func(m *ui.Menu) {
-		label := "收藏"
+		label := "加入快捷访问"
 		if fav {
-			label = "取消收藏"
+			label = "从快捷访问移除"
 		}
 		if m.Item(label).Chosen() {
 			a.toggleFavorite(path)
