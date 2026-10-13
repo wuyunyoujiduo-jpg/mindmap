@@ -125,7 +125,9 @@ func (s *Server) handle(req request) (any, *rpcError) {
 	return nil, &rpcError{-32601, "method not found: " + req.Method}
 }
 
-const instructions = `MyMind holds the user's project maps: the architecture, features, implementation notes, tasks and the next optimizations, as trees of nodes. Read the relevant map before working on a project, and keep it current as you work: mark tasks done or in progress, add notes on how things were implemented and decisions made, link nodes to the files (path:line) and PRs that implement them, and add nodes for follow-ups and optimizations you notice. Node IDs appear as {id:…} in read_map's output. Always pass a short "summary" of what you changed; the user reviews changes in the app's history. The user also keeps a library of collected notes, links, pictures and files: search it with search_library when the task may build on what they collected.`
+const instructions = `MyMind holds the user's project maps: the architecture, features, implementation notes, tasks and the next optimizations, as trees of nodes. Read the relevant map before working on a project, and keep it current as you work: mark tasks done or in progress, add notes on how things were implemented and decisions made, link nodes to the files (path:line) and PRs that implement them, and add nodes for follow-ups and optimizations you notice. Node IDs appear as {id:…} in read_map's output. Always pass a short "summary" of what you changed; the user reviews changes in the app's history. The user also keeps a library of collected notes, links, pictures and files: search it with search_library when the task may build on what they collected.
+
+A map of a project's code keeps a code baseline: the commit it matches. read_map ends with it and with what changed since, file by file, with the nodes linked to each file. To bring such a map up to date, read those changes (git diff from the baseline) rather than all the code, update the nodes they touch, add nodes for new modules, and then call set_baseline. After mapping a project's code for the first time, call set_baseline (with project_dir) too.`
 
 // tool is a tool as tools/list describes it.
 type tool struct {
@@ -193,6 +195,11 @@ var tools = []tool{
 	{"delete_node", "Delete a node", "Delete a node and all below it. The user can restore it from the map's history.",
 		schema([]string{"map", "id", "summary"}, map[string]any{"map": mapProp, "id": str("The node to delete."), "summary": summaryProp}),
 		map[string]any{"destructiveHint": true}},
+	{"set_baseline", "Set the code baseline", "Record the commit of the project's code the map is now up to date with. read_map then lists what changed since it, with the nodes linked to each changed file, so later updates read only the changes, not all the code. Call it after bringing the map up to date with the code.",
+		schema([]string{"map", "summary"}, map[string]any{"map": mapProp,
+			"project_dir": str("The project's code repository, as an absolute path; needed when the map has no project folder yet."),
+			"commit":      str("The commit the map matches; the one checked out (HEAD) when left out."),
+			"summary":     summaryProp}), nil},
 	{"search_library", "Search the library", "Search the user's library of collected notes, links (with the pages' text), pictures and files, which the app's AI sorted into categories and tagged. Returns the best matches with their ids, summaries and matching excerpts.",
 		schema([]string{"query"}, map[string]any{"query": str("Keywords, separated by spaces; Chinese or English."),
 			"category": str("Only clips of this category."), "limit": map[string]any{"type": "integer", "description": "How many clips at most; 10 when left out."}}), readOnly},
@@ -225,12 +232,16 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		return readMap(s.rel(path), f, get("sheet")), nil
+		text := readMap(s.rel(path), f, get("sheet"))
+		if f.Project != "" || f.Baseline != nil {
+			text += baselineText(path, f)
+		}
+		return text, nil
 	case "search":
 		return s.search(get("query"), get("map"))
 	case "list_tasks":
 		return s.listTasks(get("map"), get("status"))
-	case "add_nodes", "update_node", "move_node", "delete_node":
+	case "add_nodes", "update_node", "move_node", "delete_node", "set_baseline":
 		path, f, err := s.find(get("map"))
 		if err != nil {
 			return "", err
@@ -250,6 +261,8 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 			msg, err = moveNode(f, get("id"), get("parent_id"), index)
 		case "delete_node":
 			msg, err = deleteNode(f, get("id"))
+		case "set_baseline":
+			msg, err = setBaseline(path, f, get("project_dir"), get("commit"), s.Now())
 		}
 		if err != nil {
 			return "", err

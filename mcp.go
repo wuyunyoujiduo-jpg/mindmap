@@ -68,7 +68,8 @@ func (a *app) mcpView(c *ui.Context) {
 			"- 完成或开始一个任务时用 update_node 更新状态，并用 append_note 记下实现要点和决策；\n" +
 			"- 用 update_node 的 add_links 把实现它的代码文件（路径:行号）和 PR 链接到节点上；\n" +
 			"- 发现的问题和可优化点，用 add_nodes 加到对应模块下（作为 [ ] 任务）；\n" +
-			"- 每次修改都写清楚 summary。"
+			"- 每次修改都写清楚 summary；\n" +
+			"- 更新导图时不要重新扫描整个项目：read_map 末尾有「代码基线」和之后改动的文件及对应节点，只按这些改动更新节点，更新完用 set_baseline 记下当前 commit（第一次分析完项目也要记，传 project_dir）。"
 		w, _ := c.Size()
 		ui.Column(c).Gap(14).Width(min(680, w-80)).Children(func() {
 			ui.Row(c).AlignItems(ui.Center).Children(func() {
@@ -94,7 +95,7 @@ func (a *app) mcpView(c *ui.Context) {
 			step("Claude Code：在终端运行", claude, "复制命令")
 			step("Cursor / Claude Desktop 等：加到 MCP 配置文件", json, "复制配置")
 			step("建议：加到项目的 CLAUDE.md（或 Cursor 规则）里", rule, "复制说明")
-			ui.Text(c, "AI 能用的工具：list_maps、read_map、search、list_tasks、add_nodes、update_node、move_node、delete_node、create_map。导图文件夹："+a.dir).
+			ui.Text(c, "AI 能用的工具：list_maps、read_map、search、list_tasks、add_nodes、update_node、move_node、delete_node、set_baseline、create_map。导图文件夹："+a.dir).
 				FontSize(11).TextColor(t.TextMuted).Wrap()
 		})
 	})

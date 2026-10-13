@@ -218,6 +218,7 @@ func (a *app) aiFromRepo(dir string) {
 	if a.file.Project == "" {
 		a.mutate("", func() { a.file.Project = dir })
 	}
+	a.recordBaseline(dir, false) // the code it is made from
 	prompt := "根据下面这个代码仓库的目录结构和说明，生成项目架构导图，挂在当前画布的中心主题下：按模块 / 层次组织（不超过 4 层），每个模块写一句职责备注，关键文件作为节点的 links（相对仓库根目录的路径）。用 propose_edits 一次添加。"
 	a.aiAction(prompt, scopeCanvas, scanRepo(dir, 3))
 }
@@ -260,6 +261,7 @@ func (a *app) mapFromFolders(dir string) {
 		root := a.shownRoot()
 		root.Children = append(root.Children, nodes...)
 	})
+	a.recordBaseline(dir, false)
 	a.tell(fmt.Sprintf("已按目录添加 %d 个模块", len(nodes)))
 }
 

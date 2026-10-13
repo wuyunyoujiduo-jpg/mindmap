@@ -37,9 +37,8 @@ func Load(path string) (*File, error) {
 // map, becomes a file of one canvas.
 func Parse(b []byte) (*File, error) {
 	var raw struct {
-		Version int         `json:"version"`
-		Root    *Node       `json:"root"` // version 1
-		Sheets  []*Document `json:"sheets"`
+		File
+		Root *Node `json:"root"` // version 1
 	}
 	if err := json.Unmarshal(b, &raw); err != nil {
 		return nil, fmt.Errorf("文件格式错误: %w", err)
@@ -47,7 +46,8 @@ func Parse(b []byte) (*File, error) {
 	if raw.Version > FormatVersion {
 		return nil, fmt.Errorf("文件版本 %d 比本程序支持的 %d 新", raw.Version, FormatVersion)
 	}
-	f := &File{Version: FormatVersion, Sheets: raw.Sheets}
+	f := &raw.File // with the project, the repository, iterations…
+	f.Version = FormatVersion
 	if len(f.Sheets) == 0 && raw.Root != nil {
 		f.Sheets = []*Document{{Title: "画布 1", Root: raw.Root}}
 	}

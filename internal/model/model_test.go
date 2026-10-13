@@ -121,7 +121,8 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	if filepath.Base(path) != "我的-项目"+Ext {
 		t.Fatalf("file name %q", filepath.Base(path))
 	}
-	f := &File{Sheets: []*Document{d, New("second")}}
+	f := &File{Sheets: []*Document{d, New("second")}, Project: "/code/p", GitHub: "me/p", Measures: []string{"工时"},
+		Iterations: []Iteration{{ID: "s1", Name: "第一轮"}}, Baseline: &Baseline{Commit: "abc", Branch: "main", At: due}}
 	if err := f.Save(path); err != nil {
 		t.Fatal(err)
 	}
@@ -131,6 +132,11 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	}
 	if len(loaded.Sheets) != 2 || loaded.Sheets[1].Root.Title != "second" || loaded.Sheets[1].Title != "画布 2" {
 		t.Fatalf("sheets %+v", loaded.Sheets)
+	}
+	// What the file keeps besides its canvases.
+	if loaded.Project != "/code/p" || loaded.GitHub != "me/p" || len(loaded.Measures) != 1 || len(loaded.Iterations) != 1 ||
+		loaded.Baseline == nil || loaded.Baseline.Commit != "abc" {
+		t.Fatalf("file %+v", loaded)
 	}
 	got := loaded.Sheets[0]
 	n, _ := got.Find(m["a1"].ID)

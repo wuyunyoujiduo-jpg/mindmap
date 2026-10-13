@@ -16,11 +16,23 @@ type File struct {
 	Project string `json:"project,omitempty"`
 	// GitHub is the repository ("owner/repo") whose issues sync as tasks.
 	GitHub string `json:"github,omitempty"`
+	// Baseline is the commit of the project's code the map was last
+	// brought up to date with: updating it, an AI reads what changed
+	// since, not all the code again.
+	Baseline *Baseline `json:"baseline,omitempty"`
 	// Iterations are the periods tasks are planned in, as sprints.
 	Iterations []Iteration `json:"iterations,omitempty"`
 	// Measures are the numbers nodes are measured by, as hours or cost,
 	// in the order they show (Node.Values).
 	Measures []string `json:"measures,omitempty"`
+}
+
+// Baseline is a commit of the project's code, as of when it was set.
+type Baseline struct {
+	Commit  string    `json:"commit"`
+	Branch  string    `json:"branch,omitempty"`
+	Subject string    `json:"subject,omitempty"`
+	At      time.Time `json:"at"`
 }
 
 // Iteration is a period of work, as a sprint or a milestone.
@@ -149,6 +161,10 @@ func (f *File) MoveSheet(from, to int) {
 func (f *File) Clone() *File {
 	c := &File{Version: f.Version, Project: f.Project, GitHub: f.GitHub, Sheets: make([]*Document, len(f.Sheets)),
 		Measures: slices.Clone(f.Measures)}
+	if f.Baseline != nil {
+		b := *f.Baseline
+		c.Baseline = &b
+	}
 	for _, it := range f.Iterations {
 		if it.Start != nil {
 			s := *it.Start

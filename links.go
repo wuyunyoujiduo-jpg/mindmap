@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/gitbase"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
 
@@ -374,6 +375,33 @@ func (a *app) projectSection(c *ui.Context) {
 			})
 		})
 	})
+	ui.Field(c, "代码基线", func() {
+		ui.Column(c).Gap(6).Children(func() {
+			bl := a.file.Baseline
+			text := "未记录：记下导图对应的 commit，之后 AI 更新导图时只看这之后的改动"
+			if bl != nil {
+				text = "commit " + gitbase.Short(bl.Commit)
+				if bl.Branch != "" {
+					text = bl.Branch + " · " + text
+				}
+				if bl.Subject != "" {
+					text += "（" + bl.Subject + "）"
+				}
+				text += "\n记录于 " + bl.At.Local().Format("2006-01-02 15:04")
+			}
+			ui.Text(c, text).FontSize(12).TextColor(t.TextMuted).Wrap()
+			ui.Row(c).Gap(6).Children(func() {
+				repo := gitbase.IsRepo(a.projectDir())
+				if ui.Button(c.Key("baseline"), "记录当前版本").FontSize(12).Disabled(!repo).
+					Tooltip(map[bool]string{true: "记下项目代码当前的 commit", false: "先选择项目代码目录（一个 git 仓库）"}[repo]).Clicked() {
+					a.recordBaseline(a.projectDir(), true)
+				}
+				if bl != nil && ui.Button(c.Key("baseline-clear"), "清除").FontSize(12).Clicked() {
+					a.mutate("", func() { a.file.Baseline = nil })
+				}
+			})
+		})
+	})
 	ui.Field(c, "代码文件用…打开", func() {
 		cur := a.cfg.Editor
 		if cur == "" {
@@ -392,4 +420,25 @@ func (a *app) projectSection(c *ui.Context) {
 			}
 		})
 	})
+}
+
+// recordBaseline records the commit checked out in dir as the code the map
+// matches, telling of it when tell.
+func (a *app) recordBaseline(dir string, tell bool) {
+	if a.file == nil || !gitbase.IsRepo(dir) {
+		return
+	}
+	h, err := gitbase.HeadOf(dir)
+	if err != nil {
+		if tell {
+			a.tell("读不出当前 commit：" + err.Error())
+		}
+		return
+	}
+	a.mutate("", func() {
+		a.file.Baseline = &model.Baseline{Commit: h.Commit, Branch: h.Branch, Subject: h.Subject, At: a.now()}
+	})
+	if tell {
+		a.tell("代码基线已记为 " + gitbase.Short(h.Commit))
+	}
 }
