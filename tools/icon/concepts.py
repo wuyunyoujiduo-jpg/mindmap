@@ -6,8 +6,9 @@
 
     python3 tools/icon/concepts.py <concept> out.png
 
-The app's icon, resources/icon.png, is cards; appicons/ holds cards and
-orbit at 512 pixels, the icons to choose from in the settings.
+The app's icon, resources/icon.png, is now bold.py's, the bold take on
+cards (also appicons/cards.png); appicons/ holds it and orbit at 512
+pixels, the icons to choose from in the settings.
 """
 import math
 import sys

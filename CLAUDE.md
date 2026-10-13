@@ -26,7 +26,7 @@ by AI, and an AI assistant.
 - The UI's look is in `design.go` (sizes, helpers) and `icons.go` (icons
   drawn as lines, not glyphs, so that they sit centered).
 - The app's icon is drawn by `tools/icon/`; `resources/icon.png` is the
-  knowledge cards, and `appicons/` the icons to choose in the settings.
+  knowledge card, bold (`tools/icon/bold.py`), and `appicons/` the icons to choose in the settings.
 - The semantic search model is a plugin downloaded from the public
   `mindmap-models` repository (`plugin.go`).
 - Auto-updates: `mygo.json`'s `updates` and MyGo's updater plugin. Releases
