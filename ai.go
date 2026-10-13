@@ -941,7 +941,7 @@ func (a *app) aiPanel(c *ui.Context) {
 					a.loadKeyDrafts()
 				}
 			})
-			if iconButton(c, iconClose, "关闭", "关闭 AI 助手", 28, true).Clicked() {
+			if iconButton(c, iconClose, "关闭 AI 助手", "关闭 AI 助手", 28, true).Clicked() {
 				a.aiOpen = false
 			}
 		})

@@ -1308,7 +1308,7 @@ func TestAINeedsKey(t *testing.T) {
 		t.Fatal("AI not open")
 	}
 	tt.Frame()
-	if err := tt.Click("关闭"); err != nil {
+	if err := tt.Click("关闭 AI 助手"); err != nil {
 		t.Fatal(err)
 	}
 	if a.aiOpen || !tt.HasText("样式") {

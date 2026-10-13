@@ -162,6 +162,9 @@ func (a *app) toolbar(c *ui.Context) {
 	// first, then the search narrows, and the buttons keep their size.
 	w, _ := c.Size()
 	room := w - a.sidebarWidth - a.panelWidth
+	if a.aiBeside(c) {
+		room -= a.panelWidth + 1
+	}
 	// The toolbar is the window's title bar: it drags the window, and its
 	// title is the map's, with how saving goes below it.
 	gap := float32(10)
@@ -274,6 +277,16 @@ func searchWidth(room float32) float32 {
 // panelMinCanvas is the narrowest the map is left beside the panel: a
 // window narrower hides the panel, as Finder hides its preview.
 const panelMinCanvas = 420
+
+// aiBesideCanvas is the room the map keeps for the AI to have a column of
+// its own beside the inspector; with less, the AI goes below it.
+const aiBesideCanvas = 640
+
+// aiBeside tells whether the AI shows in a column beside the inspector.
+func (a *app) aiBeside(c *ui.Context) bool {
+	w, _ := c.Size()
+	return a.aiOpen && a.doc != nil && !a.libOpen && w-a.sidebarWidth-2*a.panelWidth-1 >= aiBesideCanvas
+}
 
 // panelShown tells whether the right panel shows: not turned off (⌥⌘I),
 // and with room for the map, unless the AI is asked.

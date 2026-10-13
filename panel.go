@@ -25,11 +25,36 @@ const panelMin = 260
 
 func (a *app) panel(c *ui.Context) {
 	t := c.Theme()
+	if a.aiOpen && a.doc != nil && !a.libOpen {
+		// The AI beside the inspector, in a column of its own, or below
+		// it where the window has no room for two: it hides neither.
+		if a.aiBeside(c) {
+			ui.Column(c.Key("inspector")).Width(a.panelWidth).FillHeight().Background(t.Surface).Children(func() { a.inspector(c) })
+			ui.Box(c).Width(1).FillHeight().Background(t.Border)
+			ui.Column(c.Key("ai-column")).Width(a.panelWidth).FillHeight().Background(t.Surface).Children(func() { a.aiPanel(c) })
+			return
+		}
+		ui.Column(c.Key("stacked")).Width(a.panelWidth).FillHeight().Background(t.Surface).Children(func() {
+			ui.Column(c.Key("inspector")).Grow(1).Basis(0).MinHeight(0).Children(func() { a.inspector(c) })
+			ui.Box(c).Height(1).FillWidth().Background(t.Border)
+			ui.Column(c.Key("ai-column")).Grow(1.3).Basis(0).MinHeight(0).Children(func() { a.aiPanel(c) })
+		})
+		return
+	}
 	ui.Column(c).Width(a.panelWidth).FillHeight().Background(t.Surface).Children(func() {
 		if a.aiOpen && (a.doc != nil || a.libOpen) {
 			a.aiPanel(c) // scrolls its conversation itself
 			return
 		}
+		a.inspector(c)
+	})
+}
+
+// inspector is the panel's tabs: the node, its style and markers, the
+// canvas, the presentation.
+func (a *app) inspector(c *ui.Context) {
+	t := c.Theme()
+	func() {
 		// The inspector's tabs sit in the title bar's band, which drags the
 		// window, with a hairline under them.
 		ui.Row(c.Key("panel-head")).Height(toolbarHeight).Padding(0, 12).AlignItems(ui.Center).Shrink(0).
@@ -61,7 +86,7 @@ func (a *app) panel(c *ui.Context) {
 				})
 			}
 		})
-	})
+	}()
 }
 
 // nodePanel shows and edits the selected node: its title, note, tags and
