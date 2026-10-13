@@ -20,7 +20,7 @@ func TestDocumentsInFolders(t *testing.T) {
 
 	// In no folder: under 未归档, first in the folders, closed at first.
 	tt.Frame()
-	if tt.HasText(clip.Label()) {
+	if _, ok := tt.Find("文档 " + clip.Label()); ok {
 		t.Fatal("未归档 is open at first")
 	}
 	a.unfiledOpen = true

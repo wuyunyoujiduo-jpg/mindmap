@@ -163,3 +163,80 @@ func TestClipPlaces(t *testing.T) {
 		t.Fatalf("links %v", g.Node(kid.ID).Links)
 	}
 }
+
+// The node panel tells of the material a node may be about, nodes of other
+// maps too, a click linking each; a link to material gone is marked.
+func TestNodeRelated(t *testing.T) {
+	a, tt := newTestApp(t)
+	newMapFile(t, a, "性能手册", "列表加载慢的排查")
+	slow := find(t, a, "列表加载慢")
+	a.selectNode(slow.ID)
+	a.panelTab = tabNode
+	tt.Frame()
+	_, nodes := a.relatedOfCached(slow)
+	if len(nodes) != 1 || nodes[0].title != "性能手册 › 列表加载慢的排查" {
+		t.Fatalf("nodes %+v", nodes)
+	}
+	if !tt.HasText("可能相关") || !tt.HasText("性能手册 › 列表加载慢的排查") {
+		t.Fatalf("texts %q", tt.Texts())
+	}
+	snapshot(t, tt, "node-related")
+	clickInPanel(t, tt, "挂上 性能手册 › 列表加载慢的排查")
+	tt.Frame()
+	if len(slow.Links) != 1 || a.refIndex().to["node:"+nodes[0].path+"#"+nodes[0].id] == nil {
+		t.Fatalf("links %v", slow.Links)
+	}
+	// Material gone: the link is marked.
+	clip, _ := a.addClipText("会被删掉的资料", "手动")
+	a.addLink(slow, clipScheme+clip.ID)
+	if err := a.lib.Delete(clip.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, label := a.linkLabel(clipScheme + clip.ID); label != "（资料已不存在）" {
+		t.Fatalf("label %q", label)
+	}
+	// The canvas panel counts the map's material and takes the dead link
+	// off.
+	a.panelTab = tabCanvas
+	tt.Frame()
+	for _, want := range []string{"本图资料", "链接了 1 张别的导图", "1 个链接指向已不存在的资料或节点"} {
+		if !tt.HasText(want) {
+			t.Fatalf("no %q: %q", want, tt.Texts())
+		}
+	}
+	snapshot(t, tt, "map-material")
+	clickInPanel(t, tt, "清理")
+	tt.Frame()
+	if len(slow.Links) != 1 {
+		t.Fatalf("links %v", slow.Links)
+	}
+	a.undo()
+	if n := find(t, a, "列表加载慢"); len(n.Links) != 2 {
+		t.Fatal("undo did not bring the link back")
+	}
+}
+
+// A clip of the library dropped on a map in the sidebar goes under its
+// center.
+func TestDropClipOnMap(t *testing.T) {
+	a, tt := newTestApp(t)
+	clip, _ := a.addClipText("季度复盘模板", "手动")
+	a.showLibrary()
+	a.libKind = kindDocs
+	tt.Frame()
+	src, ok1 := tt.Find("资料 " + clip.Label())
+	dst, ok2 := tt.Find("使用指南")
+	if !ok1 || !ok2 {
+		t.Fatal("rows not found")
+	}
+	tt.Press(src.X+40, src.Y+src.H/2)
+	for i := 1; i <= 10; i++ {
+		tt.Move(src.X+40+(dst.X+20-src.X-40)*float32(i)/10, src.Y+src.H/2+(dst.Y+dst.H/2-src.Y-src.H/2)*float32(i)/10)
+	}
+	tt.Release(dst.X+20, dst.Y+dst.H/2)
+	tt.Frame()
+	root := a.file.Sheets[0].Root
+	if len(root.Links) != 1 || root.Links[0] != clipScheme+clip.ID {
+		t.Fatalf("root links %v", root.Links)
+	}
+}

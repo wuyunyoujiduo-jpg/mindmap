@@ -262,7 +262,15 @@ func (a *app) fileRow(c *ui.Context, f model.FileInfo, depth int, inFavorites bo
 	}
 	row := ui.Row(c).Padding(5, 8, 5, 22+float32(depth)*14).Gap(6).Radius(6).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).Label(f.Name).Drag(fileDrag{Path: f.Path})
+	// A clip, or another map, dropped on a map goes under its center.
+	_, over := ui.DragOver[fileDrag](row)
+	if d, ok := ui.Drop[fileDrag](row); ok && d.Path != f.Path {
+		path := f.Path
+		a.later(func() { a.dropOnMap(path, d) })
+	}
 	switch {
+	case over:
+		row.Background(t.Accent.Alpha(0.15))
 	case current:
 		row.Background(t.Accent.Alpha(0.16))
 	case row.Hovered():

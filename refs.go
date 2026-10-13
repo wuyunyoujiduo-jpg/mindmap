@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+
+	"github.com/egoist/mygo/ui"
 	"path/filepath"
 	"strings"
 
@@ -192,4 +194,107 @@ func linksMark(n *model.Node) string {
 		return fmt.Sprintf("↗%d", len(n.Links))
 	}
 	return "↗"
+}
+
+// dropOnMap links a clip, or a map, dropped on a map of the sidebar to the
+// map's center.
+func (a *app) dropOnMap(path string, d fileDrag) {
+	f := a.mapFile(path)
+	if f == nil || len(f.Sheets) == 0 {
+		return
+	}
+	link, what := clipScheme+d.Clip, "资料"
+	if d.Clip == "" {
+		link, what = a.mapLink(d.Path), "导图"
+	}
+	if link == "" {
+		return
+	}
+	if err := a.attachTo(path, f.Sheets[0].Root.ID, link, what); err != nil {
+		a.libErr = err.Error()
+	}
+}
+
+// mapMaterialSection is the canvas panel's account of the map's material:
+// the clips and maps it links, the maps linking to it, and links to what
+// is no more, which a click takes off.
+func (a *app) mapMaterialSection(c *ui.Context) {
+	if a.file == nil {
+		return
+	}
+	t := c.Theme()
+	clips, maps := map[string]bool{}, map[string]bool{}
+	var gone []string
+	a.file.Walk(func(n *model.Node) {
+		for _, l := range n.Links {
+			kind, target, _ := a.parseLink(l)
+			switch kind {
+			case linkClip:
+				if a.lib.Find(target) == nil {
+					gone = append(gone, l)
+				} else {
+					clips[target] = true
+				}
+			case linkNode:
+				path, id, _ := strings.Cut(target, "#")
+				if f := a.mapFile(path); f == nil || id != "" && f.SheetOf(id) == nil {
+					gone = append(gone, l)
+				} else if path != a.path {
+					maps[path] = true
+				}
+			}
+		}
+	})
+	from := map[string]bool{}
+	for _, b := range a.refIndex().to["map:"+a.path] {
+		from[b.path] = true
+	}
+	if len(clips)+len(maps)+len(from)+len(gone) == 0 {
+		return
+	}
+	sectionCard(c, iconLibrary, tileOrange, "本图资料", nil, func() {
+		ui.Column(c).Gap(6).Children(func() {
+			line := func(text string) { ui.Text(c, text).FontSize(12).Wrap() }
+			if len(clips) > 0 {
+				line(fmt.Sprintf("挂着 %d 条资料", len(clips)))
+			}
+			if len(maps) > 0 {
+				line(fmt.Sprintf("链接了 %d 张别的导图", len(maps)))
+			}
+			for path := range from {
+				path := path
+				row := ui.Row(c.Key("from:" + path)).Gap(6).Cursor(ui.CursorPointer).Label("打开 " + mapName(path))
+				if row.Clicked() {
+					a.later(func() { _ = a.open(path) })
+				}
+				row.Children(func() {
+					ui.Text(c, "↩ 被「"+mapName(path)+"」引用").FontSize(12).TextColor(t.Accent).MaxLines(1)
+				})
+			}
+			if len(gone) > 0 {
+				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, fmt.Sprintf("%d 个链接指向已不存在的资料或节点", len(gone))).FontSize(12).TextColor(t.Danger).Grow(1).Wrap()
+					if ui.Button(c, "清理").FontSize(11).Tooltip("从节点上去掉这些失效的链接（可撤销）").Clicked() {
+						dead := map[string]bool{}
+						for _, l := range gone {
+							dead[l] = true
+						}
+						a.later(func() {
+							a.mutate("", func() {
+								a.file.Walk(func(n *model.Node) {
+									var keep []string
+									for _, l := range n.Links {
+										if !dead[l] {
+											keep = append(keep, l)
+										}
+									}
+									n.Links = keep
+								})
+							})
+						})
+					}
+				})
+			}
+		})
+	})
 }

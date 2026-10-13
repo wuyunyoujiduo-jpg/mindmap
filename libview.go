@@ -106,7 +106,11 @@ func (a *app) libraryView(c *ui.Context) {
 			}
 		})
 	})
-	switch ui.AlertDialog(c, &a.libConfirm, "删除这条资料？", "删除后无法恢复。", "取消", "删除") {
+	gone := "删除后无法恢复。"
+	if n := len(a.clipBacklinks(a.libSel)); n > 0 {
+		gone = fmt.Sprintf("它挂在 %d 个节点上，删除后这些链接会失效。删除后无法恢复。", n)
+	}
+	switch ui.AlertDialog(c, &a.libConfirm, "删除这条资料？", gone, "取消", "删除") {
 	case 1:
 		if err := l.Delete(a.libSel); err != nil {
 			a.libErr = err.Error()

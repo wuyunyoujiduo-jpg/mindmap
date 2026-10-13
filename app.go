@@ -219,6 +219,9 @@ type app struct {
 	attachRef       string                // the material the palette places (paletteAttach)
 	placesKey       string                // what placesList was worked out for
 	placesList      []place
+	relatedKey      string // what relatedClips and relatedNodes were worked out for
+	relatedClips    []library.Hit
+	relatedNodes    []place
 	index           map[string]indexEntry // maps read for the search, by path
 	// The maps' AI analyses (mapanalysis.go), by key; the map analyzed.
 	mapMetas       map[string]*model.Analysis

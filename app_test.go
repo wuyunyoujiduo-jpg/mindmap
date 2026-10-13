@@ -1672,9 +1672,7 @@ func TestGlobalTags(t *testing.T) {
 		t.Fatal(err)
 	}
 	n, _ := a.selectedNode()
-	if err := tt.Click("标签 待评审"); err != nil {
-		t.Fatal(err)
-	}
+	clickInPanel(t, tt, "标签 待评审")
 	if !n.HasTag("待评审") {
 		t.Fatalf("tags %v", n.Tags)
 	}

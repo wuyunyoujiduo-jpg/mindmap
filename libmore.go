@@ -189,33 +189,64 @@ func (a *app) nodeClips(n *model.Node) []library.Hit {
 	return out
 }
 
-// nodeClipsSection is the part of the node panel with the clips linked
-// to the node and those it may be about.
-func (a *app) nodeClipsSection(c *ui.Context, n *model.Node) {
-	hits := a.nodeClips(n)
-	if len(hits) == 0 {
+// nodeRelatedSection is the material a node may be about, not linked to
+// it yet: clips, and nodes of other maps, a click linking each.
+func (a *app) nodeRelatedSection(c *ui.Context, n *model.Node) {
+	clips, nodes := a.relatedOfCached(n)
+	if len(clips)+len(nodes) == 0 {
 		return
 	}
 	t := c.Theme()
-	ui.Field(c, "资料库里可能相关", func() {
+	id := n.ID
+	attach := func(link string) {
+		a.later(func() {
+			if node := a.file.Node(id); node != nil {
+				a.addLink(node, link)
+			}
+		})
+	}
+	ui.Field(c, "可能相关", func() {
 		ui.Column(c).Gap(4).Children(func() {
-			for _, h := range hits {
+			for _, h := range clips {
 				clip := h.Clip
 				ui.Row(c.Key("nc" + clip.ID)).Gap(6).AlignItems(ui.Center).Children(func() {
 					ui.Box(c).Grow(1).Shrink(1).MinWidth(0).Children(func() { a.clipLink(c, clip) })
-					if ui.Link(c, "链接", "").FontSize(11).Tooltip("把这条资料链接到节点").Clicked() {
-						id := n.ID
-						a.later(func() {
-							if node := a.file.Node(id); node != nil {
-								a.addLink(node, clipScheme+clip.ID)
-							}
-						})
+					if ui.Link(c, "挂上", "").FontSize(11).Label("挂上 " + clip.Label()).Tooltip("把这条资料挂到节点上").Clicked() {
+						attach(clipScheme + clip.ID)
 					}
 				})
 			}
-			ui.Text(c, "按标题和标签在资料库里找到的").FontSize(11).TextColor(t.TextMuted)
+			for _, p := range nodes {
+				p := p
+				ui.Row(c.Key("nn" + p.id)).Gap(6).AlignItems(ui.Center).Children(func() {
+					row := ui.Row(c).Gap(6).Grow(1).Shrink(1).MinWidth(0).Cursor(ui.CursorPointer).Label("前往 " + p.title)
+					if row.Clicked() {
+						a.later(func() { a.goToNode(p.path, p.sheet, p.id) })
+					}
+					row.Children(func() {
+						ui.Text(c, "🔗").FontSize(12).Shrink(0)
+						ui.Text(c, p.title).FontSize(12).TextColor(t.Accent).MaxLines(1)
+					})
+					if ui.Link(c, "挂上", "").FontSize(11).Label("挂上 " + p.title).Tooltip("链接到另一张导图的这个节点").Clicked() {
+						attach(a.nodeLinkTo(p.path, p.id))
+					}
+				})
+			}
+			ui.Text(c, "按标题、标签和意思在资料库和其他导图里找到的").FontSize(11).TextColor(t.TextMuted)
 		})
 	})
+}
+
+// relatedOfCached is relatedOf, worked out again as the node, the clips
+// or the maps change, or a query's vector comes.
+func (a *app) relatedOfCached(n *model.Node) ([]library.Hit, []place) {
+	q := strings.TrimSpace(n.Title + " " + strings.Join(n.Tags, " "))
+	key := fmt.Sprint(n.ID, q, len(n.Links), a.lib.Version, a.refIndex().sig, a.qvecs[q] != nil)
+	if a.relatedKey != key {
+		a.relatedKey = key
+		a.relatedClips, a.relatedNodes = a.relatedOf(n)
+	}
+	return a.relatedClips, a.relatedNodes
 }
 
 // clipScheme starts links to clips: "clip:id".
@@ -268,7 +299,7 @@ func (a *app) clipPlacesSection(c *ui.Context, clip *library.Clip) {
 			for i, p := range places {
 				ui.Row(c.Key(fmt.Sprint("place", i))).Gap(6).AlignItems(ui.Center).Children(func() {
 					ui.Text(c, "建议："+p.title).FontSize(12).Grow(1).Shrink(1).MinWidth(0).MaxLines(2)
-					if ui.Button(c.Key("attach"), "挂上").FontSize(11).Tooltip("把这条资料挂到「"+p.title+"」").Clicked() {
+					if ui.Button(c.Key("attach"), "挂上").FontSize(11).Tooltip("把这条资料挂到「" + p.title + "」").Clicked() {
 						p := p
 						a.later(func() {
 							if err := a.attachTo(p.path, p.id, ref, "资料"); err != nil {
@@ -384,7 +415,10 @@ func (a *app) reviewMenu(m *ui.Menu) {
 	if m.Item("把最近 7 天的资料生成导图").Chosen() {
 		a.later(func() { a.clipsToMap("资料回顾 "+a.now().Format("2006-01-02"), a.recentClips(7)) })
 	}
-	if m.Item("把当前列表生成导图").Chosen() {
+	if a.doc != nil && a.path != "" && m.Item("把最近 7 天的资料并入「"+mapName(a.path)+"」").Disabled(noKey).Chosen() {
+		a.later(func() { a.aiMergeMaterial(a.recentClips(7)) })
+	}
+	if m.Item("把当前列表生成导图（不用 AI，按分类）").Chosen() {
 		var clips []*library.Clip
 		for _, h := range a.libHits() {
 			clips = append(clips, h.Clip)

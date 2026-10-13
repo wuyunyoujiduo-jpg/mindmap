@@ -120,7 +120,7 @@ func TestNodeLinksToClips(t *testing.T) {
 	a.selectNode(slow.ID)
 	a.panelTab = tabNode
 	tt.Frame()
-	if !tt.HasText("资料库里可能相关") {
+	if !tt.HasText("可能相关") {
 		t.Fatalf("panel: %q", tt.Texts())
 	}
 	a.addLink(slow, clipScheme+clip.ID)

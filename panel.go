@@ -76,6 +76,7 @@ func (a *app) inspector(c *ui.Context) {
 			default:
 				ui.Column(c).Padding(16, 16, 0).Gap(12).Children(func() {
 					a.mapAnalysisSection(c)
+					a.mapMaterialSection(c)
 					a.tagList(c) // the map's tags, which filter its nodes
 				})
 				a.canvasPanel(c)
@@ -134,11 +135,14 @@ func (a *app) nodePanel(c *ui.Context) {
 				}
 			})
 
-			sectionCard(c, iconImage, tilePink, "图片、附件与链接", nil, func() {
+			sectionCard(c, iconLink, tileBlue, "资料与关联", nil, func() {
+				a.linksSection(c, n)
+				a.nodeRelatedSection(c, n)
+			})
+
+			sectionCard(c, iconImage, tilePink, "图片与附件", nil, func() {
 				a.imageSection(c, n)
 				a.filesSection(c, n)
-				a.linksSection(c, n)
-				a.nodeClipsSection(c, n)
 				a.annotationsSection(c, n)
 			})
 

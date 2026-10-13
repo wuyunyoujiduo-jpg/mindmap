@@ -253,8 +253,12 @@ func (a *app) linksSection(c *ui.Context, n *model.Node) {
 		ui.Column(c).Gap(6).Children(func() {
 			for i, l := range n.Links {
 				icon, label := a.linkLabel(l)
+				gone := strings.HasPrefix(label, "（")
 				row := ui.Row(c.Key(fmt.Sprint("link", i))).Gap(6).AlignItems(ui.Center).Padding(3, 6).Radius(6).
 					Background(t.Surface).Border(1, t.Border)
+				if gone {
+					row.Border(1, t.Danger.Alpha(0.5)).Tooltip("链接的资料或节点已不存在，可以删掉这个链接")
+				}
 				row.Children(func() {
 					open := ui.Row(c).Gap(6).Grow(1).Basis(0).MinWidth(0).Cursor(ui.CursorPointer).Tooltip(l).Label("打开 " + label)
 					if open.Clicked() {
@@ -267,7 +271,11 @@ func (a *app) linksSection(c *ui.Context, n *model.Node) {
 						} else {
 							ui.Text(c, "GH").FontSize(10).Bold().TextColor(t.TextMuted).Shrink(0)
 						}
-						ui.Text(c, label).FontSize(12).TextColor(t.Accent).MaxLines(1)
+						col := t.Accent
+						if gone {
+							col = t.Danger
+						}
+						ui.Text(c, label).FontSize(12).TextColor(col).MaxLines(1)
 					})
 					if iconButton(c, iconClose, "删除链接", "删除链接", 22, true).Clicked() {
 						link := l
@@ -311,7 +319,11 @@ func (a *app) linksSection(c *ui.Context, n *model.Node) {
 					}
 					row.Children(func() {
 						ui.Text(c, "↩").FontSize(12).TextColor(t.TextMuted)
-						ui.Text(c, b.title).FontSize(12).TextColor(t.Accent).MaxLines(1)
+						title := b.title
+						if b.path != a.path {
+							title = mapName(b.path) + " › " + title
+						}
+						ui.Text(c, title).FontSize(12).TextColor(t.Accent).MaxLines(1)
 					})
 				}
 			}
