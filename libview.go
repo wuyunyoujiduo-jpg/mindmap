@@ -65,6 +65,7 @@ func (a *app) libraryView(c *ui.Context) {
 		a.pluginBanner(c)
 		a.clipComposer(c)
 		a.clipFilters(c)
+		a.materialBar(c)
 		if a.libErr != "" {
 			ui.Row(c).Padding(0, 12, 6).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, a.libErr).FontSize(12).TextColor(t.Danger).Wrap().Grow(1)

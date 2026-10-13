@@ -115,6 +115,7 @@ type chatMsg struct {
 	// baseline is the commit of the code a proposal brings the map up to
 	// date with: applying it records it as the map's code baseline.
 	baseline *model.Baseline
+	material []string // the material a new map was made of
 }
 
 // aiState is the conversation of the AI panel.
@@ -139,12 +140,16 @@ type aiState struct {
 	answers []toolAnswer
 	// syncBase is the commit of the code the request is about (see
 	// syncWithCode), which its proposals bring the map up to date with.
-	syncBase  *model.Baseline
-	nextSync  *model.Baseline // the next request's syncBase
-	cancel    context.CancelFunc
-	scroll    ui.ScrollState
-	keyDraft  string
-	baseDraft string
+	syncBase *model.Baseline
+	nextSync *model.Baseline // the next request's syncBase
+	// material is the links of the material the request lists (see
+	// aiMaterialToMap): a map made of it gets what it left out.
+	material     []string
+	nextMaterial []string
+	cancel       context.CancelFunc
+	scroll       ui.ScrollState
+	keyDraft     string
+	baseDraft    string
 }
 
 // aiSender sends a request to Claude; tests replace it. onText, when not
@@ -357,8 +362,8 @@ func (a *app) snapshot(scope int) string {
 // aiSend sends the draft, with the map, or what the library holds when it
 // is shown, and waits for the reply in the background.
 func (a *app) aiSend() {
-	draft, extra, files, sync := a.ai.draft, a.ai.extra, a.ai.attach, a.ai.nextSync
-	a.ai.nextSync = nil
+	draft, extra, files, sync, material := a.ai.draft, a.ai.extra, a.ai.attach, a.ai.nextSync, a.ai.nextMaterial
+	a.ai.nextSync, a.ai.nextMaterial = nil, nil
 	a.switchChat() // the conversation about what is shown
 	a.ai.draft, a.ai.extra, a.ai.attach = draft, extra, files
 	ai := &a.ai
@@ -384,6 +389,7 @@ func (a *app) aiSend() {
 	ai.provider = a.cfg.AIProvider
 	ai.rounds = 0
 	ai.syncBase = sync // nil for a message of the user's, about something else
+	ai.material = material
 	// Proposals left unanswered are discarded by sending on.
 	for i := range ai.msgs {
 		if ai.msgs[i].proposal != nil && ai.msgs[i].state == proposalPending {
@@ -599,7 +605,7 @@ func (a *app) aiReceive(r aiReply, err error) {
 			ai.answers = append(ai.answers, toolAnswer{id: call.id, text: "无法解析修改，未应用。", isError: true})
 			continue
 		}
-		msg := chatMsg{role: "assistant", proposal: &p, toolUseID: call.id, baseline: ai.syncBase}
+		msg := chatMsg{role: "assistant", proposal: &p, toolUseID: call.id, baseline: ai.syncBase, material: ai.material}
 		if !shown {
 			msg.text, shown = text, true
 		}
@@ -678,11 +684,11 @@ func (a *app) answerProposal(i int, apply bool) {
 		return
 	}
 	result := "用户没有应用这些修改。"
-	if apply && a.file == nil {
+	if apply && a.file == nil && m.proposal.NewMap == nil {
 		m.state, m.result = proposalFailed, "没有打开的导图"
 		result = "应用失败：没有打开的导图。"
 	} else if apply && m.proposal.NewMap != nil {
-		if name, err := a.createMapFromAI(m.proposal.NewMap); err != nil {
+		if name, err := a.createMapFromAI(m.proposal.NewMap, m.material); err != nil {
 			m.state, m.result = proposalFailed, err.Error()
 			result = "创建失败：" + err.Error()
 		} else {
@@ -1269,7 +1275,7 @@ func newMapToolClaude() anthropic.BetaToolUnionParam {
 
 // createMapFromAI creates the map the AI proposed, in the folder of the
 // open map, and opens it.
-func (a *app) createMapFromAI(nm *aiNewMap) (string, error) {
+func (a *app) createMapFromAI(nm *aiNewMap, material []string) (string, error) {
 	name := strings.NewReplacer("/", "-", "\\", "-").Replace(strings.TrimSpace(nm.Name))
 	if name == "" {
 		name = "新导图"
@@ -1277,6 +1283,9 @@ func (a *app) createMapFromAI(nm *aiNewMap) (string, error) {
 	path := freeMapPath(a.currentFolder(), name)
 	f := model.NewFile(mapName(path))
 	f.Sheets[0].Root.Children = model.ParseOutline(nm.Outline)
+	if len(material) > 0 {
+		a.keepMaterial(f, material)
+	}
 	if err := f.Save(path); err != nil {
 		return "", err
 	}
