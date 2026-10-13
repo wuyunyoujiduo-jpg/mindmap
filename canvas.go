@@ -818,8 +818,10 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 			// the edit; a title has no line breaks.
 			// On a light ground of its own, whatever the node's fill: the
 			// caret, drawn in the accent color, and the selection show.
+			// The ground reaches past the title by its padding (the margins
+			// pull it back), so the text keeps the title's whole width.
 			in := ui.TextAreaBase(c.Key("edit"), &a.editText).FontSize(size).FontWeight(fontWeight(n, depth)).
-				Placeholder("新主题").Width(tw*z).Lines(1, 50).AutoFocus().
+				Placeholder("新主题").Width((tw+6)*z).Lines(1, 50).AutoFocus().
 				Background(t.Background).TextColor(t.Text).Radius(4*z).Margin(-2*z, -3*z).Padding(2*z, 3*z)
 			in.HandleInput(func(ev ui.InputEvent) bool {
 				if ev.Kind != ui.InputKeyDown || ev.Key != ui.KeyEnter || ev.Mods&^ui.Shift != 0 || a.editing != n.ID {

@@ -226,6 +226,7 @@ func TestKeyboardEditing(t *testing.T) {
 	}
 	// Enter on the canvas adds a sibling.
 	tt.Key(0, ui.KeyEnter)
+	snapshot(t, tt, "edit-new")
 	tt.Type("缓存")
 	tt.Key(0, ui.KeyEnter)
 	if got := arch.Children[len(arch.Children)-1].Title; got != "缓存" {
