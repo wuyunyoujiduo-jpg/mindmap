@@ -132,12 +132,15 @@ type app struct {
 	selected  string
 	editing   string // the node whose title is edited on the canvas
 	editText  string
-	editFocus bool              // the title input has had the focus
-	editW     float32           // the widest the title edited has been
-	reveal    bool              // scroll the selected node into view in the next frame
-	multi     map[string]bool   // nodes selected besides a.selected, with Shift or Cmd
-	focus     map[string]string // the branch each canvas is focused on, by canvas
-	progress  map[string][2]int // done and total tasks under each node shown
+	editFocus bool    // the title input has had the focus
+	editW     float32 // the widest the title edited has been
+	// The board's columns' lists, and the task to show there next.
+	boardLists  map[model.Status]*ui.ListState
+	boardReveal string
+	reveal      bool              // scroll the selected node into view in the next frame
+	multi       map[string]bool   // nodes selected besides a.selected, with Shift or Cmd
+	focus       map[string]string // the branch each canvas is focused on, by canvas
+	progress    map[string][2]int // done and total tasks under each node shown
 	// Branches copied, to paste here or in another map: the copies, the
 	// assets folder of their pictures, and the text put on the clipboard.
 	clip       []*model.Node

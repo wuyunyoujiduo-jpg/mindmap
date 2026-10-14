@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -91,7 +92,12 @@ func (a *app) boardColumns(c *ui.Context, tasks []model.TaskNode) {
 					return
 				}
 				// A virtual list: only the cards in view are built.
-				ui.List(c, nil, len(col)).Grow(1).ItemKey(func(i int) any { return col[i].Node.ID }).Rows(func(r ui.ListRow) {
+				st := a.boardList(s)
+				if i := slices.IndexFunc(col, func(tn model.TaskNode) bool { return tn.Node.ID == a.boardReveal }); i >= 0 {
+					st.ScrollIntoView(i)
+					a.boardReveal = ""
+				}
+				ui.List(c, st, len(col)).Grow(1).ItemKey(func(i int) any { return col[i].Node.ID }).Rows(func(r ui.ListRow) {
 					ui.Box(r.Context).Padding(0, 8, 8).Children(func() {
 						a.taskCard(r.Context, col[r.Index], false)
 					})
@@ -99,6 +105,31 @@ func (a *app) boardColumns(c *ui.Context, tasks []model.TaskNode) {
 			})
 		}
 	})
+}
+
+func (a *app) boardList(s model.Status) *ui.ListState {
+	if a.boardLists == nil {
+		a.boardLists = map[model.Status]*ui.ListState{}
+	}
+	if a.boardLists[s] == nil {
+		a.boardLists[s] = &ui.ListState{}
+	}
+	return a.boardLists[s]
+}
+
+// showOnBoard shows the task with the ID on the board, selected and in
+// view: a filter by iteration that hides it is cleared.
+func (a *app) showOnBoard(id string) {
+	n, _ := a.doc.Find(id)
+	if n == nil || n.Task == nil {
+		return
+	}
+	if !a.inIteration(n) {
+		a.iterFilter = ""
+	}
+	a.selectNode(id)
+	a.mode = viewBoard
+	a.boardReveal = id
 }
 
 // taskCard shows a task: its title, where it is in the map, its tags and

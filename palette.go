@@ -65,6 +65,10 @@ func (a *app) commands() []command {
 		{"添加子节点", "Tab", a.addChild, hasDoc},
 		{"添加同级节点", "↩", a.addSibling, hasDoc},
 		{"在上方添加同级节点", "⇧↩", func() { a.addSiblingAt(false) }, hasDoc},
+		{"在看板中显示所选任务", "", func() { a.showOnBoard(a.selected) }, func() bool {
+			n, _ := a.selectedNode()
+			return n != nil && n.Task != nil
+		}},
 		{"复制节点", "⌘C", func() { a.copyNodes(false) }, hasDoc},
 		{"粘贴为子节点", "⌘V", func() { a.paste() }, hasDoc},
 		{"聚焦所选分支", "⌥↩", func() { a.focusOn(a.selected) }, hasDoc},

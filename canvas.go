@@ -99,9 +99,7 @@ func (a *app) measure(c *ui.Context) layout.Measure {
 		tw, th := a.titleBox(c, n, depth)
 		w := 2*nodePadX + tw
 		if n.Task != nil {
-			if !n.HasProgress() {
-				w += checkSize + nodeGap
-			}
+			w += checkSize + nodeGap
 			if a.blocked(n) {
 				mw, _ := a.measureText(c, 0, ui.Span{Text: "🔒", Size: markSize})
 				w += mw + nodeGap
@@ -198,19 +196,27 @@ func (a *app) titleBox(c *ui.Context, n *model.Node, depth int) (w, h float32) {
 	return max(w, titleMin), h
 }
 
-// dropSide is where a node dropped on n at the pointer goes: before n
-// (-1) or after it (1) among its siblings, when near the edge they are on,
-// or under it (0). The root and floating topics have no siblings.
-func (a *app) dropSide(el ui.Element, n *model.Node, box layout.Rect) int {
-	if _, p := a.doc.Find(n.ID); p == nil {
+// dropSide is where the node dragged, id, dropped on n at the pointer
+// goes: before n (-1) or after it (1) among its siblings, when near the
+// edge they are on, or under it (0). Among its own siblings, it is mostly
+// moved: only n's middle third takes it under it. The root and floating
+// topics have no siblings.
+func (a *app) dropSide(el ui.Element, n *model.Node, box layout.Rect, id string) int {
+	_, p := a.doc.Find(n.ID)
+	if p == nil {
 		return 0
 	}
+	_, from := a.doc.Find(id)
 	x, y, _ := el.PointerPosition()
 	pos, size := y, box.H*a.cam().Zoom
 	if a.siblingsAcross(n) {
 		pos, size = x, box.W*a.cam().Zoom
 	}
-	switch edge := min(size*0.3, 14*a.cam().Zoom); {
+	edge := min(size*0.3, 14*a.cam().Zoom)
+	if from == p {
+		edge = size / 3
+	}
+	switch {
 	case pos < edge:
 		return -1
 	case pos > size-edge:
@@ -801,7 +807,7 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 			if nd, ok := d.(nodeDrag); !ok || nd.ID != n.ID {
 				if !ok {
 					el.Border(2*z, t.Accent).BorderStyle(ui.BorderDashed)
-				} else if side = a.dropSide(el, n, box); side == 0 {
+				} else if side = a.dropSide(el, n, box, nd.ID); side == 0 {
 					el.Border(2*z, t.Accent).BorderStyle(ui.BorderDashed)
 				}
 			}
@@ -810,7 +816,7 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 			id := n.ID
 			switch d := d.(type) {
 			case nodeDrag:
-				if side := a.dropSide(el, n, box); side != 0 {
+				if side := a.dropSide(el, n, box, d.ID); side != 0 {
 					a.later(func() { a.placeNode(d.ID, id, side > 0) })
 					break
 				}
@@ -850,9 +856,7 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 			a.thumbnail(c, n, iw*z, ih*z).Absolute().Left((box.W - iw) / 2 * z).Top(nodePadY * z)
 		}
 		if n.Task != nil {
-			if !n.HasProgress() { // its progress marker shows the status
-				a.taskCheck(c, n, checkSize*z)
-			}
+			a.taskCheck(c, n, checkSize*z)
 			if a.blocked(n) {
 				var names []string
 				for _, b := range a.file.Blockers(n) {
@@ -1135,6 +1139,9 @@ func (a *app) nodeMenu(m *ui.Menu, n *model.Node, depth int) {
 			}
 		}
 	})
+	if n.Task != nil && m.Item("在看板中显示").Chosen() {
+		a.later(func() { a.showOnBoard(n.ID) })
+	}
 	if len(n.Children) > 0 {
 		label := "折叠"
 		if n.Collapsed {

@@ -944,7 +944,9 @@ func TestMarkers(t *testing.T) {
 	if got := nextMarker("priority:2"); got != "priority:3" || nextMarker("priority:7") != "priority:1" {
 		t.Fatalf("next marker %v", got)
 	}
-	// Clicking a marker that is on takes it off.
+	// Clicking the node's marker goes on to the next one.
+	a.cam().X -= 150 // the node in view
+	tt.Frame()
 	tt.Click("红旗")
 	if slices.Contains(n.Markers, "flag:red") {
 		t.Fatalf("not taken off: %v", n.Markers)
@@ -3198,4 +3200,33 @@ func TestProgressMarkerMakesTask(t *testing.T) {
 	if n.Task != nil || n.Markers != nil {
 		t.Fatalf("task %+v, markers %v", n.Task, n.Markers)
 	}
+}
+
+func TestShowTaskOnBoard(t *testing.T) {
+	a, tt := newTestApp(t)
+	n := find(t, a, "后端")
+	a.toggleMarker(n, "task:0")
+	tt.Frame()
+	if n.Task == nil {
+		t.Fatal("not a task")
+	}
+	// The check shows beside the progress marker, and finishes it.
+	if err := tt.Click("完成任务 后端"); err != nil {
+		t.Fatal(err)
+	}
+	if n.Task.Status != model.StatusDone || !slices.Contains(n.Markers, "task:6") {
+		t.Fatalf("task %+v, markers %v", n.Task, n.Markers)
+	}
+	if err := clickNode(t, tt, a, "后端"); err != nil {
+		t.Fatal(err)
+	}
+	a.showOnBoard(n.ID)
+	tt.Frame()
+	if a.mode != viewBoard || a.selected != n.ID || a.boardReveal != "" {
+		t.Fatalf("mode %v, selected %v, reveal %q", a.mode, a.selected, a.boardReveal)
+	}
+	if !tt.HasText("后端") {
+		t.Fatal("card not shown")
+	}
+	snapshot(t, tt, "board-reveal")
 }
