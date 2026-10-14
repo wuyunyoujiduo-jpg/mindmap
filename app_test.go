@@ -3270,3 +3270,74 @@ func TestRelationLine(t *testing.T) {
 	}
 	snapshot(t, tt, "relation")
 }
+
+func TestDeleteFloatingTopic(t *testing.T) {
+	a, tt := newTestApp(t)
+	a.addFloatingAt(300, 120)
+	tt.Frame()
+	tt.Key(0, ui.KeyEnter) // ends the edit, the title kept
+	id := a.selected
+	if !a.doc.IsFloating(id) {
+		t.Fatal("not floating")
+	}
+	a.canvas.Focus()
+	tt.Frame()
+	tt.Key(0, ui.KeyDelete)
+	if n, _ := a.doc.Find(id); n != nil {
+		t.Fatal("the floating topic was not deleted")
+	}
+}
+
+func TestSelectBendDeleteRelation(t *testing.T) {
+	a, tt := newTestApp(t)
+	from, to := find(t, a, "前端"), find(t, a, "功能")
+	a.selected = from.ID
+	a.startRelation(from)
+	a.endRelation(to.ID)
+	tt.Frame()
+	rel := a.doc.Relations[0]
+	cam := a.cam()
+	k, ok := relationCurveOf(rel, a.boxes, cam.X, cam.Y, cam.Zoom)
+	if !ok {
+		t.Fatal("no curve")
+	}
+	// A click on the line selects it.
+	mx, my := k.at(0.5)
+	if got := a.relationAt(mx, my); got != rel.ID {
+		t.Fatalf("relation at its middle %q", got)
+	}
+	tt.ClickAt(a.vp.X+mx, a.vp.Y+my)
+	tt.Frame()
+	if a.selRel != rel.ID {
+		t.Fatal("not selected")
+	}
+	snapshot(t, tt, "relation-selected")
+	// Its handle bends it.
+	h, ok := tt.Find("拖动改变连线形状")
+	if !ok {
+		t.Fatal("no handle")
+	}
+	hx, hy := h.X+h.W/2, h.Y+h.H/2
+	tt.Press(hx, hy)
+	for i := 1; i <= 10; i++ {
+		tt.Move(hx, hy-float32(i)*6)
+	}
+	tt.Release(hx, hy-60)
+	tt.Frame()
+	bent := a.doc.Relations[0]
+	if bent.Bend == nil {
+		t.Fatal("not bent")
+	}
+	k2, _ := relationCurveOf(bent, a.boxes, cam.X, cam.Y, cam.Zoom)
+	if _, y2 := k2.at(0.5); y2 > my-40 {
+		t.Fatalf("middle at %v, was %v", y2, my)
+	}
+	snapshot(t, tt, "relation-bent")
+	// Delete takes it off, the nodes staying.
+	a.canvas.Focus()
+	tt.Frame()
+	tt.Key(0, ui.KeyDelete)
+	if len(a.doc.Relations) != 0 || find(t, a, "前端") == nil {
+		t.Fatalf("relations %+v", a.doc.Relations)
+	}
+}

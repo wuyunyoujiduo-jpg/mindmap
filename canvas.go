@@ -429,6 +429,11 @@ func (a *app) canvasArea(c *ui.Context) {
 	if cv.Pressed() && a.editing == "" {
 		a.canvas.Focus()
 	}
+	if cv.Pressed() && !exporting && a.relFrom == "" { // a relation line near the pointer is selected
+		if x, y, over := cv.PointerPosition(); over {
+			a.selRel = a.relationAt(x, y)
+		}
+	}
 	if cv.Clicked() {
 		if !a.justFloated { // not the end of the double click that made one
 			a.commitEditIfAny()
@@ -501,6 +506,9 @@ func (a *app) canvasArea(c *ui.Context) {
 		})
 		if exporting {
 			return
+		}
+		if a.selRel != "" && shown == a.doc {
+			a.relationHandle(c)
 		}
 		a.focusBar(c)
 		a.structurePicker(c)
@@ -776,6 +784,12 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 				a.later(func() { a.endRelation(id) })
 			}
 			el.Cursor(ui.CursorCrosshair)
+		} else if el.Pressed() && a.selRel != "" {
+			a.selRel = "" // a node pressed: the line is no longer selected
+			if !adding {
+				a.commitEditIfAny()
+				a.selected, a.multi = n.ID, nil
+			}
 		} else if el.Pressed() && !adding && (n.ID != a.selected || len(a.multi) > 0) {
 			a.commitEditIfAny()
 			a.selected, a.multi = n.ID, nil
@@ -1274,11 +1288,19 @@ func (a *app) canvasKey(ev ui.InputEvent) bool {
 	case ev.Mods == ui.Shift && ev.Key == ui.KeyEnter:
 		a.addSiblingAt(false)
 	case ev.Mods == 0 && (ev.Key == ui.KeyDelete || ev.Key == ui.KeyBackspace):
+		if a.selRel != "" { // the line selected, rather than the node
+			id := a.selRel
+			a.selRel = ""
+			a.removeRelation(id)
+			break
+		}
 		a.deleteSelection()
 	case ev.Mods == 0 && ev.Key == ui.KeyEscape:
 		switch {
 		case a.relFrom != "":
 			a.relFrom = ""
+		case a.selRel != "":
+			a.selRel = ""
 		case len(a.multi) > 0:
 			a.multi = nil
 		case a.focusNode() != nil:

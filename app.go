@@ -210,6 +210,7 @@ type app struct {
 	linkFrom        string      // the node a link to a node is being chosen for
 	relFrom         string      // the node a relation line is being drawn from
 	relTo           *[2]float32 // where the pointer draws it to, in the window
+	selRel          string      // the relation line selected
 	justFloated     bool        // a double click just made a floating topic, whose release should not end its editing
 	historyList     []versions.Version
 	historySel      int
@@ -806,8 +807,8 @@ func (a *app) addSiblingAt(after bool) {
 }
 
 func (a *app) deleteSelected() {
-	if n, p := a.selectedNode(); n == nil || p == nil {
-		return
+	if n, p := a.selectedNode(); n == nil || p == nil && !a.doc.IsFloating(n.ID) {
+		return // the root stays
 	}
 	a.mutate("", func() {
 		if next, err := a.doc.Delete(a.selected); err == nil {

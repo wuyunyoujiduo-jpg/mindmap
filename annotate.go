@@ -114,69 +114,224 @@ func (a *app) removeRelation(id string) {
 	})
 }
 
-// drawRelations draws the relation lines between the nodes shown: smooth
-// curves bowing away from the straight line, an arrow at the end, and the
-// label at the middle.
+// relCurve is a relation line's curve on screen: a cubic Bézier curve
+// from f to t, by c1 and c2.
+type relCurve struct{ fx, fy, c1x, c1y, c2x, c2y, tx, ty float32 }
+
+func (k relCurve) at(t float32) (float32, float32) {
+	u := 1 - t
+	return u*u*u*k.fx + 3*u*u*t*k.c1x + 3*u*t*t*k.c2x + t*t*t*k.tx,
+		u*u*u*k.fy + 3*u*u*t*k.c1y + 3*u*t*t*k.c2y + t*t*t*k.ty
+}
+
+// relationCurveOf is the relation's curve with the map's origin at (ox,
+// oy) and zoom z, false when a node it joins is not shown. Its middle is
+// moved by the relation's bend, else bows away from the straight line by
+// a quarter of its length.
+func relationCurveOf(rel model.Relation, r layout.Result, ox, oy, z float32) (relCurve, bool) {
+	fb, ok1 := r.Boxes[rel.From]
+	tb, ok2 := r.Boxes[rel.To]
+	if !ok1 || !ok2 {
+		return relCurve{}, false
+	}
+	fx, fy := ox+(fb.X+fb.W/2)*z, oy+(fb.Y+fb.H/2)*z
+	tx, ty := ox+(tb.X+tb.W/2)*z, oy+(tb.Y+tb.H/2)*z
+	// From and to the boxes' edges, toward each other, or toward the
+	// middle where it is moved: the bend is how far from the middle
+	// between the nodes' centers, in map units.
+	if rel.Bend != nil {
+		mid := [2]float32{(fx+tx)/2 + rel.Bend.X*z, (fy+ty)/2 + rel.Bend.Y*z}
+		fx, fy = edgePoint(ox+fb.X*z, oy+fb.Y*z, fb.W*z, fb.H*z, mid[0], mid[1])
+		tx, ty = edgePoint(ox+tb.X*z, oy+tb.Y*z, tb.W*z, tb.H*z, mid[0], mid[1])
+		return bentCurve(fx, fy, tx, ty, z, &mid), true
+	}
+	fx, fy = edgePoint(ox+fb.X*z, oy+fb.Y*z, fb.W*z, fb.H*z, tx, ty)
+	tx, ty = edgePoint(ox+tb.X*z, oy+tb.Y*z, tb.W*z, tb.H*z, fx, fy)
+	return bentCurve(fx, fy, tx, ty, z, nil), true
+}
+
+// bentCurve is the curve from f to t through mid, at its middle, or bowing
+// by default.
+func bentCurve(fx, fy, tx, ty, z float32, mid *[2]float32) relCurve {
+	dx, dy := tx-fx, ty-fy
+	var kx, ky float32
+	if mid != nil {
+		// The curve's middle is three quarters of the way to the control
+		// points' offset.
+		kx, ky = (mid[0]-(fx+tx)/2)/0.75, (mid[1]-(fy+ty)/2)/0.75
+	} else if length := float32(math.Hypot(float64(dx), float64(dy))); length >= 1 {
+		bow := min(length/4, 90*z)
+		kx, ky = -dy/length*bow, dx/length*bow
+	}
+	return relCurve{fx, fy, fx + dx/3 + kx, fy + dy/3 + ky, fx + 2*dx/3 + kx, fy + 2*dy/3 + ky, tx, ty}
+}
+
+// drawRelations draws the relation lines between the nodes shown: dashed
+// curves, an arrow at the end, and the label at the middle; the one
+// selected thicker.
 func (a *app) drawRelations(p *ui.Painter, r layout.Result, ox, oy, z float32, col ui.Color) {
 	for _, rel := range a.doc.Relations {
-		fb, ok1 := r.Boxes[rel.From]
-		tb, ok2 := r.Boxes[rel.To]
-		if !ok1 || !ok2 {
-			continue
+		if k, ok := relationCurveOf(rel, r, ox, oy, z); ok {
+			drawRelationCurve(p, k, z, col, rel.Label, rel.ID == a.selRel)
 		}
-		fx, fy := ox+(fb.X+fb.W/2)*z, oy+(fb.Y+fb.H/2)*z
-		tx, ty := ox+(tb.X+tb.W/2)*z, oy+(tb.Y+tb.H/2)*z
-		// From and to the boxes' edges, toward each other.
-		fx, fy = edgePoint(ox+fb.X*z, oy+fb.Y*z, fb.W*z, fb.H*z, tx, ty)
-		tx, ty = edgePoint(ox+tb.X*z, oy+tb.Y*z, tb.W*z, tb.H*z, fx, fy)
-		relationCurve(p, fx, fy, tx, ty, z, col, rel.Label)
 	}
 	// The line being drawn, from its node to the pointer.
 	if fb, ok := r.Boxes[a.relFrom]; ok && a.relTo != nil {
 		tx, ty := a.relTo[0], a.relTo[1]
 		fx, fy := edgePoint(ox+fb.X*z, oy+fb.Y*z, fb.W*z, fb.H*z, tx, ty)
-		relationCurve(p, fx, fy, tx, ty, z, col, "")
+		drawRelationCurve(p, bentCurve(fx, fy, tx, ty, z, nil), z, col, "", false)
 	}
 }
 
-// relationCurve draws a relation line from (fx, fy) to (tx, ty): a curve
-// bowing away from the straight line, an arrow at its end and its
-// label in the middle.
-func relationCurve(p *ui.Painter, fx, fy, tx, ty, z float32, col ui.Color, label string) {
-	dx, dy := tx-fx, ty-fy
-	length := float32(math.Hypot(float64(dx), float64(dy)))
-	if length < 1 {
+// drawRelationCurve draws a relation line: dashes evenly along the curve,
+// an arrow at its end and its label in the middle.
+func drawRelationCurve(p *ui.Painter, k relCurve, z float32, col ui.Color, label string, selected bool) {
+	if math.Hypot(float64(k.tx-k.fx), float64(k.ty-k.fy)) < 1 && k.c1x == k.fx && k.c1y == k.fy {
 		return
 	}
-	// The bow: a quarter of the length, to the side.
-	nx, ny := -dy/length, dx/length
-	bow := min(length/4, 90*z)
-	c1x, c1y := fx+dx/3+nx*bow, fy+dy/3+ny*bow
-	c2x, c2y := fx+2*dx/3+nx*bow, fy+2*dy/3+ny*bow
-	at := func(t float32) (float32, float32) {
-		u := 1 - t
-		return u*u*u*fx + 3*u*u*t*c1x + 3*u*t*t*c2x + t*t*t*tx,
-			u*u*u*fy + 3*u*u*t*c1y + 3*u*t*t*c2y + t*t*t*ty
+	width := max(1.6*z, 1.2)
+	if selected {
+		width *= 2
 	}
-	// A smooth line, in pieces where it is long.
-	l := polyline{{fx, fy}}
-	l.cube(c1x, c1y, c2x, c2y, tx, ty)
-	strokeLong(p, ui.Rect{}, l, max(1.6*z, 1.2), col)
+	l := polyline{{k.fx, k.fy}}
+	l.cube(k.c1x, k.c1y, k.c2x, k.c2y, k.tx, k.ty)
+	for _, d := range dashes(l, 7*max(z, 0.6), 5*max(z, 0.6)) {
+		strokeLong(p, ui.Rect{}, d, width, col)
+	}
 	// The arrow, along the curve's end.
-	ex, ey := at(0.94)
-	ang := math.Atan2(float64(ty-ey), float64(tx-ex))
+	ex, ey := k.at(0.94)
+	ang := math.Atan2(float64(k.ty-ey), float64(k.tx-ex))
 	s := float64(8 * z)
-	head := new(ui.Path).MoveTo(tx, ty).
-		LineTo(tx-float32(s*math.Cos(ang-0.45)), ty-float32(s*math.Sin(ang-0.45))).
-		LineTo(tx-float32(s*math.Cos(ang+0.45)), ty-float32(s*math.Sin(ang+0.45))).Close()
+	if selected {
+		s *= 1.4
+	}
+	head := new(ui.Path).MoveTo(k.tx, k.ty).
+		LineTo(k.tx-float32(s*math.Cos(ang-0.45)), k.ty-float32(s*math.Sin(ang-0.45))).
+		LineTo(k.tx-float32(s*math.Cos(ang+0.45)), k.ty-float32(s*math.Sin(ang+0.45))).Close()
 	p.FillPath(head, col)
 	if label != "" {
-		mx, my := at(0.5)
+		mx, my := k.at(0.5)
 		size := 12 * z
 		w := float32(len([]rune(label)))*size + 10*z
 		p.Fill(ui.Rect{X: mx - w/2, Y: my - size*0.9, W: w, H: size * 1.8}, p.Theme().Background, 4*z)
 		p.Text(mx-w/2+5*z, my-size*0.65, label, size, col)
 	}
+}
+
+// dashes cuts a line into dashes of length on, gaps of off between them,
+// along its length.
+func dashes(l polyline, on, off float32) []polyline {
+	var out []polyline
+	var cur polyline
+	pos, drawing := float32(0), true // how far into the dash or the gap
+	for i := 1; i < len(l); i++ {
+		a, b := l[i-1], l[i]
+		seg := float32(math.Hypot(float64(b[0]-a[0]), float64(b[1]-a[1])))
+		at := float32(0)
+		for at < seg {
+			left := on - pos
+			if !drawing {
+				left = off - pos
+			}
+			step := min(left, seg-at)
+			t0, t1 := at/seg, (at+step)/seg
+			p0 := [2]float32{a[0] + (b[0]-a[0])*t0, a[1] + (b[1]-a[1])*t0}
+			p1 := [2]float32{a[0] + (b[0]-a[0])*t1, a[1] + (b[1]-a[1])*t1}
+			if drawing {
+				if len(cur) == 0 {
+					cur = append(cur, p0)
+				}
+				cur = append(cur, p1)
+			}
+			at += step
+			pos += step
+			if step == left { // the dash or the gap ends
+				if drawing && len(cur) > 1 {
+					out = append(out, cur)
+				}
+				cur, pos, drawing = nil, 0, !drawing
+			}
+		}
+	}
+	if len(cur) > 1 {
+		out = append(out, cur)
+	}
+	return out
+}
+
+// relationAt is the relation line passing near (x, y), on the canvas, or "".
+func (a *app) relationAt(x, y float32) string {
+	cam := a.cam()
+	best, near := "", float32(6)
+	for _, rel := range a.doc.Relations {
+		k, ok := relationCurveOf(rel, a.boxes, cam.X, cam.Y, cam.Zoom)
+		if !ok {
+			continue
+		}
+		for i := 0; i <= 40; i++ {
+			px, py := k.at(float32(i) / 40)
+			if d := float32(math.Hypot(float64(px-x), float64(py-y))); d < near {
+				best, near = rel.ID, d
+			}
+		}
+	}
+	return best
+}
+
+// relationHandle is the handle of the relation line selected: at its
+// middle, dragged to bend it; its menu deletes it.
+func (a *app) relationHandle(c *ui.Context) {
+	i := slices.IndexFunc(a.doc.Relations, func(r model.Relation) bool { return r.ID == a.selRel })
+	if i < 0 {
+		a.selRel = ""
+		return
+	}
+	rel := a.doc.Relations[i]
+	cam := a.cam()
+	z := cam.Zoom
+	k, ok := relationCurveOf(rel, a.boxes, cam.X, cam.Y, z)
+	if !ok {
+		return
+	}
+	t := c.Theme()
+	mx, my := k.at(0.5)
+	const size = 14
+	h := ui.Box(c.Key("rel-handle")).Absolute().Left(mx-size/2).Top(my-size/2).Size(size, size).Radius(999).
+		Background(t.Background).Border(2.5, ui.Hex("#6366f1")).Cursor(ui.CursorGrab).
+		Label("拖动改变连线形状").Tooltip("拖动改变形状 · Delete 删除")
+	if dx, dy, ok := h.Dragged(); ok {
+		id := rel.ID
+		a.mutate("bend:"+id, func() {
+			for j := range a.doc.Relations {
+				if r := &a.doc.Relations[j]; r.ID == id {
+					// The curve's middle as it is now, moved, from the
+					// middle between the nodes' centers.
+					fb, tb := a.boxes.Boxes[r.From], a.boxes.Boxes[r.To]
+					sx := cam.X + (fb.X+fb.W/2+tb.X+tb.W/2)/2*z
+					sy := cam.Y + (fb.Y+fb.H/2+tb.Y+tb.H/2)/2*z
+					r.Bend = &model.Point{X: (mx - sx + dx) / z, Y: (my - sy + dy) / z}
+				}
+			}
+		})
+		h.Cursor(ui.CursorGrabbing)
+	}
+	h.ContextMenu(func(m *ui.Menu) {
+		if m.Item("删除连线").Chosen() {
+			a.later(func() { a.removeRelation(rel.ID) })
+		}
+		if m.Item("恢复默认弧度").Disabled(rel.Bend == nil).Chosen() {
+			id := rel.ID
+			a.later(func() {
+				a.mutate("", func() {
+					for j := range a.doc.Relations {
+						if a.doc.Relations[j].ID == id {
+							a.doc.Relations[j].Bend = nil
+						}
+					}
+				})
+			})
+		}
+	})
 }
 
 // edgePoint is where the line from a box's center to (x, y) leaves it.

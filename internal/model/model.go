@@ -232,6 +232,9 @@ type Relation struct {
 	From  string `json:"from"`
 	To    string `json:"to"`
 	Label string `json:"label,omitempty"`
+	// Bend moves the curve's middle this far from the middle between the
+	// nodes, in map units; nil bows it by default.
+	Bend *Point `json:"bend,omitempty"`
 }
 
 // Attachment is a file attached to a node: its copy in the assets folder,
