@@ -3442,19 +3442,29 @@ func TestZoomStopsAt100(t *testing.T) {
 	// A pinch through 100% stops there, and goes on as it goes further.
 	a.setZoom(0.9)
 	for range 3 {
-		a.zoomBy(1.05, -1, -1)
+		a.zoomBy(1.05, -1, -1, true)
 	}
 	if z := a.cam().Zoom; z != 1 {
 		t.Fatalf("pinched through 100%%: %v", z)
 	}
-	a.zoomBy(1.05, -1, -1)
+	a.zoomBy(1.05, -1, -1, true)
 	if z := a.cam().Zoom; z != 1 {
 		t.Fatalf("not held at 100%%: %v", z)
 	}
 	for range 3 {
-		a.zoomBy(1.05, -1, -1)
+		a.zoomBy(1.05, -1, -1, true)
 	}
 	if z := a.cam().Zoom; z <= 1 {
 		t.Fatalf("held at 100%% for good: %v", z)
+	}
+	// A mouse's wheel stops at 100%, and goes on with the next notch.
+	a.setZoom(0.95)
+	a.zoomBy(1.1, -1, -1, false)
+	if z := a.cam().Zoom; z != 1 {
+		t.Fatalf("a notch through 100%%: %v", z)
+	}
+	a.zoomBy(1.1, -1, -1, false)
+	if z := a.cam().Zoom; z <= 1 {
+		t.Fatalf("the next notch: %v", z)
 	}
 }

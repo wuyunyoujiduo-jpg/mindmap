@@ -605,7 +605,7 @@ func (a *app) canvasInput(ev ui.InputEvent) bool {
 			if !ev.Precise {
 				f = float32(math.Pow(1.1, float64(-ev.DY)/40))
 			}
-			a.zoomBy(f, a.pointer[0], a.pointer[1])
+			a.zoomBy(f, a.pointer[0], a.pointer[1], ev.Precise)
 			return true
 		}
 		dx, dy := ev.DX, ev.DY

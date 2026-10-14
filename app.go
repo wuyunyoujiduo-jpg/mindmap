@@ -1048,11 +1048,12 @@ func (a *app) zoomStep(in bool) {
 }
 
 // zoomBy zooms by a factor bit by bit, as a pinch or the wheel do, around
-// (x, y): passing 100%, it stops there, and goes on once the gesture has
-// gone some way further.
-func (a *app) zoomBy(f, x, y float32) {
+// (x, y): passing 100%, it stops there, and, held (a gesture's small
+// steps), goes on once the gesture has gone some way further; a mouse's
+// wheel, by notches, goes on with the next.
+func (a *app) zoomBy(f, x, y float32, hold bool) {
 	z := a.cam().Zoom
-	if z == 1 {
+	if z == 1 && hold {
 		if a.zoomHold == 0 {
 			a.zoomHold = 1
 		}
@@ -1075,7 +1076,7 @@ func (a *app) pinch(magnification float32) {
 	if a.doc == nil || a.mode != viewMap || !a.overCanvas || a.presenting {
 		return
 	}
-	a.zoomBy(1+magnification, a.pointer[0], a.pointer[1])
+	a.zoomBy(1+magnification, a.pointer[0], a.pointer[1], true)
 }
 
 // recenter puts the map back at the left middle of the canvas, at zoom 1.
