@@ -196,6 +196,48 @@ func (a *app) titleBox(c *ui.Context, n *model.Node, depth int) (w, h float32) {
 	return max(w, titleMin), h
 }
 
+// dropSide is where a node dropped on n at the pointer goes: before n
+// (-1) or after it (1) among its siblings, when near the edge they are on,
+// or under it (0). The root and floating topics have no siblings.
+func (a *app) dropSide(el ui.Element, n *model.Node, box layout.Rect) int {
+	if _, p := a.doc.Find(n.ID); p == nil {
+		return 0
+	}
+	x, y, _ := el.PointerPosition()
+	pos, size := y, box.H*a.cam().Zoom
+	if a.siblingsAcross(n) {
+		pos, size = x, box.W*a.cam().Zoom
+	}
+	switch edge := min(size*0.3, 14*a.cam().Zoom); {
+	case pos < edge:
+		return -1
+	case pos > size-edge:
+		return 1
+	}
+	return 0
+}
+
+// siblingsAcross tells whether n's siblings sit side by side (as in the
+// org chart) rather than one above another.
+func (a *app) siblingsAcross(n *model.Node) bool {
+	_, p := a.doc.Find(n.ID)
+	if p == nil {
+		return false
+	}
+	b, ok := a.boxes.Boxes[n.ID]
+	if !ok {
+		return false
+	}
+	for _, s := range p.Children {
+		if o, ok := a.boxes.Boxes[s.ID]; ok && s != n && a.boxes.Left[s.ID] == a.boxes.Left[n.ID] {
+			dx := (o.X + o.W/2) - (b.X + b.W/2)
+			dy := (o.Y + o.H/2) - (b.Y + b.H/2)
+			return dx*dx > dy*dy
+		}
+	}
+	return a.doc.Structure == model.StructureOrg
+}
+
 // styleOf is the node's own style, zero where it follows the canvas.
 func styleOf(n *model.Node) model.NodeStyle {
 	if n.Style == nil {
@@ -631,6 +673,7 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 	p := a.parts(n)
 	selected := a.isSelected(n.ID)
 	editing := n.ID == a.editing
+	side := 0 // where a node dragged over it would go: -1 before it, 1 after
 
 	el := ui.Row(c).Absolute().Left(cam.X+box.X*z).Top(cam.Y+box.Y*z).Size(box.W*z, box.H*z).
 		Padding(0, nodePadX*z).Gap(nodeGap * z).AlignItems(ui.Center).Radius(8 * z)
@@ -749,17 +792,26 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 			// Other nodes are dropped on a node to move under it.
 			el.Drag(nodeDrag{n.ID}).Cursor(ui.CursorPointer)
 		}
-		// A node dropped on it moves under it; a document or a map from
+		// A node dropped on it moves under it, or, near the edge its
+		// siblings are on, before or after it; a document or a map from
 		// the sidebar is linked to it.
 		if d, over := ui.DragOver[canvasDrop](el); over {
 			if nd, ok := d.(nodeDrag); !ok || nd.ID != n.ID {
-				el.Border(2*z, t.Accent).BorderStyle(ui.BorderDashed)
+				if !ok {
+					el.Border(2*z, t.Accent).BorderStyle(ui.BorderDashed)
+				} else if side = a.dropSide(el, n, box); side == 0 {
+					el.Border(2*z, t.Accent).BorderStyle(ui.BorderDashed)
+				}
 			}
 		}
 		if d, ok := ui.Drop[canvasDrop](el); ok {
 			id := n.ID
 			switch d := d.(type) {
 			case nodeDrag:
+				if side := a.dropSide(el, n, box); side != 0 {
+					a.later(func() { a.placeNode(d.ID, id, side > 0) })
+					break
+				}
 				a.later(func() { a.moveNode(d.ID, id) })
 			case fileDrag:
 				a.later(func() { a.dropMaterial(id, d) })
@@ -778,6 +830,20 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 		muted = onFill.Alpha(0.75)
 	}
 	el.Children(func() {
+		if side != 0 { // a bar on the edge the node dragged would go by
+			bar := ui.Box(c.Key("drop-bar")).Absolute().Background(t.Accent).Radius(2 * z).PassThrough()
+			const thick, out = 4, 7
+			switch across := a.siblingsAcross(n); {
+			case across && side < 0:
+				bar.Left(-out*z).Top(0).Size(thick*z, box.H*z)
+			case across:
+				bar.Left((box.W+out-thick)*z).Top(0).Size(thick*z, box.H*z)
+			case side < 0:
+				bar.Left(0).Top(-out*z).Size(box.W*z, thick*z)
+			default:
+				bar.Left(0).Top((box.H+out-thick)*z).Size(box.W*z, thick*z)
+			}
+		}
 		if iw > 0 {
 			a.thumbnail(c, n, iw*z, ih*z).Absolute().Left((box.W - iw) / 2 * z).Top(nodePadY * z)
 		}
@@ -999,6 +1065,9 @@ func (a *app) nodeMenu(m *ui.Menu, n *model.Node, depth int) {
 	if m.Item("添加同级节点").Shortcut(0, ui.KeyEnter).Chosen() {
 		a.later(func() { a.addSibling() })
 	}
+	if m.Item("在上方添加同级节点").Shortcut(ui.Shift, ui.KeyEnter).Chosen() {
+		a.later(func() { a.addSiblingAt(false) })
+	}
 	if m.Item("编辑标题").Shortcut(0, ui.KeyF2).Chosen() {
 		a.later(func() { a.startEdit(n.ID) })
 	}
@@ -1176,6 +1245,8 @@ func (a *app) canvasKey(ev ui.InputEvent) bool {
 		a.addChild()
 	case ev.Mods == 0 && ev.Key == ui.KeyEnter:
 		a.addSibling()
+	case ev.Mods == ui.Shift && ev.Key == ui.KeyEnter:
+		a.addSiblingAt(false)
 	case ev.Mods == 0 && (ev.Key == ui.KeyDelete || ev.Key == ui.KeyBackspace):
 		a.deleteSelection()
 	case ev.Mods == 0 && ev.Key == ui.KeyEscape:

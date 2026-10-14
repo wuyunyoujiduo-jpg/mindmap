@@ -360,11 +360,15 @@ type app struct {
 	deletePath    string
 }
 
+// clock is the time a new app starts with as now: the tests' own day, so
+// that the guide map's dates are where they expect them.
+var clock = time.Now
+
 func newApp(plat platform, cfg config) *app {
 	a := &app{
 		plat:          plat,
 		cfg:           cfg,
-		now:           time.Now,
+		now:           clock,
 		hist:          model.NewHistory(200),
 		hists:         map[string]*model.History{},
 		views:         loadViews(),
@@ -776,11 +780,22 @@ func (a *app) addChild() {
 }
 
 func (a *app) addSibling() {
+	a.addSiblingAt(true)
+}
+
+// addSiblingAt adds a node after the one selected, or before it.
+func (a *app) addSiblingAt(after bool) {
 	if a.doc == nil {
 		return
 	}
 	var n *model.Node
-	a.mutate("", func() { n, _ = a.doc.AddSibling(a.selected, "") })
+	a.mutate("", func() {
+		if after {
+			n, _ = a.doc.AddSibling(a.selected, "")
+		} else {
+			n, _ = a.doc.AddSiblingBefore(a.selected, "")
+		}
+	})
 	if n != nil {
 		a.startEdit(n.ID)
 	}
@@ -835,6 +850,25 @@ func (a *app) moveNode(id, parent string) {
 		return
 	}
 	a.mutate("", func() { _ = a.doc.Move(id, parent, -1) })
+	a.selectNode(id)
+}
+
+// placeNode puts a dragged node next to another, before or after it,
+// among that node's siblings.
+func (a *app) placeNode(id, by string, after bool) {
+	if id == by || a.doc == nil {
+		return
+	}
+	n, _ := a.doc.Find(id)
+	b, p := a.doc.Find(by)
+	if n == nil || b == nil || p == nil || n.Contains(by) {
+		return
+	}
+	i := slices.Index(p.Children, b)
+	if after {
+		i++
+	}
+	a.mutate("", func() { _ = a.doc.Move(id, p.ID, i) })
 	a.selectNode(id)
 }
 

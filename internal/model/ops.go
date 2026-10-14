@@ -42,6 +42,21 @@ func (d *Document) AddSibling(id, title string) (*Node, error) {
 	return s, nil
 }
 
+// AddSiblingBefore inserts a new node right before the node with the ID;
+// for the root, it adds a child, as AddSibling does.
+func (d *Document) AddSiblingBefore(id, title string) (*Node, error) {
+	n, p := d.Find(id)
+	if n == nil {
+		return nil, ErrNotFound
+	}
+	if p == nil {
+		return d.AddChild(id, title)
+	}
+	s := NewNode(title)
+	p.Children = slices.Insert(p.Children, slices.Index(p.Children, n), s)
+	return s, nil
+}
+
 // Delete removes the node with the ID and everything below it. It returns
 // the ID of the node to select next: the next sibling, else the previous
 // one, else the parent.

@@ -93,8 +93,8 @@ func newTestApp(t *testing.T) (*app, *ui.Tester) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	dir := t.TempDir()
+	clock = func() time.Time { return testNow }
 	a := newApp(&fakePlatform{}, config{Dir: dir})
-	a.now = func() time.Time { return testNow }
 	a.noLocalModel = true // the built-in model only where a test asks for it
 	if a.doc == nil {
 		t.Fatal("no map opened")
@@ -484,12 +484,15 @@ func TestDragNodeToReparent(t *testing.T) {
 	if !ok1 || !ok2 {
 		t.Fatal("nodes not found")
 	}
+	// Onto its middle: near its top or bottom edge, it would go before or
+	// after it.
+	x, y := to.X+5, to.Y+to.H/2
 	tt.Press(from.X+5, from.Y+5)
 	for i := 1; i <= 10; i++ {
 		f := float32(i) / 10
-		tt.Move(from.X+5+(to.X+5-from.X-5)*f, from.Y+5+(to.Y+5-from.Y-5)*f)
+		tt.Move(from.X+5+(x-from.X-5)*f, from.Y+5+(y-from.Y-5)*f)
 	}
-	tt.Release(to.X+5, to.Y+5)
+	tt.Release(x, y)
 	tt.Frame()
 	feat := find(t, a, "功能")
 	if !slices.ContainsFunc(feat.Children, func(n *model.Node) bool { return n.Title == "支持导出图片" }) {
@@ -3103,4 +3106,65 @@ func TestOutlineWraps(t *testing.T) {
 		t.Fatalf("line at %+v", el)
 	}
 	snapshot(t, tt, "outline-wrap")
+}
+
+func TestReorderSiblings(t *testing.T) {
+	a, tt := newTestApp(t)
+	arch := find(t, a, "架构")
+	titles := func() (s []string) {
+		for _, c := range arch.Children {
+			s = append(s, c.Title)
+		}
+		return s
+	}
+	drag := func(title, onto string, after bool) {
+		t.Helper()
+		from, ok1 := tt.Find(title)
+		to, ok2 := tt.Find(onto)
+		if !ok1 || !ok2 {
+			t.Fatal("nodes not found")
+		}
+		x, y := to.X+5, to.Y+3 // the top edge
+		if after {
+			y = to.Y + to.H - 3
+		}
+		tt.Press(from.X+5, from.Y+5)
+		for i := 1; i <= 10; i++ {
+			f := float32(i) / 10
+			tt.Move(from.X+5+(x-from.X-5)*f, from.Y+5+(y-from.Y-5)*f)
+		}
+		snapshot(t, tt, fmt.Sprintf("reorder-%v", after))
+		tt.Release(x, y)
+		tt.Frame()
+	}
+	a.selectNode(arch.Children[len(arch.Children)-1].ID)
+	a.addSibling()
+	tt.Frame()
+	tt.Type("缓存")
+	tt.Key(0, ui.KeyEnter)
+	start := titles()
+	if len(start) < 3 {
+		t.Fatalf("children %v", start)
+	}
+	// Onto the first's top edge: before it, not under it.
+	drag(start[2], start[0], false)
+	if got := titles(); !slices.Equal(got[:3], []string{start[2], start[0], start[1]}) {
+		t.Fatalf("before: %v", got)
+	}
+	// Onto the last's bottom edge: after it.
+	drag(start[2], start[1], true)
+	if got := titles(); !slices.Equal(got[:3], []string{start[0], start[1], start[2]}) {
+		t.Fatalf("after: %v", got)
+	}
+
+	// Shift+Enter adds a sibling above the one selected.
+	if err := clickNode(t, tt, a, start[1]); err != nil {
+		t.Fatal(err)
+	}
+	tt.Key(ui.Shift, ui.KeyEnter)
+	tt.Type("上面")
+	tt.Key(0, ui.KeyEnter)
+	if got := titles(); !slices.Equal(got[:4], []string{start[0], "上面", start[1], start[2]}) {
+		t.Fatalf("Shift+Enter: %v", got)
+	}
 }
