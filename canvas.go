@@ -916,17 +916,20 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 			})
 		}
 		size := fontSize(n, depth) * z
-		tw, _ := a.titleBox(c, n, depth)
+		tw, th := a.titleBox(c, n, depth)
 		if editing {
 			// A text area, wrapping as the title will, rather than a line
 			// that scrolls what was typed first out of view. Enter ends
 			// the edit; a title has no line breaks.
 			// On a light ground of its own, whatever the node's fill: the
 			// caret, drawn in the accent color, and the selection show.
+			// As high as the title is laid out: should the field wrap a
+			// line the title does not, it scrolls rather than spill out
+			// of the node.
 			// The ground reaches past the title by its padding (the margins
 			// pull it back), so the text keeps the title's whole width.
 			in := ui.TextAreaBase(c.Key("edit"), &a.editText).FontSize(size).FontWeight(fontWeight(n, depth)).
-				Font(a.doc.Style.Font).Placeholder("新主题").Width((tw+6)*z).Lines(1, 50).AutoFocus().
+				Font(a.doc.Style.Font).Placeholder("新主题").Width((tw+6)*z).Height((th+4)*z).AutoFocus().
 				Background(t.Background).TextColor(t.Text).Radius(4*z).Margin(-2*z, -3*z).Padding(2*z, 3*z)
 			if c := in.Composing(); c != a.editComposing {
 				a.editComposing = c // the node makes room, from the next frame
