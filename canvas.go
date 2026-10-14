@@ -185,7 +185,7 @@ func (a *app) titleBox(c *ui.Context, n *model.Node, depth int) (w, h float32) {
 		const step = 32
 		switch {
 		case a.editW == 0: // as it was
-			a.editW = w
+			a.editW = float32(math.Ceil(float64(w))) + 1
 		case w > a.editW: // room for the next characters too
 			a.editW = min(w+step, max(wrap, titleMin))
 		}
@@ -200,7 +200,21 @@ func (a *app) titleBox(c *ui.Context, n *model.Node, depth int) (w, h float32) {
 		w, h = a.measureText(c, titleMax, span)
 		w = titleMax
 	}
-	return max(w, titleMin), h
+	// A point to spare: laid out at its very width, a title of glyphs of
+	// fractional widths (a "+" among Chinese) wraps its last character.
+	return max(float32(math.Ceil(float64(w)))+1, titleMin), h
+}
+
+// titleOneLine tells whether the node's title fits on one line, as it is
+// not to wrap.
+func (a *app) titleOneLine(c *ui.Context, n *model.Node, depth int) bool {
+	st := styleOf(n)
+	if st.Width > 0 {
+		return false
+	}
+	w, _ := a.measureText(c, 0, ui.Span{Text: a.parts(n).title, Size: fontSize(n, depth), Weight: fontWeight(n, depth),
+		Italic: st.Italic, Font: a.doc.Style.Font})
+	return w <= titleMax
 }
 
 // dropSide is where the node dragged, id, dropped on n at the pointer
@@ -963,6 +977,9 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 			return
 		}
 		title := ui.Text(c, n.Title).FontSize(size).FontWeight(fontWeight(n, depth)).Width(tw * z).Shrink(0)
+		if a.titleOneLine(c, n, depth) {
+			title.NoWrap() // as measured, whatever the zoom does to the glyphs
+		}
 		if n.Task != nil && n.Task.Status == model.StatusDone || st.Strike {
 			title.Strikethrough()
 		}

@@ -3387,3 +3387,13 @@ func TestEditComposingMakesRoom(t *testing.T) {
 		t.Fatalf("box %v, composing %v", b, a.editComposing)
 	}
 }
+
+func TestMixedTitleOnOneLine(t *testing.T) {
+	a, tt := newTestApp(t)
+	n := find(t, a, "后端")
+	a.mutate("", func() { n.Title = "目表＋循环" })
+	tt.Frame()
+	if b, o := a.boxes.Boxes[n.ID], a.boxes.Boxes[find(t, a, "前端").ID]; b.H != o.H {
+		t.Fatalf("box %v, a one-line one %v", b, o)
+	}
+}
