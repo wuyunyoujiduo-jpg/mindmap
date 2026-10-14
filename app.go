@@ -155,7 +155,9 @@ type app struct {
 	boxes   layout.Result // the layout of the last frame, in map coordinates
 	vp      ui.Rect       // the canvas's box in the last frame
 	pointer [2]float32    // where the pointer is over the canvas
-	mods    ui.Modifiers  // the modifier keys held, as of the last frame
+	// overCanvas tells the pointer is over the map, as of the last frame.
+	overCanvas bool
+	mods       ui.Modifiers // the modifier keys held, as of the last frame
 
 	measured map[measureKey][2]float32 // texts measured, by how (see measureText)
 
@@ -1018,6 +1020,15 @@ func (a *app) setZoomAt(z, x, y float32) {
 }
 
 func (a *app) setZoom(z float32) { a.setZoomAt(z, -1, -1) }
+
+// pinch zooms the map by a pinch on the touchpad over it, around the
+// pointer.
+func (a *app) pinch(magnification float32) {
+	if a.doc == nil || a.mode != viewMap || !a.overCanvas || a.presenting {
+		return
+	}
+	a.setZoomAt(a.cam().Zoom*(1+magnification), a.pointer[0], a.pointer[1])
+}
 
 // recenter puts the map back at the left middle of the canvas, at zoom 1.
 func (a *app) recenter() {

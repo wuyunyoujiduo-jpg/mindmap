@@ -3397,3 +3397,27 @@ func TestMixedTitleOnOneLine(t *testing.T) {
 		t.Fatalf("box %v, a one-line one %v", b, o)
 	}
 }
+
+func TestPinchZooms(t *testing.T) {
+	a, tt := newTestApp(t)
+	r, _ := tt.Find("我的项目")
+	tt.Move(r.X+r.W/2, r.Y+r.H+60)
+	tt.Frame()
+	if !a.overCanvas {
+		t.Fatal("not over the canvas")
+	}
+	z := a.cam().Zoom
+	a.pinch(0.25)
+	tt.Frame()
+	if got := a.cam().Zoom; got <= z*1.2 {
+		t.Fatalf("zoom %v, was %v", got, z)
+	}
+	// Elsewhere, as over the sidebar, a pinch does nothing.
+	tt.Move(40, 300)
+	tt.Frame()
+	z = a.cam().Zoom
+	a.pinch(0.25)
+	if a.cam().Zoom != z {
+		t.Fatal("zoomed from the sidebar")
+	}
+}

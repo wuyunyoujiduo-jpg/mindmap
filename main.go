@@ -515,6 +515,7 @@ func main() {
 			plat.SetAppIcon(appIconPNG(a.cfg.Icon), trayIcon(a.cfg.Icon))
 		}
 		a.post = func(fn func()) { win.Update(fn) }
+		watchPinch(func(m float64) { a.post(func() { a.pinch(float32(m)) }) })
 		a.async = func(work func() (any, error), done func(any, error)) {
 			go func() {
 				v, err := work()

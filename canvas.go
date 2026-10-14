@@ -438,6 +438,9 @@ func (a *app) canvasArea(c *ui.Context) {
 		cv.Focusable().FocusRing(false).Bind(&a.canvas)
 	}
 	cv.HandleInput(a.canvasInput)
+	if !exporting {
+		a.overCanvas = cv.Hovered()
+	}
 	if a.relFrom != "" && !exporting { // the line being drawn follows the pointer
 		a.relTo = nil
 		if x, y, over := cv.PointerPosition(); over {
