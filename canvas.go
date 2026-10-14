@@ -171,6 +171,11 @@ func (a *app) titleBox(c *ui.Context, n *model.Node, depth int) (w, h float32) {
 			wrap = st.Width
 		}
 		w, h = a.measureText(c, 0, span)
+		if a.editComposing {
+			// An input method's text, not in the title until chosen, has
+			// room too: a few characters more, rather than a new line.
+			w += 6 * span.Size
+		}
 		if w > wrap {
 			_, h = a.measureText(c, wrap, span)
 			w = wrap
@@ -921,8 +926,11 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 			// The ground reaches past the title by its padding (the margins
 			// pull it back), so the text keeps the title's whole width.
 			in := ui.TextAreaBase(c.Key("edit"), &a.editText).FontSize(size).FontWeight(fontWeight(n, depth)).
-				Placeholder("新主题").Width((tw+6)*z).Lines(1, 50).AutoFocus().
+				Font(a.doc.Style.Font).Placeholder("新主题").Width((tw+6)*z).Lines(1, 50).AutoFocus().
 				Background(t.Background).TextColor(t.Text).Radius(4*z).Margin(-2*z, -3*z).Padding(2*z, 3*z)
+			if c := in.Composing(); c != a.editComposing {
+				a.editComposing = c // the node makes room, from the next frame
+			}
 			in.HandleInput(func(ev ui.InputEvent) bool {
 				if ev.Kind != ui.InputKeyDown || ev.Key != ui.KeyEnter || ev.Mods&^ui.Shift != 0 || a.editing != n.ID {
 					return false

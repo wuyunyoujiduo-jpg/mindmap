@@ -134,6 +134,8 @@ type app struct {
 	editText  string
 	editFocus bool    // the title input has had the focus
 	editW     float32 // the widest the title edited has been
+	// editComposing tells an input method is composing in the title.
+	editComposing bool
 	// The board's columns' lists, and the task to show there next.
 	boardLists  map[model.Status]*ui.ListState
 	boardReveal string
@@ -742,7 +744,7 @@ func (a *app) startEdit(id string) {
 	if n == nil {
 		return
 	}
-	a.selected, a.editing, a.editText, a.editFocus, a.editW = id, id, n.Title, false, 0
+	a.selected, a.editing, a.editText, a.editFocus, a.editW, a.editComposing = id, id, n.Title, false, 0, false
 	if n.Title == "新主题" || n.Title == "新导图" || strings.HasPrefix(n.Title, "新导图 ") {
 		a.editText = "" // a title given for now: typing starts it afresh, the old one kept if none is typed
 	}

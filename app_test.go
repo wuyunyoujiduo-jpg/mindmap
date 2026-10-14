@@ -3359,3 +3359,31 @@ func TestHistoryShowsLatestChange(t *testing.T) {
 	}
 	snapshot(t, tt, "history-latest")
 }
+
+func TestEditComposingMakesRoom(t *testing.T) {
+	a, tt := newTestApp(t)
+	if err := clickNode(t, tt, a, "后端"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Key(0, ui.KeyF2)
+	tt.Frame()
+	tt.Type("目标+")
+	tt.Frame()
+	h0 := a.boxes.Boxes[a.editing].H
+	tt.Compose("xunhuan", 7) // Pinyin, before a character is chosen
+	tt.Frame()
+	tt.Frame()
+	if !a.editComposing {
+		t.Fatal("not composing")
+	}
+	if b := a.boxes.Boxes[a.editing]; b.H > h0 {
+		t.Fatalf("the title wraps while composing: %v, was %v high", b, h0)
+	}
+	snapshot(t, tt, "edit-composing")
+	tt.Type("循环")
+	tt.Frame()
+	tt.Frame()
+	if b := a.boxes.Boxes[a.editing]; b.H > h0 || a.editComposing {
+		t.Fatalf("box %v, composing %v", b, a.editComposing)
+	}
+}
