@@ -216,7 +216,6 @@ type app struct {
 	historySel      int
 	historyFile     *model.File           // the version chosen
 	historyDiff     []model.Change        // what it changed, or from it to now
-	historyToNow    bool                  // the changes from the version to now
 	codeStat        codeStatus            // how far the code has gone since the baseline
 	refs            *refs                 // the links of every map (refs.go)
 	edits           int                   // counts the open map's changes, for what is worked out from it

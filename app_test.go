@@ -2219,9 +2219,12 @@ func TestHistoryAndConflict(t *testing.T) {
 	if len(vs) != 2 || vs[0].Reason != versions.External {
 		t.Fatalf("versions %+v", vs)
 	}
-	// The newest version shows what it changed; the one before, compared
-	// with now, the same.
+	// The newest version shows what it changed from the one before. Opening
+	// the history keeps no version of a map that has not changed.
 	a.openHistory()
+	if len(a.historyList) != 2 {
+		t.Fatalf("versions %+v", a.historyList)
+	}
 	tt.Frame()
 	if sum := model.Summary(a.historyDiff); sum != "新增 1 · 状态 1" {
 		t.Fatalf("summary %q", sum)
@@ -2235,13 +2238,6 @@ func TestHistoryAndConflict(t *testing.T) {
 		t.Fatalf("the version before changed %q", sum)
 	}
 	tt.Frame()
-	if err := tt.Click("到现在的变化"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Frame()
-	if sum := model.Summary(a.historyDiff); !a.historyToNow || sum != "新增 1 · 状态 1" {
-		t.Fatalf("to now %q", sum)
-	}
 	// Restoring the version before brings the map back, as a step undo
 	// takes back.
 	if err := tt.Click("恢复到这个版本"); err != nil {
@@ -3340,4 +3336,26 @@ func TestSelectBendDeleteRelation(t *testing.T) {
 	if len(a.doc.Relations) != 0 || find(t, a, "前端") == nil {
 		t.Fatalf("relations %+v", a.doc.Relations)
 	}
+}
+
+func TestHistoryShowsLatestChange(t *testing.T) {
+	a, tt := newTestApp(t)
+	a.keepVersion(versions.Open)
+	now := testNow
+	a.now = func() time.Time { return now }
+	now = now.Add(time.Minute)
+	a.selectNode(find(t, a, "后端").ID)
+	a.deleteSelected()
+	a.openHistory()
+	tt.Frame()
+	if len(a.historyList) < 2 || a.historySel != 0 {
+		t.Fatalf("versions %+v", a.historyList)
+	}
+	if sum := model.Summary(a.historyDiff); sum != "删除 1" {
+		t.Fatalf("the newest version's changes %q", sum)
+	}
+	if !tt.HasText("和上一版比：删除 1") || tt.HasText("到现在的变化") {
+		t.Fatalf("texts %q", tt.Texts())
+	}
+	snapshot(t, tt, "history-latest")
 }
