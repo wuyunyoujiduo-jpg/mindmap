@@ -155,6 +155,9 @@ type app struct {
 	boxes   layout.Result // the layout of the last frame, in map coordinates
 	vp      ui.Rect       // the canvas's box in the last frame
 	pointer [2]float32    // where the pointer is over the canvas
+	// zoomHold is how far a pinch or the wheel went at 100%, which holds
+	// the map there for a while.
+	zoomHold float32
 	// overCanvas tells the pointer is over the map, as of the last frame.
 	overCanvas bool
 	mods       ui.Modifiers // the modifier keys held, as of the last frame
@@ -1021,13 +1024,58 @@ func (a *app) setZoomAt(z, x, y float32) {
 
 func (a *app) setZoom(z float32) { a.setZoomAt(z, -1, -1) }
 
+// zoomSteps are where the buttons and the keys zoom to, 100% among them.
+var zoomSteps = []float32{0.3, 0.5, 0.67, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3}
+
+// zoomStep zooms in (or out) to the next step: from 95%, in to 100%.
+func (a *app) zoomStep(in bool) {
+	z := a.cam().Zoom
+	if in {
+		for _, s := range zoomSteps {
+			if s > z+0.001 {
+				a.setZoom(s)
+				return
+			}
+		}
+		return
+	}
+	for i := len(zoomSteps) - 1; i >= 0; i-- {
+		if zoomSteps[i] < z-0.001 {
+			a.setZoom(zoomSteps[i])
+			return
+		}
+	}
+}
+
+// zoomBy zooms by a factor bit by bit, as a pinch or the wheel do, around
+// (x, y): passing 100%, it stops there, and goes on once the gesture has
+// gone some way further.
+func (a *app) zoomBy(f, x, y float32) {
+	z := a.cam().Zoom
+	if z == 1 {
+		if a.zoomHold == 0 {
+			a.zoomHold = 1
+		}
+		a.zoomHold *= f
+		if a.zoomHold < 1.12 && a.zoomHold > 1/1.12 {
+			return // held at 100%
+		}
+		f, a.zoomHold = a.zoomHold, 1
+	}
+	next := z * f
+	if z < 1 && next > 1 || z > 1 && next < 1 {
+		next, a.zoomHold = 1, 1
+	}
+	a.setZoomAt(next, x, y)
+}
+
 // pinch zooms the map by a pinch on the touchpad over it, around the
 // pointer.
 func (a *app) pinch(magnification float32) {
 	if a.doc == nil || a.mode != viewMap || !a.overCanvas || a.presenting {
 		return
 	}
-	a.setZoomAt(a.cam().Zoom*(1+magnification), a.pointer[0], a.pointer[1])
+	a.zoomBy(1+magnification, a.pointer[0], a.pointer[1])
 }
 
 // recenter puts the map back at the left middle of the canvas, at zoom 1.

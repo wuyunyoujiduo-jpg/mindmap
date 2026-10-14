@@ -3421,3 +3421,40 @@ func TestPinchZooms(t *testing.T) {
 		t.Fatal("zoomed from the sidebar")
 	}
 }
+
+func TestZoomStopsAt100(t *testing.T) {
+	a, tt := newTestApp(t)
+	tt.Frame()
+	a.setZoom(0.95)
+	a.zoomStep(true)
+	if z := a.cam().Zoom; z != 1 {
+		t.Fatalf("+ from 95%%: %v", z)
+	}
+	a.zoomStep(true)
+	if z := a.cam().Zoom; z != 1.1 {
+		t.Fatalf("+ from 100%%: %v", z)
+	}
+	a.zoomStep(false)
+	a.zoomStep(false)
+	if z := a.cam().Zoom; z != 0.9 {
+		t.Fatalf("- twice from 110%%: %v", z)
+	}
+	// A pinch through 100% stops there, and goes on as it goes further.
+	a.setZoom(0.9)
+	for range 3 {
+		a.zoomBy(1.05, -1, -1)
+	}
+	if z := a.cam().Zoom; z != 1 {
+		t.Fatalf("pinched through 100%%: %v", z)
+	}
+	a.zoomBy(1.05, -1, -1)
+	if z := a.cam().Zoom; z != 1 {
+		t.Fatalf("not held at 100%%: %v", z)
+	}
+	for range 3 {
+		a.zoomBy(1.05, -1, -1)
+	}
+	if z := a.cam().Zoom; z <= 1 {
+		t.Fatalf("held at 100%% for good: %v", z)
+	}
+}

@@ -538,7 +538,7 @@ func (a *app) canvasArea(c *ui.Context) {
 		ui.Row(c).Absolute().Right(12).Bottom(12).Gap(2).Padding(3).Radius(8).
 			Background(t.Surface).Border(1, t.Border).Children(func() {
 			if iconButton(c, iconMinus, "缩小", "缩小 ⌘-", 30, true).Clicked() {
-				a.setZoom(cam.Zoom / 1.2)
+				a.zoomStep(false)
 			}
 			zoom := ui.Box(c.Key("zoom")).Height(30).MinWidth(54).Padding(0, 8).Radius(6).Center().Cursor(ui.CursorPointer).
 				Label("缩放比例").Tooltip("实际大小 ⌘0")
@@ -552,7 +552,7 @@ func (a *app) canvasArea(c *ui.Context) {
 				ui.Text(c, fmt.Sprintf("%d%%", int(cam.Zoom*100+0.5))).FontSize(12).PassThrough()
 			})
 			if iconButton(c, iconPlus, "放大", "放大 ⌘=", 30, true).Clicked() {
-				a.setZoom(cam.Zoom * 1.2)
+				a.zoomStep(true)
 			}
 			ui.Box(c).Width(1).Height(16).Background(t.Border).Margin(0, 2)
 			if iconButton(c, iconTarget, "回到中心", "回到中心 ⌘⇧0", 30, true).Clicked() {
@@ -605,7 +605,7 @@ func (a *app) canvasInput(ev ui.InputEvent) bool {
 			if !ev.Precise {
 				f = float32(math.Pow(1.1, float64(-ev.DY)/40))
 			}
-			a.setZoomAt(cam.Zoom*f, a.pointer[0], a.pointer[1])
+			a.zoomBy(f, a.pointer[0], a.pointer[1])
 			return true
 		}
 		dx, dy := ev.DX, ev.DY
