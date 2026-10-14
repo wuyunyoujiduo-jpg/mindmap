@@ -3242,3 +3242,31 @@ func TestIdeaMarker(t *testing.T) {
 	}
 	tt.Frame()
 }
+
+func TestRelationLine(t *testing.T) {
+	a, tt := newTestApp(t)
+	if err := clickNode(t, tt, a, "前端"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Key(ui.Cmd|ui.Shift, ui.KeyL)
+	if a.relFrom == "" {
+		t.Fatal("not drawing a line")
+	}
+	to, ok := tt.Find("功能")
+	if !ok {
+		t.Fatal("no 功能")
+	}
+	tt.Move(to.X-40, to.Y+to.H/2)
+	tt.Frame()
+	if a.relTo == nil {
+		t.Fatal("the line does not follow the pointer")
+	}
+	snapshot(t, tt, "relation-drawing")
+	tt.ClickAt(to.X+to.W/2, to.Y+to.H/2)
+	tt.Frame()
+	rels := a.doc.Relations
+	if len(rels) != 1 || rels[0].From != find(t, a, "前端").ID || rels[0].To != find(t, a, "功能").ID || a.relFrom != "" {
+		t.Fatalf("relations %+v", rels)
+	}
+	snapshot(t, tt, "relation")
+}

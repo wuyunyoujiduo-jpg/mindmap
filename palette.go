@@ -65,6 +65,11 @@ func (a *app) commands() []command {
 		{"添加子节点", "Tab", a.addChild, hasDoc},
 		{"添加同级节点", "↩", a.addSibling, hasDoc},
 		{"在上方添加同级节点", "⇧↩", func() { a.addSiblingAt(false) }, hasDoc},
+		{"连线到…（所选节点连到另一个节点）", "⌘⇧L", func() {
+			if n, _ := a.selectedNode(); n != nil {
+				a.startRelation(n)
+			}
+		}, hasDoc},
 		{"在看板中显示所选任务", "", func() { a.showOnBoard(a.selected) }, func() bool {
 			n, _ := a.selectedNode()
 			return n != nil && n.Task != nil
@@ -496,7 +501,7 @@ var shortcuts = []struct {
 	{"编辑节点", [][2]string{
 		{"Tab", "添加子节点"}, {"↩ / ⇧↩", "在下方 / 上方添加同级节点"}, {"Space / F2", "编辑标题"}, {"Delete", "删除"},
 		{"⌘C / ⌘X / ⌘V", "复制 / 剪切 / 粘贴（可跨导图，也可粘贴文本大纲）"}, {"⌘Z / ⌘⇧Z", "撤销 / 重做"},
-		{"⌘↑ / ⌘↓", "上移 / 下移（也可拖到兄弟节点的上沿或下沿）"}, {"⌘/", "折叠 / 展开"}, {"⇧ 或 ⌘ + 点击", "多选节点"},
+		{"⌘↑ / ⌘↓", "上移 / 下移（也可拖到兄弟节点的上沿或下沿）"}, {"⌘⇧L", "连线到另一个节点"}, {"⌘/", "折叠 / 展开"}, {"⇧ 或 ⌘ + 点击", "多选节点"},
 	}},
 	{"浏览", [][2]string{
 		{"← → ↑ ↓", "在节点间移动"}, {"⌥↩", "聚焦所选分支"}, {"Esc", "取消多选 / 退出聚焦"},

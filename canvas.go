@@ -419,6 +419,13 @@ func (a *app) canvasArea(c *ui.Context) {
 		cv.Focusable().FocusRing(false).Bind(&a.canvas)
 	}
 	cv.HandleInput(a.canvasInput)
+	if a.relFrom != "" && !exporting { // the line being drawn follows the pointer
+		a.relTo = nil
+		if x, y, over := cv.PointerPosition(); over {
+			b := a.vp
+			a.relTo = &[2]float32{b.X + x, b.Y + y}
+		}
+	}
 	if cv.Pressed() && a.editing == "" {
 		a.canvas.Focus()
 	}
@@ -1081,6 +1088,9 @@ func (a *app) nodeMenu(m *ui.Menu, n *model.Node, depth int) {
 	if m.Item("在上方添加同级节点").Shortcut(ui.Shift, ui.KeyEnter).Chosen() {
 		a.later(func() { a.addSiblingAt(false) })
 	}
+	if m.Item("连线到…").Shortcut(ui.Cmd|ui.Shift, ui.KeyL).Chosen() {
+		a.later(func() { a.startRelation(n) })
+	}
 	if m.Item("编辑标题").Shortcut(0, ui.KeyF2).Chosen() {
 		a.later(func() { a.startEdit(n.ID) })
 	}
@@ -1308,6 +1318,10 @@ func (a *app) canvasKey(ev ui.InputEvent) bool {
 		return a.paste()
 	case ev.Mods == ui.Cmd && ev.Key == ui.KeyZ:
 		a.undo()
+	case ev.Mods == ui.Cmd|ui.Shift && ev.Key == ui.KeyL:
+		if n, _ := a.selectedNode(); n != nil {
+			a.startRelation(n)
+		}
 	case ev.Mods == ui.Cmd|ui.Shift && ev.Key == ui.KeyZ:
 		a.redo()
 	default:

@@ -89,13 +89,13 @@ func (a *app) floatNode(n *model.Node) {
 // Relations: a node's menu starts one, and a click on another ends it.
 
 func (a *app) startRelation(n *model.Node) {
-	a.relFrom = n.ID
+	a.relFrom, a.relTo = n.ID, nil
 	a.tell("点击另一个节点，连上关联线（Esc 取消）")
 }
 
 func (a *app) endRelation(to string) {
 	from := a.relFrom
-	a.relFrom = ""
+	a.relFrom, a.relTo = "", nil
 	if from == "" || from == to {
 		return
 	}
@@ -114,7 +114,7 @@ func (a *app) removeRelation(id string) {
 	})
 }
 
-// drawRelations draws the relation lines between the nodes shown: dashed
+// drawRelations draws the relation lines between the nodes shown: smooth
 // curves bowing away from the straight line, an arrow at the end, and the
 // label at the middle.
 func (a *app) drawRelations(p *ui.Painter, r layout.Result, ox, oy, z float32, col ui.Color) {
@@ -129,43 +129,53 @@ func (a *app) drawRelations(p *ui.Painter, r layout.Result, ox, oy, z float32, c
 		// From and to the boxes' edges, toward each other.
 		fx, fy = edgePoint(ox+fb.X*z, oy+fb.Y*z, fb.W*z, fb.H*z, tx, ty)
 		tx, ty = edgePoint(ox+tb.X*z, oy+tb.Y*z, tb.W*z, tb.H*z, fx, fy)
-		dx, dy := tx-fx, ty-fy
-		length := float32(math.Hypot(float64(dx), float64(dy)))
-		if length < 1 {
-			continue
-		}
-		// The bow: a quarter of the length, to the side.
-		nx, ny := -dy/length, dx/length
-		bow := min(length/6, 50*z)
-		c1x, c1y := fx+dx/3+nx*bow, fy+dy/3+ny*bow
-		c2x, c2y := fx+2*dx/3+nx*bow, fy+2*dy/3+ny*bow
-		at := func(t float32) (float32, float32) {
-			u := 1 - t
-			return u*u*u*fx + 3*u*u*t*c1x + 3*u*t*t*c2x + t*t*t*tx,
-				u*u*u*fy + 3*u*u*t*c1y + 3*u*t*t*c2y + t*t*t*ty
-		}
-		// Dashes along the curve.
-		const steps = 48
-		for i := 0; i < steps; i += 2 {
-			x0, y0 := at(float32(i) / steps)
-			x1, y1 := at(float32(i+1) / steps)
-			p.Line(x0, y0, x1, y1, max(1.5*z, 1), col)
-		}
-		// The arrow, along the curve's end.
-		ex, ey := at(0.94)
-		ang := math.Atan2(float64(ty-ey), float64(tx-ex))
-		s := float64(8 * z)
-		head := new(ui.Path).MoveTo(tx, ty).
-			LineTo(tx-float32(s*math.Cos(ang-0.45)), ty-float32(s*math.Sin(ang-0.45))).
-			LineTo(tx-float32(s*math.Cos(ang+0.45)), ty-float32(s*math.Sin(ang+0.45))).Close()
-		p.FillPath(head, col)
-		if rel.Label != "" {
-			mx, my := at(0.5)
-			size := 12 * z
-			w := float32(len([]rune(rel.Label)))*size + 10*z
-			p.Fill(ui.Rect{X: mx - w/2, Y: my - size*0.9, W: w, H: size * 1.8}, p.Theme().Background, 4*z)
-			p.Text(mx-w/2+5*z, my-size*0.65, rel.Label, size, col)
-		}
+		relationCurve(p, fx, fy, tx, ty, z, col, rel.Label)
+	}
+	// The line being drawn, from its node to the pointer.
+	if fb, ok := r.Boxes[a.relFrom]; ok && a.relTo != nil {
+		tx, ty := a.relTo[0], a.relTo[1]
+		fx, fy := edgePoint(ox+fb.X*z, oy+fb.Y*z, fb.W*z, fb.H*z, tx, ty)
+		relationCurve(p, fx, fy, tx, ty, z, col, "")
+	}
+}
+
+// relationCurve draws a relation line from (fx, fy) to (tx, ty): a curve
+// bowing away from the straight line, an arrow at its end and its
+// label in the middle.
+func relationCurve(p *ui.Painter, fx, fy, tx, ty, z float32, col ui.Color, label string) {
+	dx, dy := tx-fx, ty-fy
+	length := float32(math.Hypot(float64(dx), float64(dy)))
+	if length < 1 {
+		return
+	}
+	// The bow: a quarter of the length, to the side.
+	nx, ny := -dy/length, dx/length
+	bow := min(length/4, 90*z)
+	c1x, c1y := fx+dx/3+nx*bow, fy+dy/3+ny*bow
+	c2x, c2y := fx+2*dx/3+nx*bow, fy+2*dy/3+ny*bow
+	at := func(t float32) (float32, float32) {
+		u := 1 - t
+		return u*u*u*fx + 3*u*u*t*c1x + 3*u*t*t*c2x + t*t*t*tx,
+			u*u*u*fy + 3*u*u*t*c1y + 3*u*t*t*c2y + t*t*t*ty
+	}
+	// A smooth line, in pieces where it is long.
+	l := polyline{{fx, fy}}
+	l.cube(c1x, c1y, c2x, c2y, tx, ty)
+	strokeLong(p, ui.Rect{}, l, max(1.6*z, 1.2), col)
+	// The arrow, along the curve's end.
+	ex, ey := at(0.94)
+	ang := math.Atan2(float64(ty-ey), float64(tx-ex))
+	s := float64(8 * z)
+	head := new(ui.Path).MoveTo(tx, ty).
+		LineTo(tx-float32(s*math.Cos(ang-0.45)), ty-float32(s*math.Sin(ang-0.45))).
+		LineTo(tx-float32(s*math.Cos(ang+0.45)), ty-float32(s*math.Sin(ang+0.45))).Close()
+	p.FillPath(head, col)
+	if label != "" {
+		mx, my := at(0.5)
+		size := 12 * z
+		w := float32(len([]rune(label)))*size + 10*z
+		p.Fill(ui.Rect{X: mx - w/2, Y: my - size*0.9, W: w, H: size * 1.8}, p.Theme().Background, 4*z)
+		p.Text(mx-w/2+5*z, my-size*0.65, label, size, col)
 	}
 }
 

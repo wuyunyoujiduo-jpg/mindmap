@@ -207,9 +207,10 @@ type app struct {
 	reminded        map[string]bool // tasks reminded of on remindedDay
 	remindedDay     time.Time
 	remindedAt      time.Time
-	linkFrom        string // the node a link to a node is being chosen for
-	relFrom         string // the node a relation line is being drawn from
-	justFloated     bool   // a double click just made a floating topic, whose release should not end its editing
+	linkFrom        string      // the node a link to a node is being chosen for
+	relFrom         string      // the node a relation line is being drawn from
+	relTo           *[2]float32 // where the pointer draws it to, in the window
+	justFloated     bool        // a double click just made a floating topic, whose release should not end its editing
 	historyList     []versions.Version
 	historySel      int
 	historyFile     *model.File           // the version chosen
