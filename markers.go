@@ -234,6 +234,7 @@ func (a *app) toggleMarker(n *model.Node, m string) {
 		})
 		if !had {
 			n.Markers = append(n.Markers, m)
+			n.KeepStatusMarker(m) // the bulb or the progress, not both
 			slices.SortStableFunc(n.Markers, func(x, y string) int {
 				return groupIndex(x) - groupIndex(y)
 			})

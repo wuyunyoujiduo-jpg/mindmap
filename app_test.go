@@ -3210,12 +3210,9 @@ func TestShowTaskOnBoard(t *testing.T) {
 	if n.Task == nil {
 		t.Fatal("not a task")
 	}
-	// The check shows beside the progress marker, and finishes it.
-	if err := tt.Click("完成任务 后端"); err != nil {
-		t.Fatal(err)
-	}
-	if n.Task.Status != model.StatusDone || !slices.Contains(n.Markers, "task:6") {
-		t.Fatalf("task %+v, markers %v", n.Task, n.Markers)
+	// The progress marker takes the check's place.
+	if _, ok := tt.Find("完成任务 后端"); ok {
+		t.Fatal("a check beside the progress marker")
 	}
 	if err := clickNode(t, tt, a, "后端"); err != nil {
 		t.Fatal(err)
@@ -3229,4 +3226,19 @@ func TestShowTaskOnBoard(t *testing.T) {
 		t.Fatal("card not shown")
 	}
 	snapshot(t, tt, "board-reveal")
+}
+
+func TestIdeaMarker(t *testing.T) {
+	a, tt := newTestApp(t)
+	n := find(t, a, "后端")
+	a.toggleMarker(n, "task:3")
+	a.toggleMarker(n, "symbol:idea")
+	if n.Task == nil || n.Task.Status != model.StatusIdea || !slices.Equal(n.Markers, []string{"symbol:idea"}) {
+		t.Fatalf("task %+v, markers %v", n.Task, n.Markers)
+	}
+	a.setStatus(n, model.StatusDoing)
+	if !slices.Equal(n.Markers, []string{"task:1"}) {
+		t.Fatalf("markers %v", n.Markers)
+	}
+	tt.Frame()
 }
