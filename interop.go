@@ -214,7 +214,7 @@ func syncIssues(f *model.File, issues []ghIssue, now time.Time) (added, updated 
 			}
 			if status == model.StatusDone && n.Task.Status != model.StatusDone ||
 				status == model.StatusTodo && n.Task.Status == model.StatusDone {
-				n.Task.SetStatus(status, now)
+				n.SetStatus(status, now)
 				changed = true
 			}
 			if changed {

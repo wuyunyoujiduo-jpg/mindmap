@@ -655,9 +655,9 @@ func updateNode(f *model.File, id string, args map[string]any) (string, error) {
 	}
 	if v, ok := text("status"); ok && v != "" {
 		if v == "none" {
-			n.Task = nil
+			n.DropTask()
 		} else if st, ok := statusNames[v]; ok {
-			task().SetStatus(st, time.Now())
+			n.SetStatus(st, time.Now())
 		} else {
 			return "", fmt.Errorf("未知的 status %q", v)
 		}

@@ -826,18 +826,13 @@ func (a *app) toggleTask(n *model.Node) {
 		if n.Task == nil {
 			n.Task = &model.Task{Status: model.StatusTodo}
 		} else {
-			n.Task = nil
+			n.DropTask()
 		}
 	})
 }
 
 func (a *app) setStatus(n *model.Node, s model.Status) {
-	a.mutate("", func() {
-		if n.Task == nil {
-			n.Task = &model.Task{}
-		}
-		n.Task.SetStatus(s, a.now())
-	})
+	a.mutate("", func() { n.SetStatus(s, a.now()) })
 }
 
 // moveNode puts a dragged node under another, as its last child.

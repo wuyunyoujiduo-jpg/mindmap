@@ -201,10 +201,7 @@ func (a *app) deleteSelection() {
 func (a *app) setStatusAll(s model.Status) {
 	a.mutate("", func() {
 		for _, n := range a.selection() {
-			if n.Task == nil {
-				n.Task = &model.Task{}
-			}
-			n.Task.SetStatus(s, a.now())
+			n.SetStatus(s, a.now())
 		}
 	})
 }

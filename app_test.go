@@ -947,7 +947,7 @@ func TestMarkers(t *testing.T) {
 	// Clicking a marker that is on takes it off.
 	tt.Click("红旗")
 	if slices.Contains(n.Markers, "flag:red") {
-		t.Fatal("not taken off")
+		t.Fatalf("not taken off: %v", n.Markers)
 	}
 	a.save()
 	f, _ := model.Load(a.path)
@@ -3166,5 +3166,36 @@ func TestReorderSiblings(t *testing.T) {
 	tt.Key(0, ui.KeyEnter)
 	if got := titles(); !slices.Equal(got[:4], []string{start[0], "上面", start[1], start[2]}) {
 		t.Fatalf("Shift+Enter: %v", got)
+	}
+}
+
+func TestProgressMarkerMakesTask(t *testing.T) {
+	a, tt := newTestApp(t)
+	clickNode(t, tt, a, "后端")
+	if err := tt.Click("标记"); err != nil {
+		t.Fatal(err)
+	}
+	n := find(t, a, "后端")
+	if err := tt.Click("任务开始"); err != nil {
+		t.Fatal(err)
+	}
+	if n.Task == nil || n.Task.Status != model.StatusTodo {
+		t.Fatalf("task %+v", n.Task)
+	}
+	tt.Click("任务完成")
+	if n.Task.Status != model.StatusDone || n.Task.DoneAt == nil {
+		t.Fatalf("task %+v", n.Task)
+	}
+	// The status set elsewhere moves the marker.
+	a.setStatus(n, model.StatusDoing)
+	if !slices.Contains(n.Markers, "task:1") {
+		t.Fatalf("markers %v", n.Markers)
+	}
+	tt.Frame()
+	snapshot(t, tt, "progress-task")
+	// Not a task any more: the marker goes too.
+	a.toggleTask(n)
+	if n.Task != nil || n.Markers != nil {
+		t.Fatalf("task %+v, markers %v", n.Task, n.Markers)
 	}
 }

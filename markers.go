@@ -241,6 +241,7 @@ func (a *app) toggleMarker(n *model.Node, m string) {
 		if len(n.Markers) == 0 {
 			n.Markers = nil
 		}
+		n.FollowProgress(a.now()) // a progress marker makes it a task
 	})
 }
 

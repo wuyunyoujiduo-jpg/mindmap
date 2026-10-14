@@ -841,12 +841,9 @@ func setFields(n *model.Node, op aiEdit) {
 	switch op.Status {
 	case "":
 	case "none":
-		n.Task = nil
+		n.DropTask()
 	default:
-		if n.Task == nil {
-			n.Task = &model.Task{}
-		}
-		n.Task.SetStatus(model.Status(op.Status), time.Now())
+		n.SetStatus(model.Status(op.Status), time.Now())
 	}
 	switch op.Due {
 	case "":

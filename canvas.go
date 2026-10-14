@@ -99,7 +99,9 @@ func (a *app) measure(c *ui.Context) layout.Measure {
 		tw, th := a.titleBox(c, n, depth)
 		w := 2*nodePadX + tw
 		if n.Task != nil {
-			w += checkSize + nodeGap
+			if !n.HasProgress() {
+				w += checkSize + nodeGap
+			}
 			if a.blocked(n) {
 				mw, _ := a.measureText(c, 0, ui.Span{Text: "🔒", Size: markSize})
 				w += mw + nodeGap
@@ -848,7 +850,9 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 			a.thumbnail(c, n, iw*z, ih*z).Absolute().Left((box.W - iw) / 2 * z).Top(nodePadY * z)
 		}
 		if n.Task != nil {
-			a.taskCheck(c, n, checkSize*z)
+			if !n.HasProgress() { // its progress marker shows the status
+				a.taskCheck(c, n, checkSize*z)
+			}
 			if a.blocked(n) {
 				var names []string
 				for _, b := range a.file.Blockers(n) {
@@ -866,6 +870,7 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 					a.mutate("", func() {
 						if i := slices.Index(n.Markers, m); i >= 0 {
 							n.Markers[i] = nextMarker(m)
+							n.FollowProgress(a.now())
 						}
 					})
 				})

@@ -31,6 +31,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	_ "golang.org/x/image/bmp"  // pictures' sizes
 	_ "golang.org/x/image/webp" // pictures' sizes
@@ -466,6 +467,9 @@ func (im *importer) topic(t *topic) *model.Node {
 			}
 		}
 	}
+	if n.Task == nil { // XMind's task progress makes it a task here
+		n.FollowProgress(time.Now())
+	}
 	if len(n.Children) == 0 {
 		n.Collapsed = false
 	}
@@ -580,6 +584,9 @@ func (im *importer) xmlTopic(t *xmlTopic) *model.Node {
 		for _, c := range group.Topics {
 			n.Children = append(n.Children, im.xmlTopic(c))
 		}
+	}
+	if n.Task == nil { // XMind's task progress makes it a task here
+		n.FollowProgress(time.Now())
 	}
 	if len(n.Children) == 0 {
 		n.Collapsed = false
