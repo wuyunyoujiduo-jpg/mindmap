@@ -3680,3 +3680,49 @@ func TestFoldersKeepOpen(t *testing.T) {
 		t.Fatalf("open folders %v", c.OpenFolders)
 	}
 }
+
+func TestAIReplyCutShortGoesOn(t *testing.T) {
+	a, tt := newTestApp(t)
+	fake := &fakeClaude{replies: []string{`{
+		"id": "msg_1", "type": "message", "role": "assistant", "model": "claude-opus-5-5",
+		"stop_reason": "max_tokens",
+		"content": [
+			{"type": "text", "text": "按代码更新："},
+			{"type": "tool_use", "id": "toolu_1", "name": "propose_edits", "input": {"summary": "更新"}}
+		],
+		"usage": {"input_tokens": 10, "output_tokens": 32000}
+	}`, `{
+		"id": "msg_2", "type": "message", "role": "assistant", "model": "claude-opus-5-5",
+		"stop_reason": "end_turn",
+		"content": [{"type": "text", "text": "好的，分批来。"}],
+		"usage": {"input_tokens": 10, "output_tokens": 5}
+	}`}}
+	a.sendAI = fake.send
+	a.cfg.AIKey = "sk-ant-test"
+	a.aiOpen = true
+	tt.Frame()
+	a.ai.draft = "按代码更新导图"
+	a.aiSend()
+	tt.Frame()
+	tt.Frame()
+	if len(fake.requests) != 2 {
+		t.Fatalf("requests %d", len(fake.requests))
+	}
+	// The second asks to go on, answering the call cut short.
+	last := fake.requests[1].Messages[len(fake.requests[1].Messages)-1]
+	body, _ := json.Marshal(last)
+	if !strings.Contains(string(body), "toolu_1") || !strings.Contains(string(body), "分批调用 propose_edits") {
+		t.Fatalf("follow-up %s", body)
+	}
+	for _, m := range a.ai.msgs {
+		if m.proposal != nil {
+			t.Fatal("a partial proposal shown")
+		}
+		if m.role == "error" {
+			t.Fatalf("error %q", m.text)
+		}
+	}
+	if fake.requests[0].MaxTokens != 32000 {
+		t.Fatalf("max tokens %d", fake.requests[0].MaxTokens)
+	}
+}

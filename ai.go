@@ -131,6 +131,7 @@ type aiState struct {
 	settings  bool   // the settings form is shown
 	extra     string // context an action adds to the next message, after the map
 	rounds    int    // replies in a row that only looked things up in the library
+	continued int    // replies cut short that were asked to go on, since the user's message
 	turn      int    // counts the requests, so that a late piece of a reply is dropped
 	key       string // what the conversation is about: a map's path, or the library
 	chatID    string // the conversation's, as kept
@@ -387,7 +388,7 @@ func (a *app) aiSend() {
 		return
 	}
 	ai.provider = a.cfg.AIProvider
-	ai.rounds = 0
+	ai.rounds, ai.continued = 0, 0
 	ai.syncBase = sync // nil for a message of the user's, about something else
 	ai.material = material
 	// Proposals left unanswered are discarded by sending on.
@@ -476,7 +477,9 @@ func (a *app) aiTurn(snapshot, text string, files []aiAttach) {
 		blocks = append(blocks, anthropic.NewBetaToolResultBlock(an.id, an.text, an.isError))
 	}
 	if text != "" {
-		blocks = append(blocks, anthropic.NewBetaTextBlock(snapshot))
+		if snapshot != "" { // none when going on from a reply cut short
+			blocks = append(blocks, anthropic.NewBetaTextBlock(snapshot))
+		}
 		if t := attachText(files); t != "" {
 			blocks = append(blocks, anthropic.NewBetaTextBlock(t))
 		}
@@ -506,7 +509,7 @@ func (a *app) aiParams() anthropic.BetaMessageNewParams {
 	m := aiModel(a.cfg)
 	p := anthropic.BetaMessageNewParams{
 		Model:     anthropic.Model(m),
-		MaxTokens: 16000,
+		MaxTokens: 32000,
 		System:    []anthropic.BetaTextBlockParam{{Text: aiSystem()}},
 		Messages:  slices.Clone(a.ai.claude),
 		Tools:     libraryToolsClaude(),
@@ -589,19 +592,27 @@ func (a *app) aiReceive(r aiReply, err error) {
 		return
 	}
 	shown := false
-	for _, call := range r.calls {
+	for i, call := range r.calls {
 		var p aiProposal
+		if r.truncated && i == len(r.calls)-1 { // cut short in it: whatever reads of it is partial
+			ai.answers = append(ai.answers, toolAnswer{id: call.id, text: "回复被截断，这次调用不完整，未应用。", isError: true})
+			continue
+		}
 		if call.name == "propose_new_map" {
 			var nm aiNewMap
 			if json.Unmarshal([]byte(call.input), &nm) != nil || strings.TrimSpace(nm.Name) == "" {
-				ai.msgs = append(ai.msgs, chatMsg{role: "error", text: "无法读取 AI 提出的新导图"})
+				if !r.truncated { // cut short: asked again below
+					ai.msgs = append(ai.msgs, chatMsg{role: "error", text: "无法读取 AI 提出的新导图"})
+				}
 				ai.answers = append(ai.answers, toolAnswer{id: call.id, text: "无法解析，没有创建。", isError: true})
 				continue
 			}
 			nm.Name = strings.TrimSpace(nm.Name)
 			p = aiProposal{Summary: "新建导图「" + nm.Name + "」", NewMap: &nm}
 		} else if call.name != "propose_edits" || json.Unmarshal([]byte(call.input), &p) != nil {
-			ai.msgs = append(ai.msgs, chatMsg{role: "error", text: "无法读取 AI 提出的修改"})
+			if !r.truncated {
+				ai.msgs = append(ai.msgs, chatMsg{role: "error", text: "无法读取 AI 提出的修改"})
+			}
 			ai.answers = append(ai.answers, toolAnswer{id: call.id, text: "无法解析修改，未应用。", isError: true})
 			continue
 		}
@@ -615,9 +626,22 @@ func (a *app) aiReceive(r aiReply, err error) {
 		ai.msgs = append(ai.msgs, chatMsg{role: "assistant", text: text})
 	}
 	if r.truncated {
-		ai.msgs = append(ai.msgs, chatMsg{role: "error", text: "回复太长，被截断了。"})
+		// Cut short at the length a reply may have: asked once to go on in
+		// smaller parts, its edits in batches.
+		if ai.continued < 1 {
+			ai.continued++
+			ai.msgs = append(ai.msgs, chatMsg{role: "tool", text: "回复太长被截断了，正在让 AI 分批继续…"})
+			a.aiTurn("", aiContinuePrompt, nil)
+			return
+		}
+		ai.msgs = append(ai.msgs, chatMsg{role: "error", text: "回复太长，被截断了。可以让 AI 只处理一部分（比如一个分支），或者分几次提。"})
 	}
 }
+
+// aiContinuePrompt asks a reply cut short to go on.
+const aiContinuePrompt = "你上一条回复超出了长度上限，被截断了，没有生效。" +
+	"如果是在提出修改：请分批调用 propose_edits，这一批最多 20 项操作，先提最重要的，并在 summary 里说明还剩哪些，用户确认后再提下一批；" +
+	"如果是在写回答：从截断的地方接着写，不要重复已写的内容。"
 
 // answerLibraryCalls answers the library tools a reply called, and goes on.
 func (a *app) answerLibraryCalls(calls []aiCall) {
