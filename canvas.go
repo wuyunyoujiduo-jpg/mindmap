@@ -1207,6 +1207,9 @@ func (a *app) nodeMenu(m *ui.Menu, n *model.Node, depth int) {
 		if m.Item("查看大图").Chosen() {
 			a.lightbox = n.ID
 		}
+		if img := n.Image; m.Item("复制图片").Chosen() {
+			a.copyImage(img)
+		}
 		if m.Item("删除图片").Chosen() {
 			a.later(func() { a.removeImage(n) })
 		}

@@ -32,6 +32,8 @@ type platform interface {
 	OpenFile(title string, exts []string, done func(path string))
 	// CopyText puts text on the clipboard, and ClipboardText reads it.
 	CopyText(s string)
+	// CopyImage puts a picture, PNG, on the clipboard.
+	CopyImage(png []byte)
 	ClipboardText() string
 	// OpenURL opens a web page or an app's link (vscode://…); OpenPath
 	// opens a file in its default app.

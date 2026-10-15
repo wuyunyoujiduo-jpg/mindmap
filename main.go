@@ -381,6 +381,10 @@ func (d *desktop) OpenFile(title string, exts []string, done func(string)) {
 
 func (d *desktop) CopyText(s string) { _ = mygo.Clipboard.Write(transfer.TextData(s)) }
 
+func (d *desktop) CopyImage(png []byte) {
+	_ = mygo.Clipboard.Write(transfer.New(transfer.NewItem(transfer.Bytes(transfer.PNG, png))))
+}
+
 func (d *desktop) ClipboardText() string {
 	b, _ := mygo.Clipboard.ReadFormat(transfer.Text)
 	return string(b)

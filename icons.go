@@ -340,7 +340,7 @@ func (a *app) noteMark(c *ui.Context, n *model.Node, size float32, col ui.Color)
 			panel.Padding(12, 14).Radius(10).Background(t.Surface).Border(1, t.Border).Shadow(0, 6, 20, 0, ui.RGBA(0, 0, 0, 0.18)).
 				Width(320).PassThrough().Children(func() {
 				ui.Text(c, "备注 · 点击编辑").FontSize(11).TextColor(t.TextMuted)
-				note := n.Note
+				note := notePictureMark.ReplaceAllString(n.Note, "🖼")
 				if r := []rune(note); len(r) > 600 {
 					note = string(r[:600]) + "…"
 				}
@@ -360,7 +360,8 @@ func (a *app) notePopover(c *ui.Context, anchor ui.Element, n *model.Node) {
 			Width(380).Gap(8).Children(func() {
 			ui.Row(c).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "备注 · "+n.Title).FontSize(12).Bold().SingleLine().Grow(1).Shrink(1).MinWidth(0)
-				ui.Text(c, "# 标题  - 列表  **粗体**").FontSize(11).TextColor(t.TextMuted)
+				ui.Text(c, "# 标题  - 列表  **粗体**").FontSize(11).TextColor(t.TextMuted).Margin(0, 6, 0, 0)
+				a.notePictureButton(c, "popover", n)
 			})
 			in := a.noteEditor(c, "popover", n, 14, "实现要点、决策、注意事项…").AutoFocus().MinHeight(90).MaxHeight(360)
 			if in.Shortcut(0, ui.KeyEscape) || in.Shortcut(ui.Cmd, ui.KeyEnter) {

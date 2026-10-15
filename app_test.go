@@ -30,6 +30,7 @@ type fakePlatform struct {
 	trashed     []string
 	fullScreen  bool
 	clipImage   []byte
+	copiedImage []byte
 	clipFiles   []string
 	picked      string
 	savePath    string
@@ -51,6 +52,7 @@ func (f *fakePlatform) OpenFile(title string, exts []string, done func(string)) 
 	done(f.openPath)
 }
 func (f *fakePlatform) CopyText(s string)              { f.copied = s }
+func (f *fakePlatform) CopyImage(png []byte)           { f.copiedImage = png }
 func (f *fakePlatform) ClipboardText() string          { return f.copied }
 func (f *fakePlatform) OpenURL(url string)             { f.opened = append(f.opened, url) }
 func (f *fakePlatform) OpenPath(path string)           { f.opened = append(f.opened, "path:"+path) }
@@ -3583,5 +3585,61 @@ func TestSelectDeletePicture(t *testing.T) {
 	tt.Key(0, ui.KeyDelete)
 	if m, _ := a.doc.Find(n.ID); m != nil {
 		t.Fatal("node kept")
+	}
+}
+
+func TestNotePictureAndCopyImage(t *testing.T) {
+	a, tt := newTestApp(t)
+	fp := a.plat.(*fakePlatform)
+	fp.clipImage = testPNG(t, 400, 300)
+	n := find(t, a, "后端")
+	clickNode(t, tt, a, "后端")
+	tt.Frame()
+	if err := tt.Click("插入图片"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !notePictureMark.MatchString(n.Note) || !strings.HasPrefix(n.Note, "服务与数据层。") {
+		t.Fatalf("note %q", n.Note)
+	}
+	if n.Image != nil {
+		t.Fatal("the picture went on the node, not into its note")
+	}
+	file := strings.TrimSuffix(strings.SplitN(n.Note, assetScheme, 2)[1], ")")
+	if _, err := os.Stat(filepath.Join(model.AssetsDir(a.path), file)); err != nil {
+		t.Fatalf("no file: %v", err)
+	}
+	// Read again, the note shows the picture.
+	a.noteDocs = nil
+	tt.Frame()
+	d := a.noteDocs["panel"]
+	found := false
+	for _, run := range d.doc.Text().Runs(0, d.doc.Text().Len()) {
+		if att := run.Attributes.Attachment; att != nil && att.Image != nil {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("the picture did not load")
+	}
+	snapshot(t, tt, "note-picture")
+
+	// A node's picture, shown large, copies.
+	fp.clipImage = testPNG(t, 200, 100)
+	m := find(t, a, "前端")
+	a.selectNode(m.ID)
+	if !a.pasteImage() || m.Image == nil {
+		t.Fatal("no picture")
+	}
+	a.lightbox = m.ID
+	tt.Frame()
+	if err := tt.RightClick("大图：前端"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.ChooseMenuItem("复制图片"); err != nil {
+		t.Fatal(err)
+	}
+	if len(fp.copiedImage) == 0 {
+		t.Fatal("nothing copied")
 	}
 }

@@ -112,7 +112,7 @@ func (a *app) nodePanel(c *ui.Context) {
 
 			// The note shows as it is written: Markdown typed formats as it
 			// goes.
-			sectionCard(c, iconPencil, tileYellow, "备注", nil, func() {
+			sectionCard(c, iconPencil, tileYellow, "备注", func() { a.notePictureButton(c, "panel", n) }, func() {
 				a.noteEditor(c, "panel", n, textBody, "实现要点、决策、注意事项…（# 标题、- 列表、**粗体** 输入即显示）").
 					FillWidth().MinHeight(96).MaxHeight(420)
 			})

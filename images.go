@@ -1,7 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"errors"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	"image/png"
 	"os"
 	"path/filepath"
 	"strings"
@@ -69,24 +74,66 @@ func (a *app) attachImage(n *model.Node, data []byte, ext string) error {
 	if n == nil || a.path == "" {
 		return errors.New("没有选中的节点")
 	}
-	b, err := ui.DecodeBitmap(data)
+	name, b, err := a.saveAsset(data, ext)
 	if err != nil {
-		return errors.New("无法识别的图片格式")
-	}
-	dir := model.AssetsDir(a.path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	name := model.NewID() + strings.ToLower(ext)
-	path := filepath.Join(dir, name)
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		return err
-	}
-	a.bitmaps[path] = b
 	w, h := b.Size()
 	a.mutate("", func() { n.Image = &model.Image{File: name, W: w, H: h} })
 	a.reveal = n.ID == a.selected // the node grew: keep it in view
 	return nil
+}
+
+// saveAsset keeps a picture in the map's assets folder, returning its
+// file's name there and the picture.
+func (a *app) saveAsset(data []byte, ext string) (string, *ui.Bitmap, error) {
+	if a.path == "" {
+		return "", nil, errors.New("导图还没有保存")
+	}
+	b, err := ui.DecodeBitmap(data)
+	if err != nil {
+		return "", nil, errors.New("无法识别的图片格式")
+	}
+	dir := model.AssetsDir(a.path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", nil, err
+	}
+	name := model.NewID() + strings.ToLower(ext)
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return "", nil, err
+	}
+	a.bitmaps[path] = b
+	return name, b, nil
+}
+
+// copyImage puts a node's picture on the clipboard, as PNG.
+func (a *app) copyImage(img *model.Image) {
+	data, err := os.ReadFile(a.imagePath(img))
+	if err == nil && !strings.HasSuffix(strings.ToLower(img.File), ".png") {
+		var m image.Image
+		if m, _, err = image.Decode(bytes.NewReader(data)); err == nil {
+			var buf bytes.Buffer
+			err = png.Encode(&buf, m)
+			data = buf.Bytes()
+		}
+	}
+	if err != nil {
+		a.tell("复制失败：" + err.Error())
+		return
+	}
+	a.plat.CopyImage(data)
+	a.tell("已复制图片")
+}
+
+// imageMenu is the menu of a picture: copy it, show its file.
+func (a *app) imageMenu(m *ui.Menu, img *model.Image) {
+	if m.Item("复制图片").Chosen() {
+		a.copyImage(img)
+	}
+	if m.Item("在访达中显示").Chosen() {
+		a.plat.ShowInFolder(a.imagePath(img))
+	}
 }
 
 // attachImageFile gives a node the picture in a file.
@@ -179,9 +226,14 @@ func (a *app) lightboxView(c *ui.Context) {
 	}
 	overlay.Children(func() {
 		if b := a.bitmap(n.Image); b != nil {
-			ui.Image(c, b).Size(iw*k, ih*k).Fit(ui.Contain).Radius(8).PassThrough()
+			img := n.Image
+			pic := ui.Image(c.Key("large"), b).Size(iw*k, ih*k).Fit(ui.Contain).Radius(8).Label("大图：" + n.Title)
+			pic.ContextMenu(func(m *ui.Menu) { a.imageMenu(m, img) })
 		}
-		ui.Textf(c, "%s · %d×%d · 点击或按 Esc 关闭", n.Title, n.Image.W, n.Image.H).FontSize(12).
+		if overlay.Shortcut(ui.Cmd, ui.KeyC) {
+			a.copyImage(n.Image)
+		}
+		ui.Textf(c, "%s · %d×%d · 右键或 ⌘C 复制 · 点击或按 Esc 关闭", n.Title, n.Image.W, n.Image.H).FontSize(12).
 			TextColor(ui.RGBA(255, 255, 255, 0.8)).PassThrough()
 	})
 }
