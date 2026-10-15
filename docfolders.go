@@ -53,7 +53,7 @@ func (a *app) moveClipTo(id, dir string) {
 	c.Folder = key
 	a.saveClip(c)
 	if dir != "" {
-		a.folderClosed[dir] = false
+		a.setFolderOpen(dir, true)
 		a.tell("已放进「" + filepath.Base(dir) + "」")
 	}
 }

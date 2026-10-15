@@ -233,7 +233,7 @@ func (a *app) folderContents(c *ui.Context, f model.Folder, depth int) {
 
 func (a *app) folderRow(c *ui.Context, f model.Folder, depth int) {
 	t := c.Theme()
-	open := !a.folderClosed[f.Path]
+	open := a.folderOpen(f.Path)
 	row := ui.Row(c).Padding(5, 8, 5, 8+float32(depth)*14).Gap(6).Radius(6).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).Label(f.Name)
 	if row.Hovered() {
@@ -244,7 +244,7 @@ func (a *app) folderRow(c *ui.Context, f model.Folder, depth int) {
 	}
 	a.dropOnFolder(row, f.Path)
 	if row.Clicked() {
-		a.folderClosed[f.Path] = open
+		a.setFolderOpen(f.Path, !open)
 	}
 	path := f.Path
 	row.ContextMenu(func(m *ui.Menu) {
@@ -422,7 +422,7 @@ func (a *app) moveMap(path, dir string) {
 		a.saveErr = err.Error()
 		return
 	}
-	a.folderClosed[dir] = false
+	a.setFolderOpen(dir, true)
 	a.moved(path, to)
 }
 
@@ -472,7 +472,7 @@ func (a *app) newFolder(dir string) {
 		a.saveErr = err.Error()
 		return
 	}
-	a.folderClosed[dir] = false
+	a.setFolderOpen(dir, true)
 	a.refreshFiles()
 	a.renaming, a.renameText = path, name
 }
@@ -637,4 +637,22 @@ func sideIcon(c *ui.Context, ic icon, current bool) {
 		col = col.Alpha(0.85)
 	}
 	ui.Box(c).Size(16, 16).Shrink(0).PassThrough().Draw(func(p *ui.Painter, r ui.Rect) { drawIcon(p, r, 14, ic, col) })
+}
+
+// folderOpen tells whether a folder of the sidebar is shown open: those
+// opened, as the config keeps them through restarts and updates; others
+// are closed.
+func (a *app) folderOpen(path string) bool { return slices.Contains(a.cfg.OpenFolders, path) }
+
+// setFolderOpen opens or closes a folder of the sidebar, as kept.
+func (a *app) setFolderOpen(path string, open bool) {
+	if a.folderOpen(path) == open {
+		return
+	}
+	if open {
+		a.cfg.OpenFolders = append(a.cfg.OpenFolders, path)
+	} else {
+		a.cfg.OpenFolders = slices.DeleteFunc(a.cfg.OpenFolders, func(p string) bool { return p == path })
+	}
+	a.cfg.save()
 }

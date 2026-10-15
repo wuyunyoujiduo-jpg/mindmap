@@ -14,6 +14,9 @@ type config struct {
 	// Favorites are 快捷访问, first in the sidebar, in the order put there:
 	// maps by their paths, documents as "clip:<id>".
 	Favorites []string `json:"favorites,omitempty"`
+	// OpenFolders are the folders of the sidebar shown open, by their
+	// paths; the others show closed.
+	OpenFolders []string `json:"openFolders,omitempty"`
 	// The AI assistant: an Anthropic API key, the model, and the API's
 	// address when it goes through a proxy.
 	AIKey     string `json:"aiKey,omitempty"`

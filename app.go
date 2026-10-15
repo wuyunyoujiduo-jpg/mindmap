@@ -359,8 +359,9 @@ type app struct {
 	catsOpen      bool
 	tagsOpen      bool
 	favoritesOpen bool
-	folderClosed  map[string]bool // folders of the sidebar shown closed
-	renaming      string          // the map or folder renamed in the sidebar
+	// Folders of the sidebar are shown closed but for those opened, which
+	// the config keeps.
+	renaming      string // the map or folder renamed in the sidebar
 	renameText    string
 	tagQuery      string
 	notice        string    // a passing message in the toolbar, as "已复制"
@@ -395,7 +396,6 @@ func newApp(plat platform, cfg config) *app {
 		catsOpen:      true,
 		tagsOpen:      true,
 		favoritesOpen: true,
-		folderClosed:  map[string]bool{},
 		bitmaps:       map[string]*ui.Bitmap{},
 		sendAI:        sendToClaude,
 		sendDeepSeek:  sendToDeepSeek,

@@ -3663,3 +3663,20 @@ func TestNotePictureAndCopyImage(t *testing.T) {
 		t.Fatal("nothing copied")
 	}
 }
+
+func TestFoldersKeepOpen(t *testing.T) {
+	a, _ := newTestApp(t)
+	dir := filepath.Join(a.dir, "项目")
+	if a.folderOpen(dir) {
+		t.Fatal("a folder opens by default")
+	}
+	a.setFolderOpen(dir, true)
+	// Kept in the config, through a restart (or an update).
+	if c := loadConfig(); !slices.Contains(c.OpenFolders, dir) {
+		t.Fatalf("open folders %v", c.OpenFolders)
+	}
+	a.setFolderOpen(dir, false)
+	if c := loadConfig(); slices.Contains(c.OpenFolders, dir) {
+		t.Fatalf("open folders %v", c.OpenFolders)
+	}
+}
