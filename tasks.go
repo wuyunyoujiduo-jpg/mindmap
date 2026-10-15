@@ -23,6 +23,40 @@ func (a *app) visibleTasks() []model.TaskNode {
 	return out
 }
 
+// keyMarker is the red flag: the nodes it marks are the board's 重点问题,
+// whatever their status, and whether tasks or not.
+const keyMarker = "flag:red"
+
+// keyIssues returns the nodes of every canvas marked as 重点问题 that pass
+// the search and tag filter, in map order.
+func (a *app) keyIssues() []model.TaskNode {
+	var out []model.TaskNode
+	for _, d := range a.file.Sheets {
+		var walk func(n *model.Node, parents []string)
+		walk = func(n *model.Node, parents []string) {
+			if slices.Contains(n.Markers, keyMarker) && a.highlighted(n) && (n.Task == nil || a.inIteration(n)) {
+				out = append(out, model.TaskNode{Node: n, Parents: slices.Clone(parents), Sheet: d})
+			}
+			parents = append(parents, n.Title)
+			for _, c := range n.Children {
+				walk(c, parents)
+			}
+		}
+		if d.Root != nil {
+			walk(d.Root, nil)
+		}
+	}
+	return out
+}
+
+// setKeyIssue marks a node as 重点问题, or takes the mark off.
+func (a *app) setKeyIssue(n *model.Node, on bool) {
+	if slices.Contains(n.Markers, keyMarker) == on {
+		return
+	}
+	a.toggleMarker(n, keyMarker)
+}
+
 // sortTasks puts the tasks due first first, then the most important.
 func sortTasks(tasks []model.TaskNode) {
 	sort.SliceStable(tasks, func(i, j int) bool {
@@ -62,6 +96,7 @@ func (a *app) boardView(c *ui.Context) {
 func (a *app) boardColumns(c *ui.Context, tasks []model.TaskNode) {
 	t := c.Theme()
 	ui.Row(c).Grow(1).Padding(12).Gap(12).AlignItems(ui.Stretch).Children(func() {
+		a.keyIssueColumn(c)
 		for _, s := range model.Statuses {
 			var col []model.TaskNode
 			for _, tn := range tasks {
@@ -75,7 +110,7 @@ func (a *app) boardColumns(c *ui.Context, tasks []model.TaskNode) {
 			}
 			if d, ok := ui.Drop[nodeDrag](column); ok {
 				if sheet := a.file.SheetOf(d.ID); sheet != nil {
-					if n, _ := sheet.Find(d.ID); n != nil && n.Task != nil && n.Task.Status != s {
+					if n, _ := sheet.Find(d.ID); n != nil && (n.Task == nil || n.Task.Status != s) { // a 重点问题 not a task becomes one
 						a.setStatus(n, s)
 					}
 				}
@@ -132,12 +167,52 @@ func (a *app) showOnBoard(id string) {
 	a.boardReveal = id
 }
 
+// keyIssueColumn is the board's column of 重点问题: the nodes marked with
+// the red flag, which stay in their status's column too. A card dropped
+// on it is marked.
+func (a *app) keyIssueColumn(c *ui.Context) {
+	t := c.Theme()
+	col := a.keyIssues()
+	red := ui.Hex("#ef4444")
+	column := ui.Column(c.Key("key-issues")).Grow(1).Basis(0).Radius(10).Background(red.Alpha(0.05)).Border(1, red.Alpha(0.35))
+	if _, over := ui.DragOver[nodeDrag](column); over {
+		column.Border(2, red)
+	}
+	if d, ok := ui.Drop[nodeDrag](column); ok {
+		if sheet := a.file.SheetOf(d.ID); sheet != nil {
+			if n, _ := sheet.Find(d.ID); n != nil {
+				a.setKeyIssue(n, true)
+			}
+		}
+	}
+	column.Children(func() {
+		ui.Row(c).Padding(10, 12).Gap(8).AlignItems(ui.Center).Children(func() {
+			ui.Box(c).Size(14, 14).Draw(func(p *ui.Painter, r ui.Rect) { drawMarker(p, r, keyMarker) })
+			ui.Text(c, "重点问题").Bold()
+			ui.Text(c, fmt.Sprint(len(col))).TextColor(t.TextMuted)
+		})
+		if len(col) == 0 {
+			ui.Text(c, "节点打上红旗，或把卡片拖到这里").FontSize(12).TextColor(t.TextMuted).Margin(8, 12).Wrap()
+			ui.Spacer(c)
+			return
+		}
+		ui.List(c, a.boardList("key"), len(col)).Grow(1).ItemKey(func(i int) any { return col[i].Node.ID }).Rows(func(r ui.ListRow) {
+			ui.Box(r.Context).Padding(0, 8, 8).Children(func() {
+				a.taskCard(r.Context, col[r.Index], col[r.Index].Node.Task != nil)
+			})
+		})
+	})
+}
+
 // taskCard shows a task: its title, where it is in the map, its tags and
 // dates. A click selects it; a double click shows it in the map.
 func (a *app) taskCard(c *ui.Context, tn model.TaskNode, showStatus bool) {
 	t := c.Theme()
 	n := tn.Node
 	task := n.Task
+	if task == nil { // a 重点问题 that is not a task
+		task = &model.Task{}
+	}
 	card := ui.Column(c).Padding(10).Gap(6).Radius(8).Background(t.Background).Border(1, t.Border).
 		Drag(nodeDrag{n.ID}).Cursor(ui.CursorPointer).Label(n.Title)
 	if n.ID == a.selected {
@@ -163,11 +238,19 @@ func (a *app) taskCard(c *ui.Context, tn model.TaskNode, showStatus bool) {
 		}
 		m.Submenu("任务状态", func(m *ui.Menu) {
 			for _, s := range model.Statuses {
-				if m.Item(s.Label()).Checked(task.Status == s).Chosen() {
+				if m.Item(s.Label()).Checked(n.Task != nil && task.Status == s).Chosen() {
 					a.setStatus(n, s)
 				}
 			}
 		})
+		key := slices.Contains(n.Markers, keyMarker)
+		label := "标为重点问题"
+		if key {
+			label = "移出重点问题"
+		}
+		if m.Item(label).Chosen() {
+			a.setKeyIssue(n, !key)
+		}
 	})
 	card.Children(func() {
 		ui.Row(c).Gap(6).AlignItems(ui.Start).Children(func() {

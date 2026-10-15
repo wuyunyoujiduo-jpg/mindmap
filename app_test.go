@@ -3487,3 +3487,36 @@ func TestZoomStopsAt100(t *testing.T) {
 		t.Fatalf("the next notch: %v", z)
 	}
 }
+
+func TestKeyIssuesColumn(t *testing.T) {
+	a, tt := newTestApp(t)
+	slow, plain := find(t, a, "列表加载慢"), find(t, a, "后端")
+	a.toggleMarker(slow, "flag:red")
+	a.toggleMarker(plain, "flag:red") // not a task: a 重点问题 all the same
+	if err := tt.Click("看板"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	issues := a.keyIssues()
+	if len(issues) != 2 || plain.Task != nil {
+		t.Fatalf("key issues %d, 后端 task %+v", len(issues), plain.Task)
+	}
+	if !tt.HasText("重点问题") {
+		t.Fatalf("texts %q", tt.Texts())
+	}
+	// 列表加载慢 shows twice: in 重点问题 and in its status's column.
+	n := 0
+	for _, s := range tt.Texts() {
+		if s == "列表加载慢" {
+			n++
+		}
+	}
+	if n < 2 {
+		t.Fatalf("列表加载慢 shown %d times", n)
+	}
+	snapshot(t, tt, "board-key-issues")
+	a.setKeyIssue(slow, false)
+	if slices.Contains(slow.Markers, "flag:red") || len(a.keyIssues()) != 1 {
+		t.Fatalf("markers %v", slow.Markers)
+	}
+}
