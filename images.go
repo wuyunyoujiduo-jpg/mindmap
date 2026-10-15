@@ -144,10 +144,18 @@ func (a *app) thumbnail(c *ui.Context, n *model.Node, w, h float32) ui.Element {
 		})
 	}
 	img := ui.Image(c.Key("image"), b).Size(w, h).Fit(ui.Contain).Radius(6).Cursor(ui.CursorPointer).
-		Label("图片：" + n.Title).Tooltip("点击查看大图")
+		Label("图片：" + n.Title).Tooltip("双击查看大图 · 选中后按 Delete 删除")
+	// A click selects the picture, which Delete then takes off the node;
+	// a double click shows it large.
 	if img.Clicked() {
-		a.selected = n.ID
+		a.selected, a.multi, a.selImage = n.ID, nil, n.ID
+		a.canvas.Focus()
+	}
+	if img.DoubleClicked() {
 		a.lightbox = n.ID
+	}
+	if a.selImage == n.ID && a.selected == n.ID {
+		img.Border(2.5, t.Accent)
 	}
 	return img
 }

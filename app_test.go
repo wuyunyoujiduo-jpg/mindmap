@@ -1525,10 +1525,15 @@ func TestPasteImage(t *testing.T) {
 	}
 	snapshot(t, tt, "image-node")
 
-	// A click on the picture shows it large; Escape closes it.
+	// A click on the picture selects it; a double click shows it large;
+	// Escape closes it.
 	if err := tt.Click("图片：前端"); err != nil {
 		t.Fatal(err)
 	}
+	if a.selImage != n.ID || a.lightbox != "" {
+		t.Fatalf("picture selected %q, lightbox %q", a.selImage, a.lightbox)
+	}
+	tt.Click("图片：前端")
 	if a.lightbox != n.ID {
 		t.Fatal("no lightbox")
 	}
@@ -3518,5 +3523,65 @@ func TestKeyIssuesColumn(t *testing.T) {
 	a.setKeyIssue(slow, false)
 	if slices.Contains(slow.Markers, "flag:red") || len(a.keyIssues()) != 1 {
 		t.Fatalf("markers %v", slow.Markers)
+	}
+}
+
+func TestPasteImageWhileEditing(t *testing.T) {
+	a, tt := newTestApp(t)
+	a.plat.(*fakePlatform).clipImage = testPNG(t, 400, 300)
+	n := find(t, a, "前端")
+	clickNode(t, tt, a, "前端")
+	tt.Key(0, ui.KeyF2)
+	tt.Frame()
+	if a.editing != n.ID {
+		t.Fatal("not editing")
+	}
+	tt.Key(ui.Cmd, ui.KeyV)
+	tt.Frame()
+	if n.Image == nil || n.Image.W != 400 {
+		t.Fatalf("image %+v", n.Image)
+	}
+	if a.editing != n.ID || a.editText != "前端" {
+		t.Fatalf("editing %q, text %q", a.editing, a.editText)
+	}
+}
+
+func TestSelectDeletePicture(t *testing.T) {
+	a, tt := newTestApp(t)
+	a.plat.(*fakePlatform).clipImage = testPNG(t, 400, 300)
+	// A topic with a picture and the title given for now shows the
+	// picture alone.
+	clickNode(t, tt, a, "前端")
+	a.addSibling()
+	tt.Frame()
+	tt.Key(ui.Cmd, ui.KeyV) // pasted while its title is edited
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	n, _ := a.selectedNode()
+	if n.Image == nil || n.Title != "新主题" || !a.pictureOnly(n) {
+		t.Fatalf("node %q, image %+v", n.Title, n.Image)
+	}
+	if b := a.boxes.Boxes[n.ID]; b.H > 300+2*nodePadY+1 {
+		t.Fatalf("box %v: a title under the picture", b)
+	}
+	snapshot(t, tt, "picture-only")
+	// Selected, Delete takes the picture off, the node staying.
+	if err := tt.Click("图片：新主题"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	snapshot(t, tt, "picture-selected")
+	tt.Key(0, ui.KeyDelete)
+	tt.Frame()
+	if n.Image != nil {
+		t.Fatal("picture kept")
+	}
+	if m, _ := a.doc.Find(n.ID); m == nil {
+		t.Fatal("the node went with its picture")
+	}
+	// Delete again, with no picture selected, deletes the node.
+	tt.Key(0, ui.KeyDelete)
+	if m, _ := a.doc.Find(n.ID); m != nil {
+		t.Fatal("node kept")
 	}
 }

@@ -93,8 +93,26 @@ func (a *app) measureText(c *ui.Context, wrap float32, span ui.Span) (float32, f
 	return w, h
 }
 
+// pictureOnly tells whether a node shows its picture alone: one with a
+// picture and nothing else, its title the one given for now (新主题) or
+// none, shows no title under it.
+func (a *app) pictureOnly(n *model.Node) bool {
+	if n.Image == nil || a.editing == n.ID {
+		return false
+	}
+	if t := strings.TrimSpace(n.Title); t != "" && t != "新主题" {
+		return false
+	}
+	return n.Task == nil && len(n.Markers) == 0 && len(n.Tags) == 0 && n.Note == "" && len(n.Links) == 0 &&
+		filesMark(n) == "" && a.progress[n.ID][1] == 0 && a.measuresText(n) == ""
+}
+
 func (a *app) measure(c *ui.Context) layout.Measure {
 	return func(n *model.Node, depth int) (float32, float32) {
+		if a.pictureOnly(n) {
+			iw, ih := thumbSize(n.Image)
+			return iw + 2*nodePadX, ih + 2*nodePadY
+		}
 		p := a.parts(n)
 		tw, th := a.titleBox(c, n, depth)
 		w := 2*nodePadX + tw
@@ -450,6 +468,9 @@ func (a *app) canvasArea(c *ui.Context) {
 	}
 	if cv.Pressed() && a.editing == "" {
 		a.canvas.Focus()
+	}
+	if cv.Pressed() {
+		a.selImage = "" // the picture's click, inside, selects it again
 	}
 	if cv.Pressed() && !exporting && a.relFrom == "" { // a relation line near the pointer is selected
 		if x, y, over := cv.PointerPosition(); over {
@@ -899,6 +920,9 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 		}
 		if iw > 0 {
 			a.thumbnail(c, n, iw*z, ih*z).Absolute().Left((box.W - iw) / 2 * z).Top(nodePadY * z)
+			if a.pictureOnly(n) {
+				return // the picture alone, no title under it
+			}
 		}
 		if n.Task != nil {
 			if !n.HasStatusMarker() { // its progress marker shows the status
@@ -951,6 +975,8 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 			if c := in.Composing(); c != a.editComposing {
 				a.editComposing = c // the node makes room, from the next frame
 			}
+			// A picture pasted, not text, goes on the node, as on the canvas.
+			in.OnPaste(func(text string) bool { return text == "" && a.pasteImage() })
 			in.HandleInput(func(ev ui.InputEvent) bool {
 				if ev.Kind != ui.InputKeyDown || ev.Key != ui.KeyEnter || ev.Mods&^ui.Shift != 0 || a.editing != n.ID {
 					return false
@@ -1325,6 +1351,11 @@ func (a *app) canvasKey(ev ui.InputEvent) bool {
 			a.removeRelation(id)
 			break
 		}
+		if n, _ := a.selectedNode(); n != nil && a.selImage == n.ID && n.Image != nil { // its picture
+			a.selImage = ""
+			a.removeImage(n)
+			break
+		}
 		a.deleteSelection()
 	case ev.Mods == 0 && ev.Key == ui.KeyEscape:
 		switch {
@@ -1332,6 +1363,10 @@ func (a *app) canvasKey(ev ui.InputEvent) bool {
 			a.relFrom = ""
 		case a.selRel != "":
 			a.selRel = ""
+		case a.lightbox != "":
+			a.lightbox = ""
+		case a.selImage != "":
+			a.selImage = ""
 		case len(a.multi) > 0:
 			a.multi = nil
 		case a.focusNode() != nil:

@@ -134,6 +134,7 @@ type app struct {
 	editText  string
 	editFocus bool    // the title input has had the focus
 	editW     float32 // the widest the title edited has been
+	selImage  string  // the node whose picture is selected, which Delete takes off
 	// editComposing tells an input method is composing in the title.
 	editComposing bool
 	// The board's columns' lists, and the task to show there next.
