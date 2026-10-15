@@ -210,13 +210,22 @@ func (a *app) thumbnail(c *ui.Context, n *model.Node, w, h float32) ui.Element {
 // lightboxView shows the picture of the node a.lightbox names over the
 // window, as large as fits; a click or Escape closes it.
 func (a *app) lightboxView(c *ui.Context) {
-	n, _ := a.doc.Find(a.lightbox)
-	if n == nil || n.Image == nil {
+	// "note:<id>" shows a picture of the node's note, a.notePic.
+	id, inNote := strings.CutPrefix(a.lightbox, "note:")
+	n, _ := a.doc.Find(id)
+	shown := (*model.Image)(nil)
+	if n != nil {
+		shown = n.Image
+		if inNote {
+			shown = a.notePic
+		}
+	}
+	if shown == nil {
 		a.lightbox = ""
 		return
 	}
 	w, h := c.Size()
-	iw, ih := float32(n.Image.W), float32(n.Image.H)
+	iw, ih := float32(shown.W), float32(shown.H)
 	k := min(w*0.9/iw, (h*0.9-40)/ih, 2)
 	overlay := ui.Box(c.Key("lightbox")).Absolute().Top(0).Left(0).Right(0).Bottom(0).
 		Background(ui.RGBA(0, 0, 0, 0.85)).Center().Gap(12).Focusable().FocusRing(false).AutoFocus().
@@ -225,15 +234,15 @@ func (a *app) lightboxView(c *ui.Context) {
 		a.lightbox = ""
 	}
 	overlay.Children(func() {
-		if b := a.bitmap(n.Image); b != nil {
-			img := n.Image
+		if b := a.bitmap(shown); b != nil {
+			img := shown
 			pic := ui.Image(c.Key("large"), b).Size(iw*k, ih*k).Fit(ui.Contain).Radius(8).Label("大图：" + n.Title)
 			pic.ContextMenu(func(m *ui.Menu) { a.imageMenu(m, img) })
 		}
 		if overlay.Shortcut(ui.Cmd, ui.KeyC) {
-			a.copyImage(n.Image)
+			a.copyImage(shown)
 		}
-		ui.Textf(c, "%s · %d×%d · 右键或 ⌘C 复制 · 点击或按 Esc 关闭", n.Title, n.Image.W, n.Image.H).FontSize(12).
+		ui.Textf(c, "%s · %d×%d · 右键或 ⌘C 复制 · 点击或按 Esc 关闭", n.Title, shown.W, shown.H).FontSize(12).
 			TextColor(ui.RGBA(255, 255, 255, 0.8)).PassThrough()
 	})
 }

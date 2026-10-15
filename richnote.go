@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/richtext"
@@ -22,6 +23,10 @@ import (
 type noteDoc struct {
 	id, src string
 	doc     *richtext.Document
+	// pressed, lastPress and lastCaret make a double click of two presses.
+	pressed   bool
+	lastPress time.Time
+	lastCaret int
 }
 
 // tableLine is a Markdown table's divider: the editor has no tables (it
@@ -67,7 +72,47 @@ func (a *app) noteEditor(c *ui.Context, place string, n *model.Node, size float3
 	if ed.Changed() {
 		a.saveNoteDoc(d, n)
 	}
+	// A double click on a picture (the caret by it) shows it large.
+	// The editor takes the pointer itself (no click comes): a second press
+	// soon after the first, by the same place, is the double click.
+	if pressed := ed.Pressed(); pressed != d.pressed {
+		d.pressed = pressed
+		if pressed {
+			_, caret := d.doc.Selection()
+			now := a.now()
+			if now.Sub(d.lastPress) < 400*time.Millisecond && caret == d.lastCaret {
+				if img := pictureAtCaret(d.doc); img != nil {
+					a.notePic, a.lightbox = img, "note:"+n.ID
+				}
+			}
+			d.lastPress, d.lastCaret = now, caret
+		}
+	}
 	return ed
+}
+
+// pictureAtCaret is the note's picture selected, or by the caret.
+func pictureAtCaret(doc *richtext.Document) *model.Image {
+	text := doc.Text()
+	anchor, caret := doc.Selection()
+	lo, hi := min(anchor, caret), max(anchor, caret)
+	for _, i := range []int{lo, lo - 1, hi - 1, hi} {
+		if i < 0 || i >= text.Len() {
+			continue
+		}
+		att := text.AttributesAt(i).Attachment
+		if att == nil || !strings.HasPrefix(att.URL, assetScheme) {
+			continue
+		}
+		img := &model.Image{File: strings.TrimPrefix(att.URL, assetScheme)}
+		b, ok := att.Image.(*ui.Bitmap)
+		if !ok || b == nil {
+			continue
+		}
+		img.W, img.H = b.Size()
+		return img
+	}
+	return nil
 }
 
 // saveNoteDoc keeps the note the document holds, as Markdown.

@@ -3623,6 +3623,26 @@ func TestNotePictureAndCopyImage(t *testing.T) {
 		t.Fatal("the picture did not load")
 	}
 	snapshot(t, tt, "note-picture")
+	// By the caret, it shows large.
+	text := d.doc.Text()
+	d.doc.SetSelection(text.Len(), text.Len())
+	img := pictureAtCaret(d.doc)
+	if img == nil || img.W != 400 {
+		t.Fatalf("picture at the caret %+v", img)
+	}
+	// A double click on it shows it large.
+	tt.ClickAt(1130, 300)
+	tt.Frame()
+	tt.ClickAt(1130, 300)
+	tt.Frame()
+	if a.lightbox != "note:"+n.ID {
+		t.Fatalf("lightbox %q", a.lightbox)
+	}
+	if !tt.HasText("后端 · 400×300 · 右键或 ⌘C 复制 · 点击或按 Esc 关闭") {
+		t.Fatalf("texts %q", tt.Texts())
+	}
+	snapshot(t, tt, "note-picture-large")
+	a.lightbox = ""
 
 	// A node's picture, shown large, copies.
 	fp.clipImage = testPNG(t, 200, 100)
