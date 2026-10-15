@@ -110,29 +110,11 @@ func (a *app) nodePanel(c *ui.Context) {
 				a.mutate("title:"+n.ID, func() { n.Title = title })
 			}
 
-			note := n.Note
-			sectionCard(c, iconPencil, tileYellow, "备注", func() {
-				mode := 0
-				if a.notePreview && n.Note != "" {
-					mode = 1
-				}
-				if ui.Segmented(c, &mode, "编辑", "预览").FontSize(11).Changed() {
-					a.notePreview = mode == 1
-				}
-			}, func() {
-				if a.notePreview && n.Note != "" {
-					// The note as Markdown; a double click edits it.
-					box := ui.Box(c.Key("note-preview")).Padding(10, 12).Radius(10).Background(ui.Hex("#f5b942").Alpha(0.1)).FillWidth().
-						Tooltip("双击编辑")
-					if box.DoubleClicked() {
-						a.notePreview = false
-					}
-					box.Children(func() { markdownView(c, n.Note, 13) })
-					return
-				}
-				if inlineArea(c, &note, textBody, 4, 16, "实现要点、决策、注意事项…（支持 Markdown）", "备注内容").Changed() {
-					a.mutate("note:"+n.ID, func() { n.Note = note })
-				}
+			// The note shows as it is written: Markdown typed formats as it
+			// goes.
+			sectionCard(c, iconPencil, tileYellow, "备注", nil, func() {
+				a.noteEditor(c, "panel", n, textBody, "实现要点、决策、注意事项…（# 标题、- 列表、**粗体** 输入即显示）").
+					FillWidth().MinHeight(96).MaxHeight(420)
 			})
 
 			sectionCard(c, iconLink, tileBlue, "资料与关联", nil, func() {

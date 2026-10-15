@@ -18,7 +18,9 @@ func (a *app) view(c *ui.Context) {
 		a.runPending()
 		return
 	}
-	root := ui.Row(c).Fill().AlignItems(ui.Stretch)
+	// Selected text shows in the accent color, strong enough on the
+	// panels' gray: the system's highlight (a pale orange, say) hardly did.
+	root := ui.Row(c).Fill().AlignItems(ui.Stretch).SelectionColor(t.Accent.Alpha(0.32))
 	if !c.Vibrancy() { // else the sidebar's glass shows through
 		root.Background(t.Background)
 	}

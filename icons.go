@@ -358,14 +358,9 @@ func (a *app) notePopover(c *ui.Context, anchor ui.Element, n *model.Node) {
 			Width(380).Gap(8).Children(func() {
 			ui.Row(c).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "备注 · "+n.Title).FontSize(12).Bold().SingleLine().Grow(1).Shrink(1).MinWidth(0)
-				ui.Text(c, "支持 Markdown").FontSize(11).TextColor(t.TextMuted)
+				ui.Text(c, "# 标题  - 列表  **粗体**").FontSize(11).TextColor(t.TextMuted)
 			})
-			note := n.Note
-			in := ui.TextArea(c.Key("note-text"), &note).Lines(4, 14).AutoFocus().Label("备注内容").
-				Placeholder("实现要点、决策、注意事项…")
-			if in.Changed() {
-				a.mutate("note:"+n.ID, func() { n.Note = note })
-			}
+			in := a.noteEditor(c, "popover", n, 14, "实现要点、决策、注意事项…").AutoFocus().MinHeight(90).MaxHeight(360)
 			if in.Shortcut(0, ui.KeyEscape) || in.Shortcut(ui.Cmd, ui.KeyEnter) {
 				open = false
 			}

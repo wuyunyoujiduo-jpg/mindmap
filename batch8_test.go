@@ -414,7 +414,7 @@ func TestTaskCheckAndNotePopover(t *testing.T) {
 	a.noteEditing = slow.ID
 	tt.Frame()
 	tt.Frame()
-	if !tt.HasText("支持 Markdown") {
+	if !tt.HasText("备注 · 列表加载慢") {
 		t.Fatalf("no popover: %q", tt.Texts())
 	}
 	snapshot(t, tt, "note-popover")

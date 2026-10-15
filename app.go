@@ -174,7 +174,6 @@ type app struct {
 	confirmSheet  bool
 	structureOpen bool
 	panelTab      int
-	notePreview   bool // the panel shows notes as Markdown
 	// The command palette and the cheat sheet of shortcuts.
 	paletteOpen  bool
 	paletteMode  int
@@ -197,7 +196,8 @@ type app struct {
 	cardShowDate    bool
 	cardShowSource  bool
 	cardSource      string
-	noteEditing     string // the node whose note the popover over the canvas edits
+	noteEditing     string              // the node whose note the popover over the canvas edits
+	noteDocs        map[string]*noteDoc // the notes edited as rich text, by place
 	settingsTab     int
 	tourStep        int    // the step of the tour shown, 0 for none
 	ghBusy          bool   // the issues are being synced

@@ -2138,13 +2138,32 @@ func TestNotePreview(t *testing.T) {
 	a.mutate("", func() { n.Note = "**粗体** 和 `代码`\n- 一\n- 二" })
 	a.mutate("", func() { n.Note = strings.ReplaceAll(n.Note, "\\n", "\n") })
 	tt.Frame()
-	if err := tt.Click("预览"); err != nil {
-		t.Fatal(err)
-	}
-	if !tt.HasText("粗体") || tt.HasText("**粗体** 和 `代码`") {
+	// The note shows as it reads, its Markdown formatted, in the editor.
+	if tt.HasText("**粗体** 和 `代码`") || tt.HasText("预览") {
 		t.Fatalf("texts %q", tt.Texts())
 	}
 	snapshot(t, tt, "note-preview")
+	// Typed Markdown formats as it goes; the note keeps it as Markdown.
+	clickNode(t, tt, a, "后端")
+	m, _ := a.selectedNode()
+	a.mutate("", func() { m.Note = "" })
+	tt.Frame()
+	if err := tt.Click("备注内容"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	for _, k := range []string{"#", " ", "接口"} { // as typed, key by key
+		tt.Type(k)
+	}
+	tt.Key(0, ui.KeyEnter)
+	for _, k := range []string{"-", " ", "分页"} {
+		tt.Type(k)
+	}
+	tt.Frame()
+	if m.Note != "# 接口\n\n- 分页" {
+		t.Fatalf("note %q", m.Note)
+	}
+	snapshot(t, tt, "note-rich")
 }
 
 // changeOnDisk changes the open map's file as another program would.

@@ -1082,7 +1082,8 @@ func (a *app) chatBubble(c *ui.Context, i int) {
 			ui.Spacer(c)
 			ui.Column(c).Gap(6).Padding(8, 12).Radius(12).Background(t.Accent).MaxWidth(a.panelWidth * 0.8).Children(func() {
 				attachRow(c, m.files, m.names, nil)
-				ui.Text(c, m.text).FontSize(13).TextColor(t.AccentText).Wrap().Selectable()
+				ui.Text(c, m.text).FontSize(13).TextColor(t.AccentText).Wrap().Selectable().
+					SelectionColor(t.AccentText.Alpha(0.38)) // shows on the accent
 			})
 		})
 	case "error":
