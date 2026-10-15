@@ -282,33 +282,35 @@ func (a *app) taskCheck(c *ui.Context, n *model.Node, size float32) ui.Element {
 			}
 		})
 	}
-	col := statusColor(task.Status)
 	b.Draw(func(p *ui.Painter, r ui.Rect) {
-		rad := size * 0.26
-		w := max(size/9, 1.2)
-		box := roundedRect(r.X+w/2, r.Y+w/2, r.W-w, r.H-w, rad)
-		switch task.Status {
-		case model.StatusDone:
-			p.FillPath(box, col)
-			drawIcon(p, r, size*0.78, iconCheck, ui.Hex("#ffffff"))
-			return
-		case model.StatusDoing:
-			p.FillPath(box, t.Background)
-			half := roundedRect(r.X+w/2, r.Y+w/2, (r.W-w)/2, r.H-w, rad)
-			p.FillPath(half, col.Alpha(0.85))
-			p.StrokePath(box, w, col)
-		case model.StatusIdea:
-			p.FillPath(box, t.Background)
-			p.StrokePath(box, w, col.Alpha(0.55))
-		default:
-			p.FillPath(box, t.Background)
-			p.StrokePath(box, w, col)
-		}
-		if hover { // a hint of the check a click makes
-			drawIcon(p, r, size*0.78, iconCheck, col.Alpha(0.5))
+		// The status's progress marker, as the markers draw it.
+		p.Fill(r, t.Background, r.W/2)
+		drawMarker(p, r, statusMarker(task.Status))
+		if hover && task.Status != model.StatusDone { // a hint of the check a click makes
+			drawIcon(p, r, size*0.7, iconCheck, ui.Hex("#20B26B").Alpha(0.6))
 		}
 	})
 	return b
+}
+
+// statusMarker is the progress marker a status shows as: the empty circle
+// for an idea, the start's for one to do, a sixth for one under way, the
+// check for one done.
+func statusMarker(s model.Status) string {
+	switch s {
+	case model.StatusIdea:
+		return "task:idea"
+	case model.StatusDoing:
+		return "task:1"
+	case model.StatusDone:
+		return "task:6"
+	}
+	return "task:0"
+}
+
+// statusIcon shows a status as its marker.
+func statusIcon(c *ui.Context, s model.Status, size float32) ui.Element {
+	return ui.Box(c).Size(size, size).Shrink(0).Draw(func(p *ui.Painter, r ui.Rect) { drawMarker(p, r, statusMarker(s)) })
 }
 
 // roundedRect is the path of a rectangle with rounded corners.

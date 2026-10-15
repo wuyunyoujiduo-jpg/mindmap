@@ -217,7 +217,7 @@ func (a *app) timelineView(c *ui.Context) {
 								})
 							}
 							chip.Children(func() {
-								ui.Box(c).Size(8, 8).Radius(999).Background(statusColor(n.Task.Status))
+								statusIcon(c, n.Task.Status, 12)
 								ui.Text(c, n.Title).FontSize(12)
 							})
 						}

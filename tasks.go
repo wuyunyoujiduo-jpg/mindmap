@@ -116,8 +116,8 @@ func (a *app) boardColumns(c *ui.Context, tasks []model.TaskNode) {
 				}
 			}
 			column.Children(func() {
-				ui.Row(c).Padding(10, 12).Gap(8).Children(func() {
-					ui.Box(c).Size(8, 8).Radius(999).Background(statusColor(s))
+				ui.Row(c).Padding(10, 12).Gap(8).AlignItems(ui.Center).Children(func() {
+					statusIcon(c, s, 15)
 					ui.Text(c, s.Label()).Bold()
 					ui.Text(c, fmt.Sprint(len(col))).TextColor(t.TextMuted)
 				})
@@ -255,7 +255,7 @@ func (a *app) taskCard(c *ui.Context, tn model.TaskNode, showStatus bool) {
 	card.Children(func() {
 		ui.Row(c).Gap(6).AlignItems(ui.Start).Children(func() {
 			if showStatus {
-				ui.Box(c).Size(8, 8).Radius(999).Background(statusColor(task.Status)).Margin(6, 0, 0, 0)
+				statusIcon(c, task.Status, 13).Margin(3, 0, 0, 0)
 			}
 			title := ui.Text(c, n.Title).Grow(1).Wrap()
 			if task.Status == model.StatusDone {
