@@ -74,6 +74,7 @@ func Parse(b []byte) (*File, error) {
 				n.ID = NewID()
 			}
 			nodes[n.ID] = true
+			n.UpdateIdeaMarker() // the bulb an idea was marked with
 			return true
 		})
 	}

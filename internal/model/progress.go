@@ -5,8 +5,8 @@ import (
 	"time"
 )
 
-// A task's status marker, its progress (task:0, to start, to task:6, done)
-// or the idea's light bulb, and its status go together: the marker makes
+// A task's status marker, its progress (task:idea, an empty circle, an
+// idea; task:0 to start, to task:6, done), and its status go together: the marker makes
 // the node a task, of the status it shows, and a status given changes the
 // marker, where the node has one. A node has one status marker at most.
 const (
@@ -14,11 +14,27 @@ const (
 	progressStart = progressGroup + "0"
 	progressFirst = progressGroup + "1"
 	progressDone  = progressGroup + "6"
-	ideaMarker    = "symbol:idea"
+	ideaMarker    = progressGroup + "idea"
+	// oldIdea is the light bulb, which marked an idea before the empty
+	// circle did.
+	oldIdea = "symbol:idea"
 )
 
-func isStatusMarker(m string) bool {
-	return m == ideaMarker || strings.HasPrefix(m, progressGroup)
+func isStatusMarker(m string) bool { return strings.HasPrefix(m, progressGroup) }
+
+// UpdateIdeaMarker puts the empty circle in place of the light bulb on an
+// idea, as marked before: the bulb is a symbol again.
+func (n *Node) UpdateIdeaMarker() {
+	if n.Task == nil || n.Task.Status != StatusIdea || n.HasStatusMarker() {
+		return
+	}
+	for i, m := range n.Markers {
+		if m == oldIdea {
+			n.Markers = append(n.Markers[:i:i], n.Markers[i+1:]...)
+			n.putStatusMarkerNew(ideaMarker)
+			return
+		}
+	}
 }
 
 // statusMarker is the index in n.Markers of its status marker, or -1.
@@ -92,7 +108,7 @@ func (n *Node) SetStatus(s Status, now time.Time) {
 	case StatusDone:
 		n.putStatusMarker(i, progressDone)
 	case StatusDoing:
-		if !strings.HasPrefix(m, progressGroup) || m == progressStart || m == progressDone {
+		if m == ideaMarker || m == progressStart || m == progressDone {
 			n.putStatusMarker(i, progressFirst)
 		}
 	default:
@@ -100,33 +116,20 @@ func (n *Node) SetStatus(s Status, now time.Time) {
 	}
 }
 
-// putStatusMarker puts m in place of the status marker at i: in its place
-// for a marker of the same group, else where its group goes, the progress
-// after the colors and the priority, a symbol last (and in place of the
-// node's other symbol).
-func (n *Node) putStatusMarker(i int, m string) {
-	if n.Markers[i] == m {
-		return
-	}
-	if strings.HasPrefix(m, progressGroup) == strings.HasPrefix(n.Markers[i], progressGroup) {
-		n.Markers[i] = m
-		return
-	}
-	var out []string
-	placed := false
+// putStatusMarker puts m in place of the status marker at i.
+func (n *Node) putStatusMarker(i int, m string) { n.Markers[i] = m }
+
+// putStatusMarkerNew puts the status marker m where its group goes: after
+// the colors and the priority.
+func (n *Node) putStatusMarkerNew(m string) {
+	at := len(n.Markers)
 	for j, x := range n.Markers {
-		if j == i || m == ideaMarker && strings.HasPrefix(x, "symbol:") {
-			continue
+		if !strings.HasPrefix(x, "dot:") && !strings.HasPrefix(x, "priority:") {
+			at = j
+			break
 		}
-		if !placed && m != ideaMarker && !strings.HasPrefix(x, "dot:") && !strings.HasPrefix(x, "priority:") {
-			out, placed = append(out, m), true
-		}
-		out = append(out, x)
 	}
-	if !placed {
-		out = append(out, m)
-	}
-	n.Markers = out
+	n.Markers = append(n.Markers[:at:at], append([]string{m}, n.Markers[at:]...)...)
 }
 
 // DropTask makes n no longer a task, taking its status marker off too.

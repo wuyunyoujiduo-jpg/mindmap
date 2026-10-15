@@ -43,7 +43,7 @@ var markerGroups = func() []markerGroup {
 	return []markerGroup{
 		{"dot", "标签", colors},
 		{"priority", "优先级", []string{"1", "2", "3", "4", "5", "6", "7"}},
-		{"task", "任务进度", []string{"0", "1", "2", "3", "4", "5", "6"}},
+		{"task", "任务进度", []string{"idea", "0", "1", "2", "3", "4", "5", "6"}},
 		{"flag", "旗帜", colors},
 		{"star", "星星", colors},
 		{"person", "人像", colors},
@@ -128,6 +128,9 @@ func markerName(m string) string {
 	case "priority":
 		return "优先级 " + value
 	case "task":
+		if value == "idea" {
+			return "想法"
+		}
 		if value == "0" {
 			return "任务开始"
 		}
@@ -175,11 +178,13 @@ func drawMarker(p *ui.Painter, r ui.Rect, m string) {
 	case "task":
 		const green = "#20B26B"
 		i, _ := strconv.Atoi(value)
-		switch i {
-		case 0:
+		switch {
+		case value == "idea": // an empty circle: not started, not yet planned
+			p.Stroke(r, ui.Hex(green), r.W/2, max(r.W*0.09, 1))
+		case i == 0:
 			p.Stroke(r, ui.Hex(green), r.W/2, max(r.W*0.09, 1))
 			p.Icon(playSVG, glyph, ui.Hex(green))
-		case 6:
+		case i == 6:
 			disc(green)
 			p.Icon(checkSVG, glyph, white)
 		default:

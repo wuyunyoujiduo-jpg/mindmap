@@ -3247,8 +3247,8 @@ func TestIdeaMarker(t *testing.T) {
 	a, tt := newTestApp(t)
 	n := find(t, a, "后端")
 	a.toggleMarker(n, "task:3")
-	a.toggleMarker(n, "symbol:idea")
-	if n.Task == nil || n.Task.Status != model.StatusIdea || !slices.Equal(n.Markers, []string{"symbol:idea"}) {
+	a.toggleMarker(n, "task:idea")
+	if n.Task == nil || n.Task.Status != model.StatusIdea || !slices.Equal(n.Markers, []string{"task:idea"}) {
 		t.Fatalf("task %+v, markers %v", n.Task, n.Markers)
 	}
 	a.setStatus(n, model.StatusDoing)
