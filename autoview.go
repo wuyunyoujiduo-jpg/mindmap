@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -80,6 +81,12 @@ func (a *app) autoStatus(t *ui.Theme, x *automate.Automation) (string, ui.Color)
 		}
 	}
 	tr, _ := automate.ParseTrigger(x.Trigger)
+	if m != nil && m.Enabled && tr.Watch != "" {
+		if last != "" {
+			return last + " · 监视中", col
+		}
+		return "监视 " + tr.Watch, col
+	}
 	if m != nil && m.Enabled && !tr.Manual() {
 		next := tr.Next(m.From())
 		if !next.After(a.now()) {
@@ -295,15 +302,25 @@ func (a *app) autoDetail(c *ui.Context, x *automate.Automation) {
 				}
 				ui.Text(c, "模型："+model).FontSize(textSmall).TextColor(col).
 					Tooltip("程序自己的模型：automation.toml 的 model，或单文件开头的 # 模型:\n可以写 deepseek-chat、claude-…，或 cli:claude -p 这样的命令")
+				if x.Agent != "" || strings.Contains(strings.Join(mapValues(code), "\n"), "mymind.agent") {
+					agent, col := x.Agent, t.TextMuted
+					if agent == "" {
+						agent, col = "未配置", t.Danger
+					}
+					ui.Text(c, "编码工具："+agent).FontSize(textSmall).TextColor(col).
+						Tooltip("程序自己的编码工具：automation.toml 的 agent，如 claude -p、codex exec、aider --yes --message {prompt}")
+				}
 				if !tr.Manual() {
 					on := m.Enabled
 					ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-						if ui.Switch(c.Key("auto-on"), &on).Label("定时运行").Changed() {
+						if ui.Switch(c.Key("auto-on"), &on).Label("自动运行").Changed() {
 							id := x.ID
 							a.later(func() { a.autoSetEnabled(id, on) })
 						}
 						s := "定时运行"
-						if m.Enabled {
+						if tr.Watch != "" {
+							s = "文件变化时运行"
+						} else if m.Enabled {
 							next := tr.Next(m.From())
 							if next.Before(a.now()) {
 								next = a.now()
@@ -809,5 +826,72 @@ func (a *app) installView(c *ui.Context) {
 				}
 			})
 		})
+	})
+}
+
+// homeAutomations is 概览's card of the automations: those running, those
+// that want a look (failed, waiting for an approval), then those on a
+// schedule, each with a button to run it.
+func (a *app) homeAutomations(c *ui.Context) {
+	a.autoRefresh(false)
+	if len(a.auto.list) == 0 {
+		return
+	}
+	t := c.Theme()
+	rank := func(x *automate.Automation) int {
+		m := a.auto.metas[x.ID]
+		switch {
+		case a.auto.procs[x.ID] != nil:
+			return 0
+		case x.Err != "", m != nil && (m.Status == automate.Failed || m.Status == automate.TimeOut):
+			return 1
+		case m.NeedsApproval(x.Code()):
+			return 2
+		case m != nil && m.Enabled:
+			return 3
+		}
+		return 4
+	}
+	list := slices.Clone(a.auto.list)
+	slices.SortStableFunc(list, func(x, y *automate.Automation) int { return rank(x) - rank(y) })
+	pageCard(c).Key("home-auto").Children(func() {
+		if cardHead(c, iconBolt, tileTeal, "自动化", "全部") {
+			a.later(a.openAutomations)
+		}
+		for i, x := range list {
+			if i == 6 {
+				break
+			}
+			x := x
+			row := ui.Row(c.Key("home-auto:"+x.ID)).Gap(10).Padding(5, 6).Radius(8).AlignItems(ui.Center).Cursor(ui.CursorPointer).
+				Label("自动化 " + x.Name)
+			if row.Hovered() {
+				row.Background(t.Text.Alpha(0.05))
+			}
+			if row.Clicked() {
+				a.later(func() {
+					a.openAutomations()
+					a.autoSelect(x.ID)
+				})
+			}
+			status, col := a.autoStatus(t, x)
+			running := a.auto.procs[x.ID] != nil
+			row.Children(func() {
+				ui.Box(c).Size(8, 8).Radius(4).Shrink(0).Background(col)
+				ui.Text(c, x.Name).FontSize(13).Shrink(1).MinWidth(0).SingleLine()
+				ui.Text(c, status).FontSize(12).TextColor(t.TextMuted).Grow(1).Shrink(1).MinWidth(0).SingleLine()
+				if running {
+					ui.Spinner(c)
+				} else if iconButton(c.Key("home-run:"+x.ID), iconPlay, "运行 "+x.Name, "运行一次", 24, x.Err == "").Clicked() {
+					a.later(func() {
+						if a.auto.metas.Of(x.ID).NeedsApproval(x.Code()) {
+							a.openAutomations()
+							a.autoSelect(x.ID)
+						}
+						a.autoStart(x, "手动")
+					})
+				}
+			})
+		}
 	})
 }

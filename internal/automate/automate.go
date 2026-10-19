@@ -29,6 +29,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // Shared is the folder of modules shared by all the programs.
@@ -53,7 +54,13 @@ type Automation struct {
 	// model ("deepseek-chat", "claude-…") or a command ("cli:claude -p").
 	// There is no default: a program that asks a model says which.
 	Model string
-	Err   string // what is wrong with its settings
+	// Agent is the command of the coding tool mymind.agent runs, as
+	// "claude -p" or "codex exec": none by default either.
+	Agent string
+	// Settings are all its settings, its own keys included, which the
+	// program reads as mymind.settings.
+	Settings map[string]string
+	Err      string // what is wrong with its settings
 }
 
 // Dir is the folder the program runs in.
@@ -138,6 +145,7 @@ func readFolder(path string) *Automation {
 }
 
 func (a *Automation) apply(kv map[string]string) {
+	a.Settings = kv
 	for k, v := range kv {
 		switch k {
 		case "name", "名称":
@@ -152,6 +160,8 @@ func (a *Automation) apply(kv map[string]string) {
 			}
 		case "model", "模型":
 			a.Model = v
+		case "agent", "编码工具":
+			a.Agent = v
 		case "timeout", "超时":
 			if d, err := ParseDuration(v); err == nil {
 				a.Timeout = d
@@ -195,10 +205,13 @@ func cutKey(line string) (string, string, bool) {
 	k := strings.ToLower(strings.TrimSpace(line[:i]))
 	v := strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(line[i:], ":"), "："))
 	switch k {
-	case "name", "名称", "trigger", "触发", "entry", "入口", "model", "模型", "timeout", "超时":
-		return k, v, true
+	case "", "http", "https":
+		return "", "", false
 	}
-	return "", "", false
+	if strings.ContainsAny(k, " \t") || utf8.RuneCountInString(k) > 16 {
+		return "", "", false
+	}
+	return k, v, true
 }
 
 // ParseSettings reads automation.toml, the few keys of it there are:

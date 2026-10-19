@@ -100,8 +100,9 @@ func saveRun(root string, r Run) error {
 }
 
 // Handler answers what a program asks of the app through mymind: the
-// method's name and its parameters, as JSON.
-type Handler func(ctx context.Context, a *Automation, method string, params json.RawMessage) (any, error)
+// method's name and its parameters, as JSON. What it writes to out goes
+// into the run's log, as the program's printing does.
+type Handler func(ctx context.Context, a *Automation, out io.Writer, method string, params json.RawMessage) (any, error)
 
 // Env is what runs need.
 type Env struct {
@@ -183,12 +184,12 @@ func Start(env Env, a *Automation, by string, now time.Time) (*Process, error) {
 			env.Changed()
 		}
 	}
-	go p.serve(ctx, ln, env, a, changed)
+	w := &notifying{p: p, changed: changed}
+	go p.serve(ctx, ln, env, a, w, changed)
 
 	cmd := exec.CommandContext(ctx, python, "-u", a.EntryPath())
 	cmd.Dir = a.Dir()
 	cmd.Env = runEnv(env.Root, a, sock)
-	w := &notifying{p: p, changed: changed}
 	cmd.Stdout, cmd.Stderr = w, w
 	setGroup(cmd)
 	if err := cmd.Start(); err != nil {
@@ -243,7 +244,7 @@ func (w *notifying) Write(b []byte) (int, error) {
 }
 
 // serve answers the program's calls: a line of JSON each, answered by one.
-func (p *Process) serve(ctx context.Context, ln net.Listener, env Env, a *Automation, changed func()) {
+func (p *Process) serve(ctx context.Context, ln net.Listener, env Env, a *Automation, out io.Writer, changed func()) {
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
@@ -277,7 +278,7 @@ func (p *Process) serve(ctx context.Context, ln net.Listener, env Env, a *Automa
 						res, e = p.output(req.Params)
 						changed()
 					} else if env.Handler != nil {
-						res, e = env.Handler(ctx, a, req.Method, req.Params)
+						res, e = env.Handler(ctx, a, out, req.Method, req.Params)
 					} else {
 						e = fmt.Errorf("不支持 %s", req.Method)
 					}
@@ -350,6 +351,9 @@ func runEnv(root string, a *Automation, sock string) []string {
 	set("MYMIND_NAME", a.Name)
 	set("MYMIND_STATE", StatePath(root, a.ID))
 	set("MYMIND_MODEL", a.Model)
+	set("MYMIND_AGENT", a.Agent)
+	settings, _ := json.Marshal(a.Settings)
+	set("MYMIND_SETTINGS", string(settings))
 	return env
 }
 
@@ -454,6 +458,19 @@ func Install(ctx context.Context, root string, log io.Writer) error {
 	cmd.Env = append(os.Environ(), "PATH="+SearchPath())
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("安装失败：%w", err)
+	}
+	// Playwright drives browsers of its own, which it downloads.
+	for _, r := range reqs {
+		if data, _ := os.ReadFile(r); strings.Contains(strings.ToLower(string(data)), "playwright") {
+			fmt.Fprintln(log, "$ python -m playwright install chromium")
+			cmd := exec.CommandContext(ctx, VenvPython(root), "-m", "playwright", "install", "chromium")
+			cmd.Stdout, cmd.Stderr = log, log
+			cmd.Env = append(os.Environ(), "PATH="+SearchPath())
+			if err := cmd.Run(); err != nil {
+				return fmt.Errorf("安装浏览器失败：%w", err)
+			}
+			break
+		}
 	}
 	fmt.Fprintln(log, "安装完成。")
 	return nil

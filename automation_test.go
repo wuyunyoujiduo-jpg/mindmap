@@ -3,15 +3,18 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/automate"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
 
 // postQueue keeps what goroutines post for the main thread, which the
@@ -179,7 +182,7 @@ func TestAutomations(t *testing.T) {
 	// mymind.confirm asks in the app.
 	answer := make(chan bool)
 	go func() {
-		v, _ := a.autoHandle(context.Background(), x, "confirm", json.RawMessage(`{"message":"要提交吗？"}`))
+		v, _ := a.autoHandle(context.Background(), x, io.Discard, "confirm", json.RawMessage(`{"message":"要提交吗？"}`))
 		answer <- v.(bool)
 	}()
 	for len(a.auto.confirms) == 0 {
@@ -304,4 +307,146 @@ func TestAutoGenerate(t *testing.T) {
 		t.Fatalf("approval %q %+v", a.auto.approve, a.auto.diffs)
 	}
 	snapshot(t, tt, "auto-diff")
+}
+
+func TestAutoMapsAndAgent(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("no python3")
+	}
+	a, tt := newTestApp(t)
+	q := &postQueue{}
+	a.post = q.post
+	root := a.autoRoot()
+	os.MkdirAll(filepath.Join(root, "整理"), 0o755)
+	repo := t.TempDir()
+	os.WriteFile(filepath.Join(root, "整理", automate.Settings), []byte("agent = \"cat > 需求.txt; echo 已实现\"\nrepo = \""+repo+"\"\n"), 0o644)
+	os.WriteFile(filepath.Join(root, "整理", "main.py"), []byte(`import mymind
+maps = mymind.maps.list()
+name = maps[0]["name"]
+m = mymind.maps.read(name)
+root = m["sheets"][0]["root"]
+print("导图", name, root["title"])
+mymind.maps.add(name, root["id"], "- 自动加的任务")
+m = mymind.maps.read(name)
+node = [c for c in m["sheets"][0]["root"]["children"] if c["title"] == "自动加的任务"][0]
+mymind.maps.update(name, node["id"], status="done", add_tags=["编码"])
+done = mymind.maps.tasks(status="done", done_since="2000-01-01")
+print("完成", [t["title"] for t in done])
+print("设置", mymind.settings["repo"] == mymind.settings.get("repo"))
+print("回答", mymind.agent("做个登录页", repo=mymind.settings["repo"]))
+`), 0o644)
+	a.openAutomations()
+	tt.Frame()
+	x := a.autoByID("整理")
+	if x == nil || x.Agent == "" {
+		t.Fatalf("automation %+v", x)
+	}
+	a.auto.metas.Of(x.ID).Approve(x.Code())
+	a.autoStart(x, "手动")
+	waitRuns(t, a, q)
+	r := automate.Runs(root, "整理")[0]
+	if r.Status != automate.OK || !strings.Contains(r.Log, "完成 ['自动加的任务']") || !strings.Contains(r.Log, "设置 True") ||
+		!strings.Contains(r.Log, "回答 已实现") {
+		t.Fatalf("run %s: %s %s", r.Status, r.Log, r.Error)
+	}
+	if data, _ := os.ReadFile(filepath.Join(repo, "需求.txt")); string(data) != "做个登录页" {
+		t.Fatalf("agent got %q", data)
+	}
+	// The map open shows the node added, once read again.
+	tt.Frame()
+	a.reloadFromDisk(nil)
+	found := false
+	a.doc.Walk(func(n, _ *model.Node, _ int) bool {
+		found = found || n.Title == "自动加的任务" && n.Task != nil && n.Task.Status == model.StatusDone
+		return true
+	})
+	if !found {
+		t.Fatal("the node added is not in the map")
+	}
+
+	// No coding tool named: told so.
+	if _, err := runAgent(context.Background(), "", repo, "x", io.Discard); err == nil || err.Error() != autoNoAgent {
+		t.Fatalf("no agent: %v", err)
+	}
+	got, err := runAgent(context.Background(), "printf %s {prompt}", repo, "它's 好", io.Discard)
+	if err != nil || got != "它's 好" {
+		t.Fatalf("{prompt}: %q %v", got, err)
+	}
+
+	// The home page lists the automations.
+	a.later(func() { a.showLibrary(); a.libHome = true })
+	tt.Frame()
+	tt.Frame()
+	if !tt.HasText("整理") || !tt.HasText("全部 ›") {
+		t.Fatalf("home: %q", tt.Texts())
+	}
+	snapshot(t, tt, "auto-home")
+}
+
+func TestAutoWatch(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("no python3")
+	}
+	a, _ := newTestApp(t)
+	q := &postQueue{}
+	a.post = q.post
+	inbox := t.TempDir()
+	path := filepath.Join(a.autoRoot(), "收件.py")
+	os.MkdirAll(a.autoRoot(), 0o755)
+	os.WriteFile(path, []byte("# 触发: 监视 "+inbox+"\nimport os\nprint(sorted(os.listdir('"+inbox+"')))\n"), 0o644)
+	a.autoRefresh(true)
+	x := a.autoByID("收件.py")
+	a.auto.metas.Of(x.ID).Approve(x.Code())
+	a.autoSetEnabled(x.ID, true)
+	tick := func() { a.auto.listed = time.Time{}; a.autoTick() }
+	tick()
+	tick()
+	if a.auto.procs[x.ID] != nil {
+		t.Fatal("ran with nothing new")
+	}
+	os.WriteFile(filepath.Join(inbox, "a.txt"), []byte("1"), 0o644)
+	tick()
+	if a.auto.procs[x.ID] == nil {
+		t.Fatal("did not run on a new file")
+	}
+	waitRuns(t, a, q)
+	if r := automate.Runs(a.autoRoot(), x.ID)[0]; r.By != "文件变化" || !strings.Contains(r.Log, "a.txt") {
+		t.Fatalf("run %+v", r)
+	}
+	tick()
+	if a.auto.procs[x.ID] != nil {
+		t.Fatal("ran again with nothing new")
+	}
+}
+
+// The templates' Python compiles, and their settings read.
+func TestAutoTemplates(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("no python3")
+	}
+	a, _ := newTestApp(t)
+	for _, tpl := range append(slices.Clone(autoTemplates), autoBlankFile, autoBlankFolder) {
+		a.autoFromTemplate(tpl)
+	}
+	if len(a.auto.list) != len(autoTemplates)+2 {
+		t.Fatalf("%d automations", len(a.auto.list))
+	}
+	for _, x := range a.auto.list {
+		if x.Err != "" {
+			t.Errorf("%s: %s", x.ID, x.Err)
+		}
+		for f, src := range x.Code() {
+			if !strings.HasSuffix(f, ".py") {
+				continue
+			}
+			cmd := exec.Command("python3", "-c", "import ast,sys; ast.parse(sys.stdin.read())")
+			cmd.Stdin = strings.NewReader(src)
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Errorf("%s/%s: %s", x.ID, f, out)
+			}
+		}
+	}
+	if x := a.autoByID("需求编码"); x.Agent != "" || x.Settings["repo"] != "~/code/项目" {
+		t.Fatalf("coding settings %+v", x.Settings)
+	}
 }

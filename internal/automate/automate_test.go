@@ -3,6 +3,7 @@ package automate
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -189,7 +190,7 @@ except mymind.MyMindError as e:
 		t.Fatal(err, a.Err)
 	}
 	var asked []string
-	env := Env{Root: root, Python: "python3", Handler: func(ctx context.Context, a *Automation, method string, params json.RawMessage) (any, error) {
+	env := Env{Root: root, Python: "python3", Handler: func(ctx context.Context, a *Automation, out io.Writer, method string, params json.RawMessage) (any, error) {
 		var p struct{ Prompt, Input, Model string }
 		json.Unmarshal(params, &p)
 		if p.Prompt == "坏的" {

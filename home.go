@@ -152,6 +152,7 @@ func (a *app) homeView(c *ui.Context) {
 		})
 		ui.Scroll(c.Key("home-scroll")).Grow(1).Padding(8, 24, 28).Gap(16).Children(func() {
 			a.homeStats(c, now, maps, clips)
+			a.homeAutomations(c)
 			a.homeActivity(c, now, maps, clips)
 			ui.Row(c).Gap(16).AlignItems(ui.Start).Children(func() {
 				ui.Column(c).Grow(1).Basis(0).MinWidth(0).Children(func() { a.homeCategories(c, maps, clips) })

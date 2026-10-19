@@ -12,12 +12,22 @@
         print(hit["title"])
     seen = mymind.state.get("seen", [])           # kept between runs
     mymind.state["seen"] = seen
+    for t in mymind.maps.tasks(status="open"):    # the maps' tasks
+        print(t["map"], t["title"])
+    mymind.agent("实现登录页", repo="~/code/app")  # the coding tool this automation names
 
 The model is the automation's own: `model` in automation.toml, `# 模型:` in
 a file's header, or llm(..., model=...). It may be an API model such as
 "deepseek-chat" or "claude-sonnet-4-5" (the keys are MyMind's settings),
 or a command: "cli:claude -p" gets the prompt on its input and answers on
 its output.
+
+The coding tool of mymind.agent is the automation's own too: `agent` in
+automation.toml (`# 编码工具:` in a header), or agent(..., agent=...): a
+command such as "claude -p", "codex exec" or "aider --yes --message {prompt}",
+run in the repository, given the task in place of {prompt} or on its input.
+
+mymind.settings are the automation's settings, its own keys included.
 """
 
 import json as _json
@@ -25,13 +35,16 @@ import os as _os
 import socket as _socket
 import sys as _sys
 
-__all__ = ["llm", "notify", "confirm", "output", "clip", "search", "state", "log", "name", "here"]
+__all__ = ["llm", "agent", "notify", "confirm", "output", "clip", "search", "maps", "state", "settings", "log", "name", "here"]
 
 name = _os.environ.get("MYMIND_NAME", "")
 """The automation's name."""
 
 here = _os.getcwd()
 """The automation's folder, where it runs."""
+
+settings = _json.loads(_os.environ.get("MYMIND_SETTINGS") or "{}") or {}
+"""The automation's settings: automation.toml's keys, or its header's."""
 
 _next_id = 0
 
@@ -76,6 +89,13 @@ def llm(prompt, input=None, model=None, system=None, json=False, max_tokens=8000
     return answer
 
 
+def agent(task, repo=None, agent=None):
+    """Has the coding tool this automation names do a task in a repository
+    (the automation's folder when none), and returns what it answered.
+    What it prints shows in the run's log as it goes."""
+    return _call("agent", task=str(task), repo=_os.path.expanduser(str(repo or "")), agent=agent or "")
+
+
 def notify(title, body=""):
     """Shows a notification."""
     _call("notify", title=str(title), body=str(body))
@@ -99,6 +119,56 @@ def clip(text, title="", url="", tags=None, note=""):
 def search(query, limit=5):
     """Searches the library: a list of {"id", "title", "text", "url"}."""
     return _call("search", query=str(query), limit=int(limit))
+
+
+class _Maps:
+    """The mind maps of MyMind. A map is named by its name or path in the
+    folder of maps ("项目/官网"); nodes by their IDs."""
+
+    def list(self):
+        """The maps: [{"name", "path", "tasks", "open"}]."""
+        return _call("maps.list")
+
+    def read(self, map):
+        """A map, whole: {"name", "path", "project", "sheets": [{"title",
+        "root": node, "floating": [node]}]}; a node is {"id", "title",
+        "note", "tags", "links", "status", "priority", "start", "due",
+        "done_at", "children"}."""
+        return _call("maps.read", map=str(map))
+
+    def tasks(self, map=None, status=None, done_since=None):
+        """Tasks of a map, or of all: status "idea", "todo", "doing", "done"
+        or "open" (not done); done_since a date or datetime. Each is a node
+        with "map", "sheet" and "where" (the titles above it)."""
+        if done_since is not None and not isinstance(done_since, str):
+            done_since = done_since.isoformat()
+        return _call("maps.tasks", map=str(map or ""), status=str(status or ""), done_since=done_since or "")
+
+    def add(self, map, parent_id, outline):
+        """Adds nodes under a node: outline is Markdown's list ("- 标题",
+        indented below)."""
+        return _call("maps.edit", tool="add_nodes", args={"map": map, "parent_id": parent_id, "outline": outline})
+
+    def update(self, map, id, **fields):
+        """Changes a node: title, note, append_note, status (idea, todo,
+        doing, done, none), priority (none, low, medium, high), start, due
+        (YYYY-MM-DD), estimate, add_tags, remove_tags, add_links,
+        remove_links."""
+        return _call("maps.edit", tool="update_node", args=dict(fields, map=map, id=id))
+
+    def move(self, map, id, parent_id, index=-1):
+        return _call("maps.edit", tool="move_node", args={"map": map, "id": id, "parent_id": parent_id, "index": index})
+
+    def delete(self, map, id):
+        return _call("maps.edit", tool="delete_node", args={"map": map, "id": id})
+
+    def create(self, name, root_title="", outline="", folder=""):
+        """Makes a map, its center topic and the nodes of an outline."""
+        return _call("maps.edit", tool="create_map", args={"name": name, "root_title": root_title or name,
+                                                          "outline": outline, "folder": folder})
+
+
+maps = _Maps()
 
 
 def log(*args):
