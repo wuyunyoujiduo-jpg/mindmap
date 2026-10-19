@@ -3726,3 +3726,41 @@ func TestAIReplyCutShortGoesOn(t *testing.T) {
 		t.Fatalf("max tokens %d", fake.requests[0].MaxTokens)
 	}
 }
+
+func TestSummaryLabel(t *testing.T) {
+	a, tt := newTestApp(t)
+	arch := find(t, a, "架构")
+	a.mutate("", func() { arch.Summary = &model.Mark{Label: "概要"} })
+	a.cam().X -= 250 // the summary in view
+	tt.Frame()
+	floats := len(a.doc.Floating)
+	// A click selects it; a double click edits its text, and makes no
+	// floating topic.
+	if err := tt.Click("概要 概要"); err != nil {
+		t.Fatal(err)
+	}
+	if a.selSummary != arch.ID {
+		t.Fatal("not selected")
+	}
+	tt.Click("概要 概要")
+	tt.Frame()
+	if a.summaryEditing != arch.ID || len(a.doc.Floating) != floats {
+		t.Fatalf("editing %q, floating %d", a.summaryEditing, len(a.doc.Floating))
+	}
+	tt.Key(ui.Cmd, ui.KeyA)
+	tt.Type("两端")
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if arch.Summary == nil || arch.Summary.Label != "两端" || a.summaryEditing != "" {
+		t.Fatalf("summary %+v, editing %q, text %q", arch.Summary, a.summaryEditing, a.summaryText)
+	}
+	snapshot(t, tt, "summary-edited")
+	// Selected, Delete takes it off, the node staying.
+	if err := tt.Click("概要 两端"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Key(0, ui.KeyDelete)
+	if arch.Summary != nil || find(t, a, "架构") == nil {
+		t.Fatalf("summary %+v", arch.Summary)
+	}
+}

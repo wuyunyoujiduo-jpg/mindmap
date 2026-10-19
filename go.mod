@@ -7,7 +7,7 @@ tool github.com/egoist/mygo/cmd/mygo
 require (
 	github.com/anthropics/anthropic-sdk-go v1.80.0
 	github.com/ebitengine/purego v0.11.1
-	github.com/egoist/mygo v0.5.1
+	github.com/egoist/mygo v0.5.5
 	github.com/ledongthuc/pdf v0.0.0-20260907135840-6c8c28e0e8a0
 	golang.org/x/image v0.46.0
 	golang.org/x/text v0.43.0

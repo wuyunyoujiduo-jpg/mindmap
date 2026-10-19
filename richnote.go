@@ -80,7 +80,8 @@ func (a *app) noteEditor(c *ui.Context, place string, n *model.Node, size float3
 		if pressed {
 			_, caret := d.doc.Selection()
 			now := a.now()
-			if now.Sub(d.lastPress) < 400*time.Millisecond && caret == d.lastCaret {
+			// Near the first: a double click selects a word, the caret moving.
+			if now.Sub(d.lastPress) < 400*time.Millisecond && max(caret-d.lastCaret, d.lastCaret-caret) <= 2 {
 				if img := pictureAtCaret(d.doc); img != nil {
 					a.notePic, a.lightbox = img, "note:"+n.ID
 				}

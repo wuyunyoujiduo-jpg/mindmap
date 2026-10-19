@@ -470,7 +470,7 @@ func (a *app) canvasArea(c *ui.Context) {
 		a.canvas.Focus()
 	}
 	if cv.Pressed() {
-		a.selImage = "" // the picture's click, inside, selects it again
+		a.selImage, a.selSummary = "", "" // their clicks, inside, select them again
 	}
 	if cv.Pressed() && !exporting && a.relFrom == "" { // a relation line near the pointer is selected
 		if x, y, over := cv.PointerPosition(); over {
@@ -553,6 +553,7 @@ func (a *app) canvasArea(c *ui.Context) {
 		if a.selRel != "" && shown == a.doc {
 			a.relationHandle(c)
 		}
+		a.summaryLabels(c, shown)
 		a.focusBar(c)
 		a.structurePicker(c)
 		// Zoom and recenter, over the canvas's corner.
@@ -1344,6 +1345,10 @@ func (a *app) canvasKey(ev ui.InputEvent) bool {
 	case ev.Mods == 0 && ev.Key == ui.KeyTab:
 		a.addChild()
 	case ev.Mods == 0 && ev.Key == ui.KeyEnter:
+		if n, _ := a.doc.Find(a.selSummary); n != nil && n.Summary != nil { // edits the summary selected
+			a.editSummary(n)
+			break
+		}
 		a.addSibling()
 	case ev.Mods == ui.Shift && ev.Key == ui.KeyEnter:
 		a.addSiblingAt(false)
@@ -1352,6 +1357,10 @@ func (a *app) canvasKey(ev ui.InputEvent) bool {
 			id := a.selRel
 			a.selRel = ""
 			a.removeRelation(id)
+			break
+		}
+		if n, _ := a.doc.Find(a.selSummary); n != nil && n.Summary != nil { // a summary
+			a.removeSummary(n)
 			break
 		}
 		if n, _ := a.selectedNode(); n != nil && a.selImage == n.ID && n.Image != nil { // its picture
@@ -1370,6 +1379,8 @@ func (a *app) canvasKey(ev ui.InputEvent) bool {
 			a.lightbox = ""
 		case a.selImage != "":
 			a.selImage = ""
+		case a.selSummary != "":
+			a.selSummary = ""
 		case len(a.multi) > 0:
 			a.multi = nil
 		case a.focusNode() != nil:
