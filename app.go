@@ -352,6 +352,8 @@ type app struct {
 	async        asyncRunner
 	post         func(fn func()) // runs fn on the main thread, from any
 
+	auto autoState // the automations (automation.go)
+
 	// Chrome.
 	mode          int
 	search        string
@@ -459,6 +461,8 @@ func (a *app) refreshFiles() {
 		a.tree, a.files = model.Folder{Path: a.dir, Name: filepath.Base(a.dir)}, nil
 		return
 	}
+	// The automations' folder is theirs, not one of maps.
+	tree.Folders = slices.DeleteFunc(tree.Folders, func(f model.Folder) bool { return f.Path == a.autoRoot() })
 	a.tree, a.files = tree, tree.AllFiles()
 }
 
@@ -630,6 +634,7 @@ func (a *app) tick(c *ui.Context) {
 		a.syncDue()
 		a.autoAnalyzeMaps()
 		a.keysBack()
+		a.autoTick()
 	}
 	if a.path != "" && a.checked == now {
 		if mt := modTime(a.path); !mt.IsZero() && !mt.Equal(a.modTime) {

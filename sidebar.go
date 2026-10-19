@@ -82,6 +82,7 @@ func (a *app) sidebar(c *ui.Context) {
 			a.sideKeys(list)
 			list.Children(func() {
 				a.libraryRow(c) // all the material: maps and documents
+				a.autoRow(c)
 				a.inboxRow(c)
 				a.favorites(c)
 				a.section(c, "文件夹", &a.filesOpen, a.dir, func() {

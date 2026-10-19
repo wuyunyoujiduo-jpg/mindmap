@@ -707,7 +707,7 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 
 // libraryRow is the library's entry in the sidebar.
 func (a *app) libraryRow(c *ui.Context) {
-	home := navRow(c.Key("home-row"), iconCategory, tilePurple, "概览", "", a.libOpen && a.libHome)
+	home := navRow(c.Key("home-row"), iconCategory, tilePurple, "概览", "", a.libOpen && a.libHome && !a.auto.open)
 	if home.Clicked() {
 		a.later(func() {
 			a.showLibrary()
@@ -715,7 +715,7 @@ func (a *app) libraryRow(c *ui.Context) {
 		})
 	}
 	all := navRow(c.Key("library-row"), iconLibrary, tileBlue, "全部资料", fmt.Sprint(len(a.lib.Clips)+len(a.files)),
-		a.libOpen && !a.libHome && a.libCat == "")
+		a.libOpen && !a.libHome && a.libCat == "" && !a.auto.open)
 	if all.Clicked() {
 		a.later(func() { a.openList(kindAll, "") })
 	}
@@ -731,7 +731,7 @@ func (a *app) categoryList(c *ui.Context) {
 	a.section(c, "分类", &a.catsOpen, "", func() {
 		for _, k := range cats {
 			name := k.Name
-			r := dotRow(c.Key("cat-row:"+name), catColor(name), name, fmt.Sprint(k.N), a.libOpen && !a.libHome && a.libCat == name)
+			r := dotRow(c.Key("cat-row:"+name), catColor(name), name, fmt.Sprint(k.N), a.libOpen && !a.libHome && a.libCat == name && !a.auto.open)
 			r.Label("分类 " + name)
 			if r.Clicked() {
 				a.later(func() { a.openList(kindAll, name) })
@@ -749,5 +749,5 @@ func (a *app) allCategories() []library.Count {
 func (a *app) showLibrary() {
 	a.commitEditIfAny()
 	a.lightbox, a.presenting = "", false
-	a.libOpen, a.libHome = true, false
+	a.libOpen, a.libHome, a.auto.open = true, false, false
 }

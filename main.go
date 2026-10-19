@@ -620,7 +620,7 @@ func main() {
 			}},
 		}))
 	})
-	mygo.App.OnWillQuit(func(*mygo.QuitEvent) { a.flush() })
+	mygo.App.OnWillQuit(func(*mygo.QuitEvent) { a.flush(); a.autoStopAll() })
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)
 	}

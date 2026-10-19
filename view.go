@@ -28,6 +28,10 @@ func (a *app) view(c *ui.Context) {
 		ui.Split(c, &a.sidebarWidth, func() { a.sidebar(c) }, func() {
 			ui.Row(c).Fill().AlignItems(ui.Stretch).Background(t.Background).Children(func() {
 				if a.libOpen {
+					if a.auto.open {
+						a.autoView(c)
+						return
+					}
 					if a.libHome {
 						a.homeView(c)
 					} else {
@@ -86,6 +90,11 @@ func (a *app) view(c *ui.Context) {
 		a.tourView(c)
 		a.shotAlertView(c)
 		a.cardWindow(c)
+		a.autoNewView(c)
+		a.autoFixView(c)
+		a.approvalView(c)
+		a.installView(c)
+		a.confirmView(c)
 	})
 	if len(a.pending) > 0 {
 		a.runPending()
