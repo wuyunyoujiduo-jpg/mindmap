@@ -23,4 +23,3 @@ func captureDisplay(mygo.Display) (image.Image, error) {
 }
 
 func raiseOverlay(*mygo.Window) {}
-func ReturnFocus()              {}

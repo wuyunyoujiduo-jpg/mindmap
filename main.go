@@ -9,7 +9,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -27,13 +26,10 @@ type desktop struct {
 	win     *mygo.Window
 	app     *app
 	capture *mygo.Window // the capture window, made the first time
-	// mainHidden is that the main window is hidden for a screenshot taken
-	// from another app, to show again when the app is next active.
-	mainHidden bool
-	tray       *mygo.Tray
-	key        string // the capture shortcut registered
-	clipKey    string // the shortcut registered to keep the clipboard
-	shotKey    string // the shortcut registered to take a screenshot
+	tray    *mygo.Tray
+	key     string // the capture shortcut registered
+	clipKey string // the shortcut registered to keep the clipboard
+	shotKey string // the shortcut registered to take a screenshot
 }
 
 func (d *desktop) ShowCapture() {
@@ -62,21 +58,7 @@ func (d *desktop) HideCapture() {
 	d.UpdateTray()
 }
 
-// showMainOnReturn shows the main window, hidden for a screenshot taken
-// from another app, when the app is next active.
-func (d *desktop) showMainOnReturn() {
-	var off func()
-	off = mygo.App.OnDidBecomeActive(func() {
-		off()
-		if d.mainHidden {
-			d.mainHidden = false
-			d.win.Show()
-		}
-	})
-}
-
 func (d *desktop) ShowMain() {
-	d.mainHidden = false
 	d.win.Show()
 	d.win.Focus()
 }
@@ -139,12 +121,12 @@ func (d *desktop) SetShotKey(key string) error {
 func (d *desktop) Screenshot(fromApp bool) {
 	inApp := fromApp || d.win.IsFocused()
 	logShot("截图开始：从应用内 %v，应用在前台 %v", fromApp, inApp)
-	go d.overlayShot(fromApp, inApp)
+	go d.overlayShot(fromApp)
 }
 
 // overlayShot takes a screenshot: every display frozen under a window of
 // its own, in which a region is framed and marked up. Off the main thread.
-func (d *desktop) overlayShot(fromApp, inApp bool) {
+func (d *desktop) overlayShot(fromApp bool) {
 	if !screenshot.HasPermission() {
 		logShot("没有屏幕录制权限")
 		screenshot.RequestPermission()
@@ -160,20 +142,10 @@ func (d *desktop) overlayShot(fromApp, inApp bool) {
 		d.win.Hide()
 		time.Sleep(250 * time.Millisecond) // till it is off the screen
 	}
-	// Taken from another app: the windows of the screenshot activate the
-	// app, which on macOS brings its main window forward too, a flash of
-	// it over the other app. It is hidden once the screens are captured,
-	// and shown again when the user comes back to the app.
-	hideMain := !inApp && runtime.GOOS == "darwin"
+	// The windows of the screenshot are panels: they show over the app the
+	// shortcut was pressed in, full-screen ones too, without activating
+	// this app, so the other keeps the keyboard when they close.
 	screenshot.Captured = nil
-	if hideMain {
-		screenshot.Captured = func() {
-			if d.win.IsVisible() {
-				d.win.Hide()
-				d.mainHidden = true
-			}
-		}
-	}
 	ok, err := screenshot.Start(func(png []byte, act screenshot.Action) {
 		logShot("截图完成：%d 字节，操作 %d", len(png), act)
 		if act == screenshot.Save {
@@ -182,14 +154,8 @@ func (d *desktop) overlayShot(fromApp, inApp bool) {
 		}
 		d.win.Update(func() { d.app.keepShot(png, act, fromApp) })
 	}, func() {
-		switch {
-		case fromApp:
+		if fromApp {
 			d.win.Update(d.ShowMain)
-		case !inApp:
-			screenshot.ReturnFocus()
-			if d.mainHidden {
-				d.win.Update(d.showMainOnReturn)
-			}
 		}
 	})
 	if err != nil {

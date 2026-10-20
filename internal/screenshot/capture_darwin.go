@@ -68,6 +68,7 @@ const (
 	nsScreenSaverWindowLevel = 1000
 	canJoinAllSpaces         = 1 << 0
 	fullScreenAuxiliary      = 1 << 8
+	fullScreenNone           = 1 << 9
 )
 
 // raiseOverlay 把选区窗口提到菜单栏之上。MyGo 的 AlwaysOnTop 只到浮动层，低于菜单栏。主线程调用。
@@ -77,8 +78,6 @@ func raiseOverlay(w *mygo.Window) {
 		return
 	}
 	win.Send(objc.RegisterName("setLevel:"), nsScreenSaverWindowLevel)
-	win.Send(objc.RegisterName("setCollectionBehavior:"), canJoinAllSpaces|fullScreenAuxiliary)
+	behavior := objc.Send[uint](win, objc.RegisterName("collectionBehavior"))
+	win.Send(objc.RegisterName("setCollectionBehavior:"), behavior&^fullScreenNone|canJoinAllSpaces|fullScreenAuxiliary)
 }
-
-// ReturnFocus 把焦点还给之前的应用。
-func ReturnFocus() { mygo.App.Hide() }

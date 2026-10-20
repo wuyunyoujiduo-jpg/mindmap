@@ -90,8 +90,12 @@ func openSession(shots []*screenShot, deliver func([]byte, Action), onEnd func()
 			DisableShadow:     true,
 			AlwaysOnTop:       true,
 			SkipTaskbar:       true,
-			BackgroundColor:   "#000",
-			Content:           ui.View(s.view(sh)),
+			// A panel shows over full-screen apps, on any display's Space,
+			// and takes the keyboard without activating the app: a regular
+			// window activating it switched away from a full-screen app.
+			Panel:           true,
+			BackgroundColor: "#000",
+			Content:         ui.View(s.view(sh)),
 		})
 		if cursor.X >= b.X && cursor.X < b.X+b.Width && cursor.Y >= b.Y && cursor.Y < b.Y+b.Height {
 			focus = sh

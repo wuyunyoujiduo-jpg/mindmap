@@ -40,7 +40,8 @@ by AI, and an AI assistant.
 - Sync with GitHub: `internal/ghsync` (a three-way merge over the REST API,
   state in `<maps folder>/.sync/`), wired in `sync.go`.
 - Screenshots are the app's own (`internal/screenshot`), on OneShot's way:
-  every display frozen under a window of its own (`session.go`), a region
+  every display frozen under a window of its own (`session.go`), a panel
+  so that it shows over full-screen apps without activating the app, a region
   framed there with handles and marked up in colors, the toolbar by it.
   macOS may keep those windows below the menu bar: the shot is drawn offset
   by where the window really is (`screenShot.off`). No system tool is used.
