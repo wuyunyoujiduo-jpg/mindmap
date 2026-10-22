@@ -258,6 +258,13 @@ type app struct {
 	mapClipsList   []*library.Clip
 	mapIndex       *library.Index
 	outlineFocus   string // the node whose line the outline focuses
+	// The outline's lines selected whole, to copy, cut or delete: from
+	// outlineAnchor to outlineEnd, by dragging across lines or Shift+arrows.
+	outlineBlock              bool
+	outlineAnchor, outlineEnd string
+	outlineRowAt              map[string]ui.Rect // where each line was drawn
+	outlineDragFrom           string             // the line pressed, dragged from
+	outlineDragY              float32            // where the pointer is, dragging
 
 	// The library of clips.
 	lib           *library.Library
