@@ -23,7 +23,9 @@ func TestOutlineBlock(t *testing.T) {
 		t.Fatalf("block %v focus %q", a.outlineBlock, a.outlineFocus)
 	}
 	snapshot(t, tt, "outline-block")
-	tt.Key(ui.Cmd, ui.KeyC)
+	// ⌘C as the app has it: the Edit menu's command.
+	plat.copied = ""
+	tt.Command("copy")
 	tt.Frame()
 	// 架构 holds 前端: it copies once, with all that is under it.
 	if !strings.HasPrefix(plat.copied, "- 架构") || !strings.Contains(plat.copied, "\n  - 前端") || strings.Count(plat.copied, "前端") != 1 {
@@ -52,7 +54,13 @@ func TestOutlineBlock(t *testing.T) {
 	if a.isSelected(rows[4].node.ID) || a.outlineFocus != outlineBlockFocus {
 		t.Fatalf("drag selected past, or focus %q", a.outlineFocus)
 	}
-	// Delete takes them away.
+	// The keys: copied after a drag too, then deleted.
+	plat.copied = ""
+	tt.Command("copy")
+	tt.Frame()
+	if !strings.Contains(plat.copied, rows[0].node.Title) || !strings.Contains(plat.copied, rows[3].node.Title) {
+		t.Fatalf("copied after the drag %q", plat.copied)
+	}
 	n := len(rows)
 	tt.Key(0, ui.KeyBackspace)
 	tt.Frame()

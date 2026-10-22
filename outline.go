@@ -312,6 +312,30 @@ func (a *app) outlineBlockKeys(col ui.Element, rows []outlineRow) {
 	if !a.outlineBlock {
 		return
 	}
+	// ⌘C, ⌘X and ⌘A come as the Edit menu's commands, which take the keys
+	// first, as Delete may.
+	col.HandleInput(func(ev ui.InputEvent) bool {
+		if ev.Kind != ui.InputCommand || !a.outlineBlock {
+			return false
+		}
+		switch ev.Text {
+		case "copy":
+			a.copyNodes(false)
+		case "cut":
+			a.copyNodes(true)
+			a.outlineBlock, a.outlineFocus = false, a.selected
+		case "delete":
+			a.deleteSelection()
+			a.outlineBlock, a.outlineFocus = false, a.selected
+		case "selectAll":
+			if len(rows) > 0 {
+				a.outlineSelect(rows, rows[0].node.ID, rows[len(rows)-1].node.ID)
+			}
+		default:
+			return false
+		}
+		return true
+	})
 	end := a.outlineIndex(rows, a.outlineEnd)
 	edit := func(id string) {
 		a.outlineBlock, a.multi, a.selected = false, nil, id
