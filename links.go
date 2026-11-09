@@ -288,8 +288,8 @@ func (a *app) linksSection(c *ui.Context, n *model.Node) {
 				a.addLink(n, a.linkDraft)
 				a.linkDraft = ""
 			}
-			ui.Row(c).Gap(6).Wrap().Children(func() {
-				if ui.Button(c, "选择文件…").FontSize(12).Clicked() {
+			ui.Row(c).Margin(0, 0, 0, -8).Gap(2).Wrap().Children(func() {
+				if ghostButton(c, "选择文件…", "链接到一个文件").Clicked() {
 					id := n.ID
 					a.plat.OpenFile("选择要链接的文件", nil, func(path string) {
 						if node, _ := a.doc.Find(id); node != nil && path != "" {
@@ -300,11 +300,11 @@ func (a *app) linksSection(c *ui.Context, n *model.Node) {
 						}
 					})
 				}
-				if ui.Button(c, "链接到节点…").FontSize(12).Clicked() {
+				if ghostButton(c, "链接到节点…", "链接到这张导图里的节点").Clicked() {
 					a.linkFrom = n.ID
 					a.openPalette(paletteLink)
 				}
-				if len(a.lib.Clips) > 0 && ui.Button(c, "链接到资料…").FontSize(12).Clicked() {
+				if len(a.lib.Clips) > 0 && ghostButton(c, "链接到资料…", "链接到资料库里的一条").Clicked() {
 					a.linkFrom = n.ID
 					a.openPalette(paletteClip)
 				}

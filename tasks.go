@@ -95,7 +95,9 @@ func (a *app) boardView(c *ui.Context) {
 
 func (a *app) boardColumns(c *ui.Context, tasks []model.TaskNode) {
 	t := c.Theme()
-	ui.Row(c).Grow(1).Padding(12).Gap(12).AlignItems(ui.Stretch).Children(func() {
+	// Columns on the page itself, not in gray boxes: a heading over a
+	// hairline, then the cards; a column a task is dragged over tints.
+	ui.Row(c).Grow(1).Padding(14, 16).Gap(16).AlignItems(ui.Stretch).Children(func() {
 		a.keyIssueColumn(c)
 		for _, s := range model.Statuses {
 			var col []model.TaskNode
@@ -104,9 +106,9 @@ func (a *app) boardColumns(c *ui.Context, tasks []model.TaskNode) {
 					col = append(col, tn)
 				}
 			}
-			column := ui.Column(c.Key(string(s))).Grow(1).Basis(0).Radius(10).Background(t.Surface).Border(1, t.Border)
+			column := ui.Column(c.Key(string(s))).Grow(1).Basis(0).Radius(10)
 			if _, over := ui.DragOver[nodeDrag](column); over {
-				column.Border(2, statusColor(s))
+				column.Background(statusColor(s).Alpha(0.08))
 			}
 			if d, ok := ui.Drop[nodeDrag](column); ok {
 				if sheet := a.file.SheetOf(d.ID); sheet != nil {
@@ -116,13 +118,9 @@ func (a *app) boardColumns(c *ui.Context, tasks []model.TaskNode) {
 				}
 			}
 			column.Children(func() {
-				ui.Row(c).Padding(10, 12).Gap(8).AlignItems(ui.Center).Children(func() {
-					statusIcon(c, s, 15)
-					ui.Text(c, s.Label()).Bold()
-					ui.Text(c, fmt.Sprint(len(col))).TextColor(t.TextMuted)
-				})
+				boardHead(c, func() { statusIcon(c, s, 14) }, s.Label(), len(col))
 				if len(col) == 0 {
-					ui.Text(c, "拖动卡片到这里").FontSize(12).TextColor(t.TextMuted).Margin(8, 12)
+					ui.Text(c, "拖动卡片到这里").FontSize(12).TextColor(t.TextMuted).Margin(8, 4)
 					ui.Spacer(c)
 					return
 				}
@@ -133,7 +131,7 @@ func (a *app) boardColumns(c *ui.Context, tasks []model.TaskNode) {
 					a.boardReveal = ""
 				}
 				ui.List(c, st, len(col)).Grow(1).ItemKey(func(i int) any { return col[i].Node.ID }).Rows(func(r ui.ListRow) {
-					ui.Box(r.Context).Padding(0, 8, 8).Children(func() {
+					ui.Box(r.Context).Padding(0, 0, 8).Children(func() {
 						a.taskCard(r.Context, col[r.Index], false)
 					})
 				})
@@ -170,13 +168,25 @@ func (a *app) showOnBoard(id string) {
 // keyIssueColumn is the board's column of 重点问题: the nodes marked with
 // the red flag, which stay in their status's column too. A card dropped
 // on it is marked.
+// boardHead is a column's heading over a hairline: its mark, its name,
+// how many.
+func boardHead(c *ui.Context, mark func(), name string, n int) {
+	t := c.Theme()
+	ui.Row(c).Padding(4, 4, 10).Margin(0, 0, 10).Gap(8).AlignItems(ui.Center).
+		BorderWidth(0, 0, 1, 0).BorderColor(hairline(t)).Children(func() {
+		mark()
+		ui.Text(c, name).FontSize(textBody).FontWeight(600)
+		ui.Text(c, fmt.Sprint(n)).FontSize(textSmall).TextColor(t.TextMuted)
+	})
+}
+
 func (a *app) keyIssueColumn(c *ui.Context) {
 	t := c.Theme()
 	col := a.keyIssues()
-	red := ui.Hex("#ef4444")
-	column := ui.Column(c.Key("key-issues")).Grow(1).Basis(0).Radius(10).Background(red.Alpha(0.05)).Border(1, red.Alpha(0.35))
+	red := ui.Hex("#D9605B")
+	column := ui.Column(c.Key("key-issues")).Grow(1).Basis(0).Radius(10)
 	if _, over := ui.DragOver[nodeDrag](column); over {
-		column.Border(2, red)
+		column.Background(red.Alpha(0.08))
 	}
 	if d, ok := ui.Drop[nodeDrag](column); ok {
 		if sheet := a.file.SheetOf(d.ID); sheet != nil {
@@ -186,18 +196,16 @@ func (a *app) keyIssueColumn(c *ui.Context) {
 		}
 	}
 	column.Children(func() {
-		ui.Row(c).Padding(10, 12).Gap(8).AlignItems(ui.Center).Children(func() {
+		boardHead(c, func() {
 			ui.Box(c).Size(14, 14).Draw(func(p *ui.Painter, r ui.Rect) { drawMarker(p, r, keyMarker) })
-			ui.Text(c, "重点问题").Bold()
-			ui.Text(c, fmt.Sprint(len(col))).TextColor(t.TextMuted)
-		})
+		}, "重点问题", len(col))
 		if len(col) == 0 {
-			ui.Text(c, "节点打上红旗，或把卡片拖到这里").FontSize(12).TextColor(t.TextMuted).Margin(8, 12).Wrap()
+			ui.Text(c, "节点打上红旗，或把卡片拖到这里").FontSize(12).TextColor(t.TextMuted).Margin(8, 4).Wrap()
 			ui.Spacer(c)
 			return
 		}
 		ui.List(c, a.boardList("key"), len(col)).Grow(1).ItemKey(func(i int) any { return col[i].Node.ID }).Rows(func(r ui.ListRow) {
-			ui.Box(r.Context).Padding(0, 8, 8).Children(func() {
+			ui.Box(r.Context).Padding(0, 0, 8).Children(func() {
 				a.taskCard(r.Context, col[r.Index], col[r.Index].Node.Task != nil)
 			})
 		})
@@ -213,7 +221,7 @@ func (a *app) taskCard(c *ui.Context, tn model.TaskNode, showStatus bool) {
 	if task == nil { // a 重点问题 that is not a task
 		task = &model.Task{}
 	}
-	card := ui.Column(c).Padding(10).Gap(6).Radius(8).Background(t.Background).Border(1, t.Border).
+	card := ui.Column(c).Padding(10, 12).Gap(6).Radius(10).Background(t.Background).Border(1, hairline(t)).
 		Drag(nodeDrag{n.ID}).Cursor(ui.CursorPointer).Label(n.Title)
 	if n.ID == a.selected {
 		card.Border(2, t.Accent)

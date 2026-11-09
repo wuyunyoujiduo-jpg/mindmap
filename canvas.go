@@ -494,11 +494,11 @@ func (a *app) canvasArea(c *ui.Context) {
 	}
 	cv.Draw(func(p *ui.Painter, rect ui.Rect) {
 		// A grid of dots, which moves with the map.
-		step := 24 * z
-		for step < 12 {
+		step := 28 * z
+		for step < 16 {
 			step *= 2
 		}
-		dot := t.Border
+		dot := t.Border.Alpha(0.7)
 		x0 := rect.X + mod(cam.X, step)
 		y0 := rect.Y + mod(cam.Y, step)
 		for y := y0; y < rect.Y+rect.H && !exporting; y += step {

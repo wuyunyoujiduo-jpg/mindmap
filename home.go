@@ -91,7 +91,7 @@ func cardHead(c *ui.Context, ic icon, col ui.Color, title, more string) bool {
 				clicked = true
 			}
 			l.Children(func() {
-				ui.Text(c, more+" ›").FontSize(12).TextColor(t.Accent)
+				ui.Text(c, more).FontSize(12).TextColor(t.Accent)
 			})
 		}
 	})
@@ -190,27 +190,35 @@ func (a *app) homeStats(c *ui.Context, now time.Time, maps, clips []*library.Cli
 			waiting++
 		}
 	}
+	// One quiet strip of numbers, parted by hairlines, rather than four
+	// cards alike: the number large, what it counts and a note below.
+	first := true
 	stat := func(ic icon, col ui.Color, label string, n int, unit, sub string, open func()) {
-		box := pageCard(c).Grow(1).Basis(0).MinWidth(0).Gap(6).Cursor(ui.CursorPointer).Label(label)
+		if !first {
+			ui.Box(c).Width(1).Margin(10, 0).Background(hairline(t)).Shrink(0)
+		}
+		first = false
+		box := ui.Column(c.Key("stat:"+label)).Grow(1).Basis(0).MinWidth(0).Padding(12, 16).Gap(4).Radius(10).
+			Cursor(ui.CursorPointer).Label(label)
 		if box.Hovered() {
-			box.Background(t.Text.Alpha(0.06))
+			box.Background(t.Text.Alpha(0.04))
 		}
 		if box.Clicked() {
 			a.later(open)
 		}
 		box.Children(func() {
-			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				tile(c, ic, col, 22)
-				ui.Text(c, label).FontSize(13).TextColor(t.TextMuted)
+			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+				tile(c, ic, col, 18)
+				ui.Text(c, label).FontSize(textSmall).TextColor(t.TextMuted)
 			})
 			ui.Row(c).Gap(4).AlignItems(ui.End).Children(func() {
-				ui.Text(c, fmt.Sprint(n)).FontSize(34).Bold()
-				ui.Text(c, unit).FontSize(14).TextColor(t.TextMuted).Margin(0, 0, 6)
+				ui.Text(c, fmt.Sprint(n)).FontSize(28).FontWeight(600)
+				ui.Text(c, unit).FontSize(textSmall).TextColor(t.TextMuted).Margin(0, 0, 5)
 			})
-			ui.Text(c, sub).FontSize(12).TextColor(t.TextMuted).SingleLine()
+			ui.Text(c, sub).FontSize(11).TextColor(t.TextMuted).SingleLine()
 		})
 	}
-	ui.Row(c.Key("home-stats")).Gap(16).Children(func() {
+	ui.Row(c.Key("home-stats")).AlignItems(ui.Stretch).Padding(4, 0).BorderWidth(0, 0, 1, 0).BorderColor(hairline(t)).Children(func() {
 		stat(iconMap, tileBlue, "导图", len(maps), "张", fmt.Sprintf("AI 已分析 %d 张", analyzed), func() { a.openList(kindMaps, "") })
 		stat(iconFile, tileOrange, "文档", docs, "份", fmt.Sprintf("另有链接 %d 条", links), func() { a.openList(kindDocs, "") })
 		stat(iconInbox, tileGreen, "待归档", len(a.unfiledClips()), "条", "没进文件夹，也没挂到导图", func() {
@@ -277,7 +285,7 @@ func (a *app) homeActivity(c *ui.Context, now time.Time, maps, clips []*library.
 		// The dots drawn under a column a day, which says what it holds
 		// when hovered and lists it when clicked.
 		chart := ui.Row(c.Key("home-dots")).Height(130).FillWidth().Radius(10).Padding(12, 14).
-			Background(tileOrange.Alpha(0.06)).AlignItems(ui.Stretch).
+			Background(t.Text.Alpha(0.025)).AlignItems(ui.Stretch).
 			Draw(func(p *ui.Painter, r ui.Rect) {
 				padX, padY := float32(14), float32(12)
 				w, h := r.W-2*padX, r.H-2*padY

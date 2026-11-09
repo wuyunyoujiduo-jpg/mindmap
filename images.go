@@ -257,12 +257,12 @@ func (a *app) imageSection(c *ui.Context, n *model.Node) {
 				k := min(1, (a.panelWidth-32)/w)
 				a.thumbnail(c.Key("panel"), n, w*k, h*k)
 			}
-			ui.Row(c).Gap(8).Children(func() {
+			ui.Row(c).Margin(0, 0, 0, -8).Gap(2).Children(func() {
 				label := "添加图片…"
 				if n.Image != nil {
 					label = "替换…"
 				}
-				if ui.Button(c, label).Clicked() {
+				if ghostButton(c, label, "选择图片文件").Clicked() {
 					id := n.ID
 					a.plat.PickImage(func(path string) {
 						if path == "" {

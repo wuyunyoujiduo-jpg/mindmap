@@ -145,7 +145,7 @@ func (a *app) notePictureButton(c *ui.Context, place string, n *model.Node) {
 	if !richNote(n.Note) {
 		return
 	}
-	if ui.Button(c, "插入图片").FontSize(11).Padding(1, 8).Tooltip("插入剪贴板里的图片；没有就选择图片文件。也可以把图片文件拖进备注").Clicked() {
+	if ghostButton(c, "插入图片", "插入剪贴板里的图片；没有就选择图片文件。也可以把图片文件拖进备注").Clicked() {
 		if data := a.plat.ClipboardImage(); len(data) > 0 {
 			a.insertNotePicture(place, n, data, ".png")
 			return

@@ -377,7 +377,7 @@ print("回答", mymind.agent("做个登录页", repo=mymind.settings["repo"]))
 	a.later(func() { a.showLibrary(); a.libHome = true })
 	tt.Frame()
 	tt.Frame()
-	if !tt.HasText("整理") || !tt.HasText("全部 ›") {
+	if !tt.HasText("整理") || !tt.HasText("全部") {
 		t.Fatalf("home: %q", tt.Texts())
 	}
 	snapshot(t, tt, "auto-home")

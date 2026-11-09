@@ -95,8 +95,8 @@ func (a *app) filesSection(c *ui.Context, n *model.Node) {
 					}
 				})
 			}
-			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-				if ui.Button(c, "添加附件…").FontSize(12).Clicked() {
+			ui.Row(c).Margin(0, 0, 0, -8).Gap(2).AlignItems(ui.Center).Children(func() {
+				if ghostButton(c, "添加附件…", "选择要附加到节点的文件").Clicked() {
 					id := n.ID
 					a.plat.OpenFile("选择要附加的文件", nil, func(path string) {
 						if node, _ := a.doc.Find(id); node != nil && path != "" {
