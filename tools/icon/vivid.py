@@ -1,5 +1,6 @@
-"""MindMap's icon, vivid: a large white map filling a bright icon, the AI's
-spark by it, in a few large shapes that stand out in the Dock.
+"""MindMap's icon, vivid: a large white note on a bright color, written and
+a task on it ticked, the AI's spark at its corner: notes, tasks and the
+assistant, in a few large shapes that stand out in the Dock.
 
     python3 tools/icon/vivid.py out.png [size] [blue|coral|teal]
 """
@@ -18,23 +19,20 @@ COLORS = {
 
 
 def vivid(canvas, colors):
-    cx, cy = 318, 524
-    leaves = [(706, 318), (742, 524), (706, 730)]
-    lw, lh = 196, 104
-    branches = "".join(
-        f'<path d="M{cx+60},{cy} C{cx+210},{cy} {lx-lw/2-150},{ly} {lx-lw/2+20},{ly}" fill="none" '
-        f'stroke="{{c}}" stroke-width="54" stroke-linecap="round"/>' for lx, ly in leaves)
-    pills = "".join(f'<rect x="{lx-lw/2}" y="{ly-lh/2}" width="{lw}" height="{lh}" rx="{lh/2}" fill="{{c}}"/>'
-                    for lx, ly in leaves)
-    center = f'<circle cx="{cx}" cy="{cy}" r="136" fill="{{c}}"/>'
-    shapes = branches + pills + center
+    """A white note: two lines written, a task ticked, and the AI's spark
+    at its corner, in the color's deep shade."""
+    ink = colors[1][1]
+    note = '<rect x="250" y="240" width="470" height="560" rx="96" fill="{c}"/>'
+    lines = (f'<path d="M345,420 L560,420" stroke="{ink}" stroke-width="44" stroke-linecap="round"/>'
+             f'<path d="M345,540 L500,540" stroke="{ink}" stroke-width="44" stroke-linecap="round" stroke-opacity="0.45"/>'
+             f'<path d="M350,665 L410,722 L530,610" fill="none" stroke="{ink}" stroke-width="48" '
+             f'stroke-linecap="round" stroke-linejoin="round"/>')
     layers(canvas,
            ("", base(colors, glow_opacity=0.3)),
-           ("shadow", shapes.format(c="#000")),
-           ("", shapes.format(c="#FFFFFF")),
-           ("", sparkle(cx, cy, 70, colors[1][1])),  # the spark at the map's heart
-           ("soft", sparkle(760, 230, 70, "#000")),
-           ("", sparkle(760, 230, 86, "#FFFFFF")))
+           ("shadow", note.format(c="#000")),
+           ("", note.format(c="#FFFFFF") + lines),
+           ("soft", sparkle(745, 300, 95, "#000")),
+           ("", sparkle(745, 300, 115, "#FFFFFF", k=0.14)))
 
 
 if __name__ == "__main__":

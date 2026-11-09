@@ -1,5 +1,5 @@
 """Draws the menu bar's icons, black on clear for macOS to tint (template
-images), 44 pixels for 22 points: the map of the vivid icons, the
+images), 44 pixels for 22 points: the note of the vivid icons, the
 knowledge cards and the constellation, as the app's icons.
 
     python3 tools/icon/tray.py
@@ -35,13 +35,12 @@ orbit = (
     + sparkle(22, 22, 13, "#000", k=0.14)
 )
 
-# The map of the vivid icons: a center, three branches to three ideas, and
-# the spark.
+# The note of the vivid icons: written, a task ticked, and the spark.
 vivid = (
-    '<circle cx="11" cy="24" r="6.2" fill="#000"/>'
-    + "".join(f'<path d="M14 24 C21 24 19 {y} 25 {y}" fill="none" stroke="#000" stroke-width="3" stroke-linecap="round"/>'
-              f'<rect x="24" y="{y-3.6}" width="13" height="7.2" rx="3.6" fill="#000"/>' for y in (12, 24, 36))
-    + sparkle(37, 6.5, 6, "#000", k=0.16)
+    '<rect x="7" y="8" width="25" height="30" rx="6" fill="none" stroke="#000" stroke-width="3"/>'
+    '<path d="M13 17 L24 17" stroke="#000" stroke-width="2.6" stroke-linecap="round"/>'
+    '<path d="M13 28 L16.5 31.5 L23 25" fill="none" stroke="#000" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>'
+    + sparkle(36, 9, 7.5, "#000", k=0.16)
 )
 
 if __name__ == "__main__":

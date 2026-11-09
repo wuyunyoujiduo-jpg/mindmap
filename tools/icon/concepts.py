@@ -6,9 +6,9 @@
 
     python3 tools/icon/concepts.py <concept> out.png
 
-The app's icon, resources/icon.png, is now vivid.py's, a large white map
+The app's icon, resources/icon.png, is now vivid.py's, a large white note
 on coral; bold.py's take on cards is appicons/cards.png. appicons/ holds
-the vivid map in three colors, the cards and orbit at 512 pixels, the
+the vivid note in three colors, the cards and orbit at 512 pixels, the
 icons to choose from in the settings.
 """
 import math

@@ -8,11 +8,12 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// The app's icon, chosen in the settings: a large white map on a bright
-// color, coral (the default and the one in the app bundle), blue or teal;
-// the library's cards with the AI's spark; or knowledge in orbit around
-// the spark. The choice shows in the Dock (macOS) or the
-// taskbar (Windows) while the app runs.
+// The app's icon, chosen in the settings: a large white note, a task on
+// it ticked and the AI's spark by it, on a bright color, coral (the
+// default and the one in the app bundle), blue or teal; the library's
+// cards with the AI's spark; or knowledge in orbit around the spark. The
+// choice shows in the Dock (macOS) or the taskbar (Windows) while the app
+// runs.
 
 //go:embed appicons/*.png
 var appIconFiles embed.FS
