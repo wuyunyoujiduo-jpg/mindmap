@@ -80,14 +80,14 @@ func Start(deliver func(png []byte, act Action), onEnd func()) (bool, error) {
 		w, h := sh.bmp.Size()
 		Log("屏幕 %d：%v，%dx%d 像素", sh.index, sh.display.Bounds, w, h)
 	}
-	if Captured != nil {
-		hidden := make(chan struct{})
-		mygo.RunOnMain(func() {
+	// A menu open as the shortcut was pressed is in the shot: now it goes,
+	// so that the shot's windows have the pointer and the keys.
+	mygo.RunOnMain(func() {
+		closeMenus()
+		if Captured != nil {
 			Captured()
-			close(hidden)
-		})
-		<-hidden
-	}
+		}
+	})
 	s := openSession(shots, deliver, done)
 	Log("截图窗口已打开")
 	go func() {

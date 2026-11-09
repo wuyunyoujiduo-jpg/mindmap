@@ -23,3 +23,9 @@ func captureDisplay(mygo.Display) (image.Image, error) {
 }
 
 func raiseOverlay(*mygo.Window) {}
+
+// WatchMenus is macOS's: elsewhere global shortcuts reach the app with
+// menus open.
+func WatchMenus() {}
+
+func closeMenus() {}

@@ -474,6 +474,7 @@ func main() {
 			a.showShotAlert("上次截图没有完成",
 				"截图时 MyMind 可能意外退出了。截图记录在「帮助 → 在访达中显示截图记录」里，可以发给开发者。", false)
 		}
+		screenshot.WatchMenus() // the shortcuts work with a menu open too
 		if err := plat.SetShotKey(a.shotKey()); err != nil {
 			log.Printf("截图快捷键 %s: %v", a.shotKey(), err)
 			logShot("注册截图快捷键 %s 失败：%v", a.shotKey(), err)

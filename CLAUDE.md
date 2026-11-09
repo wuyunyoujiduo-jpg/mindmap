@@ -45,5 +45,7 @@ by AI, and an AI assistant.
   framed there with handles and marked up in colors, the toolbar by it.
   macOS may keep those windows below the menu bar: the shot is drawn offset
   by where the window really is (`screenShot.off`). No system tool is used.
+  Global shortcuts reach the app with a menu open (`menus_darwin.go`), and
+  the shot closes that menu once taken.
   Each step goes to `screenshot.log`, shown in the settings.
 - The user writes in Chinese; the app's texts are Chinese.

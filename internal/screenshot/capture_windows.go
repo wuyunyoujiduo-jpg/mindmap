@@ -109,3 +109,9 @@ func captureDisplay(d mygo.Display) (image.Image, error) {
 
 // MyGo 的 AlwaysOnTop 在 Windows 上就是 HWND_TOPMOST，后显示的窗口会盖住任务栏。
 func raiseOverlay(*mygo.Window) {}
+
+// WatchMenus is macOS's: elsewhere global shortcuts reach the app with
+// menus open.
+func WatchMenus() {}
+
+func closeMenus() {}

@@ -247,6 +247,9 @@ func (a *app) folderRow(c *ui.Context, f model.Folder, depth int) {
 	if row.Clicked() {
 		a.setFolderOpen(f.Path, !open)
 	}
+	if a.renaming == f.Path {
+		row.ScrollIntoView() // a folder just made shows, wherever it sorts
+	}
 	path := f.Path
 	row.ContextMenu(func(m *ui.Menu) {
 		if m.Item("在此新建导图").Chosen() {
@@ -470,12 +473,14 @@ func (a *app) newFolder(dir string) {
 	}
 	path := filepath.Join(dir, name)
 	if err := os.Mkdir(path, 0o755); err != nil {
-		a.saveErr = err.Error()
+		a.showShotAlert("没有新建文件夹", "在「"+dir+"」里新建「"+name+"」失败：\n"+err.Error(), false)
 		return
 	}
 	a.setFolderOpen(dir, true)
+	a.filesOpen = true
 	a.refreshFiles()
 	a.renaming, a.renameText = path, name
+	a.tell("已新建文件夹「" + name + "」，输入名字后回车")
 }
 
 func (a *app) toggleFavorite(path string) {
