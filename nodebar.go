@@ -1,0 +1,64 @@
+package main
+
+import (
+	"github.com/egoist/mygo/ui"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/layout"
+)
+
+// nodeBarWidth is the width of the bar by the node selected.
+const nodeBarWidth = 6*30 + 2*4 + 9
+
+// nodeBar is the small bar of the node selected, over the canvas's top:
+// a child, a sibling, its style and markers, a task, and the rest of its
+// menu. It is not there while the node is edited, or with many
+// selected.
+func (a *app) nodeBar(c *ui.Context, r layout.Result, depth int) {
+	n, _ := a.selectedNode()
+	if n == nil || a.editing != "" || len(a.multi) > 0 {
+		return
+	}
+	if _, ok := r.Boxes[n.ID]; !ok || a.vp.W < nodeBarWidth+2*190 {
+		return // not shown, or no room beside the corners' buttons
+	}
+	t := c.Theme()
+	// At the top of the canvas, in the middle: by the node it would hide
+	// the nodes around it, which are clicked as often.
+	x, y := (a.vp.W-nodeBarWidth)/2, float32(12)
+	bar := ui.Row(c.Key("node-bar")).Absolute().Left(x).Top(y).Height(34).Padding(0, 2).Gap(0).AlignItems(ui.Center).
+		Radius(9).Background(t.Background).Border(1, hairline(t)).Shadow(0, 4, 16, 0, ui.RGBA(0, 0, 0, 0.1)).Label("主题操作")
+	bar.Children(func() {
+		if iconButton(c, iconLevels, "加子主题", "加子主题（Tab）", 30, true).Clicked() {
+			a.later(a.addChild)
+		}
+		if iconButton(c, iconPlus, "加同级", "加同级主题（↩）", 30, true).Clicked() {
+			a.later(a.addSibling)
+		}
+		ui.Box(c).Size(1, 16).Margin(0, 3).Background(hairline(t))
+		col := a.branchColor(n.ID)
+		style := ui.Box(c.Key("样式")).Size(30, 30).Radius(6).Center().Cursor(ui.CursorPointer).Label("样式").Tooltip("颜色、形状和文字")
+		if style.Hovered() {
+			style.Background(t.SurfaceHover)
+		}
+		if style.Clicked() {
+			a.later(func() { a.panelTab, a.panelOff = tabStyle, false })
+		}
+		style.Children(func() { ui.Box(c).Size(14, 14).Radius(7).Background(col).PassThrough() })
+		if iconButton(c, iconTag, "标记", "旗标、优先级、进度等标记", 30, true).Clicked() {
+			a.later(func() { a.panelTab, a.panelOff = tabMarkers, false })
+		}
+		task := "设为任务"
+		if n.Task != nil {
+			task = "取消任务"
+		}
+		tb := iconButton(c, iconCheck, task, task, 30, true)
+		if n.Task != nil {
+			tb.Background(t.Accent.Alpha(0.12))
+		}
+		if tb.Clicked() {
+			a.later(func() { a.toggleTask(n) })
+		}
+		iconButton(c, iconMore, "更多操作", "概要、关联线、复制…", 30, true).Menu(func(m *ui.Menu) {
+			a.nodeMenu(m, n, depth)
+		})
+	})
+}

@@ -70,7 +70,7 @@ func (a *app) outlineView(c *ui.Context) {
 		col.Children(func() {
 			root := a.doc.Root
 			title := root.Title
-			head := ui.Box(c).Padding(10, 14).Radius(8).Background(t.Accent.Alpha(0.1))
+			head := ui.Box(c).Padding(0, 0, 4)
 			head.Children(func() {
 				in := ui.TextInputBase(c.Key("outline-root"), &title).FontSize(26).Bold().FillWidth().
 					Placeholder("中心主题").FocusBind(&a.outlineFocus, root.ID)
@@ -126,8 +126,10 @@ func (a *app) outlineLine(c *ui.Context, rows []outlineRow, i int) {
 				ui.Text(c, "▸").FontSize(13).TextColor(t.TextMuted)
 			case len(n.Children) > 0:
 				ui.Text(c, "▾").FontSize(13).TextColor(t.TextMuted)
+			case depth == 0: // a main topic: a dot of its branch's color
+				ui.Box(c).Size(7, 7).Radius(999).Background(a.branchColor(n.ID))
 			default:
-				ui.Box(c).Size(6, 6).Radius(999).Background(t.Text)
+				ui.Box(c).Size(5, 5).Radius(999).Background(t.TextMuted.Alpha(0.6))
 			}
 		})
 		if rows[i].summary {
@@ -147,9 +149,9 @@ func (a *app) outlineLine(c *ui.Context, rows []outlineRow, i int) {
 				a.lightbox = n.ID
 			}
 		}
-		size := float32(16)
+		size := float32(15)
 		if depth == 0 {
-			size = 18
+			size = 16
 		}
 		// A long line wraps: the field grows to show it all.
 		in := ui.TextAreaBase(c.Key("line"), &title).Lines(1, 30).FontSize(size).Grow(1).Shrink(1).MinWidth(40).
@@ -420,4 +422,17 @@ func (a *app) outlinePaste(id string) {
 	last := nodes[len(nodes)-1]
 	a.outlineFocus, a.selected, a.multi = last.ID, last.ID, nil
 	a.tell("已粘贴 " + itoa(len(nodes)) + " 行")
+}
+
+// branchColor is the color of the branch a node is on, as the map draws it.
+func (a *app) branchColor(id string) ui.Color {
+	lk := lookOf(a.doc.Style)
+	if p := a.doc.Path(id); len(p) > 1 {
+		for i, ch := range p[0].Children {
+			if ch == p[1] {
+				return lk.branch(i)
+			}
+		}
+	}
+	return lk.branch(0)
 }

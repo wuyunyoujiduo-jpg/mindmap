@@ -54,7 +54,7 @@ func (a *app) commands() []command {
 		{"切换到思维导图", "⌘1", view(viewMap), hasDoc},
 		{"切换到大纲", "⌘2", view(viewOutline), hasDoc},
 		{"切换到看板", "⌘3", view(viewBoard), hasDoc},
-		{"切换到日程", "⌘4", view(viewAgenda), hasDoc},
+		{"切换到表格", "⌘4", view(viewTable), hasDoc},
 		{"切换到时间线", "⌘5", view(viewTimeline), hasDoc},
 		{"切换到总览", "⌘6", view(viewOverview), hasDoc},
 		{"开始演说", "⌘↩", func() { a.startPresenting("") }, hasDoc},

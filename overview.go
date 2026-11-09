@@ -123,8 +123,8 @@ func (a *app) overviewView(c *ui.Context) {
 						}
 					})
 					if len(tasks) > overviewCards {
-						if ui.Link(c, fmt.Sprintf("还有 %d 个，在日程里查看全部", len(tasks)-overviewCards), "").FontSize(12).Clicked() {
-							a.mode = viewAgenda
+						if ui.Link(c, fmt.Sprintf("还有 %d 个，在任务里查看全部", len(tasks)-overviewCards), "").FontSize(12).Clicked() {
+							a.later(a.openTasks)
 						}
 					}
 				})

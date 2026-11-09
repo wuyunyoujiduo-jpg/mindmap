@@ -369,6 +369,7 @@ type app struct {
 	// Chrome.
 	mode          int
 	search        string
+	searchOpen    bool // the map's search shows: ⌘F, until Esc
 	tagFilter     string
 	sidebarWidth  float32
 	panelWidth    float32

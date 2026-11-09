@@ -2,6 +2,7 @@ package main
 
 import (
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -227,43 +228,91 @@ func (a *app) toolbar(c *ui.Context) {
 			}
 		})
 		ui.Spacer(c)
-		mapLabel := "思维导图"
-		if room < 960 {
-			mapLabel = "导图"
-		}
-		views := []string{mapLabel, "大纲", "看板", "日程", "时间线", "总览", "表格"}
-		if room >= 760 {
-			seg := ui.Segmented(c, &a.mode, views...).Shrink(0)
-			if room < 900 {
-				seg.FontSize(textSmall) // the seven views in less room
-			}
-		} else { // narrow: a menu of the views
-			ui.MenuButton(c, views[a.mode], func(m *ui.Menu) {
-				for i, v := range views {
-					if m.Item(v).Checked(a.mode == i).Chosen() {
-						a.mode = i
-					}
-				}
-			}).Label("视图").Shrink(0)
-		}
+		a.viewTabs(c, room)
 		ui.Spacer(c)
-		a.searchField(c, searchWidth(room))
+		if a.searchOpen || a.search != "" {
+			a.searchField(c, searchWidth(room))
+		}
 		if room >= 450 && iconButton(c, iconPlay, "开始演说", "开始演说 ⌘↩", 30, true).Clicked() {
 			a.later(func() { a.startPresenting("") })
 		}
-		aiText := "AI"
-		if room < 900 {
+		aiText := "问 AI"
+		if room < 760 {
 			aiText = ""
 		}
-		if iconTextButton(c, iconSparkle, aiText, "AI 助手", "AI 助手", a.aiOpen).Clicked() {
+		if iconTextButton(c, iconSparkle, aiText, "AI 助手", "问 AI：关于这张导图和资料库", a.aiOpen).Clicked() {
 			a.aiOpen = !a.aiOpen
 		}
-		ui.Row(c).Gap(0).Shrink(0).Children(func() {
-			if iconButton(c, iconUndo, "撤销", "撤销 ⌘Z", 30, a.hist.CanUndo()).Clicked() && a.hist.CanUndo() {
-				a.undo()
+	})
+}
+
+// The views a map's toolbar shows, the others in its 更多 menu.
+var (
+	mainViews = []struct {
+		mode int
+		name string
+	}{{viewMap, "导图"}, {viewOutline, "大纲"}, {viewBoard, "看板"}, {viewTable, "表格"}}
+	moreViews = []struct {
+		mode int
+		name string
+	}{{viewTimeline, "时间线"}, {viewOverview, "总览"}}
+)
+
+// viewTabs switch the map's view: four as tabs, the rest in a menu; in a
+// narrow window, all in a menu.
+func (a *app) viewTabs(c *ui.Context, room float32) {
+	t := c.Theme()
+	if room < 560 {
+		name := "导图"
+		for _, v := range append(slices.Clone(mainViews), moreViews...) {
+			if v.mode == a.mode {
+				name = v.name
 			}
-			if iconButton(c, iconRedo, "重做", "重做 ⌘⇧Z", 30, a.hist.CanRedo()).Clicked() && a.hist.CanRedo() {
-				a.redo()
+		}
+		ui.MenuButton(c, name, func(m *ui.Menu) {
+			for _, v := range append(slices.Clone(mainViews), moreViews...) {
+				if m.Item(v.name).Checked(a.mode == v.mode).Chosen() {
+					a.mode = v.mode
+				}
+			}
+		}).Label("视图").Shrink(0)
+		return
+	}
+	ui.Row(c.Key("view-tabs")).Padding(2).Gap(2).Radius(8).Background(t.Text.Alpha(0.05)).Shrink(0).Children(func() {
+		tab := func(key, name string, on bool) ui.Element {
+			b := ui.Box(c.Key("view:"+key)).Height(26).Padding(0, 12).Radius(6).Center().Cursor(ui.CursorPointer).Label(name)
+			switch {
+			case on:
+				b.Background(t.Background).Border(1, hairline(t))
+			case b.Hovered():
+				b.Background(t.Text.Alpha(0.05))
+			}
+			b.Children(func() {
+				txt := ui.Text(c, name).FontSize(textSmall).PassThrough()
+				if on {
+					txt.FontWeight(600)
+				} else {
+					txt.TextColor(t.Text.MixOklab(t.TextMuted, 0.6))
+				}
+			})
+			return b
+		}
+		for _, v := range mainViews {
+			if tab(v.name, v.name, a.mode == v.mode).Clicked() {
+				a.mode = v.mode
+			}
+		}
+		more, on := "更多 ⌄", false
+		for _, v := range moreViews {
+			if a.mode == v.mode {
+				more, on = v.name+" ⌄", true
+			}
+		}
+		tab("more", more, on).Label("更多视图").Menu(func(m *ui.Menu) {
+			for _, v := range moreViews {
+				if m.Item(v.name).Checked(a.mode == v.mode).Chosen() {
+					a.mode = v.mode
+				}
 			}
 		})
 	})
@@ -273,8 +322,11 @@ func (a *app) toolbar(c *ui.Context) {
 // Return steps through what it finds and Escape clears.
 func (a *app) searchField(c *ui.Context, width float32) {
 	search := searchBox(c, "search", &a.search, "搜索", "搜索导图", "搜索标题、备注、标签，回车跳到下一个", width)
-	if a.search != "" && search.Shortcut(0, ui.KeyEscape) {
-		a.search = ""
+	if a.searchOpen && a.search == "" {
+		search.AutoFocus()
+	}
+	if search.Shortcut(0, ui.KeyEscape) {
+		a.search, a.searchOpen = "", false
 	}
 	if search.Submitted() {
 		a.mode = viewMap

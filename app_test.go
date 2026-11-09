@@ -288,7 +288,7 @@ func TestPanelEditsNode(t *testing.T) {
 	if n.Note != "PNG 和 SVG" {
 		t.Fatalf("note %q", n.Note)
 	}
-	if err := tt.Click("标签"); err != nil {
+	if err := tt.Click("新标签"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Type("导出")
@@ -296,7 +296,12 @@ func TestPanelEditsNode(t *testing.T) {
 	if !n.HasTag("导出") {
 		t.Fatalf("tags %v", n.Tags)
 	}
-	clickInPanel(t, tt, "进行中")
+	r, _ := tt.Find("任务状态")
+	tt.Press(r.X+r.W/2, r.Y+r.H/2)
+	tt.Release(r.X+r.W/2, r.Y+r.H/2)
+	if err := tt.ChooseMenuItem("进行中"); err != nil {
+		t.Fatal(err)
+	}
 	if n.Task.Status != model.StatusDoing {
 		t.Fatalf("status %v", n.Task.Status)
 	}
@@ -377,9 +382,8 @@ func TestBoardAndAgenda(t *testing.T) {
 		}
 	}
 	snapshot(t, tt, "board")
-	if err := tt.Click("日程"); err != nil {
-		t.Fatal(err)
-	}
+	a.mode = viewAgenda // no longer in the toolbar: the tasks' page has the days
+	tt.Frame()
 	for _, s := range []string{"未来 7 天  2", "未安排日期  1"} {
 		if !tt.HasText(s) {
 			t.Errorf("agenda misses %q in %q", s, tt.Texts())
@@ -762,7 +766,7 @@ func TestRootCenteredAndLongTitlesWrap(t *testing.T) {
 
 func TestStructures(t *testing.T) {
 	a, tt := newTestApp(t)
-	if err := tt.Click("结构：思维导图 ▾"); err != nil {
+	if err := tt.Click("结构"); err != nil {
 		t.Fatal(err)
 	}
 	snapshot(t, tt, "structure-picker")
@@ -783,7 +787,7 @@ func TestStructures(t *testing.T) {
 		}
 	}
 	snapshot(t, tt, "logic")
-	tt.Click("结构：逻辑图 ▾")
+	tt.Click("结构")
 	tt.Click("括号图")
 	if a.doc.Structure != model.StructureBracket {
 		t.Fatalf("structure %q", a.doc.Structure)
@@ -805,6 +809,9 @@ func TestStructures(t *testing.T) {
 func TestCanvasStyle(t *testing.T) {
 	a, tt := newTestApp(t)
 	snapshot(t, tt, "style-default")
+	if err := tt.Click("结构"); err != nil { // the canvas's corner has its style
+		t.Fatal(err)
+	}
 	if err := tt.Click("画布"); err != nil {
 		t.Fatal(err)
 	}
@@ -1123,6 +1130,7 @@ func TestPresentation(t *testing.T) {
 		t.Fatal("a leaf without a note got a slide")
 	}
 
+	tt.Click("结构")
 	tt.Click("演说")
 	if a.panelTab != tabPresent || !tt.HasText("演说模式预览") {
 		t.Fatalf("tab %d", a.panelTab)
@@ -1330,9 +1338,9 @@ func TestToolbarFitsNarrowWindow(t *testing.T) {
 	for _, w := range []int{1280, 1100, 1000, 920} {
 		tt.SetSize(w, 760)
 		tt.Frame()
-		redo, ok := tt.Find("重做")
+		redo, ok := tt.Find("AI 助手")
 		if !ok {
-			t.Fatalf("width %d: no redo", w)
+			t.Fatalf("width %d: no AI", w)
 		}
 		right := float32(w) // the panel hides in a narrow window
 		if float32(w)-a.sidebarWidth-a.panelWidth >= panelMinCanvas {
@@ -1343,10 +1351,10 @@ func TestToolbarFitsNarrowWindow(t *testing.T) {
 		}
 		// With room to spare between the views and the search, for fonts
 		// elsewhere, as on CI, are a little wider.
-		if last, ok := tt.Find("表格"); ok && a.mode != viewTable {
-			search, _ := tt.Find("搜索导图")
-			if spare := search.X - 22 - (last.X + last.W); spare < 10 {
-				t.Fatalf("width %d: %v spare between the views and the search", w, spare)
+		if last, ok := tt.Find("更多视图"); ok {
+			play, _ := tt.Find("开始演说")
+			if spare := play.X - (last.X + last.W); spare < 10 {
+				t.Fatalf("width %d: %v spare between the views and the buttons", w, spare)
 			}
 		}
 		if w == 920 {
@@ -3636,10 +3644,12 @@ func TestNotePictureAndCopyImage(t *testing.T) {
 	if img == nil || img.W != 400 {
 		t.Fatalf("picture at the caret %+v", img)
 	}
-	// A double click on it shows it large.
-	tt.ClickAt(1130, 300)
+	// A double click on it shows it large: under the note's head.
+	head, _ := tt.Find("插入图片")
+	y := head.Y + 157
+	tt.ClickAt(1130, y)
 	tt.Frame()
-	tt.ClickAt(1130, 300)
+	tt.ClickAt(1130, y)
 	tt.Frame()
 	if a.lightbox != "note:"+n.ID {
 		t.Fatalf("lightbox %q", a.lightbox)

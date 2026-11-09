@@ -560,6 +560,9 @@ func (a *app) canvasArea(c *ui.Context) {
 		}
 		a.focusBar(c)
 		a.structurePicker(c)
+		if shown == a.doc {
+			a.nodeBar(c, r, max(len(shown.Path(a.selected))-1, 0))
+		}
 		// Zoom and recenter, over the canvas's corner.
 		ui.Row(c).Absolute().Right(12).Bottom(12).Gap(2).Padding(3).Radius(8).
 			Background(t.Surface).Border(1, t.Border).Children(func() {
@@ -1781,12 +1784,29 @@ func drawLineEdges(p *ui.Painter, r layout.Result, fishbone bool, ox, oy, z, wid
 // chooses the canvas's structure, from pictures of each.
 func (a *app) structurePicker(c *ui.Context) {
 	t := c.Theme()
-	btn := ui.Button(c.Key("structure"), "结构："+a.doc.Structure.Label()+" ▾").
-		Absolute().Left(12).Top(12).Tooltip("选择这个画布的结构")
+	btn := ui.Box(c.Key("structure")).Absolute().Left(12).Top(12).Height(28).Padding(0, 10).Radius(7).Center().
+		Background(t.Background.Alpha(0.9)).Cursor(ui.CursorPointer).Label("结构").Tooltip("这个画布的结构、配色和演说")
+	if btn.Hovered() || a.structureOpen {
+		btn.Background(t.SurfaceHover)
+	}
 	if btn.Clicked() {
 		a.structureOpen = !a.structureOpen
 	}
+	btn.Children(func() {
+		ui.Text(c, a.doc.Structure.Label()+" · "+schemeOf(a.doc.Style.Scheme).name+" ⌄").FontSize(textSmall).
+			TextColor(t.Text.MixOklab(t.TextMuted, 0.6)).PassThrough()
+	})
 	ui.Popover(c, btn, &a.structureOpen, func() {
+		ui.Row(c).Gap(4).Padding(4, 4, 0).Children(func() {
+			if ghostButton(c, "画布", "配色、连线、字体和背景").Clicked() {
+				a.structureOpen = false
+				a.panelTab, a.panelOff = tabCanvas, false
+			}
+			if ghostButton(c, "演说", "演说模式的幻灯片和讲稿").Clicked() {
+				a.structureOpen = false
+				a.panelTab, a.panelOff = tabPresent, false
+			}
+		})
 		ui.Grid(c).Columns(3).Gap(8).Padding(4).Children(func() {
 			for _, st := range model.Structures {
 				card := ui.Column(c.Key(string(st))).Gap(6).Padding(8).Radius(8).
