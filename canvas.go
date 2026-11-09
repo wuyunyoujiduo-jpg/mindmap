@@ -392,7 +392,6 @@ func (a *app) canvasArea(c *ui.Context) {
 	if shown == a.doc {
 		r = a.layoutFloating(r, a.measure(c), layoutOptions(a.doc.Structure))
 	}
-	r = a.layoutSummaries(r, shown, a.measure(c), layoutOptions(a.doc.Structure))
 	a.boxes = r
 	exporting := a.exportCam != nil // drawn into an image, off screen
 	if exporting {
@@ -437,7 +436,11 @@ func (a *app) canvasArea(c *ui.Context) {
 	}
 
 	branch := map[string]int{}
+	a.summaryTopics = map[string]bool{}
 	shown.Walk(func(n, p *model.Node, _ int) bool {
+		if p != nil && p.SummaryTopic() == n {
+			a.summaryTopics[n.ID] = true // styled as summaries (nodeView)
+		}
 		switch {
 		case p == nil && n != shown.Root: // a floating topic: a color after the branches'
 			branch[n.ID] = len(shown.Root.Children) + slices.Index(shown.Floating, n)
@@ -770,6 +773,13 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 		fill = accent.Alpha(tint)
 		el.Radius(6 * z)
 	}
+	// A summary's topic: a pill outlined in its branch's color, its text
+	// in it too, lightly tinted, unlike the topics it sums up.
+	summary := a.summaryTopics[n.ID] && st.Fill == "" && st.Shape == "" && st.Border == ""
+	if summary {
+		fill, filled = accent.Alpha(0.07), false
+		el.Radius(999).Border(1.5*z, accent)
+	}
 	if st.Fill != "" {
 		fill, filled = ui.Hex(st.Fill), true
 	}
@@ -793,6 +803,9 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 	onFill := t.Text
 	if filled {
 		onFill = textOn(fill)
+	}
+	if summary {
+		onFill = accent.MixOklab(t.Text, 0.4) // toward the text, to read on the canvas
 	}
 	if st.Color != "" {
 		onFill = ui.Hex(st.Color)

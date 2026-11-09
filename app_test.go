@@ -3868,3 +3868,69 @@ func TestSummaryTopic(t *testing.T) {
 		t.Fatalf("summary %+v", arch.Summary)
 	}
 }
+
+// Summaries in every structure: beside the children in trees and on
+// timelines, under them in org charts, never over other nodes.
+func TestSummaryStructures(t *testing.T) {
+	for _, s := range []model.Structure{model.StructureLogic, model.StructureBracket, model.StructureOrg, model.StructureTimeline, model.StructureFishbone} {
+		t.Run(string(s), func(t *testing.T) {
+			a, tt := newTestApp(t)
+			a.mutate("", func() { a.doc.Structure = s })
+			arch := find(t, a, "架构")
+			a.addSummary(arch)
+			a.editing = ""
+			st := arch.SummaryTopic()
+			a.mutate("", func() {
+				st.Title = "两端"
+				for i := range 3 {
+					st.Children = append(st.Children, model.NewNode(fmt.Sprintf("要点 %d", i)))
+				}
+			})
+			a.selected = a.doc.Root.ID
+			tt.Frame()
+			br, ok := a.boxes.Braces[arch.ID]
+			if !ok || br.Topic != st.ID {
+				t.Fatalf("brace %+v", br)
+			}
+			kids, _ := subtreeBox(a.boxes, arch.Children[0])
+			last, _ := subtreeBox(a.boxes, arch.Children[len(arch.Children)-1])
+			tb := a.boxes.Boxes[st.ID]
+			if s == model.StructureOrg {
+				if !br.Horizontal || tb.Y < max(kids.Y+kids.H, last.Y+last.H) {
+					t.Fatalf("org: topic %+v, brace %+v, children to %+v", tb, br, last)
+				}
+			} else if br.Horizontal || tb.X < br.At || tb.X < kids.X+kids.W {
+				t.Fatalf("topic %+v, brace %+v, children %+v", tb, br, kids)
+			}
+			// Nothing else under the summary.
+			mine := map[string]bool{}
+			a.doc.Walk(func(n, _ *model.Node, _ int) bool {
+				if arch.Contains(n.ID) {
+					mine[n.ID] = true
+				}
+				return true
+			})
+			for id, b := range a.boxes.Boxes {
+				if mine[id] {
+					continue
+				}
+				for sid := range mine {
+					if !st.Contains(sid) {
+						continue
+					}
+					sb := a.boxes.Boxes[sid]
+					if b.X < sb.X+sb.W && sb.X < b.X+b.W && b.Y < sb.Y+sb.H && sb.Y < b.Y+b.H {
+						n, _ := a.doc.Find(id)
+						m, _ := a.doc.Find(sid)
+						t.Fatalf("%q %+v overlaps %q %+v", n.Title, b, m.Title, sb)
+					}
+				}
+			}
+			// In view, for the picture.
+			cam := a.cam()
+			cam.X, cam.Y = a.vp.W/2-(tb.X+tb.W/2)*cam.Zoom, a.vp.H/2-(tb.Y+tb.H/2)*cam.Zoom
+			tt.Frame()
+			snapshot(t, tt, "summary-"+cmpOr(string(s), "mindmap"))
+		})
+	}
+}

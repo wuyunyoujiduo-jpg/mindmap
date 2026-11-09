@@ -29,13 +29,15 @@ func (a *app) layoutFloating(r layout.Result, measure layout.Measure, o layout.O
 		}
 		fr := layout.Compute(&model.Document{Root: f}, sub, o)
 		fb := fr.Boxes[f.ID]
-		dx, dy := root.X+f.Pos.X-fb.X, root.Y+f.Pos.Y-fb.Y
+		fr.Shift(root.X+f.Pos.X-fb.X, root.Y+f.Pos.Y-fb.Y)
 		for id, b := range fr.Boxes {
-			b.X += dx
-			b.Y += dy
 			r.Boxes[id] = b
+			r.Left[id] = fr.Left[id]
 			r.Width = max(r.Width, b.X+b.W+o.Margin)
 			r.Height = max(r.Height, b.Y+b.H+o.Margin)
+		}
+		for id, br := range fr.Braces {
+			r.Braces[id] = br
 		}
 		r.Edges = append(r.Edges, fr.Edges...)
 	}
@@ -402,118 +404,38 @@ func (a *app) drawBoundaries(p *ui.Painter, r layout.Result, shown *model.Docume
 	})
 }
 
-// summaryBrace is where a node's summary brace goes, in map coordinates:
-// beside its children shown, at x from top to bottom, on their left when
-// they are left of it.
-func summaryBrace(r layout.Result, n *model.Node) (x, top, bottom float32, left, ok bool) {
-	if n.Summary == nil || n.Collapsed || len(n.Children) == 0 {
-		return
-	}
-	own, found := r.Boxes[n.ID]
-	if !found {
-		return
-	}
-	var kids layout.Rect
-	first := true
-	for _, c := range n.Children {
-		b, found := subtreeBox(r, c)
-		if !found {
-			continue
-		}
-		if first {
-			kids, first = b, false
-			continue
-		}
-		x1, y1 := max(kids.X+kids.W, b.X+b.W), max(kids.Y+kids.H, b.Y+b.H)
-		kids.X, kids.Y = min(kids.X, b.X), min(kids.Y, b.Y)
-		kids.W, kids.H = x1-kids.X, y1-kids.Y
-	}
-	if first {
-		return
-	}
-	left = r.Left[n.ID] || own.X > kids.X+kids.W // the children are left of it
-	x = kids.X + kids.W + 14
-	if left {
-		x = kids.X - 14
-	}
-	return x, kids.Y, kids.Y + kids.H, left, true
-}
-
-// summaryGap is between a summary's brace and its topic.
-const summaryGap = 18
-
-// layoutSummaries lays out the summaries' topics, each beyond its brace,
-// level with its middle, with what is below it further out, as a little
-// map of its own, and adds them to the canvas's layout.
-func (a *app) layoutSummaries(r layout.Result, shown *model.Document, measure layout.Measure, o layout.Options) layout.Result {
-	o.Mode, o.OneSided = layout.ModeTree, true
-	shown.WalkShown(func(n, _ *model.Node, depth int) {
-		t := n.SummaryTopic()
-		if t == nil {
-			return
-		}
-		bx, top, bottom, left, ok := summaryBrace(r, n)
-		if !ok {
-			return
-		}
-		sub := func(m *model.Node, d int) (float32, float32) { return measure(m, depth+1+d) }
-		fr := layout.Compute(&model.Document{Root: t}, sub, o)
-		fb := fr.Boxes[t.ID]
-		cx := fb.X + fb.W/2
-		dx, dy := bx+summaryGap-fb.X, (top+bottom)/2-(fb.Y+fb.H/2)
-		if left {
-			dx = bx - summaryGap - (fb.X + fb.W)
-		}
-		for id, b := range fr.Boxes {
-			if left { // mirrored about the topic, which stays where it is
-				b.X = 2*cx - (b.X + b.W)
-			}
-			b.X += dx
-			b.Y += dy
-			r.Boxes[id] = b
-			r.Left[id] = left
-			r.Width = max(r.Width, b.X+b.W+o.Margin)
-			r.Height = max(r.Height, b.Y+b.H+o.Margin)
-		}
-		for _, e := range fr.Edges {
-			e.Left = left
-			r.Edges = append(r.Edges, e)
-		}
-	})
-	return r
-}
-
-// drawSummaries draws, beside the children of nodes with a summary, a
-// brace around them, pointing at the summary's topic.
+// drawSummaries draws the summaries' braces, by the children they sum up,
+// and from their tips a line to their topics.
 func (a *app) drawSummaries(p *ui.Painter, r layout.Result, shown *model.Document, ox, oy, z float32, colorOf func(string) ui.Color) {
-	shown.Walk(func(n, _ *model.Node, _ int) bool {
-		x, y0, y1, left, ok := summaryBrace(r, n)
+	for id, br := range r.Braces {
+		tb, ok := r.Boxes[br.Topic]
 		if !ok {
-			return true
+			continue
 		}
-		bx, top, bottom := ox+x*z, oy+y0*z, oy+y1*z
-		dir := float32(1)
-		if left {
-			dir = -1
+		col := colorOf(id)
+		width := max(1.5*z, 1)
+		at, from, to := br.At*z, br.From*z, br.To*z
+		rad := min(8*z, (to-from)/4)
+		mid := (from + to) / 2
+		if br.Horizontal { // under the children, opening down
+			y, x0, x1, xm := oy+at, ox+from, ox+to, ox+mid
+			brace := new(ui.Path).MoveTo(x0, y-rad).QuadTo(x0, y, x0+rad, y).LineTo(xm-rad, y).
+				QuadTo(xm, y, xm, y+rad).QuadTo(xm, y, xm+rad, y).LineTo(x1-rad, y).QuadTo(x1, y, x1, y-rad)
+			p.StrokePath(brace, width, col)
+			p.Line(xm, y+rad, ox+(tb.X+tb.W/2)*z, oy+tb.Y*z, width, col)
+			continue
 		}
-		rad := min(8*z, (bottom-top)/4)
-		mid := (top + bottom) / 2
-		brace := new(ui.Path).MoveTo(bx-dir*rad, top).QuadTo(bx, top, bx, top+rad).LineTo(bx, mid-rad).
-			QuadTo(bx, mid, bx+dir*rad, mid).QuadTo(bx, mid, bx, mid+rad).LineTo(bx, bottom-rad).
-			QuadTo(bx, bottom, bx-dir*rad, bottom)
-		col := colorOf(n.ID)
-		p.StrokePath(brace, max(1.5*z, 1), col)
-		if t := n.SummaryTopic(); t != nil { // on to its topic
-			if b, ok := r.Boxes[t.ID]; ok {
-				end := ox + b.X*z
-				if left {
-					end = ox + (b.X+b.W)*z
-				}
-				p.Line(bx+dir*rad, mid, end, oy+(b.Y+b.H/2)*z, max(1.5*z, 1), col)
-			}
+		x, top, bottom, ym, dir := ox+at, oy+from, oy+to, oy+mid, br.Dir
+		brace := new(ui.Path).MoveTo(x-dir*rad, top).QuadTo(x, top, x, top+rad).LineTo(x, ym-rad).
+			QuadTo(x, ym, x+dir*rad, ym).QuadTo(x, ym, x, ym+rad).LineTo(x, bottom-rad).
+			QuadTo(x, bottom, x-dir*rad, bottom)
+		p.StrokePath(brace, width, col)
+		end := ox + tb.X*z
+		if dir < 0 {
+			end = ox + (tb.X+tb.W)*z
 		}
-		return true
-	})
+		p.Line(x+dir*rad, ym, end, oy+(tb.Y+tb.H/2)*z, width, col)
+	}
 }
 
 // addSummary gives a node a summary of its children and edits its topic.

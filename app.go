@@ -138,6 +138,9 @@ type app struct {
 	editW     float32      // the widest the title edited has been
 	selImage  string       // the node whose picture is selected, which Delete takes off
 	notePic   *model.Image // the picture of a note shown large
+	// summaryTopics are the nodes of the canvas drawn that are summaries'
+	// topics, which show as such.
+	summaryTopics map[string]bool
 	// editComposing tells an input method is composing in the title.
 	editComposing bool
 	// The board's columns' lists, and the task to show there next.

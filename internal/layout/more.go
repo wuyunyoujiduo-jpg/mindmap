@@ -13,7 +13,7 @@ const (
 // computeDown lays the map out as an org chart: each node centered over
 // the row of its children.
 func computeDown(d *model.Document, measure Measure, o Options) Result {
-	r := Result{Boxes: map[string]Rect{}, Left: map[string]bool{}, Up: map[string]bool{}}
+	r := newResult()
 	type sized struct{ w, h, span float32 }
 	sizes := map[string]sized{}
 	gapX, gapY := o.GapY*2, o.GapX
@@ -31,6 +31,13 @@ func computeDown(d *model.Document, measure Measure, o Options) Result {
 				row += sizes[c.ID].span
 			}
 			s.span = max(w, row)
+			// A summary goes under the children, centered: the node takes
+			// the room it needs, so that it does not run into its
+			// neighbors.
+			if t := n.SummaryTopic(); t != nil {
+				size(t, depth+1)
+				s.span = max(s.span, sizes[t.ID].span)
+			}
 		}
 		sizes[n.ID] = s
 	}
@@ -57,6 +64,7 @@ func computeDown(d *model.Document, measure Measure, o Options) Result {
 		}
 	}
 	place(d.Root, 0, 0)
+	placeSummaries(&r, d.Root, measure, o, summaryBelow, true)
 	return r.finish(o)
 }
 
@@ -65,8 +73,8 @@ func computeDown(d *model.Document, measure Measure, o Options) Result {
 // each with what is below it in an indented column going away from the
 // line. A fishbone runs the line leftward from the root, its head.
 func computeLine(d *model.Document, measure Measure, o Options, fishbone bool) Result {
-	r := Result{Boxes: map[string]Rect{}, Left: map[string]bool{}, Up: map[string]bool{}}
-	const indent = 24
+	r := newResult()
+	const indent = columnIndent
 	gap := o.GapY
 	// block measures an indented column: its width and height.
 	type blockSize struct{ w, h float32 }
@@ -75,10 +83,18 @@ func computeLine(d *model.Document, measure Measure, o Options, fishbone bool) R
 		w, h := measure(n, depth)
 		b := blockSize{w, h}
 		if !n.Collapsed {
+			kids := blockSize{}
 			for _, c := range n.Children {
 				cb := block(c, depth+1)
-				b.w = max(b.w, indent+cb.w)
-				b.h += gap + cb.h
+				kids.w = max(kids.w, indent+cb.w)
+				kids.h += gap + cb.h
+			}
+			b.w, b.h = max(b.w, kids.w), b.h+kids.h
+			// A summary beside the children, a column of its own.
+			if t := n.SummaryTopic(); t != nil && len(n.Children) > 0 {
+				tb := block(t, depth+1)
+				b.w = max(b.w, kids.w+braceGap+SummaryGap+tb.w)
+				b.h = max(b.h, h+gap+tb.h)
 			}
 		}
 		return b
@@ -139,6 +155,7 @@ func computeLine(d *model.Document, measure Measure, o Options, fishbone bool) R
 			}
 		}
 	}
+	placeSummaries(&r, d.Root, measure, o, summaryColumn, false)
 	return r.finish(o)
 }
 
@@ -169,11 +186,7 @@ func (r Result) finish(o Options) Result {
 		minX, minY = min(minX, b.X), min(minY, b.Y)
 		maxX, maxY = max(maxX, b.X+b.W), max(maxY, b.Y+b.H)
 	}
-	for id, b := range r.Boxes {
-		b.X += o.Margin - minX
-		b.Y += o.Margin - minY
-		r.Boxes[id] = b
-	}
+	r.Shift(o.Margin-minX, o.Margin-minY)
 	r.Width = maxX - minX + 2*o.Margin
 	r.Height = maxY - minY + 2*o.Margin
 	return r

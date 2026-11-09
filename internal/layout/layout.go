@@ -35,8 +35,9 @@ var DefaultOptions = Options{Margin: 40, GapX: 48, GapY: 14}
 type Result struct {
 	Boxes  map[string]Rect
 	Edges  []Edge
-	Left   map[string]bool // the nodes on the root's left
-	Up     map[string]bool // the main branches above the line of a timeline or fishbone
+	Left   map[string]bool  // the nodes on the root's left
+	Up     map[string]bool  // the main branches above the line of a timeline or fishbone
+	Braces map[string]Brace // the summaries' braces, by the nodes they are of
 	Width  float32
 	Height float32
 }
@@ -47,7 +48,7 @@ type Measure func(n *model.Node, depth int) (w, h float32)
 // Compute lays out the visible nodes of the document: those under a
 // collapsed node are left out.
 func Compute(d *model.Document, measure Measure, o Options) Result {
-	r := Result{Boxes: map[string]Rect{}, Left: map[string]bool{}, Up: map[string]bool{}}
+	r := newResult()
 	if d.Root == nil {
 		return r
 	}
@@ -136,6 +137,8 @@ func Compute(d *model.Document, measure Measure, o Options) Result {
 		placeColumn(root, left, -o.GapX, 0, true)
 	}
 
+	placeSummaries(&r, root, measure, o, summaryBeside, o.OneSided)
+
 	// Move everything so the map starts at the margin.
 	minX, minY := float32(0), rootBox.Y
 	maxX, maxY := rootBox.W, rootBox.Y+rootBox.H
@@ -143,11 +146,7 @@ func Compute(d *model.Document, measure Measure, o Options) Result {
 		minX, minY = min(minX, b.X), min(minY, b.Y)
 		maxX, maxY = max(maxX, b.X+b.W), max(maxY, b.Y+b.H)
 	}
-	for id, b := range r.Boxes {
-		b.X += o.Margin - minX
-		b.Y += o.Margin - minY
-		r.Boxes[id] = b
-	}
+	r.Shift(o.Margin-minX, o.Margin-minY)
 	r.Width = maxX - minX + 2*o.Margin
 	r.Height = maxY - minY + 2*o.Margin
 	return r
