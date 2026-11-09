@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math"
 	"slices"
-	"strings"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/layout"
@@ -403,185 +402,126 @@ func (a *app) drawBoundaries(p *ui.Painter, r layout.Result, shown *model.Docume
 	})
 }
 
+// summaryBrace is where a node's summary brace goes, in map coordinates:
+// beside its children shown, at x from top to bottom, on their left when
+// they are left of it.
+func summaryBrace(r layout.Result, n *model.Node) (x, top, bottom float32, left, ok bool) {
+	if n.Summary == nil || n.Collapsed || len(n.Children) == 0 {
+		return
+	}
+	own, found := r.Boxes[n.ID]
+	if !found {
+		return
+	}
+	var kids layout.Rect
+	first := true
+	for _, c := range n.Children {
+		b, found := subtreeBox(r, c)
+		if !found {
+			continue
+		}
+		if first {
+			kids, first = b, false
+			continue
+		}
+		x1, y1 := max(kids.X+kids.W, b.X+b.W), max(kids.Y+kids.H, b.Y+b.H)
+		kids.X, kids.Y = min(kids.X, b.X), min(kids.Y, b.Y)
+		kids.W, kids.H = x1-kids.X, y1-kids.Y
+	}
+	if first {
+		return
+	}
+	left = r.Left[n.ID] || own.X > kids.X+kids.W // the children are left of it
+	x = kids.X + kids.W + 14
+	if left {
+		x = kids.X - 14
+	}
+	return x, kids.Y, kids.Y + kids.H, left, true
+}
+
+// summaryGap is between a summary's brace and its topic.
+const summaryGap = 18
+
+// layoutSummaries lays out the summaries' topics, each beyond its brace,
+// level with its middle, with what is below it further out, as a little
+// map of its own, and adds them to the canvas's layout.
+func (a *app) layoutSummaries(r layout.Result, shown *model.Document, measure layout.Measure, o layout.Options) layout.Result {
+	o.Mode, o.OneSided = layout.ModeTree, true
+	shown.WalkShown(func(n, _ *model.Node, depth int) {
+		t := n.SummaryTopic()
+		if t == nil {
+			return
+		}
+		bx, top, bottom, left, ok := summaryBrace(r, n)
+		if !ok {
+			return
+		}
+		sub := func(m *model.Node, d int) (float32, float32) { return measure(m, depth+1+d) }
+		fr := layout.Compute(&model.Document{Root: t}, sub, o)
+		fb := fr.Boxes[t.ID]
+		cx := fb.X + fb.W/2
+		dx, dy := bx+summaryGap-fb.X, (top+bottom)/2-(fb.Y+fb.H/2)
+		if left {
+			dx = bx - summaryGap - (fb.X + fb.W)
+		}
+		for id, b := range fr.Boxes {
+			if left { // mirrored about the topic, which stays where it is
+				b.X = 2*cx - (b.X + b.W)
+			}
+			b.X += dx
+			b.Y += dy
+			r.Boxes[id] = b
+			r.Left[id] = left
+			r.Width = max(r.Width, b.X+b.W+o.Margin)
+			r.Height = max(r.Height, b.Y+b.H+o.Margin)
+		}
+		for _, e := range fr.Edges {
+			e.Left = left
+			r.Edges = append(r.Edges, e)
+		}
+	})
+	return r
+}
+
 // drawSummaries draws, beside the children of nodes with a summary, a
-// brace around them and the summary's label beyond it.
+// brace around them, pointing at the summary's topic.
 func (a *app) drawSummaries(p *ui.Painter, r layout.Result, shown *model.Document, ox, oy, z float32, colorOf func(string) ui.Color) {
 	shown.Walk(func(n, _ *model.Node, _ int) bool {
-		if n.Summary == nil || n.Collapsed || len(n.Children) == 0 {
-			return true
-		}
-		own, ok := r.Boxes[n.ID]
+		x, y0, y1, left, ok := summaryBrace(r, n)
 		if !ok {
 			return true
 		}
-		var kids layout.Rect
-		first := true
-		for _, c := range n.Children {
-			b, ok := subtreeBox(r, c)
-			if !ok {
-				continue
-			}
-			if first {
-				kids, first = b, false
-				continue
-			}
-			x1, y1 := max(kids.X+kids.W, b.X+b.W), max(kids.Y+kids.H, b.Y+b.H)
-			kids.X, kids.Y = min(kids.X, b.X), min(kids.Y, b.Y)
-			kids.W, kids.H = x1-kids.X, y1-kids.Y
-		}
-		if first {
-			return true
-		}
-		left := r.Left[n.ID] || own.X > kids.X+kids.W // the children are left of it
-		col := colorOf(n.ID)
-		top, bottom := oy+kids.Y*z, oy+(kids.Y+kids.H)*z
-		bx := ox + (kids.X+kids.W)*z + 14*z
+		bx, top, bottom := ox+x*z, oy+y0*z, oy+y1*z
 		dir := float32(1)
 		if left {
-			bx, dir = ox+kids.X*z-14*z, -1
+			dir = -1
 		}
 		rad := min(8*z, (bottom-top)/4)
 		mid := (top + bottom) / 2
 		brace := new(ui.Path).MoveTo(bx-dir*rad, top).QuadTo(bx, top, bx, top+rad).LineTo(bx, mid-rad).
 			QuadTo(bx, mid, bx+dir*rad, mid).QuadTo(bx, mid, bx, mid+rad).LineTo(bx, bottom-rad).
 			QuadTo(bx, bottom, bx-dir*rad, bottom)
+		col := colorOf(n.ID)
 		p.StrokePath(brace, max(1.5*z, 1), col)
-		if box, ok := summaryLabelBox(n, bx, mid, rad, dir, z); ok && a.summaryEditing != n.ID {
-			size := 14 * z
-			p.Fill(box, col.Alpha(0.15), 6*z)
-			stroke := max(z, 1)
-			if a.selSummary == n.ID {
-				stroke = max(2.5*z, 2)
-				col = p.Theme().Accent
+		if t := n.SummaryTopic(); t != nil { // on to its topic
+			if b, ok := r.Boxes[t.ID]; ok {
+				end := ox + b.X*z
+				if left {
+					end = ox + (b.X+b.W)*z
+				}
+				p.Line(bx+dir*rad, mid, end, oy+(b.Y+b.H/2)*z, max(1.5*z, 1), col)
 			}
-			p.Stroke(box, col, 6*z, stroke)
-			p.Text(box.X+8*z, box.Y+size*0.45, cmpOr(n.Summary.Label, "概要"), size, p.Theme().Text)
 		}
 		return true
 	})
 }
 
-// summaryLabelBox is where a summary's label shows, by its brace at bx
-// from top to bottom about mid, opening toward dir.
-func summaryLabelBox(n *model.Node, bx, mid, rad, dir, z float32) (ui.Rect, bool) {
-	label := n.Summary.Label
-	if label == "" {
-		label = "概要"
-	}
-	size := 14 * z
-	w := float32(len([]rune(label)))*size + 16*z
-	x := bx + dir*(rad+8*z)
-	if dir < 0 {
-		x -= w
-	}
-	return ui.Rect{X: x, Y: mid - size, W: w, H: size * 2}, true
-}
-
-// summaryBoxes are the summaries' labels, in map coordinates by origin
-// (ox, oy) and zoom z, by their nodes' IDs.
-func summaryBoxes(r layout.Result, shown *model.Document, ox, oy, z float32) map[string]ui.Rect {
-	out := map[string]ui.Rect{}
-	shown.Walk(func(n, _ *model.Node, _ int) bool {
-		if n.Summary == nil || n.Collapsed || len(n.Children) == 0 {
-			return true
-		}
-		own, ok := r.Boxes[n.ID]
-		if !ok {
-			return true
-		}
-		var kids layout.Rect
-		first := true
-		for _, c := range n.Children {
-			b, ok := subtreeBox(r, c)
-			if !ok {
-				continue
-			}
-			if first {
-				kids, first = b, false
-				continue
-			}
-			x1, y1 := max(kids.X+kids.W, b.X+b.W), max(kids.Y+kids.H, b.Y+b.H)
-			kids.X, kids.Y = min(kids.X, b.X), min(kids.Y, b.Y)
-			kids.W, kids.H = x1-kids.X, y1-kids.Y
-		}
-		if first {
-			return true
-		}
-		left := r.Left[n.ID] || own.X > kids.X+kids.W
-		top, bottom := oy+kids.Y*z, oy+(kids.Y+kids.H)*z
-		bx, dir := ox+(kids.X+kids.W)*z+14*z, float32(1)
-		if left {
-			bx, dir = ox+kids.X*z-14*z, -1
-		}
-		rad := min(8*z, (bottom-top)/4)
-		if box, ok := summaryLabelBox(n, bx, (top+bottom)/2, rad, dir, z); ok {
-			out[n.ID] = box
-		}
-		return true
-	})
-	return out
-}
-
-// summaryLabels are the summaries' labels on the canvas, as elements: a
-// click selects one (Delete takes it off), a double click edits its text,
-// and its menu does both.
-func (a *app) summaryLabels(c *ui.Context, shown *model.Document) {
-	cam := a.cam()
-	z := cam.Zoom
-	for id, box := range summaryBoxes(a.boxes, shown, cam.X, cam.Y, z) {
-		n, _ := shown.Find(id)
-		if n == nil || n.Summary == nil {
-			continue
-		}
-		key := c.Key("summary:" + id)
-		if a.summaryEditing == id {
-			in := ui.TextInput(c.Key("summary-edit:"+id), &a.summaryText).Absolute().Left(box.X).Top(box.Y).
-				Width(max(box.W, 80*z)).Height(box.H).FontSize(14 * z).AutoFocus().Label("概要文字")
-			if in.Submitted() || in.Shortcut(0, ui.KeyEscape) || !in.Focused() && a.summaryFocused {
-				a.commitSummary(n)
-			}
-			a.summaryFocused = in.Focused()
-			continue
-		}
-		el := ui.Box(key).Absolute().Left(box.X).Top(box.Y).Size(box.W, box.H).Cursor(ui.CursorPointer).
-			Label("概要 " + n.Summary.Label).Tooltip("双击编辑 · 选中后按 Delete 删除")
-		switch {
-		case el.DoubleClicked():
-			a.editSummary(n)
-		case el.Clicked():
-			a.selSummary, a.selected, a.multi = id, id, nil
-			a.canvas.Focus()
-		}
-		el.ContextMenu(func(m *ui.Menu) {
-			if m.Item("编辑概要文字").Chosen() {
-				a.later(func() { a.editSummary(n) })
-			}
-			if m.Item("删除概要").Chosen() {
-				a.later(func() { a.removeSummary(n) })
-			}
-		})
-	}
-}
-
-func (a *app) editSummary(n *model.Node) {
-	a.summaryEditing, a.summaryText, a.summaryFocused = n.ID, n.Summary.Label, false
-	a.selSummary = n.ID
-}
-
-func (a *app) commitSummary(n *model.Node) {
-	label := strings.TrimSpace(a.summaryText)
-	a.summaryEditing = ""
-	if n.Summary != nil && label != n.Summary.Label {
-		a.mutate("", func() { n.Summary = &model.Mark{Label: label} })
-	}
-	a.canvas.Focus()
-}
-
-func (a *app) removeSummary(n *model.Node) {
-	a.selSummary, a.summaryEditing = "", ""
-	if n.Summary != nil {
-		a.mutate("", func() { n.Summary = nil })
-	}
+// addSummary gives a node a summary of its children and edits its topic.
+func (a *app) addSummary(n *model.Node) {
+	var t *model.Node
+	a.mutate("", func() { t = n.AddSummary("概要") })
+	a.selected, a.multi = t.ID, nil
+	a.startEdit(t.ID)
 }
 
 // annotationsSection is the panel's part for a node's summary, boundary,
@@ -609,7 +549,17 @@ func (a *app) annotationsSection(c *ui.Context, n *model.Node) {
 					}
 				})
 			}
-			mark("summary", "概要", &n.Summary)
+			if st := n.SummaryTopic(); st != nil { // edited as the node it is
+				ui.Row(c.Key("summary")).Gap(6).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, "概要").FontSize(12).TextColor(t.TextMuted).Width(40)
+					if ui.Text(c, st.Title).FontSize(12).Grow(1).MaxLines(1).Cursor(ui.CursorPointer).Clicked() {
+						a.selected, a.multi = st.ID, nil
+					}
+					if iconButton(c, iconClose, "删除概要", "删除概要", 22, true).Clicked() {
+						a.later(func() { a.mutate("", func() { n.Summary = nil }) })
+					}
+				})
+			}
 			mark("boundary", "外框", &n.Boundary)
 			for i := range rels {
 				rel := rels[i]
@@ -650,7 +600,7 @@ func (a *app) annotationMenu(m *ui.Menu, n *model.Node, depth int) {
 			a.later(func() { a.startRelation(n) })
 		}
 		if m.Item("概要").Disabled(len(n.Children) == 0 || n.Summary != nil).Chosen() {
-			a.later(func() { a.mutate("", func() { n.Summary = &model.Mark{Label: "概要"} }) })
+			a.later(func() { a.addSummary(n) })
 		}
 		if m.Item("外框").Disabled(n.Boundary != nil).Chosen() {
 			a.later(func() { a.mutate("", func() { n.Boundary = &model.Mark{} }) })
@@ -668,11 +618,6 @@ func (a *app) annotationMenu(m *ui.Menu, n *model.Node, depth int) {
 // overNode reports whether the pointer is over a node of the canvas.
 func (a *app) overNode() bool {
 	cam := a.cam()
-	for _, b := range summaryBoxes(a.boxes, a.doc, cam.X, cam.Y, cam.Zoom) {
-		if a.pointer[0] >= b.X && a.pointer[0] <= b.X+b.W && a.pointer[1] >= b.Y && a.pointer[1] <= b.Y+b.H {
-			return true // a summary's label
-		}
-	}
 	x, y := (a.pointer[0]-cam.X)/cam.Zoom, (a.pointer[1]-cam.Y)/cam.Zoom
 	for _, b := range a.boxes.Boxes {
 		if x >= b.X && x <= b.X+b.W && y >= b.Y && y <= b.Y+b.H {

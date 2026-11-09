@@ -33,7 +33,7 @@ func (d *Document) AddSibling(id, title string) (*Node, error) {
 	if n == nil {
 		return nil, ErrNotFound
 	}
-	if p == nil {
+	if p == nil || isSummaryTopic(n, p) {
 		return d.AddChild(id, title)
 	}
 	i := slices.Index(p.Children, n)
@@ -49,7 +49,7 @@ func (d *Document) AddSiblingBefore(id, title string) (*Node, error) {
 	if n == nil {
 		return nil, ErrNotFound
 	}
-	if p == nil {
+	if p == nil || isSummaryTopic(n, p) {
 		return d.AddChild(id, title)
 	}
 	s := NewNode(title)
@@ -74,6 +74,10 @@ func (d *Document) Delete(id string) (next string, err error) {
 		return "", ErrRoot
 	}
 	d.dropRelations(n)
+	if isSummaryTopic(n, p) { // the summary goes with its topic
+		p.Summary = nil
+		return p.ID, nil
+	}
 	i := slices.Index(p.Children, n)
 	p.Children = slices.Delete(p.Children, i, i+1)
 	switch {
@@ -93,7 +97,7 @@ func (d *Document) Move(id, newParentID string, index int) error {
 		return ErrNotFound
 	}
 	floating := p == nil && d.IsFloating(id)
-	if p == nil && !floating {
+	if p == nil && !floating || isSummaryTopic(n, p) {
 		return ErrRoot
 	}
 	if n.Contains(newParentID) {
@@ -128,7 +132,7 @@ func (d *Document) Shift(id string, delta int) error {
 	if n == nil {
 		return ErrNotFound
 	}
-	if p == nil {
+	if p == nil || isSummaryTopic(n, p) {
 		return ErrRoot
 	}
 	i := slices.Index(p.Children, n)
@@ -148,7 +152,7 @@ func (d *Document) Indent(id string) error {
 	if n == nil {
 		return ErrNotFound
 	}
-	if p == nil {
+	if p == nil || isSummaryTopic(n, p) {
 		return ErrRoot
 	}
 	i := slices.Index(p.Children, n)
@@ -167,9 +171,12 @@ func (d *Document) Outdent(id string) error {
 	if p == nil {
 		return ErrRoot
 	}
+	if isSummaryTopic(n, p) {
+		return ErrRoot
+	}
 	pp, gp := d.Find(p.ID)
-	if gp == nil {
-		return nil // already a child of the root
+	if gp == nil || isSummaryTopic(pp, gp) {
+		return nil // already a child of the root, or of a summary's topic
 	}
 	return d.Move(id, gp.ID, slices.Index(gp.Children, pp)+1)
 }
@@ -194,6 +201,9 @@ func (d *Document) Tasks() []TaskNode {
 		for _, c := range n.Children {
 			walk(c, parents)
 		}
+		if t := n.SummaryTopic(); t != nil {
+			walk(t, parents)
+		}
 	}
 	if d.Root != nil {
 		walk(d.Root, nil)
@@ -213,6 +223,9 @@ func (d *Document) dropRelations(n *Node) {
 		for _, c := range m.Children {
 			walk(c)
 		}
+		if t := m.SummaryTopic(); t != nil {
+			walk(t)
+		}
 	}
 	walk(n)
 	d.Relations = slices.DeleteFunc(d.Relations, func(r Relation) bool { return gone[r.From] || gone[r.To] })
@@ -228,7 +241,7 @@ func (d *Document) Float(id string, at Point) error {
 	if n == nil {
 		return ErrNotFound
 	}
-	if p == nil {
+	if p == nil || isSummaryTopic(n, p) {
 		return ErrRoot
 	}
 	i := slices.Index(p.Children, n)

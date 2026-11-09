@@ -216,7 +216,7 @@ func otherFields(o, n *Node) string {
 		a, b any
 	}{
 		{"标记", o.Markers, n.Markers}, {"样式", o.Style, n.Style}, {"图片", o.Image, n.Image},
-		{"附件", o.Files, n.Files}, {"概要", o.Summary, n.Summary}, {"外框", o.Boundary, n.Boundary},
+		{"附件", o.Files, n.Files}, {"概要", o.Summary != nil, n.Summary != nil}, {"外框", o.Boundary, n.Boundary},
 		{"度量", o.Values, n.Values}, {"位置", o.Pos, n.Pos},
 	} {
 		if !sameJSON(f.a, f.b) {

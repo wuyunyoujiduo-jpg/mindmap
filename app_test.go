@@ -3727,39 +3727,83 @@ func TestAIReplyCutShortGoesOn(t *testing.T) {
 	}
 }
 
-func TestSummaryLabel(t *testing.T) {
+func TestSummaryTopic(t *testing.T) {
 	a, tt := newTestApp(t)
 	arch := find(t, a, "架构")
-	a.mutate("", func() { arch.Summary = &model.Mark{Label: "概要"} })
-	a.cam().X -= 250 // the summary in view
-	tt.Frame()
-	floats := len(a.doc.Floating)
-	// A click selects it; a double click edits its text, and makes no
-	// floating topic.
-	if err := tt.Click("概要 概要"); err != nil {
+	// One saved before summaries had topics: its label is its topic.
+	data := []byte(`{"version":2,"sheets":[{"id":"s","title":"画布","root":{"id":"r","title":"根","children":[` +
+		`{"id":"a","title":"A","summary":{"label":"两端"},"children":[{"id":"b","title":"B"}]}]}}]}`)
+	old, err := model.Parse(data)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if a.selSummary != arch.ID {
-		t.Fatal("not selected")
+	if st := old.Sheets[0].Root.Children[0].SummaryTopic(); st == nil || st.Title != "两端" {
+		t.Fatalf("old summary %+v", old.Sheets[0].Root.Children[0].Summary)
 	}
-	tt.Click("概要 概要")
+
+	// Inserted from the menu, its topic is edited at once.
+	a.selected = arch.ID
+	a.addSummary(arch)
 	tt.Frame()
-	if a.summaryEditing != arch.ID || len(a.doc.Floating) != floats {
-		t.Fatalf("editing %q, floating %d", a.summaryEditing, len(a.doc.Floating))
+	st := arch.SummaryTopic()
+	if st == nil || a.editing != st.ID || a.selected != st.ID {
+		t.Fatalf("topic %+v, editing %q", st, a.editing)
 	}
 	tt.Key(ui.Cmd, ui.KeyA)
 	tt.Type("两端")
 	tt.Key(0, ui.KeyEnter)
 	tt.Frame()
-	if arch.Summary == nil || arch.Summary.Label != "两端" || a.summaryEditing != "" {
-		t.Fatalf("summary %+v, editing %q, text %q", arch.Summary, a.summaryEditing, a.summaryText)
+	if st.Title != "两端" || a.editing != "" {
+		t.Fatalf("title %q, editing %q", st.Title, a.editing)
 	}
-	snapshot(t, tt, "summary-edited")
-	// Selected, Delete takes it off, the node staying.
-	if err := tt.Click("概要 两端"); err != nil {
+	// Beyond the brace, past the children, level with their middle.
+	kids, _ := subtreeBox(a.boxes, arch.Children[0])
+	last, _ := subtreeBox(a.boxes, arch.Children[len(arch.Children)-1])
+	b := a.boxes.Boxes[st.ID]
+	if b.X < kids.X+kids.W+20 || b.Y+b.H/2 < kids.Y || b.Y+b.H/2 > last.Y+last.H {
+		t.Fatalf("topic at %+v, children %+v to %+v", b, kids, last)
+	}
+	// Tab gives it a child, laid out further out.
+	tt.Key(0, ui.KeyTab)
+	tt.Type("前后端分离")
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if len(st.Children) != 1 || st.Children[0].Title != "前后端分离" {
+		t.Fatalf("children %+v", st.Children)
+	}
+	if cb := a.boxes.Boxes[st.Children[0].ID]; cb.X < b.X+b.W {
+		t.Fatalf("child at %+v, topic %+v", cb, b)
+	}
+	// On a branch left of the center, it and its children go left.
+	feat := find(t, a, "功能")
+	a.addSummary(feat)
+	a.editing = ""
+	ls := feat.SummaryTopic()
+	a.mutate("", func() { ls.Title = "左侧概要"; ls.Children = []*model.Node{model.NewNode("左孙")} })
+	tt.Frame()
+	fk, _ := subtreeBox(a.boxes, feat.Children[0])
+	lb, lc := a.boxes.Boxes[ls.ID], a.boxes.Boxes[ls.Children[0].ID]
+	if lb.X+lb.W > fk.X-14 || lc.X+lc.W > lb.X {
+		t.Fatalf("left topic %+v, its child %+v, children from %+v", lb, lc, fk)
+	}
+	a.selected = st.ID
+	snapshot(t, tt, "summary-topic")
+	// Saved and read again, it is all there.
+	a.save()
+	f, err := model.Load(a.path)
+	if err != nil {
 		t.Fatal(err)
 	}
+	n, _ := f.Sheets[0].Find(arch.ID)
+	if n.SummaryTopic() == nil || len(n.SummaryTopic().Children) != 1 {
+		t.Fatalf("saved %+v", n.Summary)
+	}
+	// Selected, Delete takes the summary off, the node staying.
+	a.selected, a.multi = st.ID, nil
+	a.canvas.Focus()
+	tt.Frame()
 	tt.Key(0, ui.KeyDelete)
+	tt.Frame()
 	if arch.Summary != nil || find(t, a, "架构") == nil {
 		t.Fatalf("summary %+v", arch.Summary)
 	}

@@ -253,6 +253,10 @@ type Point struct {
 // Mark is a summary or a boundary of a node's branch, with its label.
 type Mark struct {
 	Label string `json:"label,omitempty"`
+	// Topic is a summary's own topic, as XMind's: a node beyond the brace,
+	// edited, styled and given children as any other. Summaries saved
+	// before it had their Label only, which Parse makes their topic.
+	Topic *Node `json:"topic,omitempty"`
 }
 
 // IsFloating reports whether the node is one of the floating topics.
@@ -355,6 +359,9 @@ func (d *Document) Walk(fn func(n, parent *Node, depth int) bool) {
 				return false
 			}
 		}
+		if t := n.SummaryTopic(); t != nil && !walk(t, n, depth+1) {
+			return false
+		}
 		return true
 	}
 	if d.Root != nil && !walk(d.Root, nil, 0) {
@@ -394,6 +401,9 @@ func (d *Document) Path(id string) []*Node {
 				return true
 			}
 		}
+		if t := n.SummaryTopic(); t != nil && walk(t) {
+			return true
+		}
 		path = path[:len(path)-1]
 		return false
 	}
@@ -420,6 +430,9 @@ func (n *Node) Contains(id string) bool {
 		if c.Contains(id) {
 			return true
 		}
+	}
+	if t := n.SummaryTopic(); t != nil {
+		return t.Contains(id)
 	}
 	return false
 }
@@ -480,6 +493,9 @@ func (n *Node) renew() {
 	for _, c := range n.Children {
 		c.renew()
 	}
+	if t := n.SummaryTopic(); t != nil {
+		t.renew()
+	}
 }
 
 func (n *Node) clone() *Node {
@@ -494,6 +510,7 @@ func (n *Node) clone() *Node {
 	c.Values = maps.Clone(n.Values)
 	if n.Summary != nil {
 		m := *n.Summary
+		m.Topic = n.Summary.Topic.clone()
 		c.Summary = &m
 	}
 	if n.Boundary != nil {

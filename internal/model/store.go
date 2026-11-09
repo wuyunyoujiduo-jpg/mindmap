@@ -75,6 +75,7 @@ func Parse(b []byte) (*File, error) {
 			}
 			nodes[n.ID] = true
 			n.UpdateIdeaMarker() // the bulb an idea was marked with
+			n.summaryTopicOfLabel()
 			return true
 		})
 	}

@@ -142,6 +142,9 @@ func (d *Document) WalkShown(fn func(n, parent *Node, depth int)) {
 		for _, c := range n.Children {
 			walk(c, n, depth+1)
 		}
+		if t := n.SummaryTopic(); t != nil && len(n.Children) > 0 {
+			walk(t, n, depth+1)
+		}
 	}
 	if d.Root != nil {
 		walk(d.Root, nil, 0)
