@@ -65,7 +65,6 @@ func (a *app) libraryView(c *ui.Context) {
 		a.pluginBanner(c)
 		a.clipComposer(c)
 		a.clipFilters(c)
-		a.materialBar(c)
 		if a.libErr != "" {
 			ui.Row(c).Padding(0, 12, 6).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, a.libErr).FontSize(12).TextColor(t.Danger).Wrap().Grow(1)
@@ -197,9 +196,13 @@ func (a *app) searchClips() []library.Hit {
 // keep the clipboard or a file.
 func (a *app) clipComposer(c *ui.Context) {
 	t := c.Theme()
-	ui.Row(c).Padding(8, 12, 6).Gap(8).AlignItems(ui.End).Children(func() {
+	empty := strings.TrimSpace(a.libDraft) == ""
+	box := ui.Row(c.Key("lib-compose")).Margin(10, 12, 8).Padding(4, 6, 4, 12).Gap(6).AlignItems(ui.Center).Radius(10).
+		Background(t.Text.Alpha(0.045))
+	box.Children(func() {
+		glyph(c, iconPlus, 14, t.TextMuted)
 		in := ui.TextAreaBase(c.Key("lib-draft"), &a.libDraft).Lines(1, 5).
-			Placeholder("记点什么、粘贴链接、图片或文件…（⌘↩ 收藏）").Label("新资料").
+			Placeholder("记点什么、粘贴链接、图片或文件…").Label("新资料").
 			OnPaste(func(text string) bool { // a picture or files copied: kept at once
 				if text != "" {
 					return false
@@ -211,19 +214,22 @@ func (a *app) clipComposer(c *ui.Context) {
 				a.libSel = clips[0].ID
 				return true
 			}).
-			Padding(8).Radius(8).Border(1, t.Border).Background(t.Background).FontSize(13).Grow(1)
+			Padding(5, 4).FontSize(13).Grow(1)
 		keep := in.Shortcut(ui.Cmd, ui.KeyEnter)
-		if ui.PrimaryButton(c, "收藏").Disabled(strings.TrimSpace(a.libDraft) == "").Shrink(0).Clicked() {
-			keep = true
+		if !empty { // the button when there is something to keep
+			ui.Text(c, "⌘↩").FontSize(textCaption).TextColor(t.TextMuted)
+			if ui.PrimaryButton(c, "收藏").Shrink(0).Clicked() {
+				keep = true
+			}
 		}
-		if keep && strings.TrimSpace(a.libDraft) != "" {
+		if keep && !empty {
 			if clip, err := a.addClipText(a.libDraft, "手动"); err != nil {
 				a.libErr = err.Error()
 			} else {
 				a.libDraft, a.libSel = "", clip.ID
 			}
 		}
-		if ui.Button(c, "文件…").Tooltip("收藏图片或文件（也可以直接拖进来）").Shrink(0).Clicked() {
+		if iconButton(c, iconClip, "文件…", "收藏图片或文件（也可以直接拖进来）", 28, true).Clicked() {
 			a.plat.OpenFile("选择要收藏的文件", nil, func(path string) {
 				if path != "" {
 					a.dropClips([]string{path})
@@ -256,18 +262,18 @@ func (a *app) clipFilters(c *ui.Context) {
 		ui.Segmented(c, &a.libKind, "全部", "导图", "文档", "链接").FontSize(12).Shrink(0)
 		ui.Box(c).Width(4)
 		chip := func(key, label string, active bool) bool {
-			b := ui.Box(c.Key("cat:"+key)).Padding(3, 10).Radius(999).Cursor(ui.CursorPointer).Label(label)
-			switch {
+			b := ui.Box(c.Key("cat:"+key)).Padding(4, 10).Radius(999).Cursor(ui.CursorPointer).Label(label)
+			switch { // quiet pills, the one chosen dark, as 灵感's
 			case active:
-				b.Background(t.Accent)
+				b.Background(t.Text.Alpha(0.85))
 			case b.Hovered():
-				b.Background(t.SurfaceHover)
+				b.Background(t.Text.Alpha(0.08))
 			default:
-				b.Border(1, t.Border)
+				b.Background(t.Text.Alpha(0.045))
 			}
 			col := t.Text
 			if active {
-				col = t.AccentText
+				col = t.Background
 			}
 			b.Children(func() { ui.Text(c, label).FontSize(12).TextColor(col).NoWrap() })
 			return b.Clicked()
@@ -292,6 +298,8 @@ func (a *app) clipFilters(c *ui.Context) {
 		if a.libTag != "" && tagChip(c.Key("lib-tag"), a.libTag, "#"+a.libTag+" ✕", true, 12).Tooltip("不再按这个标签筛选").Clicked() {
 			a.libTag = ""
 		}
+		ui.Spacer(c)
+		a.materialBar(c)
 	})
 }
 

@@ -148,10 +148,14 @@ func drawIcon(p *ui.Painter, r ui.Rect, s float32, ic icon, col ui.Color) {
 		p.StrokePath(new(ui.Path).MoveTo(cx-h*0.38, cy-h*0.45).LineTo(cx, cy-h*0.85).LineTo(cx+h*0.38, cy-h*0.45), w, col)
 		p.StrokePath(new(ui.Path).MoveTo(cx-h*0.3, cy-h*0.1).LineTo(cx-h*0.75, cy-h*0.1).LineTo(cx-h*0.75, cy+h*0.85).
 			LineTo(cx+h*0.75, cy+h*0.85).LineTo(cx+h*0.75, cy-h*0.1).LineTo(cx+h*0.3, cy-h*0.1), w, col)
-	case iconFolder:
-		f := new(ui.Path).MoveTo(cx-h*0.85, cy-h*0.55).LineTo(cx-h*0.2, cy-h*0.55).LineTo(cx, cy-h*0.35).
-			LineTo(cx+h*0.85, cy-h*0.35).LineTo(cx+h*0.85, cy+h*0.65).LineTo(cx-h*0.85, cy+h*0.65).Close()
+	case iconFolder: // a folder, as the Finder's: a tab, round corners
+		x0, x1, tab, top, bot, r := cx-h*0.9, cx+h*0.9, cy-h*0.7, cy-h*0.42, cy+h*0.68, h*0.2
+		f := new(ui.Path).MoveTo(x0, bot-r).LineTo(x0, tab+r).QuadTo(x0, tab, x0+r, tab).
+			LineTo(cx-h*0.28, tab).QuadTo(cx-h*0.16, tab, cx-h*0.08, top).
+			LineTo(x1-r, top).QuadTo(x1, top, x1, top+r).LineTo(x1, bot-r).QuadTo(x1, bot, x1-r, bot).
+			LineTo(x0+r, bot).QuadTo(x0, bot, x0, bot-r).Close()
 		p.StrokePath(f, w, col)
+		p.Line(x0+w/2, top+h*0.16, x1-w/2, top+h*0.16, w*0.8, col)
 	case iconLibrary: // books on a shelf
 		p.StrokePath(roundedRect(cx-h*0.8, cy-h*0.7, h*0.42, h*1.4, h*0.08), w, col)
 		p.StrokePath(roundedRect(cx-h*0.25, cy-h*0.7, h*0.42, h*1.4, h*0.08), w, col)
@@ -166,12 +170,13 @@ func drawIcon(p *ui.Painter, r ui.Rect, s float32, ic icon, col ui.Color) {
 			p.FillPath(new(ui.Path).Circle(x, cy+dy*h, h*0.13), col)
 			p.Line(x+h*0.3, cy+dy*h, cx+h*0.85, cy+dy*h, w, col)
 		}
-	case iconMap: // a central topic, and two branches curving out to topics
-		p.StrokePath(roundedRect(cx-h*0.95, cy-h*0.3, h*0.68, h*0.6, h*0.18), w, col)
-		for _, dy := range []float32{-0.55, 0.55} {
+	case iconMap: // a map's page: a rounded square, a small map in it
+		p.StrokePath(roundedRect(cx-h*0.85, cy-h*0.85, h*1.7, h*1.7, h*0.38), w, col)
+		p.FillPath(new(ui.Path).Circle(cx-h*0.33, cy, h*0.17), col)
+		for _, dy := range []float32{-0.36, 0.36} {
 			y := cy + dy*h
-			p.StrokePath(roundedRect(cx+h*0.33, y-h*0.25, h*0.62, h*0.5, h*0.16), w, col)
-			p.StrokePath(new(ui.Path).MoveTo(cx-h*0.27, cy).CubeTo(cx+h*0.05, cy, cx+h*0.02, y, cx+h*0.33, y), w, col)
+			p.StrokePath(new(ui.Path).MoveTo(cx-h*0.2, cy).CubeTo(cx, cy, cx-h*0.02, y, cx+h*0.18, y).
+				LineTo(cx+h*0.42, y), w*0.85, col)
 		}
 	case iconText:
 		p.StrokePath(roundedRect(cx-h*0.7, cy-h*0.85, h*1.4, h*1.7, h*0.22), w, col)

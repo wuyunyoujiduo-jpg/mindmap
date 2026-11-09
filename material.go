@@ -138,18 +138,19 @@ func (a *app) materialBar(c *ui.Context) {
 		return
 	}
 	noKey := providerKey(a.cfg) == ""
-	ui.Row(c.Key("material-bar")).Padding(0, 12, 8).Gap(8).AlignItems(ui.Center).Children(func() {
-		ui.Text(c, fmt.Sprintf("%d 条", n)).FontSize(12).TextColor(t.TextMuted).NoWrap()
-		ui.Spacer(c)
-		tip := "AI 读这些资料，按主题整理成一张新导图，每个节点挂着对应的资料"
-		switch {
-		case noKey:
-			tip = "先在 AI 助手的设置里填写 API Key"
-		case n > maxMaterial:
-			tip = fmt.Sprintf("一次最多 %d 条：先用分类、标签或搜索筛选", maxMaterial)
+	// On the filters' row: how many, and a menu of what the AI makes of
+	// them.
+	ui.Text(c, fmt.Sprintf("%d 条", n)).FontSize(12).TextColor(t.TextMuted).NoWrap()
+	tip := "AI 读这些资料，整理成导图，或并入打开的导图"
+	if noKey {
+		tip = "先在 AI 助手的设置里填写 API Key"
+	}
+	iconTextButton(c, iconSparkle, "AI", "AI 整理资料", tip, false).Menu(func(m *ui.Menu) {
+		label := fmt.Sprintf("整理成新导图（%d 条）", n)
+		if n > maxMaterial {
+			label = fmt.Sprintf("整理成新导图（一次最多 %d 条，先筛选）", maxMaterial)
 		}
-		if iconTextButton(c, iconSparkle, fmt.Sprintf("用 AI 整理成导图（%d 条）", n), "用 AI 整理成导图", tip, false).
-			Disabled(noKey || n > maxMaterial || n < 2).Clicked() {
+		if m.Item(label).Disabled(noKey || n > maxMaterial || n < 2).Chosen() {
 			name := "资料整理 " + a.now().Format("2006-01-02")
 			if a.libCat != "" && a.libCat != "-" && a.libCat != "★" {
 				name = "资料 · " + a.libCat
@@ -159,16 +160,9 @@ func (a *app) materialBar(c *ui.Context) {
 			clips := a.listedMaterial()
 			a.later(func() { a.aiMaterialToMap(name, clips) })
 		}
-		if a.doc != nil && a.path != "" {
-			mergeTip := "AI 把这些资料挂到「" + mapName(a.path) + "」里最相关的节点上，或新增节点；你确认后才应用"
-			if noKey {
-				mergeTip = "先在 AI 助手的设置里填写 API Key"
-			}
-			if ui.Button(c, "并入「"+mapName(a.path)+"」").FontSize(12).Tooltip(mergeTip).
-				Disabled(noKey || n > maxMaterial).Clicked() {
-				clips := a.listedMaterial()
-				a.later(func() { a.aiMergeMaterial(clips) })
-			}
+		if a.doc != nil && a.path != "" && m.Item("并入「"+mapName(a.path)+"」").Disabled(noKey || n > maxMaterial).Chosen() {
+			clips := a.listedMaterial()
+			a.later(func() { a.aiMergeMaterial(clips) })
 		}
 	})
 }

@@ -1,8 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -137,4 +139,164 @@ func TestTasksPage(t *testing.T) {
 	tt.Frame()
 	snapshot(t, tt, "tasks-day")
 	_ = os.Remove
+}
+
+// Dragged with the pointer to another day, a task is dated to it.
+func TestTasksDrag(t *testing.T) {
+	a, tt := newTestApp(t)
+	day := today(a.now())
+	search := find(t, a, "搜索")
+	a.mutate("", func() { d := day; search.Task.Due = &d })
+	a.openTasks()
+	a.tasks.view = tasksWeek
+	tt.Frame()
+	src, ok := tt.Find("任务 搜索")
+	if !ok {
+		t.Fatalf("no chip: %q", tt.Texts())
+	}
+	// The column of the day after (or before, on a Sunday).
+	target := day.AddDate(0, 0, 1)
+	if weekStart(target) != weekStart(day) {
+		target = day.AddDate(0, 0, -1)
+	}
+	dx := float32(1)
+	if target.Before(day) {
+		dx = -1
+	}
+	x0, y0 := src.X+src.W/2, src.Y+src.H/2
+	x1 := x0 + dx*src.W*1.1
+	tt.Press(x0, y0)
+	for i := 1; i <= 6; i++ {
+		tt.Move(x0+(x1-x0)*float32(i)/6, y0+40)
+	}
+	tt.Release(x1, y0+40)
+	tt.Frame()
+	tt.Frame()
+	if !search.Task.Due.Equal(target) {
+		t.Fatalf("due %v, want %v", search.Task.Due, target)
+	}
+}
+
+// In the lists, a task dragged onto a day's group, its tasks included, goes
+// to that day; an empty day of the next 7 shows to take it.
+func TestTasksDragInList(t *testing.T) {
+	a, tt := newTestApp(t)
+	day := today(a.now())
+	search, login := find(t, a, "搜索"), find(t, a, "登录")
+	a.mutate("", func() {
+		d, e := day, day.AddDate(0, 0, 1)
+		search.Task.Due = &d
+		login.SetStatus(model.StatusTodo, a.now())
+		login.Task.Due = &e
+	})
+	a.openTasks()
+	a.tasks.view = tasksWeekAhead
+	tt.Frame()
+	src, _ := tt.Find("任务 搜索")
+	dst, ok := tt.Find("任务 登录") // tomorrow's, the drop is on its row
+	if !ok {
+		t.Fatalf("rows: %q", tt.Texts())
+	}
+	drag := func(from, to ui.Rect) {
+		x0, y0, x1, y1 := from.X+40, from.Y+from.H/2, to.X+60, to.Y+to.H/2
+		tt.Press(x0, y0)
+		for i := 1; i <= 6; i++ {
+			tt.Move(x0+(x1-x0)*float32(i)/6, y0+(y1-y0)*float32(i)/6)
+		}
+		tt.Release(x1, y1)
+		tt.Frame()
+		tt.Frame()
+	}
+	drag(src, dst)
+	if !search.Task.Due.Equal(day.AddDate(0, 0, 1)) {
+		t.Fatalf("due %v", search.Task.Due)
+	}
+	// An empty day, 3 days on, shows and takes it.
+	label := weekdayName(day.AddDate(0, 0, 3))
+	var head ui.Rect
+	found := false
+	for _, s := range tt.Texts() {
+		if strings.HasPrefix(s, label) {
+			head, found = tt.Find(s)
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("no empty day: %q", tt.Texts())
+	}
+	src, _ = tt.Find("任务 搜索")
+	drag(src, head)
+	if !search.Task.Due.Equal(day.AddDate(0, 0, 3)) {
+		t.Fatalf("due %v, want 3 days on", search.Task.Due)
+	}
+	// The month's cells too.
+	a.tasks.view = tasksMonth
+	tt.Frame()
+	src, _ = tt.Find("任务 搜索")
+	target := day.AddDate(0, 0, 7)
+	cell, ok := tt.Find(fmt.Sprint(target.Day())) // its day's number, once in the month
+	if !ok {
+		t.Fatal("no day", target.Day())
+	}
+	drag(src, ui.Rect{X: cell.X - 40, Y: cell.Y + 30, W: 1, H: 1})
+	if !search.Task.Due.Equal(target) {
+		t.Fatalf("month: due %v, want %v", search.Task.Due, target)
+	}
+}
+
+// A click shows a task's details: renamed, noted, given a subtask and a
+// priority, in its map.
+func TestTaskDetail(t *testing.T) {
+	a, tt := newTestApp(t)
+	day := today(a.now())
+	search := find(t, a, "搜索")
+	a.mutate("", func() { d := day; search.Task.Due = &d })
+	a.openTasks()
+	tt.Frame()
+	if err := tt.Click("任务 搜索"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.tasks.sel == "" || !tt.HasText("子任务") || !tt.HasText("在导图中打开") {
+		t.Fatalf("details: %q", tt.Texts())
+	}
+	// The title, saved as it is left.
+	tt.Click("任务名")
+	tt.Key(ui.Cmd, ui.KeyA)
+	tt.Type("全文搜索")
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if search.Title != "全文搜索" {
+		t.Fatalf("title %q", search.Title)
+	}
+	// A note, saved as the focus leaves it.
+	tt.Click("任务备注")
+	tt.Type("用 FTS5")
+	tt.Click("添加子任务")
+	tt.Frame()
+	if search.Note != "用 FTS5" {
+		t.Fatalf("note %q", search.Note)
+	}
+	tt.Type("建索引")
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if len(search.Children) != 1 || search.Children[0].Title != "建索引" || search.Children[0].Task == nil {
+		t.Fatalf("subtasks %+v", search.Children)
+	}
+	// Ticked off, and the priority set.
+	if err := tt.Click("完成子任务 建索引"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if search.Children[0].Task.Status != model.StatusDone || !tt.HasText("子任务 1/1") {
+		t.Fatalf("subtask %v", search.Children[0].Task.Status)
+	}
+	if err := tt.Click("高"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if search.Task.Priority != model.PriorityHigh {
+		t.Fatalf("priority %v", search.Task.Priority)
+	}
+	snapshot(t, tt, "tasks-detail")
 }

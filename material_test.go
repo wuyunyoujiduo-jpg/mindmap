@@ -32,11 +32,12 @@ func TestAIMaterialToMap(t *testing.T) {
 	a.cfg.AIKey = "sk-ant-test"
 	a.showLibrary()
 	tt.Frame()
-	if !tt.HasText("用 AI 整理成导图（4 条）") {
+	if !tt.HasText("4 条") {
 		t.Fatalf("texts %q", tt.Texts())
 	}
 	snapshot(t, tt, "material-bar")
-	if err := tt.Click("用 AI 整理成导图"); err != nil {
+	tt.Click("AI 整理资料") // its menu
+	if err := tt.ChooseMenuItem("整理成新导图（4 条）"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
@@ -95,7 +96,8 @@ func TestAIMergeMaterial(t *testing.T) {
 	a.showLibrary()
 	a.libKind = kindDocs
 	tt.Frame()
-	if err := tt.Click("并入「使用指南」"); err != nil {
+	tt.Click("AI 整理资料")
+	if err := tt.ChooseMenuItem("并入「使用指南」"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()

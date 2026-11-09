@@ -640,9 +640,10 @@ func sideFootButton(c *ui.Context, text, tip string) ui.Element {
 // sideIcon is a row's icon in the sidebar, in the accent color, stronger
 // on the row chosen.
 func sideIcon(c *ui.Context, ic icon, current bool) {
-	col := c.Theme().Accent
-	if !current {
-		col = col.Alpha(0.85)
+	t := c.Theme()
+	col := t.TextMuted // quiet: the accent only for the row shown
+	if current {
+		col = t.Accent
 	}
 	ui.Box(c).Size(16, 16).Shrink(0).PassThrough().Draw(func(p *ui.Painter, r ui.Rect) { drawIcon(p, r, 14, ic, col) })
 }
