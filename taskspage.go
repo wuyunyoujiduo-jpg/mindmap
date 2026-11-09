@@ -26,9 +26,15 @@ const (
 	tasksDay
 	tasksWeek
 	tasksMonth
+	tasksInbox // the tasks written down, not yet put in a map
+	tasksDone  // those done, the last first
 )
 
-var taskViewNames = []string{"今天", "最近 7 天", "全部", "日", "周", "月"}
+// The lists of the tasks' page, as its tabs show them.
+var taskLists = []struct {
+	view int
+	name string
+}{{tasksToday, "今天"}, {tasksWeekAhead, "最近 7 天"}, {tasksInbox, "收件箱"}, {tasksAll, "全部"}, {tasksDone, "已完成"}}
 
 // tasksState is the tasks' page.
 type tasksState struct {
@@ -332,49 +338,70 @@ func (a *app) tasksView(c *ui.Context) {
 	}
 	now := a.now()
 	ui.Column(c.Key("tasks")).Grow(1).Label("任务").Children(func() {
-		ui.Row(c.Key("tasks-head")).Height(toolbarHeight).Padding(0, 16, 0, 20).Gap(12).AlignItems(ui.Center).Shrink(0).
+		ui.Row(c.Key("tasks-head")).Height(toolbarHeight).Padding(0, 16, 0, 28).Gap(12).AlignItems(ui.Center).Shrink(0).
 			DragWindow().Children(func() {
-			ui.Column(c).Gap(1).Children(func() {
-				ui.Text(c, "任务").Bold().FontSize(textTitle)
-				open := 0
-				for _, it := range items {
-					if !it.done() {
-						open++
-					}
-				}
-				ui.Text(c, fmt.Sprintf("%d 项未完成 · 来自 %d 张导图", open, len(a.files))).FontSize(11).TextColor(t.TextMuted)
-			})
+			ui.Text(c, "任务").FontSize(textHeadline).FontWeight(600)
 			ui.Spacer(c)
 			a.taskMapMenu(c, all)
-			if a.tasks.view >= tasksDay {
+			if a.tasks.view == tasksWeek || a.tasks.view == tasksMonth || a.tasks.view == tasksDay {
 				a.calendarNav(c)
 			}
-			ui.Segmented(c.Key("tasks-view"), &a.tasks.view, taskViewNames...).Label("任务视图")
+			mode := 0
+			switch a.tasks.view {
+			case tasksWeek:
+				mode = 1
+			case tasksMonth:
+				mode = 2
+			}
+			if m := tabGroup(c, "tasks-mode", []string{"列表", "周", "月"}, mode); m != mode {
+				a.tasks.view = []int{tasksToday, tasksWeek, tasksMonth}[m]
+			}
 		})
-		ui.Divider(c)
-		ui.Row(c.Key("tasks-add")).Padding(10, 20).Gap(8).AlignItems(ui.Center).Shrink(0).Children(func() {
-			glyph(c, iconPlus, 14, t.TextMuted)
-			ph := "添加任务，如「明天 写周报 !高」，回车保存到收件箱"
-			if a.tasks.view >= tasksDay {
+		if a.tasks.view != tasksWeek && a.tasks.view != tasksMonth {
+			counts := a.taskListCounts(items)
+			ui.Row(c.Key("tasks-lists")).Padding(0, 28).Gap(22).Shrink(0).FillWidth().
+				BorderWidth(0, 0, 1, 0).BorderColor(hairline(t)).Children(func() {
+				for _, l := range taskLists {
+					if underlineTab(c, "list:"+l.name, l.name, counts[l.view], a.tasks.view == l.view).Clicked() {
+						a.tasks.view = l.view
+					}
+				}
+			})
+		}
+		ui.Row(c.Key("tasks-add")).Margin(14, 28, 4).Height(40).Padding(0, 12).Gap(10).Radius(9).AlignItems(ui.Center).Shrink(0).
+			Background(t.Text.Alpha(0.045)).Children(func() {
+			glyph(c, iconPlus, 15, t.Accent)
+			ph := "添加任务，如「明天 写周报 !高」，回车放进收件箱"
+			if a.tasks.view == tasksDay || a.tasks.view == tasksWeek || a.tasks.view == tasksMonth {
 				ph = "添加任务，不写日期就记在" + dayLabel(a.tasks.day, now) + "，回车保存"
 			}
 			in := ui.TextInputBase(c.Key("task-add"), &a.tasks.add).Placeholder(ph).FontSize(textBody).Grow(1).Label("添加任务")
+			// What the line says, as it is written: its day and priority.
+			if strings.TrimSpace(a.tasks.add) != "" {
+				_, due, prio := parseTaskLine(a.tasks.add, now)
+				if due != nil {
+					pill(c, dayLabel(*due, now), t.Background, t.Text)
+				}
+				if prio != model.PriorityNone {
+					pill(c, prio.Label(), t.Background, taskPriorityColor(t, prio))
+				}
+				ui.Text(c, "↩").FontSize(textCaption).TextColor(t.TextMuted)
+			}
 			if in.Submitted() && strings.TrimSpace(a.tasks.add) != "" {
 				line := a.tasks.add
 				a.tasks.add = ""
 				var day *time.Time
-				switch {
-				case a.tasks.view >= tasksDay:
+				switch a.tasks.view {
+				case tasksDay, tasksWeek, tasksMonth:
 					d := a.tasks.day
 					day = &d
-				case a.tasks.view == tasksToday:
+				case tasksToday:
 					d := today(now)
 					day = &d
 				}
 				a.later(func() { a.addTask(line, day) })
 			}
 		})
-		ui.Divider(c)
 		ui.Row(c).Grow(1).AlignItems(ui.Stretch).Children(func() {
 			ui.Column(c).Grow(1).Basis(0).MinWidth(0).Children(func() {
 				switch a.tasks.view {
@@ -461,7 +488,7 @@ func (a *app) taskDetail(c *ui.Context, it taskItem) {
 		a.tasks.title, a.tasks.note, a.tasks.draftOf = it.node.Title, it.node.Note, it.key()
 	}
 	ui.Column(c.Key("task-detail")).Width(340).Shrink(0).BorderWidth(0, 0, 0, 1).BorderColor(hairline(t)).
-		Background(t.Surface).Children(func() {
+		Background(t.Background).Children(func() {
 		ui.Row(c).Padding(10, 12, 0).Children(func() {
 			ui.Spacer(c)
 			if iconButton(c, iconClose, "关闭详情", "关闭", 24, true).Clicked() {
@@ -529,7 +556,7 @@ func (a *app) taskDetail(c *ui.Context, it taskItem) {
 						where += " › " + it.where
 					}
 					ui.Text(c, where).FontSize(textSmall).TextColor(t.TextMuted).Wrap()
-					if ui.Button(c, "在导图中打开").Clicked() {
+					if ghostButton(c, "在导图中打开", "跳到这个任务在导图里的位置").Margin(0, 0, 0, -8).Clicked() {
 						a.saveTaskDrafts()
 						a.later(func() { a.libOpen = false; a.goToNode(it.path, it.sheet, it.node.ID) })
 					}
@@ -737,6 +764,37 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 				over.items = append(over.items, it)
 			}
 		}
+	case tasksInbox:
+		g := add("收件箱", false, nil)
+		for _, it := range items {
+			if it.path != a.inboxPath() {
+				continue
+			}
+			if it.done() {
+				done = append(done, it)
+			} else {
+				g.items = append(g.items, it)
+			}
+		}
+	case tasksDone:
+		g := add("已完成", false, nil)
+		for _, it := range items {
+			if it.done() {
+				g.items = append(g.items, it)
+			}
+		}
+		slices.SortStableFunc(g.items, func(x, y taskItem) int {
+			dx, dy := x.node.Task.DoneAt, y.node.Task.DoneAt
+			switch {
+			case dx == nil && dy == nil:
+				return 0
+			case dx == nil:
+				return 1
+			case dy == nil:
+				return -1
+			}
+			return dy.Compare(*dx)
+		})
 	default: // all, by when
 		over, todayG := add("已逾期", true, at(day)), add("今天", false, at(day))
 		tomorrow, week := add("明天", false, at(day.AddDate(0, 0, 1))), add("未来 7 天", false, nil)
@@ -783,7 +841,7 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 			for _, g := range groups {
 				// Empty, a group of a day still shows, quietly: a place to drop
 				// a task on; others empty do not.
-				if len(g.items) == 0 && (g.danger || g.drop == nil) {
+				if len(g.items) == 0 && (g.danger || g.drop == nil) && len(groups) > 1 {
 					continue
 				}
 				// The whole group, its heading and its tasks, takes a task
@@ -1115,4 +1173,37 @@ func (a *app) ensureInbox() error {
 		a.refreshFiles()
 	}
 	return nil
+}
+
+// taskListCounts are how many tasks each list of the page holds, open.
+func (a *app) taskListCounts(items []taskItem) map[int]string {
+	day := today(a.now())
+	n := map[int]int{}
+	for _, it := range items {
+		if it.done() {
+			continue
+		}
+		if it.path == a.inboxPath() {
+			n[tasksInbox]++
+		}
+		if it.node.Task.Status == model.StatusIdea && it.date() == nil {
+			continue
+		}
+		n[tasksAll]++
+		if d := it.date(); d != nil {
+			if d.Before(day.AddDate(0, 0, 1)) {
+				n[tasksToday]++
+			}
+			if d.Before(day.AddDate(0, 0, 7)) {
+				n[tasksWeekAhead]++
+			}
+		}
+	}
+	out := map[int]string{}
+	for k, v := range n {
+		if v > 0 {
+			out[k] = fmt.Sprint(v)
+		}
+	}
+	return out
 }

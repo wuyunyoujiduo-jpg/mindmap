@@ -32,12 +32,12 @@ func TestAIMaterialToMap(t *testing.T) {
 	a.cfg.AIKey = "sk-ant-test"
 	a.showLibrary()
 	tt.Frame()
-	if !tt.HasText("4 条") {
+	if !tt.HasText("3 条") {
 		t.Fatalf("texts %q", tt.Texts())
 	}
 	snapshot(t, tt, "material-bar")
 	tt.Click("AI 整理资料") // its menu
-	if err := tt.ChooseMenuItem("整理成新导图（4 条）"); err != nil {
+	if err := tt.ChooseMenuItem("整理成新导图（3 条）"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
@@ -46,10 +46,6 @@ func TestAIMaterialToMap(t *testing.T) {
 		if !strings.Contains(string(body), "clip:"+id) {
 			t.Fatalf("clip %s not listed", id)
 		}
-	}
-	guide := a.mapLink(a.path) // maps are material too
-	if !strings.Contains(string(body), strings.TrimPrefix(guide, "mindmap:")) {
-		t.Fatalf("the map not listed: %s", guide)
 	}
 	if err := tt.Click("应用"); err != nil {
 		t.Fatal(err)
@@ -67,7 +63,7 @@ func TestAIMaterialToMap(t *testing.T) {
 	for _, n := range other.Children {
 		left[n.Links[0]] = n.Title
 	}
-	if len(left) != 2 || left[clipScheme+ids[2]] != "咖啡豆烘焙" || left[guide] != "使用指南" {
+	if len(left) != 1 || left[clipScheme+ids[2]] != "咖啡豆烘焙" {
 		t.Fatalf("left out: %v", left)
 	}
 	if bl := a.clipBacklinks(ids[0]); len(bl) != 1 || bl[0].title != "并发模式" {

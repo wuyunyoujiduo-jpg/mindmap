@@ -103,12 +103,10 @@ func (a *app) sidebar(c *ui.Context) {
 				a.memosRow(c)
 				a.libraryRow(c) // the documents, links and pictures
 				a.autoRow(c)
-				a.inboxRow(c)
 				a.favorites(c)
 				a.section(c, "导图", &a.filesOpen, a.dir, func() {
 					a.folderContents(c, a.tree, 0)
 				})
-				a.categoryList(c)
 			})
 		})
 		ui.Row(c.Key("side-foot")).Padding(6, 8).Gap(2).AlignItems(ui.Center).BorderWidth(1, 0, 0, 0).BorderColor(hairline(t)).Children(func() {
@@ -165,24 +163,6 @@ func (a *app) section(c *ui.Context, title string, open *bool, dropDir string, f
 	})
 	if *open {
 		fn()
-	}
-}
-
-// inboxRow leads to the inbox, with how many items wait in it.
-func (a *app) inboxRow(c *ui.Context) {
-	path := a.inboxPath()
-	if _, err := os.Stat(path); err != nil {
-		return
-	}
-	k := a.inboxCount()
-	count := ""
-	if k > 0 {
-		count = fmt.Sprint(k)
-	}
-	row := navRow(c.Key("inbox"), iconInbox, tileOrange, "收件箱", count, a.path == path && !a.libOpen).
-		Tooltip("快速记录的内容（" + keyLabel(a.captureKey()) + "），整理后用右键「移到其他导图…」")
-	if row.Clicked() {
-		a.later(func() { _ = a.open(path) })
 	}
 }
 

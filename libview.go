@@ -23,8 +23,8 @@ func (a *app) libraryView(c *ui.Context) {
 	root.Children(func() {
 		ui.Row(c.Key("lib-head")).Height(toolbarHeight).Padding(0, 10, 0, 16).Gap(10).AlignItems(ui.Center).Shrink(0).
 			DragWindow().Children(func() {
-			ui.Text(c, "资料").Bold().FontSize(textTitle).NoWrap()
-			ui.Text(c, fmt.Sprintf("%d 张导图 · %d 条文档和链接", len(a.files), len(l.Clips))).FontSize(12).TextColor(t.TextMuted).NoWrap()
+			ui.Text(c, "资料库").FontSize(textHeadline).FontWeight(600).NoWrap()
+			ui.Text(c, fmt.Sprintf("%d 条文档、链接和图片", len(l.Clips))).FontSize(textSmall).TextColor(t.TextMuted).NoWrap()
 			if a.libWorking != "" {
 				ui.Spinner(c)
 				ui.Text(c, fmt.Sprintf("整理中，还有 %d 条", len(a.libQueue)+1)).FontSize(12).TextColor(t.TextMuted).NoWrap()
@@ -40,7 +40,7 @@ func (a *app) libraryView(c *ui.Context) {
 				ui.Text(c, "语义检索不可用").FontSize(12).TextColor(t.Warning).NoWrap().Tooltip(a.embedErr + "（在设置里检查向量模型）")
 			}
 			ui.Spacer(c)
-			search := searchBox(c, "lib-search", &a.libQuery, "搜索资料", "搜索资料库", "按标题、内容、摘要、标签和关键词查找资料和导图", 200)
+			search := searchBox(c, "lib-search", &a.libQuery, "搜索资料", "搜索资料库", "按标题、内容、摘要、标签和关键词查找资料", 200)
 			if a.libQuery != "" && search.Shortcut(0, ui.KeyEscape) {
 				a.libQuery = ""
 			}
@@ -174,22 +174,8 @@ func (a *app) searchClips() []library.Hit {
 	} else {
 		hits = a.lib.Search(a.libQuery, keep)
 	}
-	if a.libKind != kindAll {
-		return hits
-	}
-	// All is material: the maps are listed with the clips.
-	if strings.TrimSpace(a.libQuery) == "" {
-		hits = append(hits, a.searchMaps("", keep)...) // newest first, together
-		slices.SortStableFunc(hits, func(x, y library.Hit) int { return y.Clip.Updated.Compare(x.Clip.Updated) })
-		return hits
-	}
-	var maps []library.Hit // those that match well come first
-	for _, h := range a.searchMaps(a.libQuery, keep) {
-		if h.Coverage >= 0.5 && len(maps) < 5 {
-			maps = append(maps, h)
-		}
-	}
-	return append(maps, hits...)
+	// The maps are not material: the sidebar, 今天 and ⌘K have them.
+	return hits
 }
 
 // clipComposer is the field to keep text or a link, and the buttons to
@@ -258,9 +244,19 @@ func (a *app) dropClips(files []string) {
 func (a *app) clipFilters(c *ui.Context) {
 	t := c.Theme()
 	l := a.lib
+	ui.Row(c.Key("lib-kinds")).Padding(4, 16, 0).Margin(0, 0, 8).Gap(20).FillWidth().
+		BorderWidth(0, 0, 1, 0).BorderColor(hairline(t)).Children(func() {
+		for _, k := range []struct {
+			kind int
+			name string
+		}{{kindAll, "全部"}, {kindDocs, "文档"}, {kindLinks, "链接"}, {kindImages, "图片"}} {
+			if underlineTab(c, "kind:"+k.name, k.name, "", a.libKind == k.kind).Clicked() {
+				a.libKind = k.kind
+			}
+		}
+	})
 	ui.Row(c).Padding(0, 12, 8).Gap(6).Wrap().GapY(6).AlignItems(ui.Center).Children(func() {
-		ui.Segmented(c, &a.libKind, "全部", "导图", "文档", "链接").FontSize(12).Shrink(0)
-		ui.Box(c).Width(4)
+
 		chip := func(key, label string, active bool) bool {
 			b := ui.Box(c.Key("cat:"+key)).Padding(4, 10).Radius(999).Cursor(ui.CursorPointer).Label(label)
 			switch { // quiet pills, the one chosen dark, as 灵感's
@@ -726,7 +722,7 @@ func (a *app) homeRow(c *ui.Context) {
 
 // libraryRow is the library's entry in the sidebar.
 func (a *app) libraryRow(c *ui.Context) {
-	all := navRow(c.Key("library-row"), iconLibrary, tileBlue, "资料库", fmt.Sprint(len(a.lib.Clips)+len(a.files)),
+	all := navRow(c.Key("library-row"), iconLibrary, tileBlue, "资料库", fmt.Sprint(len(a.lib.Clips)),
 		a.libOpen && !a.libHome && a.libCat == "" && !a.auto.open && !a.tasks.open && !a.memos.open)
 	if all.Clicked() {
 		a.later(func() { a.openList(kindAll, "") })

@@ -57,11 +57,11 @@ func navRow(c *ui.Context, ic icon, _ ui.Color, label, count string, current boo
 		r.Background(t.Text.Alpha(0.06))
 	}
 	r.Children(func() {
-		ink := t.TextMuted // quiet: gray lines, the ink of the text on the row shown
+		ink, hole := t.Text.MixOklab(t.TextMuted, 0.55), t.Surface // solid, a dark gray; the text's on the row shown
 		if current {
-			ink = t.Text
+			ink, hole = t.Text, t.Surface.MixOklab(t.Text, 0.075)
 		}
-		glyph(c, ic, 16, ink)
+		solidGlyph(c, ic, 15, ink, hole)
 		text := ui.Text(c, label).FontSize(13).Grow(1).Shrink(1).MinWidth(0).SingleLine()
 		if current {
 			text.Bold()

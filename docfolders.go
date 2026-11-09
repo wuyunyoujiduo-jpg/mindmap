@@ -150,8 +150,9 @@ func draggedOver(row ui.Element) bool {
 const (
 	kindAll  = iota
 	kindMaps // the maps
-	kindDocs // text, pictures and files
+	kindDocs // text and files
 	kindLinks
+	kindImages
 )
 
 // ofKind tells whether a clip, or a map as one, is of a kind of the list.
@@ -160,7 +161,9 @@ func ofKind(c *library.Clip, kind int) bool {
 	case kindMaps:
 		return c.Kind == kindMap
 	case kindDocs:
-		return c.Kind != kindMap && c.Kind != library.KindLink
+		return c.Kind != kindMap && c.Kind != library.KindLink && c.Kind != library.KindImage
+	case kindImages:
+		return c.Kind == library.KindImage
 	case kindLinks:
 		return c.Kind == library.KindLink
 	}

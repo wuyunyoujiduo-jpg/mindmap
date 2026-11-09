@@ -3,7 +3,6 @@ package main
 import (
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -45,30 +44,10 @@ func TestMapAnalysis(t *testing.T) {
 		t.Fatalf("prompt %q", prompt)
 	}
 
-	// One 资料: the sidebar's 资料 lists the maps with the clips, and the
-	// categories are of both.
-	if err := tt.Click("资料库"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Frame()
-	if !a.libOpen || a.libKind != 0 || !tt.HasText("分类 技术") {
-		t.Fatalf("资料: open %v kind %d, %q", a.libOpen, a.libKind, tt.Texts())
-	}
-	if hits := a.libHits(); len(hits) == 0 || !slices.ContainsFunc(hits, func(h library.Hit) bool { return h.Clip.Kind == library.KindMap }) {
-		t.Fatal("the maps are not listed with the clips")
-	}
-	snapshot(t, tt, "materials")
-	if err := tt.Click("分类 技术"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Frame()
-	if a.libCat != "技术" || len(a.libHits()) != 1 {
-		t.Fatalf("category %q: %d", a.libCat, len(a.libHits()))
-	}
-	a.libCat = ""
-
 	// Found by a synonym, in the library, its 导图 filter and the palette.
-	a.libOpen, a.libQuery = true, "SSO"
+	// The library lists the documents only; the maps, as its 导图 kind.
+	a.showLibrary()
+	a.libQuery, a.libKind = "SSO", kindMaps
 	hits := a.libHits()
 	if len(hits) == 0 || hits[0].Clip.Kind != library.KindMap {
 		t.Fatalf("library hits %+v", hits)

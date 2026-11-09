@@ -27,6 +27,8 @@ type memosState struct {
 	editText  string
 	deleting  string
 	confirmed bool
+	mode      int // all, 每日回顾, 随机漫步
+	walk      int // how many times 随机漫步 went on
 }
 
 // memoTag is a #tag in a text: # then what is up to a space or another #.
@@ -102,37 +104,63 @@ func (a *app) memoList() []*library.Clip {
 	return out
 }
 
-// memosView is 灵感: the box, the tags and the days written on, and the
-// cards.
+// The ways 灵感 shows the notes: all of them, 每日回顾 (a few of the old
+// ones, the same all day), and 随机漫步 (one at a time, at random).
+const (
+	memosAll = iota
+	memosDaily
+	memosWalk
+)
+
+// memosView is 灵感, as flomo: on a light gray, a rail with the numbers,
+// the days written on, the ways to look back and the tags; beside it the
+// box to write in and the notes, each a white card.
 func (a *app) memosView(c *ui.Context) {
 	t := c.Theme()
-	list := a.memoList()
-	ui.Column(c.Key("memos")).Grow(1).Label("灵感").Children(func() {
-		ui.Row(c.Key("memos-head")).Height(toolbarHeight).Padding(0, 16, 0, 20).Gap(12).AlignItems(ui.Center).Shrink(0).
-			DragWindow().Children(func() {
-			ui.Column(c).Gap(1).Children(func() {
-				ui.Text(c, "灵感").Bold().FontSize(textTitle)
-				sub := fmt.Sprintf("%d 条", len(list))
-				if a.memos.tag != "" {
-					sub = "#" + a.memos.tag + " · " + sub
-				}
-				ui.Text(c, sub).FontSize(11).TextColor(t.TextMuted)
-			})
-			ui.Spacer(c)
-			searchBox(c, "memo-search", &a.memos.query, "搜索灵感", "搜索灵感", "", 220)
-		})
-		ui.Divider(c)
+	list := a.memoShown()
+	page := t.Surface
+	ui.Column(c.Key("memos")).Grow(1).Label("灵感").Background(page).Children(func() {
+		ui.Row(c.Key("memos-head")).Height(toolbarHeight).Shrink(0).DragWindow()
 		ui.Scroll(c.Key("memo-scroll")).Grow(1).Children(func() {
-			ui.Column(c).Padding(20, 24, 40).Gap(14).MaxWidth(680).Margin(0, ui.Auto).FillWidth().Children(func() {
-				a.memoComposer(c)
-				a.memoHeatmap(c)
-				a.memoTagBar(c)
-				if len(list) == 0 {
-					ui.Text(c, "还没有灵感。在上面写下现在的想法，#标签 归类。").FontSize(textBody).TextColor(t.TextMuted).Margin(24, 0)
-				}
-				for _, m := range list {
-					a.memoCard(c, m)
-				}
+			ui.Row(c).Padding(0, 32, 48).Gap(36).AlignItems(ui.Start).MaxWidth(1000).Margin(0, ui.Auto).FillWidth().Children(func() {
+				ui.Column(c.Key("memo-rail")).Width(232).Shrink(0).Gap(18).Children(func() { a.memoRail(c) })
+				ui.Column(c.Key("memo-stream")).Grow(1).Basis(0).MinWidth(0).Gap(14).Children(func() {
+					ui.Row(c).Gap(12).AlignItems(ui.Center).MinHeight(32).Children(func() {
+						title := "全部灵感"
+						switch {
+						case a.memos.mode == memosDaily:
+							title = "每日回顾"
+						case a.memos.mode == memosWalk:
+							title = "随机漫步"
+						case a.memos.tag != "":
+							title = "#" + a.memos.tag
+						}
+						ui.Text(c, title).FontSize(textTitle).FontWeight(600)
+						ui.Spacer(c)
+						searchBox(c, "memo-search", &a.memos.query, "搜索灵感", "搜索灵感", "", 220)
+					})
+					if a.memos.mode == memosAll {
+						a.memoComposer(c)
+					}
+					switch {
+					case a.memos.mode == memosWalk && len(list) > 0:
+						a.memoCard(c, list[0])
+						ui.Row(c).Gap(8).Children(func() {
+							ui.Spacer(c)
+							if softButton(c, "换一条", "再随机看一条").Clicked() {
+								a.memos.walk++
+							}
+						})
+					case len(list) == 0 && a.memos.mode == memosDaily:
+						ui.Text(c, "一周以前的灵感会在这里，每天换几条。").FontSize(textBody).TextColor(t.TextMuted).Margin(24, 4)
+					case len(list) == 0:
+						ui.Text(c, "还没有灵感。在上面写下现在的想法，#标签 归类。").FontSize(textBody).TextColor(t.TextMuted).Margin(24, 4)
+					default:
+						for _, m := range list {
+							a.memoCard(c, m)
+						}
+					}
+				})
 			})
 		})
 	})
@@ -146,7 +174,40 @@ func (a *app) memosView(c *ui.Context) {
 	}
 }
 
-// memoComposer is the box to write in: ⌘↩ or the button keeps it.
+// memoShown are the notes the way chosen shows: all those of the tag and
+// the words searched; a few of those older than a week, by the day; or
+// one of them at random.
+func (a *app) memoShown() []*library.Clip {
+	list := a.memoList()
+	if a.memos.mode == memosAll {
+		return list
+	}
+	week := a.now().AddDate(0, 0, -7)
+	old := slices.DeleteFunc(slices.Clone(list), func(m *library.Clip) bool { return m.Created.After(week) })
+	if len(old) == 0 {
+		return nil
+	}
+	day := today(a.now())
+	seed := day.Year()*400 + day.YearDay()
+	if a.memos.mode == memosWalk {
+		return []*library.Clip{old[(seed*7919+a.memos.walk*104729)%len(old)]}
+	}
+	n := min(3, len(old))
+	out := make([]*library.Clip, 0, n)
+	for i := range len(old) {
+		if len(out) == n {
+			break
+		}
+		m := old[(seed*31+i*17)%len(old)]
+		if !slices.Contains(out, m) {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// memoComposer is the box to write in, a white card: the text, a row of
+// quiet tools, and the button that keeps it, gray until there is text.
 func (a *app) memoComposer(c *ui.Context) {
 	t := c.Theme()
 	empty := strings.TrimSpace(a.memos.draft) == ""
@@ -159,84 +220,72 @@ func (a *app) memoComposer(c *ui.Context) {
 			}
 		})
 	}
-	ui.Column(c.Key("memo-box")).Padding(12, 14, 10).Gap(8).Radius(12).Border(1, hairline(t)).Background(t.Background).
-		FillWidth().Children(func() {
-		in := ui.TextAreaBase(c.Key("memo-draft"), &a.memos.draft).Lines(3, 14).FontSize(textBody).FillWidth().
-			Placeholder("现在的想法是…  #标签 归类").Label("写下灵感")
+	box := ui.Column(c.Key("memo-box")).Padding(14, 16, 10).Gap(8).Radius(12).Background(t.Background).FillWidth()
+	box.Children(func() {
+		in := ui.TextAreaBase(c.Key("memo-draft"), &a.memos.draft).Lines(3, 14).FontSize(15).LineHeight(1.7).FillWidth().
+			Placeholder("现在的想法是…").Label("写下灵感")
+		if in.Focused() {
+			box.Border(1, t.Accent.Alpha(0.35))
+		}
 		if in.Shortcut(ui.Cmd, ui.KeyEnter) && !empty {
 			keep()
 		}
-		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-			if ghostButton(c, "# 标签", "插入标签").Clicked() {
-				a.memos.draft += "#"
+		ui.Row(c).Gap(2).AlignItems(ui.Center).Children(func() {
+			tool := func(text, tip, insert string) {
+				b := ui.Box(c.Key("memo-tool:"+text)).Size(30, 28).Radius(6).Center().Cursor(ui.CursorPointer).Label(tip).Tooltip(tip)
+				if b.Hovered() {
+					b.Background(t.Text.Alpha(0.06))
+				}
+				if b.Clicked() {
+					if a.memos.draft != "" && !strings.HasSuffix(a.memos.draft, "\n") && insert != "#" {
+						a.memos.draft += "\n"
+					}
+					a.memos.draft += insert
+				}
+				b.Children(func() { ui.Text(c, text).FontSize(14).TextColor(t.TextMuted).PassThrough() })
 			}
+			tool("#", "插入标签", "#")
+			tool("•", "列表", "- ")
+			tool("1.", "编号列表", "1. ")
 			ui.Spacer(c)
-			ui.Text(c, "⌘↩").FontSize(textCaption).TextColor(t.TextMuted)
-			if ui.PrimaryButton(c, "记录").Disabled(empty).Clicked() {
+			ui.Text(c, "⌘↩").FontSize(textCaption).TextColor(t.TextMuted).Margin(0, 8, 0, 0)
+			send := ui.Box(c.Key("memo-send")).Height(30).Padding(0, 16).Radius(8).Center().Label("记录").Tooltip("记录（⌘↩）")
+			if empty {
+				send.Background(t.Text.Alpha(0.08))
+			} else {
+				send.Background(t.Accent).Cursor(ui.CursorPointer)
+				if send.Hovered() {
+					send.Background(t.AccentHover)
+				}
+			}
+			if send.Clicked() && !empty {
 				keep()
 			}
+			send.Children(func() {
+				col := ui.Hex("#FFFFFF")
+				if empty {
+					col = t.TextMuted
+				}
+				ui.Text(c, "记录").FontSize(textSmall).FontWeight(600).TextColor(col).PassThrough()
+			})
 		})
 	})
 }
 
-// memoHeatmap is the days written on, the last 16 weeks, a square a day,
-// the darker the more.
-func (a *app) memoHeatmap(c *ui.Context) {
+// memoRail is the column beside the notes: how many notes, tags and days;
+// the days written on; the ways to look back; the tags.
+func (a *app) memoRail(c *ui.Context) {
 	t := c.Theme()
 	per := map[string]int{}
 	total := 0
-	for _, cl := range a.lib.Clips {
-		if isMemo(cl) {
-			per[cl.Created.In(time.Local).Format("2006-01-02")]++
-			total++
-		}
-	}
-	if total == 0 {
-		return
-	}
-	const weeks = 16
-	end := today(a.now())
-	start := weekStart(end).AddDate(0, 0, -7*(weeks-1))
-	days := 0
-	for _, n := range per {
-		if n > 0 {
-			days++
-		}
-	}
-	ui.Row(c.Key("memo-heat")).Gap(16).AlignItems(ui.Center).Padding(2, 2).Children(func() {
-		ui.Box(c).Size(weeks*13, 7*13).Shrink(0).Draw(func(p *ui.Painter, r ui.Rect) {
-			for w := range weeks {
-				for d := range 7 {
-					day := start.AddDate(0, 0, w*7+d)
-					if day.After(end) {
-						continue
-					}
-					n := per[day.Format("2006-01-02")]
-					col := t.Text.Alpha(0.06)
-					if n > 0 {
-						col = tileGreen.Alpha(min(0.35+0.2*float32(n), 1))
-					}
-					p.Fill(ui.Rect{X: r.X + float32(w)*13, Y: r.Y + float32(d)*13, W: 10, H: 10}, col, 2)
-				}
-			}
-		})
-		ui.Column(c).Gap(4).Children(func() {
-			ui.Text(c, fmt.Sprint(total)).FontSize(textHeadline).Bold()
-			ui.Text(c, fmt.Sprintf("条灵感 · %d 天", days)).FontSize(textCaption).TextColor(t.TextMuted)
-		})
-	})
-}
-
-// memoTagBar is the tags of 灵感, the most used first: a click shows only
-// those of the tag.
-func (a *app) memoTagBar(c *ui.Context) {
-	t := c.Theme()
 	counts := map[string]int{}
 	var order []string
 	for _, cl := range a.lib.Clips {
 		if !isMemo(cl) {
 			continue
 		}
+		per[cl.Created.In(time.Local).Format("2006-01-02")]++
+		total++
 		seen := map[string]bool{}
 		for _, tag := range append(memoTags(cl.Text), cl.Tags...) {
 			if seen[tag] {
@@ -249,57 +298,120 @@ func (a *app) memoTagBar(c *ui.Context) {
 			counts[tag]++
 		}
 	}
+	slices.SortStableFunc(order, func(x, y string) int { return counts[y] - counts[x] })
+	ui.Row(c.Key("memo-numbers")).Gap(22).Padding(4, 4, 0).Children(func() {
+		for _, n := range []struct {
+			v     int
+			label string
+		}{{total, "条灵感"}, {len(order), "个标签"}, {len(per), "天"}} {
+			ui.Column(c).Gap(2).Children(func() {
+				ui.Text(c, fmt.Sprint(n.v)).FontSize(22).FontWeight(600).TextColor(t.Text.MixOklab(t.TextMuted, 0.3))
+				ui.Text(c, n.label).FontSize(textCaption).TextColor(t.TextMuted)
+			})
+		}
+	})
+	// The days written on, the last 16 weeks: a square a day, a week a
+	// column, the months under them.
+	const weeks = 16
+	end := today(a.now())
+	start := weekStart(end).AddDate(0, 0, -7*(weeks-1))
+	cell, gap := float32(11), float32(3)
+	ui.Box(c.Key("memo-heat")).Size(weeks*(cell+gap), 7*(cell+gap)+16).Margin(0, 4).Label("最近 16 周记录的天数").
+		Draw(func(p *ui.Painter, r ui.Rect) {
+			for w := range weeks {
+				for d := range 7 {
+					day := start.AddDate(0, 0, w*7+d)
+					if day.After(end) {
+						continue
+					}
+					n := per[day.Format("2006-01-02")]
+					col := t.Text.Alpha(0.06)
+					if n > 0 {
+						col = t.Accent.Alpha(min(0.3+0.22*float32(n), 1))
+					}
+					x, y := r.X+float32(w)*(cell+gap), r.Y+float32(d)*(cell+gap)
+					p.Fill(ui.Rect{X: x, Y: y, W: cell, H: cell}, col, 3)
+				}
+			}
+		}).Children(func() {
+		for w := range weeks {
+			day := start.AddDate(0, 0, w*7)
+			if day.Day() <= 7 {
+				ui.Text(c, fmt.Sprintf("%d月", day.Month())).FontSize(textCaption).TextColor(t.TextMuted).
+					Absolute().Left(float32(w) * (cell + gap)).Top(7*(cell+gap) + 2)
+			}
+		}
+	})
+	ui.Column(c.Key("memo-ways")).Gap(1).Children(func() {
+		for _, w := range []struct {
+			mode int
+			ic   icon
+			name string
+		}{{memosAll, iconCategory, "全部灵感"}, {memosDaily, iconSparkle, "每日回顾"}, {memosWalk, iconTarget, "随机漫步"}} {
+			on := a.memos.mode == w.mode && (w.mode != memosAll || a.memos.tag == "")
+			if navRow(c.Key("memo-way:"+w.name), w.ic, tileOrange, w.name, "", on).Clicked() {
+				a.memos.mode, a.memos.tag = w.mode, ""
+			}
+		}
+	})
 	if len(order) == 0 {
 		return
 	}
-	slices.SortStableFunc(order, func(x, y string) int { return counts[y] - counts[x] })
-	ui.Row(c.Key("memo-tags")).Gap(6).Wrap().GapY(6).Children(func() {
-		chip := func(key, label string, on bool) ui.Element {
-			b := ui.Box(c.Key("memo-tag:"+key)).Padding(3, 10).Radius(999).Cursor(ui.CursorPointer).Label(label)
+	ui.Column(c.Key("memo-tags")).Gap(1).Children(func() {
+		ui.Text(c, "标签").FontSize(textCaption).FontWeight(600).TextColor(t.TextMuted).Margin(4, 10, 6)
+		for _, tag := range order {
+			on := a.memos.tag == tag
+			row := ui.Row(c.Key("memo-tag:"+tag)).Height(30).Padding(0, 10).Gap(8).Radius(7).AlignItems(ui.Center).FillWidth().
+				Cursor(ui.CursorPointer).Label(fmt.Sprintf("#%s %d", tag, counts[tag]))
 			switch {
 			case on:
-				b.Background(t.Text.Alpha(0.85))
-			case b.Hovered():
-				b.Background(t.Text.Alpha(0.08))
-			default:
-				b.Background(t.Text.Alpha(0.045))
+				row.Background(chosen(t))
+			case row.Hovered():
+				row.Background(t.Text.Alpha(0.05))
 			}
-			b.Children(func() {
-				col := t.Text
+			if row.Clicked() {
+				a.memos.mode = memosAll
 				if on {
-					col = t.Background
-				}
-				ui.Text(c, label).FontSize(textSmall).TextColor(col).PassThrough()
-			})
-			return b
-		}
-		if chip("", "全部", a.memos.tag == "").Clicked() {
-			a.memos.tag = ""
-		}
-		for _, tag := range order {
-			if chip(tag, fmt.Sprintf("#%s %d", tag, counts[tag]), a.memos.tag == tag).Clicked() {
-				if a.memos.tag == tag {
 					a.memos.tag = ""
 				} else {
 					a.memos.tag = tag
 				}
 			}
+			row.Children(func() {
+				ui.Text(c, "#").FontSize(14).TextColor(t.TextMuted).PassThrough()
+				txt := ui.Text(c, tag).FontSize(textBody).Grow(1).SingleLine().PassThrough()
+				if on {
+					txt.FontWeight(600)
+				}
+				ui.Text(c, fmt.Sprint(counts[tag])).FontSize(textSmall).TextColor(t.TextMuted).PassThrough()
+			})
 		}
 	})
 }
 
-// memoCard is a note: when it was written, its text with its #tags, which
-// a click filters by; its menu edits, copies, puts it on a map or deletes
-// it.
+// memoCard is a note, a white card: when it was written and where from,
+// its menu; its text with its #tags. A double click, or 编辑 in its menu,
+// edits it where it is.
 func (a *app) memoCard(c *ui.Context, m *library.Clip) {
 	t := c.Theme()
-	card := ui.Column(c.Key("memo:"+m.ID)).Padding(12, 16, 14).Gap(8).Radius(12).Background(t.Background).
-		Border(1, hairline(t)).FillWidth()
+	card := ui.Column(c.Key("memo:"+m.ID)).Padding(14, 18, 16).Gap(8).Radius(12).Background(t.Background).FillWidth()
+	if card.DoubleClicked() && a.memos.editing != m.ID {
+		a.memos.editing, a.memos.editText = m.ID, m.Text
+	}
+	hover := card.Hovered()
 	card.Children(func() {
-		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, m.Created.In(time.Local).Format("2006-01-02 15:04")).FontSize(textCaption).TextColor(t.TextMuted)
+		ui.Row(c).Gap(8).AlignItems(ui.Center).MinHeight(22).Children(func() {
+			meta := m.Created.In(time.Local).Format("2006-01-02 15:04")
+			if m.Source != "" && m.Source != "灵感" {
+				meta += "  |  " + m.Source
+			}
+			ui.Text(c, meta).FontSize(textSmall).TextColor(t.TextMuted)
 			ui.Spacer(c)
-			iconButton(c.Key("memo-more:"+m.ID), iconMore, "更多", "更多", 22, true).Menu(func(mm *ui.Menu) {
+			more := iconButton(c.Key("memo-more:"+m.ID), iconMore, "更多", "更多", 22, true)
+			if !hover {
+				more.Opacity(0.5)
+			}
+			more.Menu(func(mm *ui.Menu) {
 				if mm.Item("编辑").Chosen() {
 					a.memos.editing, a.memos.editText = m.ID, m.Text
 				}
@@ -321,15 +433,15 @@ func (a *app) memoCard(c *ui.Context, m *library.Clip) {
 			})
 		})
 		if a.memos.editing == m.ID {
-			in := ui.TextAreaBase(c.Key("memo-edit"), &a.memos.editText).Lines(3, 20).FontSize(textBody).FillWidth().
+			in := ui.TextAreaBase(c.Key("memo-edit"), &a.memos.editText).Lines(3, 20).FontSize(15).LineHeight(1.7).FillWidth().
 				AutoFocus().Label("编辑灵感")
 			save := in.Shortcut(ui.Cmd, ui.KeyEnter)
-			ui.Row(c).Gap(8).Children(func() {
+			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Spacer(c)
-				if ui.Button(c, "取消").Clicked() || in.Shortcut(0, ui.KeyEscape) {
+				if ghostButton(c, "取消", "不保存（Esc）").Clicked() || in.Shortcut(0, ui.KeyEscape) {
 					a.memos.editing = ""
 				}
-				if ui.PrimaryButton(c, "保存").Clicked() {
+				if accentButton(c, "保存", "保存（⌘↩）").Clicked() {
 					save = true
 				}
 			})
@@ -356,9 +468,9 @@ func (a *app) memoCard(c *ui.Context, m *library.Clip) {
 		if extra := slices.DeleteFunc(slices.Clone(m.Tags), func(s string) bool { return slices.Contains(memoTags(m.Text), s) }); len(extra) > 0 {
 			ui.Row(c).Gap(6).Wrap().Children(func() {
 				for _, tag := range extra { // the AI's
-					b := ui.Text(c.Key("extra:"+tag), "#"+tag).FontSize(textCaption).TextColor(t.TextMuted).Cursor(ui.CursorPointer)
+					b := pill(c.Key("extra:"+tag), "#"+tag, t.Accent.Alpha(0.1), t.Accent).Cursor(ui.CursorPointer)
 					if b.Clicked() {
-						a.memos.tag = tag
+						a.memos.mode, a.memos.tag = memosAll, tag
 					}
 				}
 			})
@@ -378,14 +490,14 @@ func (a *app) memoText(c *ui.Context, text string) {
 		last := 0
 		for _, m := range memoTag.FindAllStringIndex(line, -1) {
 			if m[0] > last {
-				spans = append(spans, ui.Span{Text: line[last:m[0]], Size: textBody, Color: t.Text})
+				spans = append(spans, ui.Span{Text: line[last:m[0]], Size: 15, Color: t.Text})
 			}
-			spans = append(spans, ui.Span{Text: line[m[0]:m[1]], Size: textBody, Color: t.Accent})
+			spans = append(spans, ui.Span{Text: line[m[0]:m[1]], Size: 15, Color: t.Accent})
 			last = m[1]
 		}
 		if last < len(line) {
-			spans = append(spans, ui.Span{Text: line[last:], Size: textBody, Color: t.Text})
+			spans = append(spans, ui.Span{Text: line[last:], Size: 15, Color: t.Text})
 		}
-		ui.RichText(c.Key(fmt.Sprint("line:", i)), spans...).LineHeight(1.6).Wrap().Selectable().FillWidth()
+		ui.RichText(c.Key(fmt.Sprint("line:", i)), spans...).LineHeight(1.75).Wrap().Selectable().FillWidth()
 	}
 }

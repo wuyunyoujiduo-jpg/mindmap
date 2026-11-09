@@ -245,3 +245,59 @@ func quietTheme(base *ui.Theme) *ui.Theme {
 	t.Focus = t.Accent.Alpha(0.5)
 	return &t
 }
+
+// tabGroup is a few tabs in a gray box, the one chosen raised on white,
+// as a segmented control; it gives the one clicked, else the one chosen.
+func tabGroup(c *ui.Context, key string, names []string, chosenTab int) int {
+	t := c.Theme()
+	out := chosenTab
+	ui.Row(c.Key(key)).Padding(2).Gap(2).Radius(8).Background(t.Text.Alpha(0.05)).Shrink(0).Children(func() {
+		for i, name := range names {
+			on := i == chosenTab
+			b := ui.Box(c.Key("tab:"+name)).Height(24).Padding(0, 12).Radius(6).Center().Cursor(ui.CursorPointer).Label(name)
+			switch {
+			case on:
+				b.Background(t.Background).Border(1, hairline(t))
+			case b.Hovered():
+				b.Background(t.Text.Alpha(0.05))
+			}
+			if b.Clicked() {
+				out = i
+			}
+			b.Children(func() {
+				txt := ui.Text(c, name).FontSize(textSmall).PassThrough()
+				if on {
+					txt.FontWeight(600)
+				} else {
+					txt.TextColor(t.Text.MixOklab(t.TextMuted, 0.6))
+				}
+			})
+		}
+	})
+	return out
+}
+
+// underlineTab is a tab of a row of them, as a page's lists: its name and
+// count, the one chosen in the text's color over a line.
+func underlineTab(c *ui.Context, key, name, count string, on bool) ui.Element {
+	t := c.Theme()
+	b := ui.Row(c.Key(key)).Padding(0, 0, 10).Gap(5).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(name).Shrink(0)
+	if on {
+		b.BorderWidth(0, 0, 2, 0).BorderColor(t.Text)
+	}
+	b.Children(func() {
+		txt := ui.Text(c, name).FontSize(textBody).PassThrough()
+		switch {
+		case on:
+			txt.FontWeight(600)
+		case b.Hovered():
+			txt.TextColor(t.Text)
+		default:
+			txt.TextColor(t.TextMuted)
+		}
+		if count != "" {
+			ui.Text(c, count).FontSize(textSmall).TextColor(t.TextMuted).PassThrough()
+		}
+	})
+	return b
+}
