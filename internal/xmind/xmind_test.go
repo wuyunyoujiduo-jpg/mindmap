@@ -55,7 +55,8 @@ func TestRoundTrip(t *testing.T) {
 	a.Collapsed = true
 	d.Relations = []model.Relation{{ID: "r1", From: a.ID, To: b.ID, Label: "依赖"}}
 	fl := d.AddFloating("备忘", model.Point{X: 300, Y: -80})
-	a.Summary = &model.Mark{Label: "核心功能"}
+	sum := a.AddSummary("核心功能")
+	sum.Children = []*model.Node{model.NewNode("登录与权限")}
 	f := &model.File{Version: model.FormatVersion, Sheets: []*model.Document{d, model.New("第二")}}
 
 	var buf bytes.Buffer
@@ -114,7 +115,7 @@ func TestRoundTrip(t *testing.T) {
 	if len(gd.Relations) != 1 || gd.Relations[0].Label != "依赖" || gd.Relations[0].From != ga.ID || gd.Relations[0].To != ga.Children[0].ID {
 		t.Fatalf("relations %+v", gd.Relations)
 	}
-	if ga.Summary == nil || ga.Summary.Label != "核心功能" {
+	if gs := ga.SummaryTopic(); gs == nil || gs.Title != "核心功能" || len(gs.Children) != 1 || gs.Children[0].Title != "登录与权限" {
 		t.Fatalf("summary %+v", ga.Summary)
 	}
 	gb := ga.Children[0]

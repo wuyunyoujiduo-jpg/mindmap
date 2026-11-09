@@ -77,12 +77,22 @@ type topic struct {
 	Href           string      `json:"href,omitempty"`
 	Position       *position   `json:"position,omitempty"`
 	Children       *children   `json:"children,omitempty"`
+	Summaries      []summary   `json:"summaries,omitempty"`
 	Extensions     []extension `json:"extensions,omitempty"`
 }
 
 type children struct {
 	Attached []*topic `json:"attached,omitempty"`
 	Detached []*topic `json:"detached,omitempty"`
+	Summary  []*topic `json:"summary,omitempty"` // the summaries' topics
+}
+
+// summary is XMind's summary: a brace over the children of range,
+// "(first,last)", and its topic, one of children.summary.
+type summary struct {
+	ID      string `json:"id"`
+	Range   string `json:"range"`
+	TopicID string `json:"topicId"`
 }
 
 type notes struct {
@@ -331,9 +341,17 @@ func exportTopic(n *model.Node, pictures map[string]bool) *topic {
 		}
 		t.Children.Attached = append(t.Children.Attached, exportTopic(c, pictures))
 	}
-	if n.Task != nil || len(n.Markers) > 0 || n.Style != nil || len(n.Links) > 0 || n.Summary != nil || n.Boundary != nil {
+	st := n.SummaryTopic()
+	if st == nil && n.Summary != nil { // one not opened since summaries had topics
+		st = &model.Node{ID: model.NewID(), Title: cmpOr(n.Summary.Label, "概要")}
+	}
+	if st != nil && len(n.Children) > 0 { // over all the children, as XMind draws it
+		t.Children.Summary = []*topic{exportTopic(st, pictures)}
+		t.Summaries = []summary{{ID: model.NewID(), Range: fmt.Sprintf("(0,%d)", len(n.Children)-1), TopicID: st.ID}}
+	}
+	if n.Task != nil || len(n.Markers) > 0 || n.Style != nil || len(n.Links) > 0 || n.Boundary != nil {
 		extra, _ := json.Marshal(topicExtra{Task: n.Task, Markers: n.Markers, Style: n.Style, Links: n.Links,
-			Summary: n.Summary, Boundary: n.Boundary})
+			Boundary: n.Boundary})
 		t.Extensions = []extension{{Provider: provider, Content: extra}}
 	}
 	return t
@@ -454,11 +472,27 @@ func (im *importer) topic(t *topic) *model.Node {
 		for _, c := range t.Children.Attached {
 			n.Children = append(n.Children, im.topic(c))
 		}
+		// A summary's topic, of XMind's or of an export from here; one a
+		// node, over all its children: the first, if there are several.
+		for _, s := range t.Summaries {
+			for _, c := range t.Children.Summary {
+				if c.ID == s.TopicID && n.Summary == nil {
+					n.Summary = &model.Mark{Topic: im.topic(c)}
+				}
+			}
+		}
 	}
 	for _, e := range t.Extensions {
 		var extra topicExtra
 		if e.Provider == provider && json.Unmarshal(e.Content, &extra) == nil {
-			n.Task, n.Style, n.Summary, n.Boundary = extra.Task, extra.Style, extra.Summary, extra.Boundary
+			n.Task, n.Style, n.Boundary = extra.Task, extra.Style, extra.Boundary
+			if extra.Summary != nil && n.Summary == nil { // exported before summaries had topics
+				label := extra.Summary.Label
+				if label == "" {
+					label = "概要"
+				}
+				n.AddSummary(label)
+			}
 			if extra.Links != nil {
 				n.Links = extra.Links
 			}
@@ -592,4 +626,11 @@ func (im *importer) xmlTopic(t *xmlTopic) *model.Node {
 		n.Collapsed = false
 	}
 	return n
+}
+
+func cmpOr(s, def string) string {
+	if s != "" {
+		return s
+	}
+	return def
 }

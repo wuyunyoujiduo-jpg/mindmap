@@ -46,6 +46,11 @@ func OPML(f *model.File, title string) ([]byte, error) {
 		for _, c := range n.Children {
 			o.Children = append(o.Children, conv(c))
 		}
+		if t := n.SummaryTopic(); t != nil && len(n.Children) > 0 { // after what it sums up
+			s := conv(t)
+			s.Text = model.SummaryPrefix + s.Text
+			o.Children = append(o.Children, s)
+		}
 		return o
 	}
 	for _, d := range f.Sheets {

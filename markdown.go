@@ -105,10 +105,11 @@ type mdSpanStyle struct {
 	bold, italic, strike, code, link bool
 }
 
-var mdInline = regexp.MustCompile("`[^`]+`|\\*\\*[^*]+\\*\\*|__[^_]+__|~~[^~]+~~|\\[[^\\]]+\\]\\([^)]+\\)|\\*[^*\\s][^*]*\\*")
+var mdInline = regexp.MustCompile("\\\\[!-/:-@\\[-`{-~]|`[^`]+`|\\*\\*[^*]+\\*\\*|__[^_]+__|~~[^~]+~~|\\[[^\\]]+\\]\\([^)]+\\)|\\*[^*\\s][^*]*\\*")
 
 // inlineSpans styles the runs of a line: **bold**, *italic*, ~~struck~~,
-// `code` and [links](url), which show their text.
+// `code` and [links](url), which show their text; a backslash before a
+// punctuation mark, as \_, shows the mark as it is.
 func inlineSpans(text string, size float32, color, accent, codeBg ui.Color, base mdSpanStyle) []ui.Span {
 	var spans []ui.Span
 	add := func(s string, st mdSpanStyle) {
@@ -133,6 +134,8 @@ func inlineSpans(text string, size float32, color, accent, codeBg ui.Color, base
 		tok := text[m[0]:m[1]]
 		st := base
 		switch {
+		case strings.HasPrefix(tok, "\\"):
+			add(tok[1:], base)
 		case strings.HasPrefix(tok, "`"):
 			st.code = true
 			add(tok[1:len(tok)-1], st)

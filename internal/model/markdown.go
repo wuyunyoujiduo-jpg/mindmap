@@ -18,7 +18,7 @@ func Markdown(d *Document) string {
 	if len(d.Root.Children) > 0 {
 		b.WriteString("\n")
 	}
-	writeItems(&b, d.Root.Children)
+	writeItemsOf(&b, d.Root.Children, d.Root.SummaryTopic())
 	return b.String()
 }
 
@@ -29,11 +29,21 @@ func MarkdownNodes(nodes []*Node) string {
 	return b.String()
 }
 
+// SummaryPrefix starts a summary's topic in outlines written out: it comes
+// after the children it sums up, at their depth.
+const SummaryPrefix = "〔概要〕"
+
 func writeItems(b *strings.Builder, nodes []*Node) {
-	var walk func(n *Node, depth int)
-	walk = func(n *Node, depth int) {
+	writeItemsOf(b, nodes, nil)
+}
+
+// writeItemsOf writes nodes, and after them the topic of the summary of
+// their parent, when it has one.
+func writeItemsOf(b *strings.Builder, nodes []*Node, summary *Node) {
+	var walk func(n *Node, depth int, prefix string)
+	walk = func(n *Node, depth int, prefix string) {
 		indent := strings.Repeat("  ", depth)
-		b.WriteString(indent + "- " + itemLine(n) + "\n")
+		b.WriteString(indent + "- " + prefix + itemLine(n) + "\n")
 		if n.Note != "" {
 			for _, line := range strings.Split(strings.TrimRight(n.Note, "\n"), "\n") {
 				if strings.TrimSpace(line) == "" {
@@ -44,11 +54,17 @@ func writeItems(b *strings.Builder, nodes []*Node) {
 			}
 		}
 		for _, c := range n.Children {
-			walk(c, depth+1)
+			walk(c, depth+1, "")
+		}
+		if t := n.SummaryTopic(); t != nil && len(n.Children) > 0 {
+			walk(t, depth+1, SummaryPrefix)
 		}
 	}
 	for _, c := range nodes {
-		walk(c, 0)
+		walk(c, 0, "")
+	}
+	if summary != nil && len(nodes) > 0 {
+		walk(summary, 0, SummaryPrefix)
 	}
 }
 

@@ -3788,6 +3788,23 @@ func TestSummaryTopic(t *testing.T) {
 	}
 	a.selected = st.ID
 	snapshot(t, tt, "summary-topic")
+	// In the outline, after the children it sums up, with its own.
+	a.mode = viewOutline
+	tt.Frame()
+	rows := outlineRows(a.doc)
+	at := slices.IndexFunc(rows, func(r outlineRow) bool { return r.node == st })
+	if at < 0 || !rows[at].summary || rows[at].depth != 1 || rows[at+1].node != st.Children[0] || rows[at+1].depth != 2 ||
+		rows[at-1].node.Title != "后端" {
+		t.Fatalf("outline rows around %d", at)
+	}
+	snapshot(t, tt, "summary-outline")
+	a.mode = viewMap
+	tt.Frame()
+	// Written out, after the children too.
+	md := model.Markdown(a.doc)
+	if !strings.Contains(md, "  - 后端\n") || !strings.Contains(md, "\n  - 〔概要〕两端\n    - 前后端分离\n") {
+		t.Fatalf("markdown %s", md)
+	}
 	// Saved and read again, it is all there.
 	a.save()
 	f, err := model.Load(a.path)

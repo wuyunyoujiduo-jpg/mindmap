@@ -14,20 +14,28 @@ const outlineBlockFocus = "outline-block"
 
 // outlineRow is a node shown in the outline, with its depth.
 type outlineRow struct {
-	node  *model.Node
-	depth int
+	node    *model.Node
+	depth   int
+	summary bool // the topic of its parent's summary
 }
 
 // outlineRows lists the nodes below the root that the outline shows, in
-// order: those under a folded node are left out.
+// order: those under a folded node are left out. A summary's topic comes
+// after the children it sums up, at their depth.
 func outlineRows(d *model.Document) []outlineRow {
 	var rows []outlineRow
 	var walk func(n *model.Node, depth int)
 	walk = func(n *model.Node, depth int) {
 		for _, c := range n.Children {
-			rows = append(rows, outlineRow{c, depth})
+			rows = append(rows, outlineRow{node: c, depth: depth})
 			if !c.Collapsed {
 				walk(c, depth+1)
+			}
+		}
+		if t := n.SummaryTopic(); t != nil && len(n.Children) > 0 {
+			rows = append(rows, outlineRow{node: t, depth: depth, summary: true})
+			if !t.Collapsed {
+				walk(t, depth+1)
 			}
 		}
 	}
@@ -112,6 +120,8 @@ func (a *app) outlineLine(c *ui.Context, rows []outlineRow, i int) {
 		}
 		bullet.Children(func() {
 			switch {
+			case rows[i].summary: // a brace, as the map draws it
+				ui.Text(c, "}").FontSize(15).Bold().TextColor(t.Accent)
 			case len(n.Children) > 0 && n.Collapsed:
 				ui.Text(c, "▸").FontSize(13).TextColor(t.TextMuted)
 			case len(n.Children) > 0:
@@ -120,6 +130,9 @@ func (a *app) outlineLine(c *ui.Context, rows []outlineRow, i int) {
 				ui.Box(c).Size(6, 6).Radius(999).Background(t.Text)
 			}
 		})
+		if rows[i].summary {
+			pill(c, "概要", t.Accent.Alpha(0.14), t.Accent)
+		}
 		if n.Task != nil {
 			a.taskCheck(c, n, 15)
 		}
@@ -390,7 +403,13 @@ func (a *app) outlinePaste(id string) {
 	if len(nodes) == 0 {
 		return
 	}
+	under := a.doc.IsSummaryTopic(n.ID) // a summary's topic has no siblings: its lines go under it
 	a.mutate("", func() {
+		if under {
+			n.Children = append(n.Children, nodes...)
+			n.Collapsed = false
+			return
+		}
 		at := slices.Index(parent.Children, n) + 1
 		if n.Title == "" && len(n.Children) == 0 { // an empty line takes the first
 			at--
