@@ -36,18 +36,18 @@ func (a *app) captureKey() string {
 // Where captured text goes.
 const (
 	captureInbox   = iota
-	captureLibrary // a clip of the library
+	captureLibrary // a note of 灵感, a text of the library: the default
 	captureHere    // under the node selected in the open map
 )
 
 // capture adds text to the inbox, or under the node selected: a node a
 // line, nested by indentation, as a pasted outline is.
 func (a *app) capture(text string, where int) error {
-	if where == captureLibrary {
-		if _, err := a.addClipText(text, "快速记录"); err != nil {
+	if where == captureLibrary { // a note of 灵感
+		if _, err := a.addMemo(text, "快速记录"); err != nil {
 			return err
 		}
-		a.tell("已收进资料库")
+		a.tell("已记到灵感")
 		return nil
 	}
 	nodes := model.ParseOutline(text)
@@ -140,7 +140,7 @@ func (a *app) captureView(c *ui.Context) {
 				}
 			}
 			ui.Text(c, "记到").FontSize(12).TextColor(t.TextMuted)
-			labels := []string{"收件箱", "资料库"}
+			labels := []string{"收件箱", "灵感"}
 			if n, _ := a.selectedNode(); n != nil && a.path != a.inboxPath() {
 				labels = append(labels, "「"+mapName(a.path)+"」的「"+n.Title+"」下")
 			}

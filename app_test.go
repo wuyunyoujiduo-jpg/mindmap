@@ -2526,6 +2526,7 @@ func TestQuickCaptureAndInbox(t *testing.T) {
 	// The capture window, a window of its own.
 	ct := ui.NewTester(a.captureView, 560, 170)
 	fp.capture = true
+	a.captureWhere = captureInbox // 灵感 is the default (TestMemos)
 	ct.Type("调研竞品\n  - [ ] 看 XMind 的导出")
 	ct.Key(0, ui.KeyEnter)
 	if fp.capture {

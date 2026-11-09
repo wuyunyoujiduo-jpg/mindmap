@@ -37,6 +37,10 @@ func (a *app) view(c *ui.Context) {
 						a.tasksView(c)
 						return
 					}
+					if a.memos.open {
+						a.memosView(c)
+						return
+					}
 					if a.libHome {
 						a.homeView(c)
 					} else {

@@ -360,6 +360,7 @@ type app struct {
 
 	auto  autoState  // the automations (automation.go)
 	tasks tasksState // the tasks of all the maps (taskspage.go)
+	memos memosState // 灵感, the notes written as they come (memos.go)
 	// lastTheme is the theme the window was last drawn in, for what is
 	// worked out outside a frame's build.
 	lastTheme *ui.Theme
@@ -412,6 +413,7 @@ func newApp(plat platform, cfg config) *app {
 		catsOpen:      true,
 		tagsOpen:      true,
 		favoritesOpen: true,
+		captureWhere:  captureLibrary, // 灵感
 		bitmaps:       map[string]*ui.Bitmap{},
 		sendAI:        sendToClaude,
 		sendDeepSeek:  sendToDeepSeek,

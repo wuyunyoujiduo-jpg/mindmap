@@ -185,6 +185,9 @@ func (a *app) unfiledClips() []*library.Clip {
 		if len(refs.to[clipScheme+c.ID]) > 0 {
 			continue // placed in a map
 		}
+		if c.Folder == "" && (c.Source == "灵感" || c.Source == "快速记录") {
+			continue // a note of 灵感, which waits for no filing
+		}
 		if c.Folder == "" {
 			out = append(out, c)
 			continue
