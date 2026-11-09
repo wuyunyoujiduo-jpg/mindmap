@@ -32,7 +32,10 @@ by AI, and an AI assistant.
   the accent kept for what acts. On the canvas only the central topic is
   solid; main topics are tinted, the topics below them a faint gray.
 - The app's icon is drawn by `tools/icon/`; `resources/icon.png` is the
-  knowledge card, bold (`tools/icon/bold.py`), and `appicons/` the icons to choose in the settings.
+  vivid map, coral (`tools/icon/vivid.py`: a large white map on a bright
+  color, to stand out in the Dock), and `appicons/` the icons to choose in
+  the settings (the vivid map in three colors, the knowledge cards of
+  `bold.py`, the orbit), with their menu bar icons (`tray.py`).
 - The semantic search model is a plugin downloaded from the public
   `mindmap-models` repository (`plugin.go`).
 - Auto-updates: `mygo.json`'s `updates` and MyGo's updater plugin. Releases

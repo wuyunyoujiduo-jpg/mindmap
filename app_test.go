@@ -3061,11 +3061,11 @@ func TestChooseAppIcon(t *testing.T) {
 	if a.cfg.Icon != "orbit" || !bytes.Equal(fp.icon, appIconPNG("orbit")) || !bytes.Equal(fp.tray, trayIcon("orbit")) {
 		t.Fatalf("icon %q, %d bytes set", a.cfg.Icon, len(fp.icon))
 	}
-	if err := tt.Click("图标 知识卡片"); err != nil {
+	if err := tt.Click("图标 珊瑚"); err != nil { // the default
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if a.cfg.Icon != "" || !bytes.Equal(fp.icon, appIconPNG("")) {
+	if a.cfg.Icon != "" || !bytes.Equal(fp.icon, appIconPNG("")) || !bytes.Equal(fp.tray, trayIcon("")) {
 		t.Fatalf("icon %q", a.cfg.Icon)
 	}
 	for _, ic := range appIcons {

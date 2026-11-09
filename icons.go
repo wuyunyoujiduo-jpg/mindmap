@@ -158,11 +158,12 @@ func drawIcon(p *ui.Painter, r ui.Rect, s float32, ic icon, col ui.Color) {
 			p.FillPath(new(ui.Path).Circle(x, cy+dy*h, h*0.13), col)
 			p.Line(x+h*0.3, cy+dy*h, cx+h*0.85, cy+dy*h, w, col)
 		}
-	case iconMap: // a node with three branches
-		p.FillPath(new(ui.Path).Circle(cx-h*0.45, cy, h*0.28), col)
-		for _, dy := range []float32{-0.6, 0, 0.6} {
-			p.StrokePath(new(ui.Path).MoveTo(cx-h*0.2, cy).CubeTo(cx+h*0.1, cy, cx+h*0.1, cy+dy*h, cx+h*0.45, cy+dy*h), w*0.9, col)
-			p.FillPath(new(ui.Path).Circle(cx+h*0.7, cy+dy*h, h*0.16), col)
+	case iconMap: // a central topic, and two branches curving out to topics
+		p.StrokePath(roundedRect(cx-h*0.95, cy-h*0.3, h*0.68, h*0.6, h*0.18), w, col)
+		for _, dy := range []float32{-0.55, 0.55} {
+			y := cy + dy*h
+			p.StrokePath(roundedRect(cx+h*0.33, y-h*0.25, h*0.62, h*0.5, h*0.16), w, col)
+			p.StrokePath(new(ui.Path).MoveTo(cx-h*0.27, cy).CubeTo(cx+h*0.05, cy, cx+h*0.02, y, cx+h*0.33, y), w, col)
 		}
 	case iconText:
 		p.StrokePath(roundedRect(cx-h*0.7, cy-h*0.85, h*1.4, h*1.7, h*0.22), w, col)

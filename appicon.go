@@ -8,9 +8,10 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// The app's icon, chosen in the settings: the library's cards with the
-// AI's spark, the default and the one in the app bundle, or knowledge in
-// orbit around the spark. The choice shows in the Dock (macOS) or the
+// The app's icon, chosen in the settings: a large white map on a bright
+// color, coral (the default and the one in the app bundle), blue or teal;
+// the library's cards with the AI's spark; or knowledge in orbit around
+// the spark. The choice shows in the Dock (macOS) or the
 // taskbar (Windows) while the app runs.
 
 //go:embed appicons/*.png
@@ -19,7 +20,10 @@ var appIconFiles embed.FS
 type appIcon struct{ key, name, file, tray string }
 
 var appIcons = []appIcon{
-	{"", "知识卡片", "appicons/cards.png", "appicons/tray-cards.png"},
+	{"", "珊瑚", "appicons/vivid.png", "appicons/tray-vivid.png"},
+	{"vivid-blue", "靛蓝", "appicons/vivid-blue.png", "appicons/tray-vivid.png"},
+	{"vivid-teal", "青绿", "appicons/vivid-teal.png", "appicons/tray-vivid.png"},
+	{"cards", "知识卡片", "appicons/cards.png", "appicons/tray-cards.png"},
 	{"orbit", "知识星图", "appicons/orbit.png", "appicons/tray-orbit.png"},
 }
 
@@ -79,7 +83,7 @@ func (a *app) iconSettings(c *ui.Context) {
 	t := c.Theme()
 	ui.Field(c, "应用图标", func() {
 		ui.Column(c).Gap(6).Children(func() {
-			ui.Row(c).Gap(12).Children(func() {
+			ui.Row(c).Gap(10).Wrap().GapY(8).Children(func() {
 				for _, ic := range appIcons {
 					on := a.cfg.Icon == ic.key
 					box := ui.Column(c.Key("icon:"+ic.name)).Padding(8, 10).Gap(6).Radius(12).AlignItems(ui.Center).
@@ -98,7 +102,7 @@ func (a *app) iconSettings(c *ui.Context) {
 					}
 					box.Children(func() {
 						if b := a.iconBitmap(ic.key); b != nil {
-							ui.Image(c, b).Size(72, 72).PassThrough()
+							ui.Image(c, b).Size(64, 64).PassThrough()
 						}
 						col := t.TextMuted
 						if on {
@@ -108,7 +112,7 @@ func (a *app) iconSettings(c *ui.Context) {
 					})
 				}
 			})
-			ui.Text(c, "换上的图标在程序坞（Windows 是任务栏）和菜单栏里显示；访达和启动台里仍是默认的「知识卡片」。").
+			ui.Text(c, "换上的图标在程序坞（Windows 是任务栏）和菜单栏里显示；访达和启动台里仍是默认的「珊瑚」。").
 				FontSize(12).TextColor(t.TextMuted).Wrap()
 		})
 	})
