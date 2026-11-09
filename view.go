@@ -154,7 +154,7 @@ func tagChip(c *ui.Context, tag, label string, active bool, size float32) ui.Ele
 	return chip
 }
 
-var tagPalette = []string{"#2563eb", "#16a34a", "#d97706", "#db2777", "#7c3aed", "#0891b2", "#dc2626", "#4d7c0f"}
+var tagPalette = []string{"#4F74B8", "#4F9668", "#B7843F", "#B3618A", "#7A68BD", "#3F8C9C", "#B95A54", "#6E8A45"}
 
 func tagColor(tag string) ui.Color {
 	if hex, ok := tagColors[tag]; ok {

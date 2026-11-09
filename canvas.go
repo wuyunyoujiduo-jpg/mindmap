@@ -517,9 +517,10 @@ func (a *app) canvasArea(c *ui.Context) {
 		if exporting {
 			view = ui.Rect{} // all of it
 		}
+		soft := func(id string) ui.Color { return color(id).Alpha(0.8) } // the lines a little lighter than the topics
 		lines := func() {
 			a.drawBoundaries(p, r, shown, rect.X+cam.X, rect.Y+cam.Y, z, color)
-			drawEdges(p, r, a.doc.Structure, rect.X+cam.X, rect.Y+cam.Y, z, lk.line, view, color)
+			drawEdges(p, r, a.doc.Structure, rect.X+cam.X, rect.Y+cam.Y, z, lk.line, view, soft)
 			a.drawSummaries(p, r, shown, rect.X+cam.X, rect.Y+cam.Y, z, color)
 			a.drawDependencies(p, r, rect.X+cam.X, rect.Y+cam.Y, z)
 			a.drawRelations(p, r, rect.X+cam.X, rect.Y+cam.Y, z, ui.Hex("#6366f1"))
@@ -759,19 +760,28 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 	st := styleOf(n)
 	var fill ui.Color
 	filled := false // with a fill whose text color differs from the canvas's
+	// Quietly: the central topic solid, the main topics tinted with their
+	// branch's color and written in a deep shade of it, and the topics
+	// below them all alike, on a faint gray.
+	branchText := accent.MixOklab(t.Text, 0.45)
 	switch depth {
 	case 0:
 		fill, filled = lookOf(a.doc.Style).root(t), true
-		el.Radius(10 * z)
+		el.Radius(12 * z)
 	case 1:
-		fill, filled = accent, true
-	default:
-		tint := float32(0.12)
+		tint := float32(0.15)
 		if t.Dark {
-			tint = 0.24
+			tint, branchText = 0.24, accent.MixOklab(t.Text, 0.3)
 		}
 		fill = accent.Alpha(tint)
-		el.Radius(6 * z)
+		el.Radius(10 * z)
+	default:
+		tint := float32(0.045)
+		if t.Dark {
+			tint = 0.08
+		}
+		fill = t.Text.Alpha(tint)
+		el.Radius(7 * z)
 	}
 	// A summary's topic: a pill outlined in its branch's color, its text
 	// in it too, lightly tinted, unlike the topics it sums up.
@@ -801,6 +811,9 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 	}
 	el.Background(fill)
 	onFill := t.Text
+	if depth == 1 {
+		onFill = branchText
+	}
 	if filled {
 		onFill = textOn(fill)
 	}

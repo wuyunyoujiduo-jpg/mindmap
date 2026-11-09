@@ -133,3 +133,30 @@ func pill(c *ui.Context, text string, bg, fg ui.Color) ui.Element {
 		ui.Text(c, text).FontSize(textCaption).TextColor(fg).NoWrap()
 	})
 }
+
+// chosen is the fill of the row chosen in a list: a neutral gray, as the
+// accent would shout across a quiet page.
+func chosen(t *ui.Theme) ui.Color {
+	if t.Dark {
+		return t.Text.Alpha(0.12)
+	}
+	return t.Text.Alpha(0.075)
+}
+
+// section is a part of a panel or a detail: a quiet heading, an icon and a
+// title in the muted text, with what right builds at its end, then body,
+// under a hairline rather than in a card.
+func section(c *ui.Context, ic icon, title string, right func(), body func()) {
+	t := c.Theme()
+	ui.Column(c.Key("section:"+title)).Padding(14, 0, 4).Gap(10).FillWidth().
+		BorderWidth(1, 0, 0, 0).BorderColor(hairline(t)).Children(func() {
+		ui.Row(c).Gap(6).AlignItems(ui.Center).MinHeight(20).Children(func() {
+			glyph(c, ic, 13, t.TextMuted)
+			ui.Text(c, title).FontSize(textSmall).FontWeight(600).TextColor(t.TextMuted).Grow(1)
+			if right != nil {
+				right()
+			}
+		})
+		body()
+	})
+}

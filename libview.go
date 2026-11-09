@@ -314,7 +314,7 @@ func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 		Drag(fileDrag{Clip: clip.ID}) // onto a folder of the sidebar
 	switch {
 	case a.libSel == clip.ID:
-		row.Background(t.Accent.Alpha(0.14))
+		row.Background(chosen(t))
 	case row.Hovered():
 		row.Background(t.SurfaceHover)
 	}

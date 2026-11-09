@@ -108,7 +108,7 @@ func (a *app) docRow(c *ui.Context, clip *library.Clip, depth int) {
 		Tooltip(clip.Label())
 	switch {
 	case current:
-		row.Background(t.Accent.Alpha(0.16))
+		row.Background(chosen(t))
 	case row.Hovered():
 		row.Background(t.Text.Alpha(0.06))
 	}

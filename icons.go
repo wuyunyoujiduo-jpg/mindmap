@@ -292,7 +292,7 @@ func (a *app) taskCheck(c *ui.Context, n *model.Node, size float32) ui.Element {
 		p.Fill(r, t.Background, r.W/2)
 		drawMarker(p, r, statusMarker(task.Status))
 		if hover && task.Status != model.StatusDone { // a hint of the check a click makes
-			drawIcon(p, r, size*0.7, iconCheck, ui.Hex("#20B26B").Alpha(0.6))
+			drawIcon(p, r, size*0.7, iconCheck, ui.Hex("#4FA374").Alpha(0.6))
 		}
 	})
 	return b

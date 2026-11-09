@@ -310,7 +310,7 @@ func (a *app) fileRow(c *ui.Context, f model.FileInfo, depth int, inFavorites bo
 	case over:
 		row.Background(t.Accent.Alpha(0.15))
 	case current:
-		row.Background(t.Accent.Alpha(0.16))
+		row.Background(chosen(t))
 	case row.Hovered():
 		row.Background(t.Text.Alpha(0.06))
 	}
@@ -367,7 +367,7 @@ func (a *app) fileRow(c *ui.Context, f model.FileInfo, depth int, inFavorites bo
 			text.Bold()
 		}
 		if fav && !inFavorites {
-			ui.Text(c, "★").FontSize(11).TextColor(ui.Hex("#F2C200"))
+			ui.Text(c, "★").FontSize(11).TextColor(ui.Hex("#D4A836"))
 		}
 	})
 }

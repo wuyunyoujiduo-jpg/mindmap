@@ -67,10 +67,13 @@ func TestLinesStayInCanvas(t *testing.T) {
 	tt.Frame()
 	img := tt.Image()
 	col := lookOf(a.doc.Style).branch(0)
+	// Lines are drawn a little lighter than their branch: 0.8 of it over the
+	// canvas's white.
+	soft := func(v uint8) uint8 { return uint8(0.8*float32(v) + 0.2*255) }
 	near := func(x, y int) bool {
 		px := img.RGBAAt(x, y)
-		d := func(p, q uint8) bool { return max(p, q)-min(p, q) < 32 }
-		return d(px.R, col.R) && d(px.G, col.G) && d(px.B, col.B)
+		d := func(p, q uint8) bool { return max(p, q)-min(p, q) < 48 } // a thin line's pixels are partly the canvas's
+		return d(px.R, soft(col.R)) && d(px.G, soft(col.G)) && d(px.B, soft(col.B))
 	}
 	vp := a.vp
 	onCanvas, above := false, false

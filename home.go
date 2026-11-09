@@ -12,20 +12,20 @@ import (
 )
 
 // The look of the sidebar and of 概览 follows Pulse's: rows of the
-// sidebar with an icon on a tile of its own color and a count on the
-// right, the current one filled with the accent; pages of soft cards with
-// large numbers.
+// sidebar with a line icon in a quiet shade of its color and a count on
+// the right, the current one on a light gray; pages of outlined cards with
+// large numbers. Colors are muted, as the rest is.
 
-// Colors of the tiles.
+// Colors of the kinds of things, muted.
 var (
-	tileBlue   = ui.Hex("#3B82F6")
-	tileOrange = ui.Hex("#F08A3C")
-	tileGreen  = ui.Hex("#22C55E")
-	tilePurple = ui.Hex("#8B5CF6")
-	tilePink   = ui.Hex("#EC4899")
-	tileYellow = ui.Hex("#EAB308")
-	tileTeal   = ui.Hex("#14B8A6")
-	tileRed    = ui.Hex("#EF4444")
+	tileBlue   = ui.Hex("#5B83C9")
+	tileOrange = ui.Hex("#D08A55")
+	tileGreen  = ui.Hex("#5FA37E")
+	tilePurple = ui.Hex("#8C79C9")
+	tilePink   = ui.Hex("#C77796")
+	tileYellow = ui.Hex("#C9A443")
+	tileTeal   = ui.Hex("#4E9E9A")
+	tileRed    = ui.Hex("#C9655F")
 )
 
 var tilePalette = []ui.Color{tileBlue, tileOrange, tileGreen, tilePurple, tilePink, tileTeal, tileYellow, tileRed}
@@ -37,10 +37,13 @@ func catColor(name string) ui.Color {
 	return tilePalette[h.Sum32()%uint32(len(tilePalette))]
 }
 
-// tile is an icon, white, on a rounded square of a color.
+// tile is an icon of a kind of thing, drawn as a line in a quiet shade of
+// its color: a hint of the color, no block of it.
 func tile(c *ui.Context, ic icon, col ui.Color, size float32) {
-	ui.Box(c).Size(size, size).Shrink(0).Radius(size * 0.28).Background(col).PassThrough().
-		Draw(func(p *ui.Painter, r ui.Rect) { drawIcon(p, r, size*0.62, ic, ui.Hex("#FFFFFF")) })
+	t := c.Theme()
+	ink := col.MixOklab(t.TextMuted, 0.4)
+	ui.Box(c).Size(size, size).Shrink(0).PassThrough().
+		Draw(func(p *ui.Painter, r ui.Rect) { drawIcon(p, r, size*0.72, ic, ink) })
 }
 
 // navRow is a row of the sidebar: a tile, a label and a count. The
@@ -51,7 +54,7 @@ func navRow(c *ui.Context, ic icon, col ui.Color, label, count string, current b
 	// Selected as the other rows of the sidebar are: a light accent.
 	switch {
 	case current:
-		r.Background(t.Accent.Alpha(0.16))
+		r.Background(chosen(t))
 	case r.Hovered():
 		r.Background(t.Text.Alpha(0.06))
 	}
@@ -71,7 +74,7 @@ func navRow(c *ui.Context, ic icon, col ui.Color, label, count string, current b
 // pageCard is a card of a page: soft, much rounded.
 func pageCard(c *ui.Context) ui.Element {
 	t := c.Theme()
-	return ui.Column(c).Padding(16, 18).Gap(12).Radius(16).Background(t.Text.Alpha(0.035)).FillWidth()
+	return ui.Column(c).Padding(16, 18).Gap(12).Radius(12).Background(t.Background).Border(1, hairline(t)).FillWidth()
 }
 
 // cardHead is the head of a card: a tile, a title in its color, and a link
@@ -406,16 +409,7 @@ func (a *app) homeRecent(c *ui.Context, now time.Time, maps, clips []*library.Cl
 // sectionCard is a card of a detail or a panel: a head of a tile and a
 // title in its color, with what right builds at its end, then body.
 func sectionCard(c *ui.Context, ic icon, col ui.Color, title string, right func(), body func()) {
-	pageCard(c.Key("section:"+title)).Padding(12, 14).Gap(10).Radius(14).Children(func() {
-		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-			tile(c, ic, col, 22)
-			ui.Text(c, title).FontSize(13).Bold().Grow(1)
-			if right != nil {
-				right()
-			}
-		})
-		body()
-	})
+	section(c, ic, title, right, body)
 }
 
 // dotRow is a row of the sidebar with a small dot of a color, as Finder's
@@ -425,12 +419,12 @@ func dotRow(c *ui.Context, col ui.Color, label, count string, current bool) ui.E
 	r := ui.Row(c).Padding(5, 8, 5, 14).Gap(10).Radius(8).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(label).FillWidth()
 	switch {
 	case current:
-		r.Background(t.Accent.Alpha(0.16))
+		r.Background(chosen(t))
 	case r.Hovered():
 		r.Background(t.Text.Alpha(0.06))
 	}
 	r.Children(func() {
-		ui.Box(c).Size(10, 10).Radius(5).Background(col).Shrink(0).Margin(0, 4, 0, 0)
+		ui.Box(c).Size(8, 8).Radius(4).Background(col).Shrink(0).Margin(0, 5, 0, 1)
 		text := ui.Text(c, label).FontSize(13).Grow(1).Shrink(1).MinWidth(0).SingleLine()
 		if current {
 			text.Bold()

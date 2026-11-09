@@ -24,7 +24,13 @@ by AI, and an AI assistant.
 ## Notes
 
 - The UI's look is in `design.go` (sizes, helpers) and `icons.go` (icons
-  drawn as lines, not glyphs, so that they sit centered).
+  drawn as lines, not glyphs, so that they sit centered). It is quiet, as
+  Things or Craft: muted colors (`style.go`'s default scheme, the kinds'
+  colors in `home.go`, tags and markers), icons as lines in a muted shade
+  rather than on colored tiles (`tile`), parts under hairlines rather than
+  in gray cards (`section`), the row chosen on a neutral gray (`chosen`),
+  the accent kept for what acts. On the canvas only the central topic is
+  solid; main topics are tinted, the topics below them a faint gray.
 - The app's icon is drawn by `tools/icon/`; `resources/icon.png` is the
   knowledge card, bold (`tools/icon/bold.py`), and `appicons/` the icons to choose in the settings.
 - The semantic search model is a plugin downloaded from the public

@@ -23,8 +23,8 @@ var tagColors = map[string]string{}
 
 // tagColorChoices are the colors offered for a tag.
 var tagColorChoices = []struct{ hex, name string }{
-	{"#2563eb", "蓝"}, {"#16a34a", "绿"}, {"#d97706", "橙"}, {"#db2777", "粉"},
-	{"#7c3aed", "紫"}, {"#0891b2", "青"}, {"#dc2626", "红"}, {"#4d7c0f", "橄榄"}, {"#6b7280", "灰"},
+	{"#4F74B8", "蓝"}, {"#4F9668", "绿"}, {"#B7843F", "橙"}, {"#B3618A", "粉"},
+	{"#7A68BD", "紫"}, {"#3F8C9C", "青"}, {"#B95A54", "红"}, {"#6E8A45", "橄榄"}, {"#6b7280", "灰"},
 }
 
 // syncTagColors makes tagColor follow the library.

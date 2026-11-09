@@ -226,7 +226,7 @@ func (a *app) autoListRow(c *ui.Context, x *automate.Automation) {
 	r := ui.Column(c.Key("auto:"+x.ID)).Padding(7, 10).Gap(2).Radius(8).FillWidth().Cursor(ui.CursorPointer).Label(x.Name)
 	switch {
 	case sel:
-		r.Background(t.Accent.Alpha(0.16))
+		r.Background(chosen(t))
 	case r.Hovered():
 		r.Background(t.Text.Alpha(0.06))
 	}
@@ -388,7 +388,7 @@ func (a *app) autoCodeView(c *ui.Context, x *automate.Automation) {
 					b := ui.Box(c.Key("file:"+f)).Padding(3, 9).Radius(6).Cursor(ui.CursorPointer).Label(f)
 					switch {
 					case sel:
-						b.Background(t.Accent.Alpha(0.16))
+						b.Background(chosen(t))
 					case b.Hovered():
 						b.Background(t.Text.Alpha(0.06))
 					}
@@ -564,7 +564,7 @@ func (a *app) autoRunsView(c *ui.Context, x *automate.Automation) {
 				row := ui.Column(c.Key("run:"+r.ID)).Padding(6, 8).Gap(1).Radius(6).FillWidth().Cursor(ui.CursorPointer)
 				switch {
 				case r.ID == shown.ID:
-					row.Background(t.Accent.Alpha(0.16))
+					row.Background(chosen(t))
 				case row.Hovered():
 					row.Background(t.Text.Alpha(0.06))
 				}
@@ -686,7 +686,7 @@ func (a *app) approvalView(c *ui.Context) {
 						}
 						b := ui.Box(c.Key(fmt.Sprint("diff:", i))).Padding(3, 9).Radius(6).Cursor(ui.CursorPointer).Label(d.change.File)
 						if i == a.auto.diffSel {
-							b.Background(t.Accent.Alpha(0.16))
+							b.Background(chosen(t))
 						}
 						if b.Clicked() {
 							a.auto.diffSel = i
