@@ -296,7 +296,12 @@ func (a *app) taskCheck(c *ui.Context, n *model.Node, size float32) ui.Element {
 	if done {
 		tip, label = a.taskSummary(task)+"\n点击标为未完成", "取消完成 "+n.Title
 	}
-	b := ui.Box(c.Key("task-check")).Size(size, size).Shrink(0).Cursor(ui.CursorPointer).Label(label).Tooltip(tip)
+	b := ui.Box(c.Key("task-check")).Size(size, size).Shrink(0).Cursor(ui.CursorPointer).Label(label)
+	if a.mode != viewMap || a.libOpen {
+		// On the canvas, the tip's dark box would sit on the topic's, the
+		// central one's as dark: the panel says the state there.
+		b.Tooltip(tip)
+	}
 	hover := b.Hovered()
 	if b.Clicked() {
 		id := n.ID

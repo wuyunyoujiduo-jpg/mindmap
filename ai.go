@@ -952,8 +952,13 @@ func (a *app) aiPanel(c *ui.Context) {
 		ui.Row(c.Key("ai-head")).Height(toolbarHeight).Padding(0, 10, 0, 16).Gap(6).AlignItems(ui.Center).Shrink(0).
 			BorderWidth(0, 0, 1, 0).BorderColor(hairline(t)).DragWindow().Children(func() {
 			ui.Box(c).Size(16, 16).Draw(func(p *ui.Painter, r ui.Rect) { drawIcon(p, r, 14, iconSparkle, t.Accent) })
-			ui.Text(c, "AI 助手").FontSize(textTitle).Bold().Grow(1)
-			if len(ai.msgs) > 0 && ui.Button(c, "新对话").Disabled(ai.busy).Clicked() {
+			ui.Text(c, "问 AI").FontSize(textBody).FontWeight(600)
+			about := "资料库"
+			if !a.libOpen && a.doc != nil {
+				about = "「" + mapName(a.path) + "」"
+			}
+			ui.Text(c, "· 关于"+about).FontSize(textSmall).TextColor(t.TextMuted).SingleLine().Grow(1).Shrink(1).MinWidth(0)
+			if len(ai.msgs) > 0 && iconButton(c, iconPlus, "新对话", "新对话", 28, !ai.busy).Clicked() && !ai.busy {
 				a.newChat()
 			}
 			iconButton(c, iconMore, "AI 菜单", "周报、风险扫描、拆解任务、从文本或代码仓库生成，以及设置", 28, !ai.busy).Menu(func(m *ui.Menu) {
@@ -1040,16 +1045,15 @@ func (a *app) aiPanel(c *ui.Context) {
 				})
 			}
 		})
-		ui.Divider(c)
-		ui.Column(c).Padding(10, 16, 14).Gap(8).Children(func() {
+		ui.Column(c).Padding(12, 16, 14).Gap(8).BorderWidth(1, 0, 0, 0).BorderColor(hairline(t)).Children(func() {
 			if a.libOpen {
 				ui.Text(c, "基于资料库对话；导图里提问时也能检索资料库").FontSize(11).TextColor(t.TextMuted)
 			}
 			attachRow(c, ai.attach, nil, func(i int) {
 				a.later(func() { ai.attach = slices.Delete(ai.attach, i, i+1) })
 			})
-			in := ui.TextAreaBase(c.Key("draft"), &ai.draft).Lines(2, 6).Placeholder("输入消息，↩ 发送，⇧↩ 换行").Label("AI 消息").
-				Padding(8).Radius(8).Border(1, t.Border).Background(t.Background).FontSize(13).
+			in := ui.TextAreaBase(c.Key("draft"), &ai.draft).Lines(2, 6).Placeholder("问点什么，或让它帮你拆任务…").Label("AI 消息").
+				Padding(10, 12).Radius(10).Border(1, hairline(t)).Background(t.Background).FontSize(13).
 				OnPaste(func(text string) bool { return text == "" && a.pasteAttach() })
 			// Return sends, as in chats; Shift+Return, the field's own, is
 			// a new line. The field takes keys before shortcuts: its key
@@ -1075,8 +1079,8 @@ func (a *app) aiPanel(c *ui.Context) {
 					a.scopeChip(c)
 				}
 				model, _, _ := strings.Cut(providerModelName(a.cfg), "（")
-				ui.Text(c, model).FontSize(11).TextColor(t.TextMuted).SingleLine().Ellipsis("…").Grow(1).Shrink(1).MinWidth(0).
-					Tooltip(providerModelName(a.cfg) + "（在 AI 设置里更换）")
+				ui.Text(c, "用 "+model).FontSize(11).TextColor(t.TextMuted).SingleLine().Ellipsis("…").Grow(1).Shrink(1).MinWidth(0).
+					Tooltip("用设置里配置的模型：" + providerModelName(a.cfg) + "（在 AI 设置里更换）")
 				if ui.PrimaryButton(c, "发送").Disabled(ai.busy || strings.TrimSpace(ai.draft) == "" && len(ai.attach) == 0).Clicked() {
 					send = true
 				}
@@ -1104,10 +1108,9 @@ func (a *app) chatBubble(c *ui.Context, i int) {
 	case "user":
 		ui.Row(c).Children(func() {
 			ui.Spacer(c)
-			ui.Column(c).Gap(6).Padding(8, 12).Radius(12).Background(t.Accent).MaxWidth(a.panelWidth * 0.8).Children(func() {
+			ui.Column(c).Gap(6).Padding(9, 12).Radius(12).Background(t.Text.Alpha(0.06)).MaxWidth(a.panelWidth * 0.8).Children(func() {
 				attachRow(c, m.files, m.names, nil)
-				ui.Text(c, m.text).FontSize(13).TextColor(t.AccentText).Wrap().Selectable().
-					SelectionColor(t.AccentText.Alpha(0.38)) // shows on the accent
+				ui.Text(c, m.text).FontSize(13).LineHeight(1.55).Wrap().Selectable()
 			})
 		})
 	case "error":

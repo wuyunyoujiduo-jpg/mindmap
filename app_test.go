@@ -65,6 +65,7 @@ func (f *fakePlatform) SetTray(on bool)                {}
 func (f *fakePlatform) SetClipKey(key string) error    { return nil }
 func (f *fakePlatform) SetShotKey(key string) error    { return nil }
 func (f *fakePlatform) Screenshot(fromApp bool)        { f.shots++ }
+func (f *fakePlatform) DelayedScreenshot(int)          { f.shots++ }
 func (f *fakePlatform) OpenShotSettings()              { f.opened = append(f.opened, "shot-settings") }
 func (f *fakePlatform) ShotLog() string                { return "2026-10-11 15:04:05 截图开始" }
 func (f *fakePlatform) SetAppIcon(png, tray []byte)    { f.icon, f.tray = png, tray }

@@ -85,7 +85,23 @@ func (a *app) shotSettings(c *ui.Context) {
 					a.settingsOpen = false
 					a.later(a.screenshot)
 				}
+				if ui.Button(c, "延时 3 秒截图").Tooltip("倒数时打开要截的菜单").Clicked() {
+					a.settingsOpen = false
+					a.later(func() { a.plat.DelayedScreenshot(3) })
+				}
 			})
+			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+				if screenshot.KeysAllowed() {
+					ui.Text(c, "✓ 菜单展开时也能用快捷键截图").FontSize(12).TextColor(t.Success)
+					return
+				}
+				if ui.Button(c, "让菜单展开时也能截图…").Tooltip("需要「输入监控」权限：只用来在菜单展开时认出截图快捷键").Clicked() {
+					screenshot.RequestKeys()
+					a.later(func() { a.plat.SetShotKey(a.shotKey()) })
+				}
+			})
+			ui.Text(c, "右键菜单、「+」这样的下拉菜单展开时，macOS 不把全局快捷键交给应用。给 MyMind「输入监控」权限（系统设置 › 隐私与安全性 › 输入监控，授权后重启 MyMind），菜单开着也能按快捷键截图；或者用「延时 3 秒截图」（菜单栏图标或「文件」菜单里），倒数时把菜单打开。").
+				FontSize(12).TextColor(t.TextMuted).Wrap()
 		})
 	})
 }

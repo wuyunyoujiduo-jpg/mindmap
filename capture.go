@@ -276,6 +276,7 @@ func (a *app) trayMenu() []trayEntry {
 	items := []trayEntry{{label: "快速记录…", run: a.plat.ShowCapture},
 		{label: "收藏剪贴板到资料库", run: a.clipFromShortcut},
 		{label: "截图…", run: func() { a.plat.Screenshot(false) }},
+		{label: "延时 3 秒截图（截菜单）", run: func() { a.plat.DelayedScreenshot(3) }},
 		{label: fmt.Sprintf("资料库（%d）", len(a.lib.Clips)), run: func() {
 			a.plat.ShowMain()
 			a.showLibrary()
@@ -339,64 +340,88 @@ func (a *app) settingsView(c *ui.Context) {
 	t := c.Theme()
 	ui.Modal(c.Key("settings"), &a.settingsOpen, func() {
 		w, h := c.Size()
-		ui.Column(c).Gap(14).Width(min(600, w-80)).Children(func() {
-			ui.Row(c).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, "设置").FontSize(17).Bold().Grow(1)
-				if iconButton(c, iconClose, "关闭", "关闭（Esc）", 28, true).Clicked() {
-					a.settingsOpen = false
-				}
-			})
-			tabs := []string{"通用", "资料整理", "备份", "同步", "连接"}
-			if a.file != nil {
-				tabs = append(tabs, "当前导图")
-			}
-			a.settingsTab = min(a.settingsTab, len(tabs)-1)
-			ui.Segmented(c, &a.settingsTab, tabs...).FillWidth()
-			// The same height for every tab, so that the window does not
-			// jump when switching; a long tab scrolls.
-			ui.Scroll(c.Key(fmt.Sprint("settings", a.settingsTab))).Gap(16).Height(max(min(560, h-200), 200)).Padding(0, 10, 0, 0).Label("设置内容").Children(func() {
-				switch tabs[a.settingsTab] {
-				case "通用":
-					a.generalSettings(c)
-				case "资料整理":
-					auto := !a.cfg.LibraryManual
-					switchRow(c, &auto, "自动整理资料", "新收藏的资料由 AI 自动起标题、加说明、写摘要、分类、打标签，并生成同义词和分析（用 AI 助手的 API Key，按用量计费）", func() {
-						a.cfg.LibraryManual = !auto
-						a.cfg.save()
-					})
-					a.embedSettings(c)
-				case "备份":
-					a.backupSettings(c)
-				case "同步":
-					a.syncSettings(c)
-				case "连接":
-					ui.Field(c, "AI 助手", func() {
-						ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-							ui.Text(c, "服务商、API Key 和模型在 AI 助手面板的「⋯ → AI 设置」里。当前："+providerModelName(a.cfg)).FontSize(12).TextColor(t.TextMuted).Wrap().Grow(1)
-							if ui.Button(c, "打开 AI 设置").Clicked() {
-								a.settingsOpen, a.aiOpen, a.ai.settings = false, true, true
-								a.loadKeyDrafts()
-							}
-						})
-					})
-					ui.Field(c, "AI 编程工具（MCP）", func() {
-						ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-							ui.Text(c, "让 Claude Code、Cursor 等读写导图、检索资料库").FontSize(12).TextColor(t.TextMuted).Grow(1)
-							if ui.Button(c, "连接说明…").Clicked() {
-								a.settingsOpen, a.mcpOpen = false, true
-							}
-						})
-					})
-					ui.Field(c, "GitHub Token（同步私有仓库的 issues 需要）", func() {
-						in := ui.TextInput(c.Key("gh-token"), &a.ghTokenDraft).Password().Placeholder("ghp_… 或 github_pat_…").Label("GitHub Token")
-						if in.Submitted() || in.PressedOutside() && a.ghTokenDraft != a.cfg.GitHubToken {
-							a.cfg.GitHubToken = strings.TrimSpace(a.ghTokenDraft)
-							a.cfg.save()
+		tabs := []string{"通用", "资料整理", "备份", "同步", "连接"}
+		if a.file != nil {
+			tabs = append(tabs, "当前导图")
+		}
+		a.settingsTab = min(a.settingsTab, len(tabs)-1)
+		// The parts on the left, as a list; the one chosen on the right.
+		ui.Row(c).Gap(24).Width(min(780, w-80)).AlignItems(ui.Start).Children(func() {
+			ui.Column(c.Key("settings-tabs")).Width(150).Shrink(0).Gap(1).Children(func() {
+				ui.Text(c, "设置").FontSize(textHeadline).FontWeight(600).Margin(0, 10, 14)
+				for i, name := range tabs {
+					row := ui.Row(c.Key("settings-tab:"+name)).Height(30).Padding(0, 10).Radius(7).AlignItems(ui.Center).
+						FillWidth().Cursor(ui.CursorPointer).Label(name)
+					switch {
+					case i == a.settingsTab:
+						row.Background(chosen(t))
+					case row.Hovered():
+						row.Background(t.Text.Alpha(0.05))
+					}
+					if row.Clicked() {
+						a.settingsTab = i
+					}
+					row.Children(func() {
+						txt := ui.Text(c, name).FontSize(textBody).PassThrough()
+						if i == a.settingsTab {
+							txt.FontWeight(600)
 						}
 					})
-				default:
-					a.projectSection(c)
 				}
+			})
+			ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(10).Children(func() {
+				ui.Row(c).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, tabs[a.settingsTab]).FontSize(textTitle).FontWeight(600).Grow(1)
+					if iconButton(c, iconClose, "关闭", "关闭（Esc）", 28, true).Clicked() {
+						a.settingsOpen = false
+					}
+				})
+				// The same height for every tab, so that the window does not
+				// jump when switching; a long tab scrolls.
+				ui.Scroll(c.Key(fmt.Sprint("settings", a.settingsTab))).Gap(16).Height(max(min(560, h-200), 200)).Padding(0, 10, 0, 0).Label("设置内容").Children(func() {
+					switch tabs[a.settingsTab] {
+					case "通用":
+						a.generalSettings(c)
+					case "资料整理":
+						auto := !a.cfg.LibraryManual
+						switchRow(c, &auto, "自动整理资料", "新收藏的资料由 AI 自动起标题、加说明、写摘要、分类、打标签，并生成同义词和分析（用 AI 助手的 API Key，按用量计费）", func() {
+							a.cfg.LibraryManual = !auto
+							a.cfg.save()
+						})
+						a.embedSettings(c)
+					case "备份":
+						a.backupSettings(c)
+					case "同步":
+						a.syncSettings(c)
+					case "连接":
+						ui.Field(c, "AI 助手", func() {
+							ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+								ui.Text(c, "服务商、API Key 和模型在 AI 助手面板的「⋯ → AI 设置」里。当前："+providerModelName(a.cfg)).FontSize(12).TextColor(t.TextMuted).Wrap().Grow(1)
+								if ui.Button(c, "打开 AI 设置").Clicked() {
+									a.settingsOpen, a.aiOpen, a.ai.settings = false, true, true
+									a.loadKeyDrafts()
+								}
+							})
+						})
+						ui.Field(c, "AI 编程工具（MCP）", func() {
+							ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+								ui.Text(c, "让 Claude Code、Cursor 等读写导图、检索资料库").FontSize(12).TextColor(t.TextMuted).Grow(1)
+								if ui.Button(c, "连接说明…").Clicked() {
+									a.settingsOpen, a.mcpOpen = false, true
+								}
+							})
+						})
+						ui.Field(c, "GitHub Token（同步私有仓库的 issues 需要）", func() {
+							in := ui.TextInput(c.Key("gh-token"), &a.ghTokenDraft).Password().Placeholder("ghp_… 或 github_pat_…").Label("GitHub Token")
+							if in.Submitted() || in.PressedOutside() && a.ghTokenDraft != a.cfg.GitHubToken {
+								a.cfg.GitHubToken = strings.TrimSpace(a.ghTokenDraft)
+								a.cfg.save()
+							}
+						})
+					default:
+						a.projectSection(c)
+					}
+				})
 			})
 		})
 	})

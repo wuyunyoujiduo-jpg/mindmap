@@ -29,3 +29,9 @@ func raiseOverlay(*mygo.Window) {}
 func WatchMenus() {}
 
 func closeMenus() {}
+
+// KeysAllowed, RequestKeys, HotKeyFired and ListenShotKey are macOS's.
+func KeysAllowed() bool            { return true }
+func RequestKeys()                 {}
+func HotKeyFired()                 {}
+func ListenShotKey(string, func()) {}

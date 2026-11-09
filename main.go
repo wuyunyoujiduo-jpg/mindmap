@@ -5,6 +5,7 @@ package main
 import (
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -105,12 +106,19 @@ func (d *desktop) SetShotKey(key string) error {
 		return nil
 	}
 	if err := mygo.GlobalShortcut.Register(key, func() {
+		screenshot.HotKeyFired()
 		logShot("按下截图快捷键 %s", key)
 		d.Screenshot(false)
 	}); err != nil {
 		return err
 	}
 	d.shotKey = key
+	// With a menu open, the shortcut does not reach the app: a listener of
+	// the keyboard, when allowed, sees it then.
+	screenshot.ListenShotKey(key, func() {
+		logShot("菜单展开时按下截图快捷键 %s", key)
+		d.Screenshot(false)
+	})
 	return nil
 }
 
@@ -122,6 +130,41 @@ func (d *desktop) Screenshot(fromApp bool) {
 	inApp := fromApp || d.win.IsFocused()
 	logShot("截图开始：从应用内 %v，应用在前台 %v", fromApp, inApp)
 	go d.overlayShot(fromApp)
+}
+
+// DelayedScreenshot counts down in a small panel at the top of the screen,
+// in which a menu is opened, then takes the shot with the menu in it: a
+// menu open in another app keeps the shortcut from reaching this one.
+func (d *desktop) DelayedScreenshot(seconds int) {
+	logShot("延时截图：%d 秒", seconds)
+	left := seconds
+	var panel *mygo.Window
+	panel = mygo.NewWindow(mygo.WindowOptions{
+		Title: "延时截图", Width: 230, Height: 46, Frameless: true, AlwaysOnTop: true, Panel: true,
+		SkipTaskbar: true, DisableResize: true, CornerRadius: 12, Hidden: true,
+		Content: ui.View(func(c *ui.Context) {
+			t := quietTheme(c.Theme())
+			ui.Row(c).Fill().Padding(0, 16).Gap(10).AlignItems(ui.Center).Background(t.Text.MixOklab(t.Background, 0.05)).Children(func() {
+				ui.Text(c, fmt.Sprint(left)).FontSize(20).FontWeight(600).TextColor(t.Background)
+				ui.Text(c, "秒后截图，现在打开菜单").FontSize(13).TextColor(t.Background.Alpha(0.85))
+			})
+		}),
+	})
+	panel.Center()
+	b := panel.Bounds()
+	panel.SetPosition(b.X, 60)
+	panel.SetIgnoreMouseEvents(true)
+	panel.Show()
+	go func() {
+		for left > 0 {
+			time.Sleep(time.Second)
+			left--
+			panel.Update(func() {})
+		}
+		panel.Close()
+		time.Sleep(200 * time.Millisecond) // till it is off the screen
+		d.overlayShot(false)
+	}()
 }
 
 // overlayShot takes a screenshot: every display frozen under a window of
@@ -158,6 +201,10 @@ func (d *desktop) overlayShot(fromApp bool) {
 			d.win.Update(d.ShowMain)
 		}
 	})
+	if errors.Is(err, screenshot.ErrBusy) {
+		logShot("已在截图中")
+		return
+	}
 	if err != nil {
 		logShot("截图失败：%v", err)
 		d.win.Update(func() {
@@ -516,6 +563,7 @@ func main() {
 				item("从模板新建…", "CmdOrCtrl+Shift+N", func() { a.templatesOpen = true }),
 				item("打开文件夹…", "CmdOrCtrl+O", a.pickWorkspace),
 				item("截图…", "", a.screenshot),
+				item("延时 3 秒截图（截菜单）", "", func() { a.plat.DelayedScreenshot(3) }),
 				item("保存", "CmdOrCtrl+S", a.save),
 				item("历史版本…", "CmdOrCtrl+Shift+H", a.openHistory),
 				mygo.Separator(),

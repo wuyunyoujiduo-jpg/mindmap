@@ -118,7 +118,7 @@ const (
 func (a *app) memosView(c *ui.Context) {
 	t := c.Theme()
 	list := a.memoShown()
-	page := t.Surface
+	page, _ := memoColors(t)
 	ui.Column(c.Key("memos")).Grow(1).Label("灵感").Background(page).Children(func() {
 		ui.Row(c.Key("memos-head")).Height(toolbarHeight).Shrink(0).DragWindow()
 		ui.Scroll(c.Key("memo-scroll")).Grow(1).Children(func() {
@@ -220,7 +220,8 @@ func (a *app) memoComposer(c *ui.Context) {
 			}
 		})
 	}
-	box := ui.Column(c.Key("memo-box")).Padding(14, 16, 10).Gap(8).Radius(12).Background(t.Background).FillWidth()
+	_, cardBg := memoColors(t)
+	box := ui.Column(c.Key("memo-box")).Padding(14, 16, 10).Gap(8).Radius(12).Background(cardBg).FillWidth()
 	box.Children(func() {
 		in := ui.TextAreaBase(c.Key("memo-draft"), &a.memos.draft).Lines(3, 14).FontSize(15).LineHeight(1.7).FillWidth().
 			Placeholder("现在的想法是…").Label("写下灵感")
@@ -394,7 +395,8 @@ func (a *app) memoRail(c *ui.Context) {
 // edits it where it is.
 func (a *app) memoCard(c *ui.Context, m *library.Clip) {
 	t := c.Theme()
-	card := ui.Column(c.Key("memo:"+m.ID)).Padding(14, 18, 16).Gap(8).Radius(12).Background(t.Background).FillWidth()
+	_, cardBg := memoColors(t)
+	card := ui.Column(c.Key("memo:"+m.ID)).Padding(14, 18, 16).Gap(8).Radius(12).Background(cardBg).FillWidth()
 	if card.DoubleClicked() && a.memos.editing != m.ID {
 		a.memos.editing, a.memos.editText = m.ID, m.Text
 	}
@@ -500,4 +502,13 @@ func (a *app) memoText(c *ui.Context, text string) {
 		}
 		ui.RichText(c.Key(fmt.Sprint("line:", i)), spans...).LineHeight(1.75).Wrap().Selectable().FillWidth()
 	}
+}
+
+// memoColors are 灵感's page and its cards': white cards on a light gray,
+// or, dark, lighter cards on the dark.
+func memoColors(t *ui.Theme) (page, card ui.Color) {
+	if t.Dark {
+		return t.Background, t.Surface
+	}
+	return t.Surface, t.Background
 }
