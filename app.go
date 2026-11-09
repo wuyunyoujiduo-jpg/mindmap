@@ -271,7 +271,8 @@ type app struct {
 	libSel        string // the clip shown
 	libQuery      string
 	libKind       int        // kindAll, kindMaps, kindDocs or kindLinks
-	libHome       bool       // 概览 is shown, not the list
+	libHome       bool       // 今天 is shown, not the list
+	homeDraft     string     // what is typed in 今天's line: a note of 灵感, or a task
 	libDay        time.Time  // the day the list shows, from 概览's dots; zero for any
 	unfiledOpen   bool       // 未归档 of the sidebar is open
 	panelOff      bool       // the right panel is hidden

@@ -112,7 +112,7 @@ func TestShotSettings(t *testing.T) {
 	if !ok {
 		t.Fatal("no settings")
 	}
-	for _, tab := range []string{"备份", "同步", "连接", "资料库"} {
+	for _, tab := range []string{"备份", "同步", "连接", "资料整理"} {
 		if err := tt.Click(tab); err != nil {
 			t.Fatal(err)
 		}

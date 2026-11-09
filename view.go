@@ -12,7 +12,8 @@ import (
 // tasks in the middle, and the selected node's details on the right.
 func (a *app) view(c *ui.Context) {
 	a.tick(c)
-	t := c.Theme()
+	t := quietTheme(c.Theme())
+	c.SetTheme(t)
 	a.lastTheme = t
 	if a.presenting && a.doc != nil {
 		a.presentView(c)
@@ -271,7 +272,7 @@ func (a *app) toolbar(c *ui.Context) {
 // searchField is the toolbar's search: a field with a magnifier, which
 // Return steps through what it finds and Escape clears.
 func (a *app) searchField(c *ui.Context, width float32) {
-	search := searchBox(c, "search", &a.search, "搜索", "搜索", "搜索标题、备注、标签，回车跳到下一个", width)
+	search := searchBox(c, "search", &a.search, "搜索", "搜索导图", "搜索标题、备注、标签，回车跳到下一个", width)
 	if a.search != "" && search.Shortcut(0, ui.KeyEscape) {
 		a.search = ""
 	}

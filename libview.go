@@ -713,16 +713,20 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 	a.relatedSection(c, clip)
 }
 
-// libraryRow is the library's entry in the sidebar.
-func (a *app) libraryRow(c *ui.Context) {
-	home := navRow(c.Key("home-row"), iconCategory, tilePurple, "概览", "", a.libOpen && a.libHome && !a.auto.open && !a.tasks.open && !a.memos.open)
+// homeRow is 今天's entry in the sidebar, the page the app opens on.
+func (a *app) homeRow(c *ui.Context) {
+	home := navRow(c.Key("home-row"), iconCategory, tilePurple, "今天", "", a.libOpen && a.libHome && !a.auto.open && !a.tasks.open && !a.memos.open)
 	if home.Clicked() {
 		a.later(func() {
 			a.showLibrary()
 			a.libHome = true
 		})
 	}
-	all := navRow(c.Key("library-row"), iconLibrary, tileBlue, "全部资料", fmt.Sprint(len(a.lib.Clips)+len(a.files)),
+}
+
+// libraryRow is the library's entry in the sidebar.
+func (a *app) libraryRow(c *ui.Context) {
+	all := navRow(c.Key("library-row"), iconLibrary, tileBlue, "资料库", fmt.Sprint(len(a.lib.Clips)+len(a.files)),
 		a.libOpen && !a.libHome && a.libCat == "" && !a.auto.open && !a.tasks.open && !a.memos.open)
 	if all.Clicked() {
 		a.later(func() { a.openList(kindAll, "") })

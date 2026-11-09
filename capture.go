@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -48,6 +49,15 @@ func (a *app) capture(text string, where int) error {
 			return err
 		}
 		a.tell("已记到灵感")
+		return nil
+	}
+	if where == captureInbox { // tasks, a line each, to the inbox
+		for _, line := range strings.Split(text, "\n") {
+			line = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "- [ ]"))
+			if line != "" {
+				a.addTask(line, nil)
+			}
+		}
 		return nil
 	}
 	nodes := model.ParseOutline(text)
@@ -102,25 +112,49 @@ func (a *app) inboxCount() int {
 	return len(f.Sheets[0].Root.Children)
 }
 
-// captureView is the capture window: a field, where it goes, and keys.
+// captureView is the capture window: where it goes on top, a field, and
+// at the bottom the clipboard, the keys and the one button that saves.
 func (a *app) captureView(c *ui.Context) {
-	t := c.Theme()
-	ui.Column(c).Fill().Padding(14).Gap(10).Background(t.Background).Children(func() {
-		in := ui.TextArea(c.Key("capture"), &a.captureText).Placeholder("记下想法或待办…（↩ 保存，⇧↩ 换行，Esc 关闭；“- [ ] ” 开头记为任务）").
-			Lines(2, 6).AutoFocus().FillWidth().Label("快速记录")
-		save := func() {
-			if strings.TrimSpace(a.captureText) == "" {
-				return
-			}
-			if err := a.capture(a.captureText, a.captureWhere); err != nil {
-				a.captureErr = err.Error()
-				return
-			}
-			a.captureText, a.captureErr = "", ""
-			a.plat.HideCapture()
+	t := quietTheme(c.Theme())
+	c.SetTheme(t)
+	save := func() {
+		if strings.TrimSpace(a.captureText) == "" {
+			return
 		}
+		if err := a.capture(a.captureText, a.captureWhere); err != nil {
+			a.captureErr = err.Error()
+			return
+		}
+		a.captureText, a.captureErr = "", ""
+		a.plat.HideCapture()
+	}
+	ui.Column(c).Fill().Padding(16, 18, 14).Gap(12).Background(t.Background).Children(func() {
+		ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
+			// The places in the order of the segments: 灵感, 任务, and the
+			// node selected in the open map when there is one.
+			order := []int{captureLibrary, captureInbox}
+			labels := []string{"灵感", "任务"}
+			if n, _ := a.selectedNode(); n != nil && a.path != a.inboxPath() {
+				order = append(order, captureHere)
+				labels = append(labels, "「"+n.Title+"」下")
+			}
+			seg := slices.Index(order, a.captureWhere)
+			if seg < 0 {
+				seg = 0
+			}
+			ui.Segmented(c, &seg, labels...).FontSize(textSmall).Label("记到")
+			a.captureWhere = order[seg]
+			ui.Spacer(c)
+			ui.Text(c, keyLabel(a.captureKey())+" 随时呼出").FontSize(textCaption).TextColor(t.TextMuted)
+		})
+		placeholder := "现在的想法是……  #标签 归类"
+		if a.captureWhere == captureInbox {
+			placeholder = "一行一个任务，例如：明天 写周报 !高"
+		}
+		in := ui.TextAreaBase(c.Key("capture"), &a.captureText).Placeholder(placeholder).FontSize(15).LineHeight(1.6).
+			Lines(3, 8).AutoFocus().FillWidth().Grow(1).Label("快速记录")
 		in.HandleInput(func(ev ui.InputEvent) bool {
-			if ev.Kind == ui.InputKeyDown && ev.Key == ui.KeyEnter && ev.Mods == 0 {
+			if ev.Kind == ui.InputKeyDown && ev.Key == ui.KeyEnter && (ev.Mods == 0 || ev.Mods == ui.Cmd) {
 				save()
 				return true
 			}
@@ -131,7 +165,7 @@ func (a *app) captureView(c *ui.Context) {
 			return false
 		})
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-			if ui.Button(c, "收藏剪贴板").FontSize(12).Tooltip("把剪贴板里的文字、链接、图片或文件收进资料库（" + keyLabel(a.clipKey()) + "）").Clicked() {
+			if ghostButton(c, "收藏剪贴板", "把剪贴板里的文字、链接、图片或文件收进资料库（"+keyLabel(a.clipKey())+"）").Clicked() {
 				if _, err := a.clipClipboard("剪贴板"); err != nil {
 					a.captureErr = err.Error()
 				} else {
@@ -139,20 +173,13 @@ func (a *app) captureView(c *ui.Context) {
 					a.plat.HideCapture()
 				}
 			}
-			ui.Text(c, "记到").FontSize(12).TextColor(t.TextMuted)
-			labels := []string{"收件箱", "灵感"}
-			if n, _ := a.selectedNode(); n != nil && a.path != a.inboxPath() {
-				labels = append(labels, "「"+mapName(a.path)+"」的「"+n.Title+"」下")
-			}
-			if a.captureWhere >= len(labels) {
-				a.captureWhere = 0
-			}
-			ui.Segmented(c, &a.captureWhere, labels...).FontSize(12)
 			ui.Spacer(c)
 			if a.captureErr != "" {
-				ui.Text(c, a.captureErr).FontSize(12).TextColor(t.Danger)
+				ui.Text(c, a.captureErr).FontSize(textSmall).TextColor(t.Danger).Shrink(1).SingleLine()
+			} else {
+				ui.Text(c, "⇧↩ 换行 · Esc 关闭").FontSize(textCaption).TextColor(t.TextMuted)
 			}
-			if ui.Button(c, "保存").Clicked() {
+			if accentButton(c, "记录 ↩", "保存").Clicked() {
 				save()
 			}
 		})
@@ -319,7 +346,7 @@ func (a *app) settingsView(c *ui.Context) {
 					a.settingsOpen = false
 				}
 			})
-			tabs := []string{"通用", "资料库", "备份", "同步", "连接"}
+			tabs := []string{"通用", "资料整理", "备份", "同步", "连接"}
 			if a.file != nil {
 				tabs = append(tabs, "当前导图")
 			}
@@ -331,7 +358,7 @@ func (a *app) settingsView(c *ui.Context) {
 				switch tabs[a.settingsTab] {
 				case "通用":
 					a.generalSettings(c)
-				case "资料库":
+				case "资料整理":
 					auto := !a.cfg.LibraryManual
 					switchRow(c, &auto, "自动整理资料", "新收藏的资料由 AI 自动起标题、加说明、写摘要、分类、打标签，并生成同义词和分析（用 AI 助手的 API Key，按用量计费）", func() {
 						a.cfg.LibraryManual = !auto

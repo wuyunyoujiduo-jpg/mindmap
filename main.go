@@ -36,10 +36,10 @@ func (d *desktop) ShowCapture() {
 	if d.capture == nil {
 		d.capture = mygo.NewWindow(mygo.WindowOptions{
 			Title:       "快速记录",
-			Width:       640,
-			Height:      170,
+			Width:       560,
+			Height:      240,
 			MinWidth:    420,
-			MinHeight:   150,
+			MinHeight:   200,
 			AlwaysOnTop: true,
 			Hidden:      true,
 			Content:     ui.View(d.app.captureView),

@@ -854,20 +854,18 @@ func (a *app) homeAutomations(c *ui.Context) {
 	}
 	list := slices.Clone(a.auto.list)
 	slices.SortStableFunc(list, func(x, y *automate.Automation) int { return rank(x) - rank(y) })
-	pageCard(c).Key("home-auto").Children(func() {
-		if cardHead(c, iconBolt, tileTeal, "自动化", "全部") {
+	ui.Column(c.Key("home-auto")).FillWidth().Children(func() {
+		if pageHead(c, "自动化", "", "全部") {
 			a.later(a.openAutomations)
 		}
 		for i, x := range list {
-			if i == 6 {
+			if i == 3 {
 				break
 			}
 			x := x
-			row := ui.Row(c.Key("home-auto:"+x.ID)).Gap(10).Padding(5, 6).Radius(8).AlignItems(ui.Center).Cursor(ui.CursorPointer).
-				Label("自动化 " + x.Name)
-			if row.Hovered() {
-				row.Background(t.Text.Alpha(0.05))
-			}
+			row := ui.Row(c.Key("home-auto:"+x.ID)).Height(38).Gap(10).Padding(0, 2).AlignItems(ui.Center).FillWidth().
+				Cursor(ui.CursorPointer).Label("自动化 " + x.Name)
+			hover := row.Hovered()
 			if row.Clicked() {
 				a.later(func() {
 					a.openAutomations()
@@ -877,19 +875,22 @@ func (a *app) homeAutomations(c *ui.Context) {
 			status, col := a.autoStatus(t, x)
 			running := a.auto.procs[x.ID] != nil
 			row.Children(func() {
-				ui.Box(c).Size(8, 8).Radius(4).Shrink(0).Background(col)
-				ui.Text(c, x.Name).FontSize(13).Shrink(1).MinWidth(0).SingleLine()
-				ui.Text(c, status).FontSize(12).TextColor(t.TextMuted).Grow(1).Shrink(1).MinWidth(0).SingleLine()
-				if running {
+				ui.Box(c).Size(6, 6).Radius(3).Shrink(0).Background(col)
+				ui.Text(c, x.Name).FontSize(textBody).Grow(1).Shrink(1).MinWidth(0).SingleLine()
+				ui.Text(c, status).FontSize(textSmall).TextColor(t.TextMuted).Shrink(1).MinWidth(0).SingleLine()
+				switch {
+				case running:
 					ui.Spinner(c)
-				} else if iconButton(c.Key("home-run:"+x.ID), iconPlay, "运行 "+x.Name, "运行一次", 24, x.Err == "").Clicked() {
-					a.later(func() {
-						if a.auto.metas.Of(x.ID).NeedsApproval(x.Code()) {
-							a.openAutomations()
-							a.autoSelect(x.ID)
-						}
-						a.autoStart(x, "手动")
-					})
+				case hover && x.Err == "":
+					if iconButton(c.Key("home-run:"+x.ID), iconPlay, "运行 "+x.Name, "运行一次", 24, true).Clicked() {
+						a.later(func() {
+							if a.auto.metas.Of(x.ID).NeedsApproval(x.Code()) {
+								a.openAutomations()
+								a.autoSelect(x.ID)
+							}
+							a.autoStart(x, "手动")
+						})
+					}
 				}
 			})
 		}

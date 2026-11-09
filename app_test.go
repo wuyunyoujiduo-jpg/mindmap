@@ -1344,7 +1344,7 @@ func TestToolbarFitsNarrowWindow(t *testing.T) {
 		// With room to spare between the views and the search, for fonts
 		// elsewhere, as on CI, are a little wider.
 		if last, ok := tt.Find("表格"); ok && a.mode != viewTable {
-			search, _ := tt.Find("搜索")
+			search, _ := tt.Find("搜索导图")
 			if spare := search.X - 22 - (last.X + last.W); spare < 10 {
 				t.Fatalf("width %d: %v spare between the views and the search", w, spare)
 			}
@@ -2524,9 +2524,11 @@ func TestQuickCaptureAndInbox(t *testing.T) {
 	fp := a.plat.(*fakePlatform)
 	guide := a.path
 	// The capture window, a window of its own.
-	ct := ui.NewTester(a.captureView, 560, 170)
+	ct := ui.NewTester(a.captureView, 560, 240)
 	fp.capture = true
-	a.captureWhere = captureInbox // 灵感 is the default (TestMemos)
+	ct.Frame()
+	snapshot(t, ct, "capture")
+	a.captureWhere = captureInbox // 任务; 灵感 is the default (TestMemos)
 	ct.Type("调研竞品\n  - [ ] 看 XMind 的导出")
 	ct.Key(0, ui.KeyEnter)
 	if fp.capture {
@@ -2537,11 +2539,13 @@ func TestQuickCaptureAndInbox(t *testing.T) {
 		t.Fatal(err)
 	}
 	root := f.Sheets[0].Root
-	if len(root.Children) != 1 || root.Children[0].Title != "调研竞品" || root.Children[0].Children[0].Task == nil {
+	// A task a line.
+	if len(root.Children) != 2 || root.Children[0].Title != "调研竞品" || root.Children[1].Title != "看 XMind 的导出" ||
+		root.Children[0].Task == nil || root.Children[1].Task == nil {
 		t.Fatalf("inbox %+v", root.Children)
 	}
 	tt.Frame()
-	if !tt.HasText("收件箱") || a.inboxCount() != 1 {
+	if !tt.HasText("收件箱") || a.inboxCount() != 2 {
 		t.Fatalf("no inbox row: %q", tt.Texts())
 	}
 	snapshot(t, tt, "inbox-row")
@@ -2567,7 +2571,7 @@ func TestQuickCaptureAndInbox(t *testing.T) {
 	tt.Frame()
 	tt.Type("待优化")
 	tt.Key(0, ui.KeyEnter)
-	if len(a.doc.Root.Children) != 0 {
+	if len(a.doc.Root.Children) != 1 {
 		t.Fatal("not moved out of the inbox")
 	}
 	g, _ := model.Load(guide)

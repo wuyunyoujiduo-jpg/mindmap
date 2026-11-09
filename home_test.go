@@ -11,52 +11,67 @@ import (
 
 func TestHome(t *testing.T) {
 	a, tt := newTestApp(t)
-	cats := []string{"技术", "产品", "工作", "技术", "学习", "技术", "工作"}
-	for i, cat := range cats {
-		clip, err := a.addClipText(fmt.Sprintf("资料 %d：关于%s的一些记录", i, cat), "手动")
+	for i := range 4 {
+		clip, err := a.addClipText(fmt.Sprintf("资料 %d", i), "手动")
 		if err != nil {
 			t.Fatal(err)
 		}
-		clip.Category = cat
-		clip.Created = testNow.Add(-time.Duration(i*3) * 24 * time.Hour)
-		clip.Updated = clip.Created
+		clip.Created = testNow.Add(-time.Duration(i) * time.Hour)
 	}
-	if err := tt.Click("概览"); err != nil {
+	if err := tt.Click("今天"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
 	if !a.libOpen || !a.libHome {
-		t.Fatal("概览 not shown")
+		t.Fatal("今天 not shown")
 	}
-	for _, want := range []string{"导图", "文档", "待归档", "待 AI 整理", "最近 30 天", "分类分布", "最近更新", "分类 技术"} {
+	for _, want := range []string{greeting(testNow), dateLabel(testNow), "今天要做", "最近记下的", "最近打开的导图", "导图 使用指南"} {
 		if !tt.HasText(want) {
 			t.Fatalf("no %q: %q", want, tt.Texts())
 		}
 	}
 	snapshot(t, tt, "home")
 
-	// A category leads to the list, filtered; 显示全部 to all of it.
-	if err := tt.Click("分类 技术"); err != nil {
+	// The line: a day makes it a task, else it is a note of 灵感.
+	if err := tt.Click("记一条灵感或任务"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Type("今天 写周报 !高")
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if a.homeDraft != "" || !tt.HasText("任务 写周报") {
+		t.Fatalf("no task: %q %q", a.homeDraft, tt.Texts())
+	}
+	tt.Type("灵感来了")
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if len(a.lib.Clips) != 5 || a.lib.Clips[0].Text != "灵感来了" || !isMemo(a.lib.Clips[0]) {
+		t.Fatalf("no note: %d", len(a.lib.Clips))
+	}
+	snapshot(t, tt, "home-filled")
+
+	// A map leads to it; 打开任务 to the tasks.
+	if err := tt.Click("导图 使用指南"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if a.libHome || a.libCat != "技术" || len(a.libHits()) != 3 {
-		t.Fatalf("category: home %v, %q, %d", a.libHome, a.libCat, len(a.libHits()))
+	if a.libOpen {
+		t.Fatal("the map not opened")
 	}
-	snapshot(t, tt, "home-list")
+	a.showLibrary()
 	a.libHome = true
 	tt.Frame()
-	if err := tt.Click("显示全部 最近更新"); err != nil {
+	if err := tt.Click("打开任务 今天要做"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if a.libHome || a.libCat != "" {
-		t.Fatal("显示全部 did not show the list")
+	if !a.tasks.open {
+		t.Fatal("tasks not opened")
 	}
 }
 
-// A day of 概览's dots lists what it holds; the sidebar's keys go through
-// its maps and documents; dark, the pages read as well.
+// The sidebar's keys go through its maps and documents; dark, the pages
+// read as well.
 func TestHomeDaysKeysAndDark(t *testing.T) {
 	a, tt := newTestApp(t)
 	for i := range 3 {
@@ -66,21 +81,6 @@ func TestHomeDaysKeysAndDark(t *testing.T) {
 		}
 		clip.Created = testNow.Add(-time.Duration(i) * 24 * time.Hour)
 	}
-	a.showLibrary()
-	a.libHome = true
-	tt.Frame()
-	day := testNow.Add(-24 * time.Hour)
-	if err := tt.Click(fmt.Sprintf("%s：编辑导图 0 张 · 收藏资料 1 条", day.Format("1月2日"))); err != nil {
-		t.Fatal(err)
-	}
-	tt.Frame()
-	if hits := a.libHits(); a.libHome || len(hits) != 1 || hits[0].Clip.Label() != "第 1 条" {
-		t.Fatalf("the day's list: home %v, %d", a.libHome, len(hits))
-	}
-	if !tt.HasText(day.Format("1月2日") + " ✕") {
-		t.Fatal("no chip of the day")
-	}
-
 	// The sidebar's keys: down from the map to the next item.
 	a.unfiledOpen = true
 	a.libOpen = false

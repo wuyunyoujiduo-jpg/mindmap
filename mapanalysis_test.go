@@ -47,7 +47,7 @@ func TestMapAnalysis(t *testing.T) {
 
 	// One 资料: the sidebar's 资料 lists the maps with the clips, and the
 	// categories are of both.
-	if err := tt.Click("全部资料"); err != nil {
+	if err := tt.Click("资料库"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()

@@ -160,3 +160,88 @@ func section(c *ui.Context, ic icon, title string, right func(), body func()) {
 		body()
 	})
 }
+
+// accentButton is the one button of a part that acts: filled with the
+// accent, its text white.
+func accentButton(c *ui.Context, text, tip string) ui.Element {
+	t := c.Theme()
+	b := ui.Box(c.Key("accent:"+text)).Height(30).Padding(0, 14).Radius(8).Center().
+		Cursor(ui.CursorPointer).Label(text).Tooltip(tip).Shrink(0).Background(t.Accent)
+	switch {
+	case b.Pressed():
+		b.Background(t.Accent.MixOklab(t.Text, 0.2))
+	case b.Hovered():
+		b.Background(t.Accent.MixOklab(t.Text, 0.1))
+	}
+	b.Children(func() {
+		ui.Text(c, text).FontSize(textSmall).FontWeight(600).TextColor(ui.Hex("#FFFFFF")).NoWrap().PassThrough()
+	})
+	return b
+}
+
+// softButton is a button on a light gray, for what is beside the accent's.
+func softButton(c *ui.Context, text, tip string) ui.Element {
+	t := c.Theme()
+	b := ui.Box(c.Key("soft:"+text)).Height(30).Padding(0, 12).Radius(8).Center().
+		Cursor(ui.CursorPointer).Label(text).Tooltip(tip).Shrink(0).Background(t.Text.Alpha(0.06))
+	switch {
+	case b.Pressed():
+		b.Background(t.Text.Alpha(0.14))
+	case b.Hovered():
+		b.Background(t.Text.Alpha(0.1))
+	}
+	b.Children(func() { ui.Text(c, text).FontSize(textSmall).NoWrap().PassThrough() })
+	return b
+}
+
+// pageHead is the heading of a part of a page: its title, how many, and a
+// link at the end, over a hairline. It tells whether the link was clicked.
+func pageHead(c *ui.Context, title, count, link string) bool {
+	t := c.Theme()
+	clicked := false
+	ui.Row(c.Key("head:"+title)).Padding(0, 0, 8).Gap(8).AlignItems(ui.Center).FillWidth().
+		BorderWidth(0, 0, 1, 0).BorderColor(hairline(t)).Children(func() {
+		ui.Text(c, title).FontSize(textBody).FontWeight(600).TextColor(t.Text.MixOklab(t.TextMuted, 0.5))
+		if count != "" {
+			ui.Text(c, count).FontSize(textSmall).TextColor(t.TextMuted)
+		}
+		ui.Spacer(c)
+		if link != "" {
+			l := ui.Box(c.Key("link:" + title)).Cursor(ui.CursorPointer).Label(link + " " + title)
+			if l.Clicked() {
+				clicked = true
+			}
+			col := t.Accent
+			if l.Hovered() {
+				col = t.Accent.MixOklab(t.Text, 0.25)
+			}
+			l.Children(func() { ui.Text(c, link).FontSize(textSmall).TextColor(col).PassThrough() })
+		}
+	})
+	return clicked
+}
+
+// quietTheme is the app's palette over the system's theme: warm grays for
+// the text and the lines, and coral, the icon's color, for what acts.
+func quietTheme(base *ui.Theme) *ui.Theme {
+	if base.Accent == ui.Hex("#D4705F") || base.Accent == ui.Hex("#E0846F") {
+		return base // already ours
+	}
+	t := *base
+	if t.Dark {
+		t.Background, t.Surface = ui.Hex("#1C1C1E"), ui.Hex("#252527")
+		t.SurfaceHover, t.SurfacePressed = ui.Hex("#2F2F32"), ui.Hex("#38383C")
+		t.Border = ui.Hex("#3A3A3D")
+		t.Text, t.TextMuted = ui.Hex("#EDEDEF"), ui.Hex("#9C9CA3")
+		t.Accent, t.AccentHover, t.AccentPressed = ui.Hex("#E0846F"), ui.Hex("#E89786"), ui.Hex("#C9715D")
+	} else {
+		t.Surface, t.SurfaceHover, t.SurfacePressed = ui.Hex("#F5F4F1"), ui.Hex("#ECEAE6"), ui.Hex("#E3E1DC")
+		t.Border = ui.Hex("#E3E1DC")
+		t.Text, t.TextMuted = ui.Hex("#1D1D1F"), ui.Hex("#76767C")
+		t.Accent, t.AccentHover, t.AccentPressed = ui.Hex("#D4705F"), ui.Hex("#C4604F"), ui.Hex("#B4574A")
+	}
+	t.AccentText = ui.Hex("#FFFFFF")
+	t.Selection = t.Accent.Alpha(0.25)
+	t.Focus = t.Accent.Alpha(0.5)
+	return &t
+}

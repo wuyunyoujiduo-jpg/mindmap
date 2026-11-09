@@ -47,6 +47,7 @@ const (
 	iconBolt     // automations: a lightning bolt
 	iconBack     // back: a chevron to the left
 	iconForward  // on: a chevron to the right
+	iconGear     // settings: a wheel with teeth
 )
 
 // glyph is an icon drawn in a box of the given side, as a piece of text.
@@ -78,6 +79,14 @@ func drawIcon(p *ui.Painter, r ui.Rect, s float32, ic icon, col ui.Color) {
 		p.StrokePath(arrow, w, col)
 		tray := new(ui.Path).MoveTo(cx-h*0.8, cy+h*0.35).LineTo(cx-h*0.8, cy+h*0.78).LineTo(cx+h*0.8, cy+h*0.78).LineTo(cx+h*0.8, cy+h*0.35)
 		p.StrokePath(tray, w, col)
+	case iconGear:
+		p.StrokePath(new(ui.Path).Circle(cx, cy, h*0.48), w, col)
+		p.StrokePath(new(ui.Path).Circle(cx, cy, h*0.17), w, col)
+		for i := range 6 { // the teeth, short and apart
+			a := float64(i)*math.Pi/3 + math.Pi/6
+			dx, dy := float32(math.Cos(a)), float32(math.Sin(a))
+			p.Line(cx+dx*h*0.48, cy+dy*h*0.48, cx+dx*h*0.78, cy+dy*h*0.78, w*1.2, col)
+		}
 	case iconBack, iconForward:
 		k := float32(1)
 		if ic == iconForward {

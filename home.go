@@ -3,8 +3,6 @@ package main
 import (
 	"fmt"
 	"hash/fnv"
-	"math"
-	"slices"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -48,9 +46,9 @@ func tile(c *ui.Context, ic icon, col ui.Color, size float32) {
 
 // navRow is a row of the sidebar: a tile, a label and a count. The
 // current one is filled with the accent.
-func navRow(c *ui.Context, ic icon, col ui.Color, label, count string, current bool) ui.Element {
+func navRow(c *ui.Context, ic icon, _ ui.Color, label, count string, current bool) ui.Element {
 	t := c.Theme()
-	r := ui.Row(c).Padding(5, 8).Gap(10).Radius(8).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(label).FillWidth()
+	r := ui.Row(c).Height(30).Padding(0, 10).Gap(10).Radius(8).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(label).FillWidth()
 	// Selected as the other rows of the sidebar are: a light accent.
 	switch {
 	case current:
@@ -59,7 +57,11 @@ func navRow(c *ui.Context, ic icon, col ui.Color, label, count string, current b
 		r.Background(t.Text.Alpha(0.06))
 	}
 	r.Children(func() {
-		tile(c, ic, col, 22)
+		ink := t.TextMuted // quiet: gray lines, the ink of the text on the row shown
+		if current {
+			ink = t.Text
+		}
+		glyph(c, ic, 16, ink)
 		text := ui.Text(c, label).FontSize(13).Grow(1).Shrink(1).MinWidth(0).SingleLine()
 		if current {
 			text.Bold()
@@ -134,284 +136,10 @@ func kindTile(kind string) icon {
 	return kindIcon(kind)
 }
 
-// homeView is 概览: what the material holds, how it grows, and what
-// changed last.
-func (a *app) homeView(c *ui.Context) {
-	t := c.Theme()
-	now := a.now()
-	maps := a.mapClips()
-	clips := a.lib.Clips
-	ui.Column(c.Key("home")).Grow(1).Label("概览").Children(func() {
-		ui.Row(c.Key("home-head")).Height(toolbarHeight).Padding(0, 10, 0, 20).Gap(10).AlignItems(ui.Center).Shrink(0).
-			DragWindow().Children(func() {
-			ui.Column(c).Gap(1).Children(func() {
-				ui.Text(c, "概览").Bold().FontSize(textTitle)
-				ui.Text(c, fmt.Sprintf("%d 张导图 · %d 条文档和链接", len(maps), len(clips))).FontSize(11).TextColor(t.TextMuted)
-			})
-			ui.Spacer(c)
-			if iconTextButton(c, iconSparkle, "AI", "AI 助手", "问问导图和资料里的内容", a.aiOpen).Clicked() {
-				a.aiOpen = !a.aiOpen
-			}
-		})
-		ui.Scroll(c.Key("home-scroll")).Grow(1).Padding(8, 24, 28).Gap(16).Children(func() {
-			a.homeStats(c, now, maps, clips)
-			a.homeAutomations(c)
-			a.homeActivity(c, now, maps, clips)
-			ui.Row(c).Gap(16).AlignItems(ui.Start).Children(func() {
-				ui.Column(c).Grow(1).Basis(0).MinWidth(0).Children(func() { a.homeCategories(c, maps, clips) })
-				ui.Column(c).Grow(1).Basis(0).MinWidth(0).Children(func() { a.homeRecent(c, now, maps, clips) })
-			})
-		})
-	})
-}
-
 // openList shows the list of 资料, of a kind.
 func (a *app) openList(kind int, cat string) {
 	a.showLibrary()
 	a.libKind, a.libCat, a.libTag, a.libQuery, a.libDay = kind, cat, "", "", time.Time{}
-}
-
-// homeStats are the cards of large numbers.
-func (a *app) homeStats(c *ui.Context, now time.Time, maps, clips []*library.Clip) {
-	t := c.Theme()
-	docs, links, waiting := 0, 0, len(a.lib.Unorganized())
-	for _, cl := range clips {
-		if cl.Kind == library.KindLink {
-			links++
-		} else {
-			docs++
-		}
-	}
-	analyzed := 0
-	for _, m := range maps {
-		if m.Desc != "" || m.Summary != "" {
-			analyzed++
-		} else {
-			waiting++
-		}
-	}
-	// One quiet strip of numbers, parted by hairlines, rather than four
-	// cards alike: the number large, what it counts and a note below.
-	first := true
-	stat := func(ic icon, col ui.Color, label string, n int, unit, sub string, open func()) {
-		if !first {
-			ui.Box(c).Width(1).Margin(10, 0).Background(hairline(t)).Shrink(0)
-		}
-		first = false
-		box := ui.Column(c.Key("stat:"+label)).Grow(1).Basis(0).MinWidth(0).Padding(12, 16).Gap(4).Radius(10).
-			Cursor(ui.CursorPointer).Label(label)
-		if box.Hovered() {
-			box.Background(t.Text.Alpha(0.04))
-		}
-		if box.Clicked() {
-			a.later(open)
-		}
-		box.Children(func() {
-			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-				tile(c, ic, col, 18)
-				ui.Text(c, label).FontSize(textSmall).TextColor(t.TextMuted)
-			})
-			ui.Row(c).Gap(4).AlignItems(ui.End).Children(func() {
-				ui.Text(c, fmt.Sprint(n)).FontSize(28).FontWeight(600)
-				ui.Text(c, unit).FontSize(textSmall).TextColor(t.TextMuted).Margin(0, 0, 5)
-			})
-			ui.Text(c, sub).FontSize(11).TextColor(t.TextMuted).SingleLine()
-		})
-	}
-	ui.Row(c.Key("home-stats")).AlignItems(ui.Stretch).Padding(4, 0).BorderWidth(0, 0, 1, 0).BorderColor(hairline(t)).Children(func() {
-		stat(iconMap, tileBlue, "导图", len(maps), "张", fmt.Sprintf("AI 已分析 %d 张", analyzed), func() { a.openList(kindMaps, "") })
-		stat(iconFile, tileOrange, "文档", docs, "份", fmt.Sprintf("另有链接 %d 条", links), func() { a.openList(kindDocs, "") })
-		stat(iconInbox, tileGreen, "待归档", len(a.unfiledClips()), "条", "没进文件夹，也没挂到导图", func() {
-			a.unfiledOpen = true // listed in the sidebar
-			a.openList(kindDocs, "")
-		})
-		stat(iconSparkle, tilePurple, "待 AI 整理", waiting, "条", "资料未整理、导图未分析", func() {
-			if k := len(a.lib.Unorganized()); k > 0 && providerKey(a.cfg) != "" {
-				a.openList(kindAll, "-")
-				a.organizeAll()
-				return
-			}
-			a.openList(kindAll, "")
-		})
-	})
-}
-
-// homeDays is how many days the activity shows.
-const homeDays = 30
-
-// homeActivity is the dots of the last days: per day, the maps changed
-// and the clips kept, stacked, as Pulse's charts.
-func (a *app) homeActivity(c *ui.Context, now time.Time, maps, clips []*library.Clip) {
-	t := c.Theme()
-	day := func(at time.Time) int {
-		y1, m1, d1 := now.Date()
-		y2, m2, d2 := at.In(now.Location()).Date()
-		a := time.Date(y1, m1, d1, 0, 0, 0, 0, time.UTC)
-		b := time.Date(y2, m2, d2, 0, 0, 0, 0, time.UTC)
-		return int(a.Sub(b).Hours() / 24)
-	}
-	var mapsOn, clipsOn [homeDays]int
-	for _, m := range maps {
-		if d := day(m.Updated); d >= 0 && d < homeDays {
-			mapsOn[homeDays-1-d]++
-		}
-	}
-	for _, cl := range clips {
-		if d := day(cl.Created); d >= 0 && d < homeDays {
-			clipsOn[homeDays-1-d]++
-		}
-	}
-	most := 1
-	for i := range homeDays {
-		most = max(most, mapsOn[i]+clipsOn[i])
-	}
-	const rows = 8
-	per := int(math.Ceil(float64(most) / rows)) // what a dot counts
-	pageCard(c).Key("home-activity").Children(func() {
-		ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
-			ui.Row(c).Grow(1).Children(func() { cardHead(c, iconTarget, tileOrange, "最近 30 天", "") })
-			legend := func(col ui.Color, text string) {
-				ui.Row(c).Gap(5).AlignItems(ui.Center).Children(func() {
-					ui.Box(c).Size(8, 8).Radius(4).Background(col)
-					ui.Text(c, text).FontSize(12).TextColor(t.TextMuted)
-				})
-			}
-			legend(tileBlue, "导图编辑")
-			legend(tileOrange, "收藏资料")
-			if per > 1 {
-				ui.Text(c, fmt.Sprintf("每点 %d 条", per)).FontSize(12).TextColor(t.TextMuted)
-			}
-		})
-		// The dots drawn under a column a day, which says what it holds
-		// when hovered and lists it when clicked.
-		chart := ui.Row(c.Key("home-dots")).Height(130).FillWidth().Radius(10).Padding(12, 14).
-			Background(t.Text.Alpha(0.025)).AlignItems(ui.Stretch).
-			Draw(func(p *ui.Painter, r ui.Rect) {
-				padX, padY := float32(14), float32(12)
-				w, h := r.W-2*padX, r.H-2*padY
-				colW, rowH := w/homeDays, h/rows
-				rad := min(colW, rowH) * 0.28
-				for i := range homeDays {
-					nm := int(math.Ceil(float64(mapsOn[i]) / float64(per)))
-					nc := int(math.Ceil(float64(clipsOn[i]) / float64(per)))
-					for j := range rows {
-						x := r.X + padX + colW*(float32(i)+0.5)
-						y := r.Y + padY + h - rowH*(float32(j)+0.5)
-						col := tileOrange.Alpha(0.16)
-						switch {
-						case j < nm:
-							col = tileBlue
-						case j < nm+nc:
-							col = tileOrange
-						}
-						p.FillPath(new(ui.Path).Circle(x, y, rad), col)
-					}
-				}
-			})
-		chart.Children(func() {
-			for i := range homeDays {
-				d := now.AddDate(0, 0, i-(homeDays-1))
-				tip := fmt.Sprintf("%s：编辑导图 %d 张 · 收藏资料 %d 条", d.Format("1月2日"), mapsOn[i], clipsOn[i])
-				col := ui.Box(c.Key(fmt.Sprint("day", i))).Grow(1).Basis(0).Radius(4).Cursor(ui.CursorPointer).
-					Tooltip(tip).Label(tip)
-				if col.Hovered() {
-					col.Background(t.Text.Alpha(0.06))
-				}
-				if col.Clicked() && mapsOn[i]+clipsOn[i] > 0 {
-					a.later(func() {
-						a.openList(kindAll, "")
-						a.libDay = today(d)
-					})
-				}
-			}
-		})
-		ui.Row(c).Children(func() {
-			ui.Text(c, "30 天前").FontSize(11).TextColor(t.TextMuted)
-			ui.Spacer(c)
-			ui.Text(c, "15 天前").FontSize(11).TextColor(t.TextMuted)
-			ui.Spacer(c)
-			ui.Text(c, "今天").FontSize(11).TextColor(t.TextMuted)
-		})
-	})
-}
-
-// homeCategories is how the material is spread over the categories.
-func (a *app) homeCategories(c *ui.Context, maps, clips []*library.Clip) {
-	t := c.Theme()
-	cats := library.CategoriesOf(slices.Concat(clips, maps))
-	total := len(clips) + len(maps)
-	pageCard(c).Key("home-cats").Children(func() {
-		cardHead(c, iconCategory, tilePurple, "分类分布", "")
-		if len(cats) == 0 {
-			ui.Text(c, "AI 整理资料、分析导图后，会按分类统计在这里。").FontSize(12).TextColor(t.TextMuted).Wrap()
-			return
-		}
-		for i, k := range cats {
-			if i == 8 {
-				break
-			}
-			name, col := k.Name, catColor(k.Name)
-			frac := float32(k.N) / float32(max(total, 1))
-			row := ui.Row(c.Key("cat:"+name)).Gap(10).Padding(4, 6).Radius(8).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label("分类 " + name)
-			if row.Hovered() {
-				row.Background(t.Text.Alpha(0.05))
-			}
-			if row.Clicked() {
-				a.later(func() { a.openList(kindAll, name) })
-			}
-			row.Children(func() {
-				ui.Box(c).Size(8, 8).Radius(4).Background(col)
-				ui.Text(c, name).FontSize(13).Width(64).SingleLine()
-				ui.Box(c).Height(8).Grow(1).Draw(func(p *ui.Painter, r ui.Rect) {
-					p.FillPath(roundedRect(r.X, r.Y, r.W, r.H, 4), col.Alpha(0.15))
-					p.FillPath(roundedRect(r.X, r.Y, max(r.W*frac, 8), r.H, 4), col)
-				})
-				ui.Text(c, fmt.Sprint(k.N)).FontSize(13).Bold().Width(28).TextAlign(ui.End)
-			})
-		}
-	})
-}
-
-// homeRecent is what changed last, maps and clips together.
-func (a *app) homeRecent(c *ui.Context, now time.Time, maps, clips []*library.Clip) {
-	t := c.Theme()
-	all := slices.Concat(maps, clips)
-	slices.SortStableFunc(all, func(x, y *library.Clip) int { return y.Updated.Compare(x.Updated) })
-	pageCard(c).Key("home-recent").Children(func() {
-		if cardHead(c, iconInbox, tileTeal, "最近更新", "显示全部") {
-			a.later(func() { a.openList(kindAll, "") })
-		}
-		for i, it := range all {
-			if i == 8 {
-				break
-			}
-			it := it
-			row := ui.Row(c.Key("recent:"+it.ID)).Gap(10).Padding(5, 6).Radius(8).AlignItems(ui.Center).Cursor(ui.CursorPointer).
-				Label("最近 " + it.Label())
-			if row.Hovered() {
-				row.Background(t.Text.Alpha(0.05))
-			}
-			if row.Clicked() {
-				a.later(func() {
-					if it.Kind == kindMap {
-						a.libOpen = false
-						a.openMap(mapPathOf(it))
-						return
-					}
-					a.openList(kindAll, "")
-					a.libSel = it.ID
-				})
-			}
-			row.Children(func() {
-				tile(c, kindTile(it.Kind), kindColor(it.Kind), 22)
-				ui.Text(c, cmpOr(it.Title, it.Label())).FontSize(13).Grow(1).Shrink(1).MinWidth(0).SingleLine()
-				ui.Text(c, relTime(now, it.Updated)).FontSize(12).TextColor(t.TextMuted).Shrink(0)
-			})
-		}
-		if len(all) == 0 {
-			ui.Text(c, "还没有导图和资料。").FontSize(12).TextColor(t.TextMuted)
-		}
-	})
 }
 
 // sectionCard is a card of a detail or a panel: a head of a tile and a
