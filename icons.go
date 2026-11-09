@@ -45,6 +45,8 @@ const (
 	iconTag      // a tag: a label with a hole
 	iconLevels   // levels shown: an outline, each row further in
 	iconBolt     // automations: a lightning bolt
+	iconBack     // back: a chevron to the left
+	iconForward  // on: a chevron to the right
 )
 
 // glyph is an icon drawn in a box of the given side, as a piece of text.
@@ -76,6 +78,12 @@ func drawIcon(p *ui.Painter, r ui.Rect, s float32, ic icon, col ui.Color) {
 		p.StrokePath(arrow, w, col)
 		tray := new(ui.Path).MoveTo(cx-h*0.8, cy+h*0.35).LineTo(cx-h*0.8, cy+h*0.78).LineTo(cx+h*0.8, cy+h*0.78).LineTo(cx+h*0.8, cy+h*0.35)
 		p.StrokePath(tray, w, col)
+	case iconBack, iconForward:
+		k := float32(1)
+		if ic == iconForward {
+			k = -1
+		}
+		p.StrokePath(new(ui.Path).MoveTo(cx+k*h*0.25, cy-h*0.55).LineTo(cx-k*h*0.3, cy).LineTo(cx+k*h*0.25, cy+h*0.55), w*1.1, col)
 	case iconBolt:
 		bolt := new(ui.Path).MoveTo(cx+h*0.2, cy-h*0.9).LineTo(cx-h*0.55, cy+h*0.12).LineTo(cx-h*0.02, cy+h*0.12).
 			LineTo(cx-h*0.2, cy+h*0.9).LineTo(cx+h*0.55, cy-h*0.12).LineTo(cx+h*0.02, cy-h*0.12).Close()

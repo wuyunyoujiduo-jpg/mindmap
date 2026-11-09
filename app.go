@@ -358,7 +358,11 @@ type app struct {
 	async        asyncRunner
 	post         func(fn func()) // runs fn on the main thread, from any
 
-	auto autoState // the automations (automation.go)
+	auto  autoState  // the automations (automation.go)
+	tasks tasksState // the tasks of all the maps (taskspage.go)
+	// lastTheme is the theme the window was last drawn in, for what is
+	// worked out outside a frame's build.
+	lastTheme *ui.Theme
 
 	// Chrome.
 	mode          int

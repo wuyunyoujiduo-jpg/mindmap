@@ -13,6 +13,7 @@ import (
 func (a *app) view(c *ui.Context) {
 	a.tick(c)
 	t := c.Theme()
+	a.lastTheme = t
 	if a.presenting && a.doc != nil {
 		a.presentView(c)
 		a.runPending()
@@ -30,6 +31,10 @@ func (a *app) view(c *ui.Context) {
 				if a.libOpen {
 					if a.auto.open {
 						a.autoView(c)
+						return
+					}
+					if a.tasks.open {
+						a.tasksView(c)
 						return
 					}
 					if a.libHome {
