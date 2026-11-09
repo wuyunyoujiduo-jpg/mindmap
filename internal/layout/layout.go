@@ -83,6 +83,13 @@ func Compute(d *model.Document, measure Measure, o Options) Result {
 				measureTree(c, depth+1)
 			}
 			s.subtree = max(h, column(n.Children))
+			// A summary's topic, laid out after (by the app), level with the
+			// children's middle: the node takes the room it needs, so that
+			// it does not run into the branches below.
+			if t := n.SummaryTopic(); t != nil && len(n.Children) > 0 {
+				measureTree(t, depth+1)
+				s.subtree = max(s.subtree, sizes[t.ID].subtree)
+			}
 		}
 		sizes[n.ID] = s
 	}

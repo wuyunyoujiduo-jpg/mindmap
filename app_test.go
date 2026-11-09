@@ -21,6 +21,7 @@ import (
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/egoist/mygo/ui"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/layout"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/versions"
 )
@@ -3788,6 +3789,48 @@ func TestSummaryTopic(t *testing.T) {
 	}
 	a.selected = st.ID
 	snapshot(t, tt, "summary-topic")
+	// Many children of its own push the branches below away, not into it.
+	a.mutate("", func() {
+		for i := range 8 {
+			st.Children = append(st.Children, model.NewNode(fmt.Sprintf("概要下 %d", i)))
+		}
+	})
+	tt.Frame()
+	mine := map[string]bool{}
+	a.doc.Walk(func(n, _ *model.Node, _ int) bool {
+		if arch.Contains(n.ID) {
+			mine[n.ID] = true
+		}
+		return true
+	})
+	var sumBoxes []layout.Rect
+	var walkSum func(n *model.Node)
+	walkSum = func(n *model.Node) {
+		sumBoxes = append(sumBoxes, a.boxes.Boxes[n.ID])
+		for _, c := range n.Children {
+			walkSum(c)
+		}
+	}
+	walkSum(st)
+	for id, b := range a.boxes.Boxes {
+		if mine[id] {
+			continue
+		}
+		for _, sb := range sumBoxes {
+			if b.X < sb.X+sb.W && sb.X < b.X+b.W && b.Y < sb.Y+sb.H && sb.Y < b.Y+b.H {
+				n, _ := a.doc.Find(id)
+				t.Fatalf("%q at %+v overlaps the summary's %+v", n.Title, b, sb)
+			}
+		}
+	}
+	a.cam().X -= 450 // the branch on the right in view
+	a.cam().Y -= 120
+	tt.Frame()
+	snapshot(t, tt, "summary-many")
+	a.cam().X += 450
+	a.cam().Y += 120
+	a.mutate("", func() { st.Children = st.Children[:1] })
+	tt.Frame()
 	// In the outline, after the children it sums up, with its own.
 	a.mode = viewOutline
 	tt.Frame()
