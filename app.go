@@ -272,6 +272,8 @@ type app struct {
 	libQuery      string
 	libKind       int       // kindAll, kindMaps, kindDocs or kindLinks
 	libHome       bool      // 今天 is shown, not the list
+	homeFocus     bool      // the desk's line has the focus
+	noMotion      bool      // nothing animates: the tests look at where things end
 	homeDraft     string    // what is typed in 今天's line: a note of 灵感, or a task
 	libDay        time.Time // the day the list shows, from 概览's dots; zero for any
 	panelOff      bool      // the right panel is hidden

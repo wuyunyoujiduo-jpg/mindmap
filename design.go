@@ -78,6 +78,8 @@ func captureFocus(c *ui.Context, box, field ui.Element) {
 	if field.Focused() {
 		t := c.Theme()
 		box.Border(1, t.Accent.Alpha(0.55)).Shadow(0, 0, 0, 4, t.Accent.Alpha(0.14)) // a soft halo, not a loud line
+	} else {
+		box.Shadow(0, 0, 0, 0, c.Theme().Accent.Alpha(0)) // the halo's place, for it to grow from
 	}
 }
 
@@ -104,7 +106,39 @@ var shadowColor = ui.RGBA(40, 32, 16, 0.05)
 // raise gives an element a card's look: white, a thin ring, a faint
 // shadow under it.
 func raise(el ui.Element, t *ui.Theme) ui.Element {
-	return el.Background(cardColor(t)).Border(1, cardEdge(t)).Shadow(0, 1, 2, 0, shadowColor)
+	// Lit from above: a line of light inside its top edge, a short shadow
+	// close under it and a long faint one further down. Its colors and
+	// shadows go smoothly where they change, as under the pointer.
+	light := ui.RGBA(255, 255, 255, 0.9)
+	if t.Dark {
+		light = ui.RGBA(255, 255, 255, 0.05)
+	}
+	return el.Background(cardColor(t)).Border(1, cardEdge(t)).InsetShadow(0, 1, 0, 0, light).
+		Shadow(0, 1, 1, 0, shadowColor).Shadow(0, 3, 8, -3, ui.RGBA(40, 32, 16, 0.08)).Transition(easeLook)
+}
+
+// easeLook has an element's colors and shadows change smoothly, and no
+// more: what is under the pointer lights up rather than switches.
+var easeLook = ui.ElementTransition{Duration: 140 * time.Millisecond, Colors: true, Shadows: true}
+
+// easeDetent is the curve things move along: fast at first, settling.
+var easeDetent = ui.CubicBezier(0.2, 0.9, 0.25, 1)
+
+// rowMotion is how a row of a list comes, goes and makes room: it fades
+// in from a little above, the others move to their places, and one gone
+// fades out where it was.
+var rowMotion = ui.ElementTransition{
+	Duration: 260 * time.Millisecond, Ease: easeDetent, Position: true, Colors: true,
+	Enter: &ui.Motion{Y: -6}, Exit: &ui.Motion{Scale: 0.98}, ExitDuration: 160 * time.Millisecond,
+}
+
+// press has an element give a little under the pointer, as a key does.
+func press(el ui.Element, by float32) ui.Element {
+	p := ui.Pose{Scale: 1}
+	if el.Pressed() {
+		p.Scale = by
+	}
+	return el.AnimatePose(p, ui.Animation{Duration: 120 * time.Millisecond, Ease: easeDetent})
 }
 
 // chosenCard marks the card chosen: its ring in the accent, a soft halo
@@ -146,11 +180,12 @@ func listCard(c *ui.Context, key string) ui.Element {
 // under the pointer.
 func listCardRow(c *ui.Context, key string) ui.Element {
 	t := c.Theme()
-	row := ui.Row(c.Key(key)).MinHeight(40).Padding(6, 10).Gap(10).Radius(7).AlignItems(ui.Center).FillWidth()
+	row := ui.Row(c.Key(key)).MinHeight(40).Padding(6, 10).Gap(10).Radius(7).AlignItems(ui.Center).FillWidth().
+		Background(t.Text.Alpha(0)).Transition(rowMotion)
 	if row.Hovered() {
-		row.Background(t.Text.Alpha(0.04))
+		row.Background(t.Text.Alpha(0.045))
 	}
-	return row
+	return press(row, 0.99)
 }
 
 // textLink is a few words in the accent that go somewhere: no box, so
@@ -177,7 +212,11 @@ func key(b ui.Element, t *ui.Theme) ui.Element {
 	default:
 		b.Background(cardColor(t))
 	}
-	return b.Border(1, cardEdge(t)).Shadow(0, 1, 1, 0, shadowColor)
+	light := ui.RGBA(255, 255, 255, 0.9)
+	if t.Dark {
+		light = ui.RGBA(255, 255, 255, 0.05)
+	}
+	return press(b.Border(1, cardEdge(t)).InsetShadow(0, 1, 0, 0, light).Shadow(0, 1, 1, 0, shadowColor).Transition(easeLook), 0.97)
 }
 
 // dropButton is a key that opens a menu (the caller's Menu): its text
@@ -430,7 +469,7 @@ func accentButton(c *ui.Context, text, tip string) ui.Element {
 	b.Children(func() {
 		ui.Text(c, text).FontSize(textSmall).FontWeight(600).TextColor(t.Background).NoWrap().PassThrough()
 	})
-	return b
+	return press(b.Transition(easeLook), 0.97)
 }
 
 // inkButton is the key that acts, where the system's would be a button
@@ -452,7 +491,7 @@ func inkButton(c *ui.Context, text string, enabled bool) ui.Element {
 	b.Children(func() {
 		ui.Text(c, text).FontSize(textSmall).FontWeight(600).TextColor(t.Background).NoWrap().PassThrough()
 	})
-	return b
+	return press(b.Transition(easeLook), 0.97)
 }
 
 // softButton is a key of a word, for what is beside the one that acts.

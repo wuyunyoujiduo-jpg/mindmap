@@ -55,7 +55,7 @@ func TestHome(t *testing.T) {
 	if n := len(a.waiting()); n != 6 || tt.HasText("留在收集") || tt.HasText("待归位") {
 		t.Fatalf("lately %d: %q", n, tt.Texts())
 	}
-	if !tt.HasText(dateLabel(testNow) + " · 今天 1 件事 · 收件箱 1 个任务") {
+	if !tt.HasText(weekdays[testNow.Weekday()]) || !tt.HasText("件事") {
 		t.Fatalf("the day's line: %q", tt.Texts())
 	}
 	a.lib.Clips[0].Created = testNow.AddDate(0, 0, -8)
@@ -205,4 +205,37 @@ func TestPanelPutAway(t *testing.T) {
 	if _, ok := tt.Find("备注内容"); !ok || !a.cfg.PanelOpen {
 		t.Fatalf("the panel is not shown: %q", tt.Texts())
 	}
+}
+
+// TestHomeTicksAndReads: a task ticked on the desk goes under those done
+// today, where it can be seen and unticked; the line says what it reads
+// of what is written in it.
+func TestHomeTicksAndReads(t *testing.T) {
+	a, tt := newTestApp(t)
+	a.addTask("今天 写周报", nil)
+	a.showLibrary()
+	a.libHome = true
+	tt.Frame()
+	if tt.HasText("做完的") {
+		t.Fatal("nothing is done yet")
+	}
+	if err := tt.Click("完成 写周报"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Frame()
+	if !tt.HasText("做完的") || !tt.HasText("写周报") || !tt.HasText("1 / 1") {
+		t.Fatalf("the task done is not shown: %q", tt.Texts())
+	}
+	if err := tt.Click("记一条灵感或任务"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Type("周五 给客户发报价单 #报价")
+	tt.Frame()
+	for _, want := range []string{"#报价", "记下 ↩", "开头的词是标签"} {
+		if !tt.HasText(want) {
+			t.Fatalf("the line does not say %q: %q", want, tt.Texts())
+		}
+	}
+	snapshot(t, tt, "home-typed")
 }

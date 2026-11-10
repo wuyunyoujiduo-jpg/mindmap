@@ -100,6 +100,7 @@ func newTestApp(t *testing.T) (*app, *ui.Tester) {
 	clock = func() time.Time { return testNow }
 	a := newApp(&fakePlatform{}, config{Dir: dir, ShowTree: true, PanelOpen: true})
 	a.noLocalModel = true       // the built-in model only where a test asks for it
+	a.noMotion = true           // what is looked at is where things end, not their way there
 	a.sidebarWidth -= railWidth // the rail and the maps' list in the room the tests' places count on
 	if a.doc == nil {
 		t.Fatal("no map opened")

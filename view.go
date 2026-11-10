@@ -13,6 +13,9 @@ import (
 // tasks in the middle, and the selected node's details on the right.
 func (a *app) view(c *ui.Context) {
 	a.tick(c)
+	if a.noMotion {
+		c.DisableAnimations()
+	}
 	t := quietTheme(c.Theme())
 	c.SetTheme(t)
 	a.lastTheme = t

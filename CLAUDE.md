@@ -59,8 +59,15 @@ by AI, and an AI assistant.
   collected is 收集's (the word of the UI, never 资料库), and is on a map
   by a topic's link. The AI has two entries, 问 AI (whose panel lists
   what else it does, before a conversation) and AI 归位.
-  Design drafts are in the Design artifact the user reviews before a page
-  is built.
+  A page is drawn first as an interactive draft (an HTML artifact, the
+  desk's is https://claude.ai/artifact/RU6pxJSxMAsGbVYQrvs21b), then built
+  to it, its snapshot held beside the draft: the draft uses only what
+  MyGo has (stacked and inset shadows, transitions, poses, the system's
+  fonts). Things move as in the drafts (`design.go`: `easeLook` for colors
+  and shadows, `rowMotion` for rows that come and go, `press` for what
+  gives under the pointer, `easeDetent` the curve); nothing may move what
+  is under the pointer away from it on a click, as a part opening on
+  focus would. The tests run with no motion (`app.noMotion`).
 - The app's icon is drawn by `tools/icon/`; `resources/icon.png` is the
   desk (`tools/icon/desk.py`: a white note on the app's violet-blue, three lines
   each led by a dot of a map's color, the last ticked, the AI's spark), and

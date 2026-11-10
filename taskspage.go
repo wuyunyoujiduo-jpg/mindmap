@@ -907,9 +907,10 @@ func (a *app) taskRow(c *ui.Context, it taskItem, overdue bool) {
 	t := c.Theme()
 	task := it.node.Task
 	row := ui.Row(c.Key("task:"+it.path+"#"+it.node.ID)).MinHeight(46).Padding(6, 12, 6, 10).Gap(10).Radius(7).AlignItems(ui.Center).
-		FillWidth().Cursor(ui.CursorPointer).Label("任务 " + it.node.Title).Drag(taskDrag{it.path, it.node.ID})
+		FillWidth().Cursor(ui.CursorPointer).Label("任务 " + it.node.Title).Drag(taskDrag{it.path, it.node.ID}).
+		Background(t.Text.Alpha(0)).Transition(rowMotion)
 	if row.Hovered() {
-		row.Background(t.Text.Alpha(0.04))
+		row.Background(t.Text.Alpha(0.045))
 	}
 	switch {
 	case row.DoubleClicked():
@@ -967,22 +968,40 @@ func (a *app) taskCircle(c *ui.Context, it taskItem, size float32) {
 	col := taskPriorityColor(t, it.node.Task.Priority)
 	done := it.done()
 	box := ui.Box(c.Key("circle")).Size(size, size).Shrink(0).Cursor(ui.CursorPointer).Label("完成 " + it.node.Title)
-	hover := box.Hovered()
+	// Ticked, it fills from its middle and the check comes after; under
+	// the pointer it shows a hint of the fill.
+	target := float32(0)
+	if done {
+		target = 1
+	}
+	fill := box.AnimateTo("done", target, ui.Animation{Duration: 240 * time.Millisecond, Ease: easeDetent, NonMotion: true})
+	hint := box.AnimateTo("hover", b2f(box.Hovered() && !done), ui.Animation{Duration: 140 * time.Millisecond, NonMotion: true})
 	box.Draw(func(p *ui.Painter, r ui.Rect) {
 		rr := ui.Rect{X: r.X + 1, Y: r.Y + 1, W: r.W - 2, H: r.H - 2}
-		if done {
-			p.Fill(rr, t.TextMuted.Alpha(0.5), rr.W/2)
-			drawIcon(p, r, size*0.62, iconCheck, t.Background)
-			return
+		if hint > 0 {
+			p.Fill(rr, col.Alpha(0.16*hint), rr.W/2)
 		}
-		if hover {
-			p.Fill(rr, col.Alpha(0.15), rr.W/2)
+		if fill < 1 {
+			p.Stroke(rr, col.Alpha(1-fill), rr.W/2, 1.6)
 		}
-		p.Stroke(rr, col, rr.W/2, 1.6)
+		if fill > 0 {
+			k := 0.5 + 0.5*fill // it grows as it fills
+			in := ui.Rect{X: rr.X + rr.W*(1-k)/2, Y: rr.Y + rr.H*(1-k)/2, W: rr.W * k, H: rr.H * k}
+			p.Fill(in, t.TextMuted.Alpha(0.5*fill), in.W/2)
+			drawIcon(p, r, size*0.62*k, iconCheck, t.Background.Alpha(fill))
+		}
 	})
+	press(box, 0.88)
 	if box.Clicked() {
 		a.later(func() { a.setTaskDone(it, !done) })
 	}
+}
+
+func b2f(b bool) float32 {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 func taskPriorityColor(t *ui.Theme, p model.Priority) ui.Color {
