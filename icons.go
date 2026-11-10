@@ -488,3 +488,73 @@ func drawSolidIcon(p *ui.Painter, r ui.Rect, s float32, ic icon, col, hole ui.Co
 		drawIcon(p, r, s, ic, col)
 	}
 }
+
+// The rail's icons: one set drawn alike, in lines of one weight with
+// round ends on a 24 grid, each with one part filled, so that they read
+// as a family and stand at a small size.
+const (
+	railDesk = iota
+	railMap
+	railTasks
+	railCollect
+	railAuto
+	railSearch
+	railGear
+)
+
+// drawRailIcon draws an icon of the rail in the square of side s centered
+// in r, in col; its filled part in col too, lightly.
+func drawRailIcon(p *ui.Painter, r ui.Rect, s float32, kind int, col ui.Color) {
+	k := s / 24
+	ox, oy := r.X+(r.W-s)/2, r.Y+(r.H-s)/2
+	x := func(v float32) float32 { return ox + v*k }
+	y := func(v float32) float32 { return oy + v*k }
+	w := 1.9 * k
+	soft := col.Alpha(0.22)
+	line := func(path *ui.Path) { p.StrokePath(path, w, col) }
+	box := func(bx, by, bw, bh, rad float32, fill bool) {
+		path := roundedRect(x(bx), y(by), bw*k, bh*k, rad*k)
+		if fill {
+			p.FillPath(path, soft)
+		}
+		line(path)
+	}
+	switch kind {
+	case railDesk: // the desk: four tiles, two tall, the first filled
+		box(3.5, 3.5, 7.5, 9.5, 2.2, true)
+		box(13, 3.5, 7.5, 5.5, 2.2, false)
+		box(13, 11, 7.5, 9.5, 2.2, false)
+		box(3.5, 15, 7.5, 5.5, 2.2, false)
+	case railMap: // a map: a topic, and two branches ending in topics
+		p.FillPath(new(ui.Path).Circle(x(6.6), y(12), 3.6*k), soft)
+		line(new(ui.Path).Circle(x(6.6), y(12), 3.6*k))
+		line(new(ui.Path).MoveTo(x(10.2), y(12)).CubeTo(x(13.5), y(12), x(12.5), y(6), x(16.2), y(6)))
+		line(new(ui.Path).MoveTo(x(10.2), y(12)).CubeTo(x(13.5), y(12), x(12.5), y(18), x(16.2), y(18)))
+		line(new(ui.Path).Circle(x(18.6), y(6), 2.4*k))
+		line(new(ui.Path).Circle(x(18.6), y(18), 2.4*k))
+	case railTasks: // a task done: a disc, ticked
+		p.FillPath(new(ui.Path).Circle(x(12), y(12), 8.5*k), soft)
+		line(new(ui.Path).Circle(x(12), y(12), 8.5*k))
+		line(new(ui.Path).MoveTo(x(8.2), y(12.3)).LineTo(x(10.9), y(15)).LineTo(x(15.9), y(9.4)))
+	case railCollect: // what is kept: a box with its lid, a line on it
+		box(3.5, 4, 17, 5, 1.8, true)
+		line(new(ui.Path).MoveTo(x(5), y(9)).LineTo(x(5), y(18)).QuadTo(x(5), y(20), x(7), y(20)).
+			LineTo(x(17), y(20)).QuadTo(x(19), y(20), x(19), y(18)).LineTo(x(19), y(9)))
+		line(new(ui.Path).MoveTo(x(9.5), y(13.5)).LineTo(x(14.5), y(13.5)))
+	case railAuto: // what runs by itself: a bolt
+		bolt := new(ui.Path).MoveTo(x(13.2), y(3)).LineTo(x(5.5), y(13.5)).LineTo(x(11), y(13.5)).
+			LineTo(x(10.2), y(21)).LineTo(x(18.5), y(10.2)).LineTo(x(12.6), y(10.2)).Close()
+		p.FillPath(bolt, soft)
+		line(bolt)
+	case railSearch:
+		line(new(ui.Path).Circle(x(11), y(11), 6.5*k))
+		line(new(ui.Path).MoveTo(x(16), y(16)).LineTo(x(20.5), y(20.5)))
+	case railGear: // the settings: three sliders
+		for i, knob := range []float32{15, 9, 13.5} {
+			cy := 6 + float32(i)*6
+			line(new(ui.Path).MoveTo(x(4), y(cy)).LineTo(x(knob-2.4), y(cy)))
+			line(new(ui.Path).MoveTo(x(knob+2.4), y(cy)).LineTo(x(20), y(cy)))
+			line(new(ui.Path).Circle(x(knob), y(cy), 2.4*k))
+		}
+	}
+}

@@ -21,8 +21,8 @@ func (a *app) rail(c *ui.Context) {
 		col.Background(t.Surface)
 	}
 	page := a.libOpen
-	item := func(key string, ic icon, label, count, tip string, on bool, click func()) {
-		b := ui.Column(c.Key("rail:"+key)).Width(62).Padding(8, 0, 6).Gap(3).Radius(12).AlignItems(ui.Center).
+	item := func(key string, kind int, label, count, tip string, on bool, click func()) {
+		b := ui.Column(c.Key("rail:"+key)).Width(62).Padding(9, 0, 7).Gap(4).Radius(14).AlignItems(ui.Center).
 			Cursor(ui.CursorPointer).Label(label).Tooltip(tip)
 		ink := t.TextMuted
 		switch {
@@ -38,7 +38,8 @@ func (a *app) rail(c *ui.Context) {
 		}
 		b.Children(func() {
 			ui.Box(c).Size(24, 22).PassThrough().Children(func() {
-				ui.Box(c).Absolute().Left(2).Top(1).Children(func() { solidGlyph(c, ic, 20, ink, t.Surface) })
+				ui.Box(c).Absolute().Left(0).Top(-1).Size(24, 24).PassThrough().
+					Draw(func(p *ui.Painter, r ui.Rect) { drawRailIcon(p, r, 23, kind, ink) })
 				if count != "" {
 					ui.Box(c).Absolute().Left(14).Top(-4).MinWidth(15).Height(15).Padding(0, 4).Radius(8).Center().Background(t.Accent).Children(func() {
 						ui.Text(c, count).FontSize(10).FontWeight(600).TextColor(ui.Hex("#FFFFFF")).PassThrough()
@@ -53,11 +54,11 @@ func (a *app) rail(c *ui.Context) {
 	}
 	col.Children(func() {
 		ui.Box(c).Height(max(bar.Height, 38)).FillWidth().DragWindow()
-		item("home", iconCategory, "工作台", "", "记下来、归位、今天要做的", page && a.libHome && !a.auto.open && !a.tasks.open && !a.memos.open, func() {
+		item("home", railDesk, "工作台", "", "记下来、归位、今天要做的", page && a.libHome && !a.auto.open && !a.tasks.open && !a.memos.open, func() {
 			a.showLibrary()
 			a.libHome = true
 		})
-		item("map", iconMap, "导图", "", "打开的导图；再点一下，显示或收起导图列表", !page, func() {
+		item("map", railMap, "导图", "", "打开的导图；再点一下，显示或收起导图列表", !page, func() {
 			if a.libOpen {
 				a.commitEditIfAny()
 				a.libOpen = false
@@ -70,16 +71,22 @@ func (a *app) rail(c *ui.Context) {
 		if n := a.tasksDue(); n > 0 {
 			due = fmt.Sprint(n)
 		}
-		item("tasks", iconCheck, "任务", due, "所有导图里的任务", page && a.tasks.open, a.openTasks)
-		item("library", iconLibrary, "收集", "", "灵感、链接、文档和图片", page && !a.libHome && !a.auto.open && !a.tasks.open, func() { a.openList(kindAll, "") })
-		item("auto", iconBolt, "自动化", "", "把日常任务写成程序，手动或定时运行", page && a.auto.open, a.openAutomations)
+		item("tasks", railTasks, "任务", due, "所有导图里的任务", page && a.tasks.open, a.openTasks)
+		item("library", railCollect, "收集", "", "灵感、链接、文档和图片", page && !a.libHome && !a.auto.open && !a.tasks.open, func() { a.openList(kindAll, "") })
+		item("auto", railAuto, "自动化", "", "把日常任务写成程序，手动或定时运行", page && a.auto.open, a.openAutomations)
 		ui.Spacer(c)
-		if iconButton(c, iconSearch, "搜索全部", "搜索导图、任务、灵感和资料，或执行命令（⌘K）", 36, true).Clicked() {
-			a.later(func() { a.openPalette(paletteAll) })
+		foot := func(kind int, label, tip string, click func()) {
+			b := ui.Box(c.Key("rail-foot:"+label)).Size(40, 40).Radius(12).Cursor(ui.CursorPointer).Label(label).Tooltip(tip)
+			if b.Hovered() {
+				b.Background(t.Text.Alpha(0.05))
+			}
+			if b.Clicked() {
+				a.later(click)
+			}
+			b.Draw(func(p *ui.Painter, r ui.Rect) { drawRailIcon(p, r, 21, kind, t.TextMuted) })
 		}
-		if iconButton(c, iconGear, "设置", "设置（⌘,）", 36, true).Clicked() {
-			a.later(a.openSettings)
-		}
+		foot(railSearch, "搜索全部", "搜索导图、主题、灵感和资料，#标签 按标签找（⌘K）", func() { a.openPalette(paletteAll) })
+		foot(railGear, "设置", "设置（⌘,）", a.openSettings)
 	})
 }
 
