@@ -156,7 +156,7 @@ func tagChip(c *ui.Context, tag, label string, active bool, size float32) ui.Ele
 	// tag it is without a patch of color; the one chosen is tinted with it.
 	t := c.Theme()
 	col := tagColor(tag)
-	chip := ui.Row(c).Padding(size*0.15, size*0.6, size*0.15, size*0.5).Gap(size*0.35).Radius(999).AlignItems(ui.Center).
+	chip := ui.Row(c).Padding(size*0.15, size*0.6, size*0.15, size*0.5).Gap(size * 0.35).Radius(999).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer)
 	bg, ink := t.Text.Alpha(0.055), t.Text.MixOklab(t.TextMuted, 0.7)
 	if active {
