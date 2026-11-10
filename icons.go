@@ -413,7 +413,7 @@ func (a *app) notePopover(c *ui.Context, anchor ui.Element, n *model.Node) {
 			}
 			ui.Row(c).Children(func() {
 				ui.Text(c, "⌘↩ 或 Esc 完成").FontSize(11).TextColor(t.TextMuted).Grow(1)
-				if ui.PrimaryButton(c, "完成").Clicked() {
+				if inkButton(c, "完成", true).Clicked() {
 					open = false
 				}
 			})
@@ -427,22 +427,20 @@ func (a *app) notePopover(c *ui.Context, anchor ui.Element, n *model.Node) {
 // iconTextButton is a button of an icon and a word, as the AI's.
 func iconTextButton(c *ui.Context, ic icon, text, label, tip string, active bool) ui.Element {
 	t := c.Theme()
-	b := ui.Row(c.Key(label)).Height(30).Padding(0, 10).Gap(5).Radius(6).AlignItems(ui.Center).Cursor(ui.CursorPointer).
-		Label(label).Tooltip(tip).Shrink(0).Border(1, t.Border)
-	col := t.Text
-	switch {
-	case active:
-		b.Background(t.Accent).Border(1, t.Accent)
-		col = t.AccentText
-	case b.Pressed():
-		b.Background(t.Text.Alpha(0.12))
-	case b.Hovered():
-		b.Background(t.SurfaceHover)
-	default:
-		b.Background(t.Surface)
+	b := ui.Row(c.Key(label)).Height(30).Padding(0, 11, 0, 9).Gap(5).Radius(8).AlignItems(ui.Center).Cursor(ui.CursorPointer).
+		Label(label).Tooltip(tip).Shrink(0)
+	col, mark := t.Text, t.Text
+	if ic == iconSparkle {
+		mark = t.Accent // the AI's spark is the accent's wherever it is
+	}
+	if active {
+		b.Background(t.Text)
+		col, mark = t.Background, t.Background
+	} else {
+		key(b, t)
 	}
 	b.Children(func() {
-		ui.Box(c).Size(14, 14).PassThrough().Draw(func(p *ui.Painter, r ui.Rect) { drawIcon(p, r, 13, ic, col) })
+		ui.Box(c).Size(14, 14).PassThrough().Draw(func(p *ui.Painter, r ui.Rect) { drawIcon(p, r, 13, ic, mark) })
 		if text != "" {
 			ui.Text(c, text).FontSize(13).TextColor(col).PassThrough()
 		}

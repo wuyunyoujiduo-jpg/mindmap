@@ -341,7 +341,7 @@ func (a *app) presentPanel(c *ui.Context) {
 			}
 		})
 		ui.Divider(c)
-		if ui.PrimaryButton(c, "▶ 从头开始演说").FillWidth().Clicked() {
+		if inkButton(c, "▶ 从头开始演说", true).FillWidth().Clicked() {
 			a.later(func() { a.startPresenting("") })
 		}
 		if ui.Button(c, "从选中的节点开始").FillWidth().Clicked() {

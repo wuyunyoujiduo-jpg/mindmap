@@ -299,7 +299,7 @@ func (a *app) fromTextView(c *ui.Context) {
 						a.paste()
 					})
 				}
-				if ui.PrimaryButton(c, "用 AI 整理").Disabled(strings.TrimSpace(a.fromText) == "" || providerKey(a.cfg) == "").Clicked() {
+				if inkButton(c, "用 AI 整理", strings.TrimSpace(a.fromText) != "" && providerKey(a.cfg) != "").Clicked() {
 					text := a.fromText
 					a.fromTextOpen, a.fromText = false, ""
 					a.later(func() { a.aiFromText(text) })

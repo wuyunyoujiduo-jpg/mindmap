@@ -247,7 +247,7 @@ func (a *app) clipPlacesSection(c *ui.Context, clip *library.Clip) {
 		a.openPalette(paletteAttach)
 	}
 	sectionCard(c, iconMap, tileBlue, title, func() {
-		if ui.Button(c, "放到导图…").FontSize(12).Tooltip("挂到某张导图的某个节点上").Clicked() {
+		if softButton(c, "放到导图…", "挂到某张导图的某个节点上").Height(28).Clicked() {
 			a.later(place)
 		}
 	}, func() {
@@ -387,7 +387,7 @@ func (a *app) embedSettings(c *ui.Context) {
 			ui.TextInput(c.Key("embed-model"), &d[2]).Placeholder("模型，如 bge-m3").Label("向量模型")
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				changed := d[0] != a.cfg.EmbedURL || d[1] != a.cfg.EmbedKey || d[2] != a.cfg.EmbedModel
-				if ui.PrimaryButton(c, "保存并测试").Disabled(!changed && a.embedErr == "").Clicked() {
+				if inkButton(c, "保存并测试", changed || a.embedErr != "").Clicked() {
 					a.cfg.EmbedURL = strings.TrimRight(strings.TrimSpace(d[0]), "/")
 					a.cfg.EmbedKey = strings.TrimSpace(d[1])
 					a.cfg.EmbedModel = strings.TrimSpace(d[2])

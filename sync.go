@@ -200,7 +200,7 @@ func (a *app) syncSettings(c *ui.Context) {
 		if a.syncBusy {
 			label = "同步中…"
 		}
-		if ui.PrimaryButton(c, label).Disabled(a.syncBusy || !a.syncReady()).Clicked() {
+		if inkButton(c, label, !a.syncBusy && a.syncReady()).Clicked() {
 			saveDrafts()
 			a.syncNow()
 		}

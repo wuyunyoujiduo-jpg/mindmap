@@ -977,7 +977,7 @@ func (a *app) aiPanel(c *ui.Context) {
 			a.aiSettings(c)
 			return
 		}
-		ui.Scroll(c.Key("chat")).Grow(1).TrackScroll(&ai.scroll).Padding(4, 16, 12).Gap(10).Children(func() {
+		ui.Scroll(c.Key("chat")).Grow(1).TrackScroll(&ai.scroll).Padding(14, 16, 12).Gap(10).Children(func() {
 			if len(ai.msgs) == 0 && a.libOpen {
 				ui.Text(c, "问问收集里的内容：AI 会先在本地检索相关资料，再根据它们回答，并说明依据的是哪几条。").
 					FontSize(12).TextColor(t.TextMuted).Wrap()
@@ -1083,7 +1083,7 @@ func (a *app) aiPanel(c *ui.Context) {
 				model, _, _ := strings.Cut(providerModelName(a.cfg), "（")
 				ui.Text(c, "用 "+model).FontSize(11).TextColor(t.TextMuted).SingleLine().Ellipsis("…").Grow(1).Shrink(1).MinWidth(0).
 					Tooltip("用设置里配置的模型：" + providerModelName(a.cfg) + "（在 AI 设置里更换）")
-				if ui.PrimaryButton(c, "发送").Disabled(ai.busy || strings.TrimSpace(ai.draft) == "" && len(ai.attach) == 0).Clicked() {
+				if inkButton(c, "发送", !ai.busy && (strings.TrimSpace(ai.draft) != "" || len(ai.attach) > 0)).Clicked() {
 					send = true
 				}
 			})
@@ -1163,7 +1163,7 @@ func (a *app) proposalCard(c *ui.Context, i int) {
 		switch m.state {
 		case proposalPending:
 			ui.Row(c).Gap(8).Children(func() {
-				if ui.PrimaryButton(c, "应用").Clicked() {
+				if inkButton(c, "应用", true).Clicked() {
 					a.answerProposal(i, true)
 				}
 				if ui.Button(c, "放弃").Clicked() {
@@ -1252,7 +1252,7 @@ func (a *app) aiSettings(c *ui.Context) {
 			ui.Text(c, "换了服务商，下一条消息会开始新的对话。").FontSize(12).TextColor(t.Warning).Wrap()
 		}
 		ui.Row(c).Gap(8).Children(func() {
-			if ui.PrimaryButton(c, "保存").Clicked() {
+			if inkButton(c, "保存", true).Clicked() {
 				key := strings.TrimSpace(ai.keyDraft)
 				url := strings.TrimRight(strings.TrimSpace(ai.baseDraft), "/")
 				if deepseek {

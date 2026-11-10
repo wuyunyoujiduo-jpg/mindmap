@@ -26,28 +26,39 @@ by AI, and an AI assistant.
 - The UI's look is in `design.go` (sizes, helpers, the theme of
   `quietTheme`) and `icons.go` (icons drawn, not glyphs, so that they sit
   centered; the rail's and the lists' are one family of thin lines,
-  `drawRailIcon`). The palette is warm and restrained: paper for the page,
-  a shade of beige for the panels, the rail and the board's columns, white
-  cards (`cardColor`), a near-black ink, thin warm lines, a violet-blue
-  for what acts. Color is kept for small things that mean something: each
-  map has its own (`mapcolor.go`), shown as a dot by its tasks and what was
-  put on it, or as a pastel with a deep ink (`tinted`); a kind of clip has
-  its own. A narrow rail has the app's parts (`rail.go`), the maps' folders
-  beside it when asked; the desk (`today.go`) is the first page: write it
-  down, today's tasks, what was written lately (only the inbox's tasks
-  wait for a map: a note's place is 收集). The desk, the tasks and 收集
-  are laid out the same (`design.go`): a `pageColumn` in the middle, its
-  `pageHeader`, a `captureBox` to write in, then white cards; what is
-  chosen shows its details in a pane on the right, as the topic's panel
-  on the maps' page, which is put away until asked for. On the canvas the main
-  topics are on a pastel of their branch's color, those below on a faint
-  tint (the scheme 明亮 of `style.go`). Notes and clips are one page, 收集
-  (`libview.go`: a wall of cards, narrowed by kind and by tag; its 回顾
-  shows a few old notes in place, `memos.go`). The maps' list is beside the
-  rail on the maps' page only, with maps and their folders, those starred
-  first: what is collected is 收集's (the word of the UI, never 资料库), and
-  is on a map by a topic's link. The AI has two entries, 问 AI (whose
-  panel lists what else it does, before a conversation) and AI 归位.
+  `drawRailIcon`). It is laid out as Detent's components are
+  (detentui.com, whose tokens `design.go` follows): the window is a quiet
+  ground (`ground`) the rail and the maps' list stand on; what is read and
+  worked on is a leaf on it (`view.go`), near white, its corners round; a
+  part of a page is a tray (`tray`, `trayHead`), a shade darker than the
+  leaf, with its heading on it and what it holds in a white card
+  (`listCard`, `raise`), as the board's columns; cards are told by a thin
+  ring rather than a shadow, the one chosen by the accent's ring and a
+  halo (`chosenCard`); the key that acts is in the ink (`inkButton`,
+  `accentButton`), the others white with a ring (`key`: `softButton`,
+  `dropButton`, `iconTextButton`); the accent, a violet-blue, is kept for
+  what is chosen, for links and for the AI's spark. Color is kept for
+  small things that mean something: each map has its own (`mapcolor.go`),
+  shown as a dot by its tasks and what was put on it, or as a pastel with
+  a deep ink (`tinted`); a kind of clip has its own. A narrow rail has the
+  app's parts (`rail.go`), the maps' folders beside it when asked; the
+  desk (`today.go`) is the first page: write it down, today's tasks, what
+  was written lately (only the inbox's tasks wait for a map: a note's
+  place is 收集). The desk, the tasks and 收集 are laid out the same: a
+  `pageColumn` in the middle, its `pageHeader`, a `captureBox` to write
+  in, `pillTab`s to narrow by, then trays; what is chosen shows its
+  details in a pane on the right, as the topic's panel on the maps' page,
+  which is put away until asked for. A task's state, priority and day are
+  set the same way in both (`segmented`, `dateProp`). On the canvas the
+  main topics are on a pastel of their branch's color, those below on a
+  faint tint (the scheme 明亮 of `style.go`). Notes and clips are one
+  page, 收集 (`libview.go`: a wall of cards, narrowed by kind and by tag;
+  its 回顾 shows a few old notes in place, `memos.go`). The maps' list is
+  beside the rail on the maps' page only, with maps and their folders,
+  those starred first, the folder they are in at its foot: what is
+  collected is 收集's (the word of the UI, never 资料库), and is on a map
+  by a topic's link. The AI has two entries, 问 AI (whose panel lists
+  what else it does, before a conversation) and AI 归位.
   Design drafts are in the Design artifact the user reviews before a page
   is built.
 - The app's icon is drawn by `tools/icon/`; `resources/icon.png` is the

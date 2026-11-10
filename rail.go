@@ -21,7 +21,7 @@ func (a *app) rail(c *ui.Context) {
 	a.railNow = max(railWidth, bar.Left+12)
 	col := ui.Column(c.Key("rail")).Width(a.railNow).Shrink(0).FillHeight().AlignItems(ui.Center).Padding(0, 0, 10).Gap(4)
 	if !c.Vibrancy() {
-		col.Background(t.Surface)
+		col.Background(ground(t))
 	}
 	page := a.libOpen
 	item := func(key string, kind int, label, count, tip string, on bool, click func()) {

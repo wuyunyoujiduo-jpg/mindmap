@@ -41,13 +41,13 @@ func (a *app) homeView(c *ui.Context) {
 				}
 			})
 			a.homeLine(c)
-			ui.Scroll(c.Key("home-scroll")).Grow(1).Basis(0).Margin(18, 0, 0).Children(func() {
-				ui.Row(c).Gap(28).AlignItems(ui.Start).FillWidth().Padding(0, 0, 32).Children(func() {
-					ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(24).Children(func() {
+			ui.Scroll(c.Key("home-scroll")).Grow(1).Basis(0).Margin(14, 0, 0).Children(func() {
+				ui.Row(c).Gap(14).AlignItems(ui.Start).FillWidth().Padding(0, 0, 32).Children(func() {
+					ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(14).Children(func() {
 						a.homeTasks(c, now)
 						a.homeMaps(c, now)
 					})
-					ui.Column(c).Grow(1.15).Basis(0).MinWidth(0).Gap(24).Children(func() {
+					ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(14).Children(func() {
 						a.homeWaiting(c)
 					})
 				})
@@ -118,32 +118,6 @@ func (a *app) saveHomeLine() {
 	a.homeDraft = ""
 }
 
-// deskHead is the heading of a part of the desk: its title, a count in a
-// pill, a word on it, and a link at the end; it tells whether the link
-// was clicked.
-func deskHead(c *ui.Context, title, count, hint, link string) bool {
-	t := c.Theme()
-	clicked := false
-	ui.Row(c.Key("head:" + title)).Gap(8).AlignItems(ui.Center).FillWidth().MinHeight(24).Children(func() {
-		ui.Text(c, title).FontSize(textTitle).FontWeight(700)
-		if count != "" {
-			ui.Text(c, count).FontSize(textSmall).TextColor(t.TextMuted)
-		}
-		if hint != "" {
-			ui.Text(c, hint).FontSize(textSmall).TextColor(t.TextMuted).Shrink(1).MinWidth(0).SingleLine()
-		}
-		ui.Spacer(c)
-		if link != "" {
-			l := ui.Box(c.Key("link:" + title)).Cursor(ui.CursorPointer).Label(link + " " + title)
-			if l.Clicked() {
-				clicked = true
-			}
-			l.Children(func() { ui.Text(c, link).FontSize(textSmall).FontWeight(600).TextColor(t.Accent).PassThrough() })
-		}
-	})
-	return clicked
-}
-
 // dueToday are the tasks of today and those overdue, not done.
 func (a *app) dueToday(now time.Time) []taskItem {
 	day := today(now)
@@ -170,32 +144,31 @@ func (a *app) homeTasks(c *ui.Context, now time.Time) {
 			done++
 		}
 	}
-	ui.Column(c.Key("home-tasks")).Gap(6).FillWidth().Children(func() {
+	tray(c, "home-tasks").Children(func() {
 		count := ""
 		if len(due)+done > 0 {
 			count = fmt.Sprintf("%d / %d", done, len(due)+done)
 		}
-		if deskHead(c, "今天要做", count, "", "全部任务") {
-			a.later(a.openTasks)
-		}
+		trayHead(c, "head:今天要做", "今天要做", count, func() {
+			if textLink(c, "全部任务", "全部任务 今天要做").Clicked() {
+				a.later(a.openTasks)
+			}
+		})
 		if len(due) == 0 {
 			msg := "今天没有要做的事。"
 			if done > 0 {
 				msg = "今天的都做完了。"
 			}
-			ui.Text(c, msg).FontSize(textBody).TextColor(t.TextMuted).Margin(6, 2)
+			emptyNote(c, msg)
 			return
 		}
 		day := today(now)
-		listCard(c, "home-task-list").Margin(4, 0, 0).Children(func() {
+		listCard(c, "home-task-list").Children(func() {
 			for i, it := range due {
 				if i == homeTaskCount {
 					break
 				}
-				row := listCardRow(c, "home-task:"+it.key(), i).Cursor(ui.CursorPointer).Label("任务 " + it.node.Title)
-				if row.Hovered() {
-					row.Background(t.Text.Alpha(0.03))
-				}
+				row := listCardRow(c, "home-task:"+it.key()).Cursor(ui.CursorPointer).Label("任务 " + it.node.Title)
 				if row.Clicked() {
 					a.later(func() {
 						a.openTasks()
@@ -203,19 +176,19 @@ func (a *app) homeTasks(c *ui.Context, now time.Time) {
 					})
 				}
 				row.Children(func() {
-					a.taskCircle(c, it, 18)
-					ui.Text(c, it.node.Title).FontSize(14).Grow(1).Shrink(1).MinWidth(0).SingleLine().PassThrough()
+					a.taskCircle(c, it, 17)
+					ui.Text(c, it.node.Title).FontSize(textBody).Grow(1).Shrink(1).MinWidth(0).SingleLine().PassThrough()
 					if d := it.date(); d.Before(day) {
 						n := int(day.Sub(today(*d)).Hours()/24 + 0.5)
-						ui.Text(c, fmt.Sprintf("过期 %d 天", n)).FontSize(textSmall).FontWeight(600).TextColor(t.Danger).Shrink(0).PassThrough()
+						ui.Text(c, fmt.Sprintf("过期 %d 天", n)).FontSize(textSmall).TextColor(t.Danger).Shrink(0).PassThrough()
 					}
-					mapDot(c, a.mapColor(it.path), 8).Tooltip(it.mapName)
+					mapDot(c, a.mapColor(it.path), 7).Tooltip(it.mapName)
 					ui.Text(c, it.mapName).FontSize(textSmall).TextColor(t.TextMuted).Shrink(0).MaxWidth(120).SingleLine().PassThrough()
 				})
 			}
 		})
 		if more := len(due) - homeTaskCount; more > 0 {
-			l := ui.Box(c.Key("home-more-tasks")).Padding(4, 16, 0).Cursor(ui.CursorPointer).Label("还有任务")
+			l := ui.Box(c.Key("home-more-tasks")).Padding(8, 10, 4).Cursor(ui.CursorPointer).Label("还有任务")
 			if l.Clicked() {
 				a.later(a.openTasks)
 			}
@@ -236,21 +209,23 @@ func (a *app) homeMaps(c *ui.Context, now time.Time) {
 			files = append(files, fi)
 		}
 	}
-	ui.Column(c.Key("home-maps")).Gap(10).FillWidth().Children(func() {
-		if deskHead(c, "我的导图", "", "", "＋ 新建") {
-			a.later(a.newMap)
-		}
+	tray(c, "home-maps").Children(func() {
+		trayHead(c, "head:我的导图", "我的导图", "", func() {
+			if textLink(c, "＋ 新建", "＋ 新建 我的导图").Clicked() {
+				a.later(a.newMap)
+			}
+		})
 		if len(files) == 0 {
-			ui.Text(c, "还没有导图。").FontSize(textBody).TextColor(t.TextMuted)
+			emptyNote(c, "还没有导图。")
 			return
 		}
-		ui.Grid(c).Columns(2).Gap(12).FillWidth().Children(func() {
+		ui.Grid(c).Columns(2).Gap(6).FillWidth().Children(func() {
 			for _, fi := range files {
 				col := a.mapColor(fi.Path)
-				card := ui.Column(c.Key("home-map:"+fi.Path)).Padding(14, 16).Gap(8).Radius(14).Background(cardColor(t)).Cursor(ui.CursorPointer).
-					Shadow(0, 1, 2, 0, ui.RGBA(31, 34, 51, 0.06)).Label("导图 " + mapName(fi.Path))
+				card := raise(ui.Column(c.Key("home-map:"+fi.Path)).Padding(12, 14).Gap(8).Radius(10).Cursor(ui.CursorPointer).
+					Label("导图 "+mapName(fi.Path)), t)
 				if card.Hovered() {
-					card.Shadow(0, 4, 14, 0, ui.RGBA(31, 34, 51, 0.1))
+					card.Shadow(0, 4, 12, 0, ui.RGBA(40, 32, 16, 0.1))
 				}
 				if card.Clicked() {
 					a.later(func() { _ = a.open(fi.Path) })
@@ -270,17 +245,17 @@ func (a *app) homeMaps(c *ui.Context, now time.Time) {
 				}
 				card.Children(func() {
 					ui.Row(c).Gap(8).AlignItems(ui.Center).PassThrough().Children(func() {
-						mapDot(c, col, 10)
-						ui.Text(c, mapName(fi.Path)).FontSize(textTitle).FontWeight(600).SingleLine().Grow(1).Shrink(1).MinWidth(0)
+						mapDot(c, col, 9)
+						ui.Text(c, mapName(fi.Path)).FontSize(textBody).FontWeight(600).SingleLine().Grow(1).Shrink(1).MinWidth(0)
 					})
 					sub := "没有任务"
 					if total > 0 {
 						sub = fmt.Sprintf("%d / %d 个任务", done, total)
 					}
 					ui.Text(c, sub+" · "+relTime(now, modTime(fi.Path))).FontSize(textSmall).TextColor(t.TextMuted).SingleLine().PassThrough()
-					ui.Box(c).Height(4).FillWidth().Radius(2).Background(t.Text.Alpha(0.07)).PassThrough().Children(func() {
+					ui.Box(c).Height(3).FillWidth().Radius(2).Background(t.Text.Alpha(0.07)).PassThrough().Children(func() {
 						if total > 0 {
-							ui.Box(c).Height(4).WidthPercent(float32(done) / float32(total) * 100).Radius(2).Background(col)
+							ui.Box(c).Height(3).WidthPercent(float32(done) / float32(total) * 100).Radius(2).Background(col)
 						}
 					})
 				})
@@ -342,11 +317,8 @@ func (a *app) homeWaiting(c *ui.Context) {
 	}
 	items := slices.DeleteFunc(a.waiting(), func(w waitingItem) bool { return w.task != nil && listed[w.task.key()] })
 	suggested := len(a.tasks.places) + len(a.clipPlaces)
-	ui.Column(c.Key("home-waiting")).Gap(12).FillWidth().Children(func() {
-		ui.Row(c).Gap(8).AlignItems(ui.Center).FillWidth().MinHeight(24).Children(func() {
-			ui.Text(c, "刚记下的").FontSize(textTitle).FontWeight(700)
-			ui.Text(c, "收件箱的任务，和这几天记的").FontSize(textSmall).TextColor(t.TextMuted).Shrink(1).MinWidth(0).SingleLine()
-			ui.Spacer(c)
+	tray(c, "home-waiting").Children(func() {
+		trayHead(c, "head:刚记下的", "刚记下的", "收件箱的任务，和这几天记的", func() {
 			switch {
 			case a.tasks.placing || a.clipPlacing:
 				ui.Spinner(c)
@@ -382,7 +354,7 @@ func (a *app) homeWaiting(c *ui.Context) {
 			}
 		})
 		if len(items) == 0 {
-			ui.Text(c, "这几天记下的会出现在这里。").FontSize(textBody).TextColor(t.TextMuted).Margin(6, 2)
+			emptyNote(c, "这几天记下的会出现在这里。")
 			return
 		}
 		listCard(c, "home-lately").Children(func() {
@@ -394,7 +366,7 @@ func (a *app) homeWaiting(c *ui.Context) {
 			}
 		})
 		if more := len(items) - homeWaitingCount; more > 0 {
-			ui.Text(c, fmt.Sprintf("还有 %d 条，在任务的收件箱和收集里", more)).FontSize(textSmall).TextColor(t.TextMuted).Margin(0, 16)
+			ui.Text(c, fmt.Sprintf("还有 %d 条，在任务的收件箱和收集里", more)).FontSize(textSmall).TextColor(t.TextMuted).Margin(8, 10, 4)
 		}
 	})
 }
@@ -408,27 +380,29 @@ func (a *app) waitingCard(c *ui.Context, w waitingItem, i int) {
 	has := false
 	ic := iconPencil
 	if w.task != nil {
-		key, text, kind = "t:"+w.task.node.ID, w.task.node.Title, "任务"
+		key, text, kind = "t:"+w.task.node.ID, w.task.node.Title, "收件箱"
 		if d := w.task.date(); d != nil {
-			kind += " · " + dayLabel(*d, a.now())
+			kind = dayLabel(*d, a.now())
 		}
 		place, has = a.tasks.places[w.task.node.ID]
 	} else {
 		cl := w.clip
-		key, text, kind = "c:"+cl.ID, cl.Label(), library.KindLabel(cl.Kind)
+		key, text, kind = "c:"+cl.ID, cl.Label(), relTime(a.now(), cl.Created) // its icon says its kind
 		if isMemo(cl) {
 			if first, _, _ := strings.Cut(strings.TrimSpace(cl.Text), "\n"); first != "" {
 				text = first // else its title or its note, as its label has it
 			}
-			kind = "灵感"
 		} else {
 			ic = kindIcon(cl.Kind)
 		}
 		place, has = a.clipPlaces[cl.ID]
 	}
-	card := ui.Column(c.Key("waiting:"+key)).Padding(10, 16).Gap(10).FillWidth().MinHeight(46).Center()
-	if i > 0 {
-		card.BorderWidth(1, 0, 0, 0).BorderColor(hairline(t))
+	card := ui.Column(c.Key("waiting:"+key)).Padding(6, 6, 6, 10).Gap(8).Radius(7).FillWidth().MinHeight(40).Center().Label("记下的 " + text)
+	// A row says what it is and when; what can be done with it shows under
+	// the pointer, so that a list of them reads as a list.
+	hover := card.Hovered()
+	if hover {
+		card.Background(t.Text.Alpha(0.04))
 	}
 	card.Children(func() {
 		actions := func() {
@@ -452,16 +426,26 @@ func (a *app) waitingCard(c *ui.Context, w waitingItem, i int) {
 				if has {
 					label = "换一个"
 				}
-				if softButton(c, label, "自己选放到哪张导图的哪个主题下").Height(28).Label(label + " " + text).Clicked() {
+				b := softButton(c, label, "自己选放到哪张导图的哪个主题下").Height(26).Label(label + " " + text)
+				if !hover && !has {
+					b.Width(0).Padding(0).Opacity(0)
+				}
+				if b.Clicked() {
 					it := *w.task
 					a.later(func() { a.moveTaskTo(it) })
 				}
-			} else if addButton(c, "放到导图…", "放到某张导图的某个主题下；不放也行，它在收集里").Label("放到导图 " + text).Clicked() {
-				ref := clipScheme + w.clip.ID
-				a.later(func() {
-					a.attachRef = ref
-					a.openPalette(paletteAttach)
-				})
+			} else {
+				b := softButton(c, "放到导图…", "放到某张导图的某个主题下；不放也行，它在收集里").Height(26).Label("放到导图 " + text)
+				if !hover && !has {
+					b.Width(0).Padding(0).Opacity(0)
+				}
+				if b.Clicked() {
+					ref := clipScheme + w.clip.ID
+					a.later(func() {
+						a.attachRef = ref
+						a.openPalette(paletteAttach)
+					})
+				}
 			}
 		}
 		ui.Row(c).Gap(10).AlignItems(ui.Center).FillWidth().Children(func() {
@@ -472,8 +456,10 @@ func (a *app) waitingCard(c *ui.Context, w waitingItem, i int) {
 					glyph(c, ic, 16, t.TextMuted)
 				}
 			})
-			ui.Text(c, text).FontSize(14).LineHeight(1.5).Grow(1).Shrink(1).MinWidth(0).MaxLines(2)
-			ui.Text(c, kind).FontSize(textSmall).TextColor(t.TextMuted).Shrink(0)
+			ui.Text(c, text).FontSize(textBody).LineHeight(1.5).Grow(1).Shrink(1).MinWidth(0).MaxLines(2)
+			if !hover || has {
+				ui.Text(c, kind).FontSize(textSmall).TextColor(t.TextMuted).Shrink(0).Margin(0, 4, 0, 0)
+			}
 			if !has {
 				actions()
 			}

@@ -63,6 +63,10 @@ func TestHome(t *testing.T) {
 		t.Fatalf("an old note stays: %d", n)
 	}
 	a.lib.Clips[0].Created = testNow
+	// What can be done with a row shows under the pointer.
+	row, _ := tt.Find("记下的 灵感来了")
+	tt.Move(row.X+row.W/2, row.Y+row.H/2)
+	tt.Frame()
 	if err := tt.Click("放到导图 灵感来了"); err != nil {
 		t.Fatal(err)
 	}

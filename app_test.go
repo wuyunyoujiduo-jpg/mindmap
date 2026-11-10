@@ -300,16 +300,11 @@ func TestPanelEditsNode(t *testing.T) {
 	if !n.HasTag("导出") {
 		t.Fatalf("tags %v", n.Tags)
 	}
-	r, _ := tt.Find("任务状态")
-	tt.Press(r.X+r.W/2, r.Y+r.H/2)
-	tt.Release(r.X+r.W/2, r.Y+r.H/2)
-	if err := tt.ChooseMenuItem("进行中"); err != nil {
-		t.Fatal(err)
-	}
+	clickInPanel(t, tt, "状态 进行中")
 	if n.Task.Status != model.StatusDoing {
 		t.Fatalf("status %v", n.Task.Status)
 	}
-	clickInPanel(t, tt, "截止日期")
+	clickInPanel(t, tt, "截止日期 今天")
 	if n.Task.Due == nil || !n.Task.Due.Equal(today(testNow)) {
 		t.Fatalf("due %v", n.Task.Due)
 	}

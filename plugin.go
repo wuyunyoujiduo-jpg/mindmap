@@ -236,7 +236,7 @@ func (a *app) pluginSettings(c *ui.Context) {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "语义检索插件：离线、免费、不上传内容，按意思搜资料并推荐相关资料。约 23MB，下载一次即可。").
 					FontSize(12).TextColor(t.TextMuted).Wrap().Grow(1)
-				if ui.PrimaryButton(c, "下载插件").Clicked() {
+				if inkButton(c, "下载插件", true).Clicked() {
 					a.downloadPlugin()
 				}
 			})
@@ -310,7 +310,7 @@ func (a *app) pluginBanner(c *ui.Context) {
 		if a.pluginErr != "" {
 			ui.Text(c, "下载失败，可以重试").FontSize(12).TextColor(t.Danger).Tooltip(a.pluginErr)
 		}
-		if ui.PrimaryButton(c, "下载").Clicked() {
+		if inkButton(c, "下载", true).Clicked() {
 			a.downloadPlugin()
 		}
 		if ui.Button(c, "不用了").Tooltip("以后可以在设置 → 资料整理里下载").Clicked() {

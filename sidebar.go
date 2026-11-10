@@ -24,37 +24,14 @@ func (a *app) sidebar(c *ui.Context) {
 	t := c.Theme()
 	side := ui.Column(c).Fill()
 	if !c.Vibrancy() {
-		side.Background(t.Surface)
+		side.Background(ground(t))
 	}
 	side.Children(func() {
-		// The title bar's part over the sidebar holds the window's controls;
-		// under it the folder of maps, whose menu opens another, then the
-		// search of everything and what is new.
-		// One row, as high as the toolbar beside it: the folder of maps, whose
-		// menu opens another, and at its end what is new.
-		ui.Row(c.Key("side-head")).Height(toolbarHeight).Padding(0, 10, 0, 8).Gap(4).AlignItems(ui.Center).Shrink(0).DragWindow().Children(func() {
-			folder := ui.Row(c.Key("folder-switch")).Height(32).Padding(0, 8).Gap(8).Radius(8).AlignItems(ui.Center).Grow(1).Shrink(1).MinWidth(0).
-				Cursor(ui.CursorPointer).Label("切换文件夹").Tooltip(a.dir)
-			if folder.Hovered() {
-				folder.Background(t.Text.Alpha(0.06))
-			}
-			folder.Menu(func(m *ui.Menu) {
-				if m.Item("打开其他文件夹…").Shortcut(ui.Cmd, ui.KeyO).Chosen() {
-					a.pickWorkspace()
-				}
-				if m.Item("在 Finder 中显示").Chosen() {
-					a.plat.ShowInFolder(a.dir)
-				}
-			})
-			name := filepath.Base(a.dir)
-			folder.Children(func() {
-				initial := string([]rune(name + " ")[0])
-				ui.Box(c).Size(20, 20).Radius(6).Background(t.Text.MixOklab(t.Background, 0.08)).Center().Shrink(0).PassThrough().Children(func() {
-					ui.Text(c, strings.ToUpper(initial)).FontSize(textCaption).FontWeight(600).TextColor(t.Background).PassThrough()
-				})
-				ui.Text(c, name).FontSize(14).FontWeight(600).Shrink(1).MinWidth(0).SingleLine().PassThrough()
-				ui.Text(c, "⌄").FontSize(textSmall).TextColor(t.TextMuted).PassThrough()
-			})
+		// One row, as high as the toolbar beside it: what the list is, the
+		// button that puts it away, and what is new. The folder the maps are
+		// in is at the list's foot, where its name has room.
+		ui.Row(c.Key("side-head")).Height(toolbarHeight).Padding(0, 8, 0, 16).Gap(2).AlignItems(ui.Center).Shrink(0).DragWindow().Children(func() {
+			ui.Text(c, "导图").FontSize(textBody).FontWeight(600).TextColor(t.TextMuted).Grow(1).PassThrough()
 			if iconButton(c, iconSidebar, "收起导图列表", "收起导图列表（点左边的「导图」可以再打开）", 28, true).Clicked() {
 				a.cfg.ShowTree = false
 				a.cfg.save()
@@ -87,7 +64,29 @@ func (a *app) sidebar(c *ui.Context) {
 				a.folderContents(c, a.tree, 0)
 			})
 		})
-		ui.Row(c.Key("side-foot")).Padding(6, 8).Gap(2).AlignItems(ui.Center).BorderWidth(1, 0, 0, 0).BorderColor(hairline(t)).Children(func() {
+		ui.Column(c.Key("side-foot")).Padding(6, 6).Gap(2).Shrink(0).BorderWidth(1, 0, 0, 0).BorderColor(hairline(t)).Children(func() {
+			name := filepath.Base(a.dir)
+			folder := ui.Row(c.Key("folder-switch")).Height(30).Padding(0, 8).Gap(8).Radius(8).AlignItems(ui.Center).FillWidth().
+				Cursor(ui.CursorPointer).Label("切换文件夹").Tooltip("导图所在的文件夹：" + a.dir)
+			if folder.Hovered() {
+				folder.Background(t.Text.Alpha(0.06))
+			}
+			folder.Menu(func(m *ui.Menu) {
+				if m.Item("打开其他文件夹…").Shortcut(ui.Cmd, ui.KeyO).Chosen() {
+					a.pickWorkspace()
+				}
+				if m.Item("在 Finder 中显示").Chosen() {
+					a.plat.ShowInFolder(a.dir)
+				}
+			})
+			folder.Children(func() {
+				glyph(c, iconFolder, 15, t.TextMuted)
+				ui.Text(c, name).FontSize(textSmall).TextColor(t.TextMuted).Grow(1).Shrink(1).MinWidth(0).SingleLine().PassThrough()
+				ui.Box(c).Size(10, 10).Shrink(0).PassThrough().Draw(func(p *ui.Painter, r ui.Rect) {
+					cx, cy := r.X+r.W/2, r.Y+r.H/2
+					p.StrokePath(new(ui.Path).MoveTo(cx-3, cy+1.5).LineTo(cx, cy-1.5).LineTo(cx+3, cy+1.5), 1.2, t.TextMuted)
+				})
+			})
 			a.syncFoot(c)
 		})
 	})

@@ -81,7 +81,7 @@ func (a *app) tourView(c *ui.Context) {
 				if a.tourStep == len(tourCards) {
 					next = "开始使用"
 				}
-				if ui.PrimaryButton(c, next).Clicked() {
+				if inkButton(c, next, true).Clicked() {
 					if a.tourStep == len(tourCards) {
 						a.endTour()
 					} else {

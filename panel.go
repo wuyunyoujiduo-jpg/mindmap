@@ -129,7 +129,7 @@ func (a *app) nodePanel(c *ui.Context) {
 			a.breadcrumbs(c, n)
 
 			title := n.Title
-			if inlineInput(c, &title, textHeadline, true, "无标题", "标题").Changed() {
+			if inlineInput(c, &title, textHeadline, true, "无标题", "标题").Margin(0, -6).Changed() {
 				a.mutate("title:"+n.ID, func() { n.Title = title })
 			}
 
@@ -149,7 +149,7 @@ func (a *app) nodePanel(c *ui.Context) {
 			files := shown("files", len(n.Files) > 0)
 
 			if n.Task != nil || tags {
-				ui.Column(c.Key("props")).Gap(2).FillWidth().Children(func() {
+				ui.Column(c.Key("props")).Gap(8).FillWidth().Children(func() {
 					if n.Task != nil {
 						a.taskEditor(c, n)
 					}
@@ -199,7 +199,7 @@ func (a *app) nodePanel(c *ui.Context) {
 			}
 
 			// What can be added, each a quiet button, gone once it is there.
-			ui.Row(c.Key("panel-add")).Gap(2).Wrap().GapY(2).Margin(0, 0, 0, -8).AlignItems(ui.Center).Children(func() {
+			ui.Row(c.Key("panel-add")).Wrap().GapY(2).Margin(0, -8).AlignItems(ui.Center).Children(func() {
 				add := func(text, tip, kind string) {
 					if addButton(c, text, tip).Clicked() {
 						show(kind)
@@ -222,6 +222,9 @@ func (a *app) nodePanel(c *ui.Context) {
 				}
 				if n.Task != nil && n.Task.Start == nil && !a.panelShow[n.ID+":plan"] {
 					add("＋ 开始日期", "这个任务从哪天开始：时间线上显示成一段", "plan")
+				}
+				if n.Task != nil && addButton(c, "不再作为任务", "去掉它的状态、日期和优先级，留下主题").Clicked() {
+					a.later(func() { a.toggleTask(n) })
 				}
 			})
 
@@ -276,65 +279,35 @@ func (a *app) taskEditor(c *ui.Context, n *model.Node) {
 			status = i
 		}
 	}
+	names := make([]string, len(model.Statuses))
+	for i, st := range model.Statuses {
+		names[i] = st.Label()
+	}
 	propRow(c, "状态", func() {
-		ui.MenuButton(c, model.Statuses[status].Label(), func(m *ui.Menu) {
-			for _, s := range model.Statuses {
-				if m.Item(s.Label()).Checked(s == task.Status).Chosen() {
-					a.setStatus(n, s)
-				}
-			}
-			m.Separator()
-			if m.Item("不再作为任务").Chosen() {
-				a.toggleTask(n)
-			}
-		}).Label("任务状态").FontSize(textSmall)
+		if st := segmented(c, "task-status", "状态", names, status); st != status {
+			a.setStatus(n, model.Statuses[st])
+		}
 	})
-	a.dateField(c, "截止", "截止日期", &task.Due)
+	propRow(c, "优先级", func() {
+		labels := make([]string, len(model.Priorities))
+		prio := 0
+		for i, p := range model.Priorities {
+			labels[i] = p.Label()
+			if p == task.Priority {
+				prio = i
+			}
+		}
+		if p := segmented(c, "task-prio", "优先级", labels, prio); p != prio {
+			a.mutate("", func() { task.Priority = model.Priorities[p] })
+		}
+	})
+	dateProp(c, "截止", "截止日期", task.Due, a.now(), func(d *time.Time) { a.mutate("", func() { task.Due = d }) })
 	if task.Start != nil || a.panelShow[n.ID+":plan"] {
-		a.dateField(c, "开始", "开始日期", &task.Start)
+		dateProp(c, "开始", "开始日期", task.Start, a.now(), func(d *time.Time) { a.mutate("", func() { task.Start = d }) })
 	}
 	if task.Overdue(a.now()) {
 		propRow(c, "", func() { ui.Text(c, "已逾期").FontSize(textSmall).TextColor(t.Danger) })
 	}
-	prio := task.Priority.Label()
-	propRow(c, "优先级", func() {
-		labels := make([]string, len(model.Priorities))
-		for i, p := range model.Priorities {
-			labels[i] = p.Label()
-		}
-		if ui.Select(c, &prio, labels).Label("优先级").FontSize(textSmall).Changed() {
-			a.mutate("", func() { task.Priority = model.PriorityFromLabel(prio) })
-		}
-	})
-}
-
-// dateField is a row of an optional date: the date to change and to clear,
-// or a button to set it.
-func (a *app) dateField(c *ui.Context, name, label string, date **time.Time) {
-	t := c.Theme()
-	propRow(c, name, func() {
-		if *date == nil {
-			b := ui.Box(c.Key("set:"+label)).Padding(3, 8).Margin(0, 0, 0, -8).Radius(6).Cursor(ui.CursorPointer).Label(label)
-			if b.Hovered() {
-				b.Background(t.SurfaceHover)
-			}
-			if b.Clicked() {
-				a.mutate("", func() {
-					d := today(a.now())
-					*date = &d
-				})
-			}
-			b.Children(func() { ui.Text(c, "设日期").FontSize(textBody).TextColor(t.TextMuted).PassThrough() })
-			return
-		}
-		d := **date
-		if ui.DateInput(c, &d).Label(label).FontSize(textSmall).Changed() {
-			a.mutate("", func() { *date = &d })
-		}
-		if iconButton(c, iconClose, "清除"+label, "清除"+label, 22, true).Clicked() {
-			a.mutate("", func() { *date = nil })
-		}
-	})
 }
 
 func today(now time.Time) time.Time {

@@ -25,7 +25,7 @@ func (a *app) view(c *ui.Context) {
 	// panels' gray: the system's highlight (a pale orange, say) hardly did.
 	root := ui.Row(c).Fill().AlignItems(ui.Stretch).SelectionColor(t.Accent.Alpha(0.32))
 	if !c.Vibrancy() { // else the sidebar's glass shows through
-		root.Background(t.Background)
+		root.Background(ground(t))
 	}
 	root.Children(func() {
 		a.rail(c)
@@ -38,52 +38,57 @@ func (a *app) view(c *ui.Context) {
 			}
 		}
 		main(func() {
-			ui.Row(c).Fill().AlignItems(ui.Stretch).Background(t.Background).Children(func() {
-				if a.libOpen {
-					if a.tasks.open {
-						a.tasksView(c)
+			// What is read and worked on is a leaf on the window's ground: near
+			// white, its corners round, a thin ring around it.
+			ui.Box(c.Key("leaf-room")).Fill().Padding(leafGap, leafGap, leafGap, 0).Children(func() {
+				ui.Row(c.Key("leaf")).Fill().AlignItems(ui.Stretch).Background(t.Background).Radius(leafRadius).
+					Border(1, cardEdge(t)).Shadow(0, 1, 3, 0, shadowColor).Clip().Children(func() {
+					if a.libOpen {
+						if a.tasks.open {
+							a.tasksView(c)
+							return
+						}
+						if a.libHome {
+							a.homeView(c)
+						} else {
+							a.libraryView(c)
+						}
+						if a.aiOpen {
+							a.panelResizer(c)
+							a.panel(c)
+						}
 						return
 					}
-					if a.libHome {
-						a.homeView(c)
-					} else {
-						a.libraryView(c)
-					}
-					if a.aiOpen {
+					ui.Column(c).Grow(1).Children(func() {
+						a.toolbar(c)
+						if a.doc == nil || a.mode != viewMap && a.mode != viewOutline {
+							ui.Divider(c) // the map and the outline are the page itself
+						}
+						a.conflictBar(c)
+						a.brokenBar(c)
+						switch {
+						case a.doc == nil:
+							a.empty(c)
+						case a.mode == viewOutline:
+							ui.Column(c).Grow(1).Children(func() {
+								a.outlineView(c)
+								a.sheetTabs(c)
+							})
+						case a.mode == viewBoard:
+							a.boardView(c)
+						case a.mode == viewTimeline:
+							a.timelineView(c)
+						case a.mode == viewOverview:
+							a.overviewView(c)
+						default:
+							a.canvasView(c)
+						}
+					})
+					if a.panelShown(c) {
 						a.panelResizer(c)
 						a.panel(c)
 					}
-					return
-				}
-				ui.Column(c).Grow(1).Children(func() {
-					a.toolbar(c)
-					if a.doc == nil || a.mode != viewMap && a.mode != viewOutline {
-						ui.Divider(c) // the map and the outline are the page itself
-					}
-					a.conflictBar(c)
-					a.brokenBar(c)
-					switch {
-					case a.doc == nil:
-						a.empty(c)
-					case a.mode == viewOutline:
-						ui.Column(c).Grow(1).Children(func() {
-							a.outlineView(c)
-							a.sheetTabs(c)
-						})
-					case a.mode == viewBoard:
-						a.boardView(c)
-					case a.mode == viewTimeline:
-						a.timelineView(c)
-					case a.mode == viewOverview:
-						a.overviewView(c)
-					default:
-						a.canvasView(c)
-					}
 				})
-				if a.panelShown(c) {
-					a.panelResizer(c)
-					a.panel(c)
-				}
 			})
 		})
 		if a.lightbox != "" && a.doc != nil {
@@ -105,6 +110,12 @@ func (a *app) view(c *ui.Context) {
 		c.Invalidate()
 	}
 }
+
+// The leaf: how far it is from the window's edges, and how round.
+const (
+	leafGap    = 8
+	leafRadius = 12
+)
 
 // panelResizer is the line left of the panel, which the pointer drags to
 // make the panel wider or narrower.
@@ -136,7 +147,7 @@ func mapName(path string) string {
 func (a *app) empty(c *ui.Context) {
 	ui.Column(c).Grow(1).Center().Gap(12).Children(func() {
 		ui.Text(c, "没有打开的导图").FontSize(16).TextColor(c.Theme().TextMuted)
-		if ui.PrimaryButton(c, "新建导图").Clicked() {
+		if inkButton(c, "新建导图", true).Clicked() {
 			a.newMap()
 		}
 	})

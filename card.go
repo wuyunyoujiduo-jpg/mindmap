@@ -313,7 +313,7 @@ func (a *app) cardWindow(c *ui.Context) {
 					}
 				})
 				ui.Row(c).Gap(8).Children(func() {
-					if ui.PrimaryButton(c, "保存图片…").Clicked() {
+					if inkButton(c, "保存图片…", true).Clicked() {
 						a.saveCard(o, clip)
 					}
 					if iconButton(c, iconClose, "关闭", "关闭（Esc）", 28, true).Clicked() {
