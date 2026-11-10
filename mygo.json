@@ -1,7 +1,7 @@
 {
   "name": "MyMind",
   "identifier": "com.wuyunyoujiduo.mindmap",
-  "version": "0.49.0",
+  "version": "0.49.1",
   "out": "build",
   "updates": {
     "publicKey": "QiqxcF4IRxoXZeYeRcxscPP0HCto8pGMHvdFqvDtx/A=",

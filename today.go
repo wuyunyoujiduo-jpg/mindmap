@@ -28,7 +28,7 @@ func (a *app) homeView(c *ui.Context) {
 			}
 		})
 		ui.Scroll(c.Key("home-scroll")).Grow(1).Padding(4, 48, 32).Children(func() {
-			ui.Column(c).MaxWidth(900).FillWidth().Gap(28).Children(func() {
+			ui.Column(c).MaxWidth(820).Margin(0, ui.Auto).FillWidth().Gap(28).Children(func() {
 				ui.Column(c).Gap(4).Children(func() {
 					ui.Text(c, greeting(now)).FontSize(24).FontWeight(600)
 					ui.Text(c, dateLabel(now)).FontSize(textBody).TextColor(t.TextMuted)

@@ -146,6 +146,12 @@ func (a *app) materialBar(c *ui.Context) {
 		tip = "先在 AI 助手的设置里填写 API Key"
 	}
 	iconTextButton(c, iconSparkle, "AI", "AI 整理资料", tip, false).Menu(func(m *ui.Menu) {
+		if k := len(a.lib.Unorganized()); k > 0 {
+			if m.Item(fmt.Sprintf("整理 %d 条还没整理的资料", k)).Disabled(noKey || a.libWorking != "").Chosen() {
+				a.later(a.organizeAll)
+			}
+			m.Separator()
+		}
 		label := fmt.Sprintf("整理成新导图（%d 条）", n)
 		if n > maxMaterial {
 			label = fmt.Sprintf("整理成新导图（一次最多 %d 条，先筛选）", maxMaterial)
@@ -164,5 +170,7 @@ func (a *app) materialBar(c *ui.Context) {
 			clips := a.listedMaterial()
 			a.later(func() { a.aiMergeMaterial(clips) })
 		}
+		m.Separator()
+		a.reviewMenu(m)
 	})
 }

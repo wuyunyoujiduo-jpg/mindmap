@@ -20,7 +20,35 @@ func (a *app) libraryView(c *ui.Context) {
 	if files := root.DroppedFiles(); len(files) > 0 {
 		a.later(func() { a.dropClips(files) })
 	}
+	sel := l.Find(a.libSel)
 	root.Children(func() {
+		// One calm column in the middle of the page; with a clip chosen, the
+		// list and, beside it, the clip, the page's height.
+		ui.Row(c).Grow(1).AlignItems(ui.Stretch).Children(func() {
+			ui.Column(c).Grow(1).Basis(0).MinWidth(0).Children(func() {
+				column := ui.Column(c.Key("lib-column")).Grow(1).FillWidth()
+				if sel == nil {
+					column.MaxWidth(820).Margin(0, ui.Auto)
+				}
+				column.Children(func() { a.libraryColumn(c) })
+			})
+			if sel != nil {
+				ui.Box(c).Width(1).FillHeight().Background(hairline(t))
+				ui.Scroll(c.Key("clip-detail:"+sel.ID)).Grow(1).Basis(0).Padding(14, 16, 20).Gap(12).Children(func() {
+					a.clipDetail(c, sel)
+				})
+			}
+		})
+	})
+	a.libraryDialogs(c)
+}
+
+// libraryColumn is the library but the clip chosen: its heading, the line
+// to keep something, the filters and the clips found.
+func (a *app) libraryColumn(c *ui.Context) {
+	t := c.Theme()
+	l := a.lib
+	func() {
 		ui.Row(c.Key("lib-head")).Height(toolbarHeight).Padding(0, 10, 0, 16).Gap(10).AlignItems(ui.Center).Shrink(0).
 			DragWindow().Children(func() {
 			ui.Text(c, "资料库").FontSize(textHeadline).FontWeight(600).NoWrap()
@@ -48,20 +76,13 @@ func (a *app) libraryView(c *ui.Context) {
 				a.libQueryAt = a.now()
 			}
 			a.searchQueryVector(c)
-			ui.MenuButton(c, "回顾", a.reviewMenu).Label("回顾").Tooltip("AI 回顾最近收藏的资料，或把资料生成导图").Shrink(0)
-			if k := len(l.Unorganized()); k > 0 && a.libWorking == "" {
-				if ui.Button(c, fmt.Sprintf("AI 整理 %d 条", k)).Tooltip("让 AI 给还没整理的资料起标题、写摘要、分类和打标签").Shrink(0).Clicked() {
-					a.organizeAll()
-				}
-			}
 			if iconButton(c, iconShot, "截图", "截图：框选屏幕、标注后收进资料库（"+keyLabel(a.shotKey())+"）", 30, true).Clicked() {
 				a.later(a.screenshot)
 			}
-			if iconTextButton(c, iconSparkle, "AI", "AI 助手", "和 AI 聊资料库里的内容，它会检索相关资料来回答", a.aiOpen).Clicked() {
+			if iconTextButton(c, iconSparkle, "问 AI", "AI 助手", "和 AI 聊资料库里的内容，它会检索相关资料来回答", a.aiOpen).Clicked() {
 				a.aiOpen = !a.aiOpen
 			}
 		})
-		ui.Divider(c)
 		a.pluginBanner(c)
 		a.clipComposer(c)
 		a.clipFilters(c)
@@ -73,7 +94,6 @@ func (a *app) libraryView(c *ui.Context) {
 				}
 			})
 		}
-		ui.Divider(c)
 		hits := a.libHits()
 		ui.Row(c).Grow(1).AlignItems(ui.Stretch).Children(func() {
 			if len(hits) == 0 {
@@ -97,14 +117,13 @@ func (a *app) libraryView(c *ui.Context) {
 						})
 					})
 			}
-			if clip := l.Find(a.libSel); clip != nil {
-				ui.Box(c).Width(1).FillHeight().Background(t.Border)
-				ui.Scroll(c.Key("clip-detail:"+clip.ID)).Grow(1).Basis(0).Padding(14, 16, 20).Gap(12).Children(func() {
-					a.clipDetail(c, clip)
-				})
-			}
 		})
-	})
+	}()
+}
+
+// libraryDialogs are the library's questions.
+func (a *app) libraryDialogs(c *ui.Context) {
+	l := a.lib
 	gone := "删除后无法恢复。"
 	if n := len(a.clipBacklinks(a.libSel)); n > 0 {
 		gone = fmt.Sprintf("它挂在 %d 个节点上，删除后这些链接会失效。删除后无法恢复。", n)
