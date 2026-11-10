@@ -1192,9 +1192,17 @@ func (a *app) monthView(c *ui.Context, items []taskItem) {
 // faint fill; dragged to another day, it goes there.
 func (a *app) taskChip(c *ui.Context, it taskItem) {
 	t := c.Theme()
-	chip := ui.Row(c.Key("chip:"+it.path+"#"+it.node.ID)).Padding(3, 6).Gap(6).Radius(6).AlignItems(ui.Center).FillWidth().
-		Background(taskPriorityColor(t, it.node.Task.Priority).Alpha(0.1)).Cursor(ui.CursorPointer).
+	// A white card, as the lists' are: its circle says its priority, a dot
+	// its map.
+	chip := ui.Row(c.Key("chip:"+it.path+"#"+it.node.ID)).Padding(4, 7).Gap(6).Radius(7).AlignItems(ui.Center).FillWidth().
+		Background(cardColor(t)).Shadow(0, 1, 2, 0, ui.RGBA(31, 34, 51, 0.06)).Cursor(ui.CursorPointer).
 		Label("任务 " + it.node.Title).Tooltip(it.mapName + " · " + it.node.Title).Drag(taskDrag{it.path, it.node.ID})
+	switch {
+	case a.tasks.sel == it.key():
+		chip.Border(1.5, t.Accent)
+	case chip.Hovered():
+		chip.Shadow(0, 3, 10, 0, ui.RGBA(31, 34, 51, 0.1))
+	}
 	switch {
 	case chip.DoubleClicked():
 		a.later(func() { a.libOpen = false; a.goToNode(it.path, it.sheet, it.node.ID) })
@@ -1204,10 +1212,11 @@ func (a *app) taskChip(c *ui.Context, it taskItem) {
 	chip.ContextMenu(func(m *ui.Menu) { a.taskMenu(m, it) })
 	chip.Children(func() {
 		a.taskCircle(c, it, 13)
-		title := ui.Text(c, it.node.Title).FontSize(textSmall).SingleLine().Shrink(1).MinWidth(0).PassThrough()
+		title := ui.Text(c, it.node.Title).FontSize(textSmall).SingleLine().Grow(1).Shrink(1).MinWidth(0).PassThrough()
 		if it.done() {
 			title.TextColor(t.TextMuted).Strikethrough()
 		}
+		mapDot(c, a.mapColor(it.path), 6)
 	})
 }
 
