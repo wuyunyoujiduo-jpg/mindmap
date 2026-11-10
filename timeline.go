@@ -10,8 +10,8 @@ import (
 )
 
 // The timeline: the tasks with dates as bars on days, grouped by branch,
-// with today, weekends, iterations and what each task waits on. Dragging
-// a bar moves its dates; dragging its right end changes its due date.
+// with today and the weekends. Dragging a bar moves its dates; dragging
+// its right end changes its due date.
 
 const (
 	tlLabelW = 220
@@ -62,9 +62,6 @@ func (a *app) timelineView(c *ui.Context) {
 	groups := map[string][]model.TaskNode{}
 	var order []string
 	for _, tn := range a.visibleTasks() {
-		if !a.inIteration(tn.Node) {
-			continue
-		}
 		from, to, ok := span(tn.Node.Task)
 		if !ok {
 			unplanned = append(unplanned, tn)
@@ -88,14 +85,6 @@ func (a *app) timelineView(c *ui.Context) {
 		}
 		groups[g] = append(groups[g], tn)
 	}
-	for _, it := range a.file.Iterations {
-		if it.Start != nil && it.Start.Before(first) && a.iterFilter == it.ID {
-			first = today(*it.Start)
-		}
-		if it.End != nil && it.End.After(last) && a.iterFilter == it.ID {
-			last = today(*it.End)
-		}
-	}
 	for _, g := range order {
 		rows = append(rows, tlRow{group: g})
 		tasks := groups[g]
@@ -107,12 +96,6 @@ func (a *app) timelineView(c *ui.Context) {
 	days := daysBetween(first, last) + 1
 	width := tlLabelW + float32(days)*dayW
 	x := func(d time.Time) float32 { return tlLabelW + float32(daysBetween(first, d))*dayW }
-	rowOf := map[string]int{}
-	for i, r := range rows {
-		if r.task.Node != nil {
-			rowOf[r.task.Node.ID] = i
-		}
-	}
 
 	ui.Column(c).Grow(1).Children(func() {
 		ui.Row(c).Padding(8, 12).Gap(10).AlignItems(ui.Center).Children(func() {
@@ -124,7 +107,6 @@ func (a *app) timelineView(c *ui.Context) {
 			if ui.Segmented(c, &scale, "按天", "按周").Changed() {
 				a.tlWeeks = scale == 1
 			}
-			a.iterationPicker(c)
 			ui.Spacer(c)
 			ui.Text(c, "拖动条形调整日期，拖右端改截止日期").FontSize(12).TextColor(t.TextMuted)
 		})
@@ -152,37 +134,9 @@ func (a *app) timelineView(c *ui.Context) {
 						p.Line(dx, r.Y+tlHeadH-4, dx, r.Y+tlHeadH, 1, t.Border)
 					}
 				}
-				for k, it := range a.file.Iterations {
-					if it.Start == nil || it.End == nil {
-						continue
-					}
-					x0, x1 := r.X+x(*it.Start), r.X+x(*it.End)+dayW
-					col := ui.Hex(tagPalette[k%len(tagPalette)])
-					p.Fill(ui.Rect{X: x0, Y: r.Y + 4, W: x1 - x0, H: 18}, col.Alpha(0.15), 4)
-					p.Text(x0+6, r.Y+7, it.Name, 11, col)
-				}
 				p.Line(r.X+tlLabelW, r.Y+tlHeadH, r.X+r.W, r.Y+tlHeadH, 1, t.Border)
 				tx := r.X + x(day) + dayW/2
 				p.Line(tx, r.Y+tlHeadH-4, tx, r.Y+r.H, 1.5, t.Danger.Alpha(0.7))
-				// What each task waits on: from the end of one bar to the
-				// start of the next.
-				for i, row := range rows {
-					if row.task.Node == nil {
-						continue
-					}
-					for _, id := range row.task.Node.Task.After {
-						j, ok := rowOf[id]
-						if !ok {
-							continue
-						}
-						_, to, _ := span(rows[j].task.Node.Task)
-						from, _, _ := span(row.task.Node.Task)
-						x0, y0 := r.X+x(to)+dayW, r.Y+tlHeadH+float32(j)*tlRowH+tlRowH/2
-						x1, y1 := r.X+x(from), r.Y+tlHeadH+float32(i)*tlRowH+tlRowH/2
-						path := new(ui.Path).MoveTo(x0, y0).CubeTo(x0+12, y0, x1-12, y1, x1, y1)
-						p.StrokePath(path, 1.2, ui.Hex("#d97706").Alpha(0.8))
-					}
-				}
 			})
 			grid.Children(func() {
 				ui.Box(c).Height(tlHeadH)
@@ -277,9 +231,6 @@ func (a *app) timelineRow(c *ui.Context, row tlRow, first time.Time, dayW, width
 			a.selectNode(n.ID)
 		}
 		label.Children(func() {
-			if len(a.file.Blockers(n)) > 0 && task.Status != model.StatusDone {
-				ui.Text(c, "🔒").FontSize(10)
-			}
 			title := ui.Text(c, n.Title).FontSize(12).MaxLines(1)
 			if task.Status == model.StatusDone {
 				title.Strikethrough().TextColor(t.TextMuted)

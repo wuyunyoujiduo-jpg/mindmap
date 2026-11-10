@@ -20,8 +20,7 @@ func (a *app) overviewView(c *ui.Context) {
 	day := today(now)
 	weekEnd := day.AddDate(0, 0, 7)
 	var all, done, doing, overdue, doneWeek int
-	var hoursLeft float64
-	var late, dueSoon, blocked, recent []model.TaskNode
+	var late, dueSoon, recent []model.TaskNode
 	for _, tn := range a.file.Tasks() {
 		task := tn.Node.Task
 		all++
@@ -36,15 +35,11 @@ func (a *app) overviewView(c *ui.Context) {
 		case model.StatusDoing:
 			doing++
 		}
-		hoursLeft += task.Estimate
 		if task.Overdue(now) {
 			overdue++
 			late = append(late, tn)
 		} else if task.Due != nil && task.Due.Before(weekEnd) {
 			dueSoon = append(dueSoon, tn)
-		}
-		if len(a.file.Blockers(tn.Node)) > 0 {
-			blocked = append(blocked, tn)
 		}
 	}
 	sortTasks(late)
@@ -76,7 +71,6 @@ func (a *app) overviewView(c *ui.Context) {
 				tile("进行中", strconv.Itoa(doing), ui.Hex("#f59e0b"))
 				tile("已逾期", strconv.Itoa(overdue), map[bool]ui.Color{true: t.Danger, false: t.Text}[overdue > 0])
 				tile("近 7 天完成", strconv.Itoa(doneWeek), t.Accent)
-				tile("剩余估时", strconv.FormatFloat(hoursLeft, 'f', -1, 64)+" 小时", t.Text)
 			})
 			a.section2(c, "各分支进度", func() {
 				for _, d := range a.file.Sheets {
@@ -108,7 +102,6 @@ func (a *app) overviewView(c *ui.Context) {
 					}
 				}
 			})
-			a.section2(c, "迭代", func() { a.iterationsEditor(c) })
 			list := func(title string, tasks []model.TaskNode, col ui.Color) {
 				if len(tasks) == 0 {
 					return
@@ -132,7 +125,6 @@ func (a *app) overviewView(c *ui.Context) {
 			}
 			list("已逾期", late, t.Danger)
 			list("7 天内到期", dueSoon, t.Text)
-			list("被阻塞（等待前置任务）", blocked, t.Text)
 			list("近 7 天完成", recent, t.Text)
 			if all == 0 {
 				ui.Text(c, "这个导图还没有任务。选中节点，在右侧勾选「作为任务」即可。").TextColor(t.TextMuted)

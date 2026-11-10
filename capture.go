@@ -388,7 +388,7 @@ func (a *app) trayTitle() string {
 // openSettings opens the settings, with the fields as saved.
 func (a *app) openSettings() {
 	a.settingsOpen = true
-	a.captureKeyDraft, a.ghTokenDraft, a.clipKeyDraft = a.cfg.CaptureKey, a.cfg.GitHubToken, a.cfg.ClipKey
+	a.captureKeyDraft, a.clipKeyDraft = a.cfg.CaptureKey, a.cfg.ClipKey
 	a.shotKeyDraft = a.cfg.ShotKey
 	a.embedDrafts = [3]string{a.cfg.EmbedURL, a.cfg.EmbedKey, a.cfg.EmbedModel}
 	a.syncDrafts = [2]string{a.cfg.SyncRepo, a.cfg.SyncToken}
@@ -470,13 +470,6 @@ func (a *app) settingsView(c *ui.Context) {
 									a.settingsOpen, a.mcpOpen = false, true
 								}
 							})
-						})
-						ui.Field(c, "GitHub Token（同步私有仓库的 issues 需要）", func() {
-							in := ui.TextInput(c.Key("gh-token"), &a.ghTokenDraft).Password().Placeholder("ghp_… 或 github_pat_…").Label("GitHub Token")
-							if in.Submitted() || in.PressedOutside() && a.ghTokenDraft != a.cfg.GitHubToken {
-								a.cfg.GitHubToken = strings.TrimSpace(a.ghTokenDraft)
-								a.cfg.save()
-							}
 						})
 					default:
 						a.projectSection(c)

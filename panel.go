@@ -107,7 +107,6 @@ func (a *app) inspector(c *ui.Context) {
 				ui.Column(c).Padding(0, 16, 16).Gap(12).Children(func() {
 					ui.Divider(c)
 					a.projectSection(c)
-					a.githubSection(c)
 				})
 			}
 		})
@@ -148,7 +147,6 @@ func (a *app) nodePanel(c *ui.Context) {
 			links := shown("links", len(n.Links) > 0 || len(a.backlinks(n.ID)) > 0)
 			image := shown("image", n.Image != nil)
 			files := shown("files", len(n.Files) > 0)
-			plan := n.Task != nil && shown("plan", n.Task.Estimate > 0 || n.Task.Iteration != "" || len(n.Task.After) > 0)
 
 			if n.Task != nil || tags {
 				ui.Column(c.Key("props")).Gap(2).FillWidth().Children(func() {
@@ -200,12 +198,6 @@ func (a *app) nodePanel(c *ui.Context) {
 				})
 			}
 
-			if plan {
-				sectionCard(c, iconLevels, tileBlue, "排期", nil, func() {
-					a.planEditor(c, n)
-				})
-			}
-
 			// What can be added, each a quiet button, gone once it is there.
 			ui.Row(c.Key("panel-add")).Gap(2).Wrap().GapY(2).Margin(0, 0, 0, -8).AlignItems(ui.Center).Children(func() {
 				add := func(text, tip, kind string) {
@@ -228,8 +220,8 @@ func (a *app) nodePanel(c *ui.Context) {
 				if !files {
 					add("＋ 附件", "把文件附在主题上（也可以拖到主题上）", "files")
 				}
-				if n.Task != nil && !plan {
-					add("＋ 排期", "开始日期、估时、所属迭代和前置任务", "plan")
+				if n.Task != nil && n.Task.Start == nil && !a.panelShow[n.ID+":plan"] {
+					add("＋ 开始日期", "这个任务从哪天开始：时间线上显示成一段", "plan")
 				}
 			})
 

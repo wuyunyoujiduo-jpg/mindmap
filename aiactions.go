@@ -99,7 +99,7 @@ func (a *app) aiBreakDown() {
 func (a *app) riskFacts() string {
 	now := a.now()
 	var b strings.Builder
-	var overdue, noDue, ideas, blocked []string
+	var overdue, noDue, ideas []string
 	for _, tn := range a.file.Tasks() {
 		n, t := tn.Node, tn.Node.Task
 		switch {
@@ -112,9 +112,6 @@ func (a *app) riskFacts() string {
 		}
 		if t.Status == model.StatusIdea {
 			ideas = append(ideas, n.Title)
-		}
-		if len(a.file.Blockers(n)) > 0 {
-			blocked = append(blocked, n.Title)
 		}
 	}
 	var bare []string
@@ -129,7 +126,6 @@ func (a *app) riskFacts() string {
 		}
 	}
 	list("已逾期", overdue)
-	list("被阻塞", blocked)
 	list("没有截止日期的待做/进行中任务", noDue)
 	list("停留在「想法」的任务", ideas)
 	list("有 3 个以上下级却没有备注的节点", bare)

@@ -210,15 +210,11 @@ type app struct {
 	noteEditing     string              // the node whose note the popover over the canvas edits
 	noteDocs        map[string]*noteDoc // the notes edited as rich text, by place
 	settingsTab     int
-	tourStep        int    // the step of the tour shown, 0 for none
-	ghBusy          bool   // the issues are being synced
-	ghResult        string // how the last sync went
-	ghTokenDraft    string
+	tourStep        int  // the step of the tour shown, 0 for none
 	templatesOpen   bool // the window of templates
 	fromTextOpen    bool // the window to paste text to make nodes of
 	fromText        string
 	trayAt          time.Time // when the menu bar icon was last brought up to date
-	iterFilter      string    // the iteration the board and timeline show: "" all, "-" none
 	tlWeeks         bool      // the timeline shows weeks rather than days
 	tlDrag          tlDrag
 	tlScroll        ui.ScrollState

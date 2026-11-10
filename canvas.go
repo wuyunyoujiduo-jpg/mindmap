@@ -117,10 +117,6 @@ func (a *app) measure(c *ui.Context) layout.Measure {
 			if !n.HasStatusMarker() {
 				w += checkSize + nodeGap
 			}
-			if a.blocked(n) {
-				mw, _ := a.measureText(c, 0, ui.Span{Text: "🔒", Size: markSize})
-				w += mw + nodeGap
-			}
 		}
 		w += float32(len(n.Markers)) * (markerSize(depth) + nodeGap)
 		for _, tag := range p.tags {
@@ -335,14 +331,6 @@ func (a *app) taskSummary(task *model.Task) string {
 		}
 		parts = append(parts, due)
 	}
-	if task.Estimate > 0 {
-		parts = append(parts, "估时 "+strconv.FormatFloat(task.Estimate, 'f', -1, 64)+" 小时")
-	}
-	if a.file != nil {
-		if it := a.file.Iteration(task.Iteration); it != nil {
-			parts = append(parts, it.Name)
-		}
-	}
 	return strings.Join(parts, " · ")
 }
 
@@ -501,7 +489,6 @@ func (a *app) canvasArea(c *ui.Context) {
 			a.drawBoundaries(p, r, shown, rect.X+cam.X, rect.Y+cam.Y, z, color)
 			drawEdges(p, r, a.doc.Structure, rect.X+cam.X, rect.Y+cam.Y, z, lk.line, view, soft)
 			a.drawSummaries(p, r, shown, rect.X+cam.X, rect.Y+cam.Y, z, color)
-			a.drawDependencies(p, r, rect.X+cam.X, rect.Y+cam.Y, z)
 			a.drawRelations(p, r, rect.X+cam.X, rect.Y+cam.Y, z, ui.Hex("#6366f1"))
 		}
 		if exporting {
@@ -938,13 +925,6 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 		if n.Task != nil {
 			if !n.HasStatusMarker() { // its progress marker shows the status
 				a.taskCheck(c, n, checkSize*z)
-			}
-			if a.blocked(n) {
-				var names []string
-				for _, b := range a.file.Blockers(n) {
-					names = append(names, "「"+b.Title+"」")
-				}
-				ui.Text(c.Key("blocked"), "🔒").FontSize(markSize * z).NoWrap().Tooltip("等待 " + strings.Join(names, "、") + " 完成")
 			}
 		}
 		for _, m := range n.Markers {

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"slices"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -15,7 +14,7 @@ import (
 func (a *app) visibleTasks() []model.TaskNode {
 	var out []model.TaskNode
 	for _, tn := range a.file.Tasks() {
-		if a.highlighted(tn.Node) && a.inIteration(tn.Node) {
+		if a.highlighted(tn.Node) {
 			out = append(out, tn)
 		}
 	}
@@ -33,7 +32,7 @@ func (a *app) keyIssues() []model.TaskNode {
 	for _, d := range a.file.Sheets {
 		var walk func(n *model.Node, parents []string)
 		walk = func(n *model.Node, parents []string) {
-			if slices.Contains(n.Markers, keyMarker) && a.highlighted(n) && (n.Task == nil || a.inIteration(n)) {
+			if slices.Contains(n.Markers, keyMarker) && a.highlighted(n) {
 				out = append(out, model.TaskNode{Node: n, Parents: slices.Clone(parents), Sheet: d})
 			}
 			parents = append(parents, n.Title)
@@ -75,19 +74,9 @@ func sortTasks(tasks []model.TaskNode) {
 // boardView shows the tasks in a column per status; dragging a card to
 // another column changes its status.
 func (a *app) boardView(c *ui.Context) {
-	t := c.Theme()
 	tasks := a.visibleTasks()
 	sortTasks(tasks)
 	ui.Column(c).Grow(1).Children(func() {
-		if a.file != nil && len(a.file.Iterations) > 0 {
-			ui.Row(c).Padding(10, 12, 0).Gap(8).AlignItems(ui.Center).Children(func() {
-				a.iterationPicker(c)
-				if a.iterFilter != "" && a.iterFilter != "-" {
-					done, total, hours := a.iterationProgress(a.iterFilter)
-					ui.Text(c, fmt.Sprintf("%d/%d 完成 · 剩余 %s 小时", done, total, hours)).FontSize(12).TextColor(t.TextMuted)
-				}
-			})
-		}
 		a.boardColumns(c, tasks)
 	})
 }
@@ -150,14 +139,11 @@ func (a *app) boardList(s model.Status) *ui.ListState {
 }
 
 // showOnBoard shows the task with the ID on the board, selected and in
-// view: a filter by iteration that hides it is cleared.
+// view.
 func (a *app) showOnBoard(id string) {
 	n, _ := a.doc.Find(id)
 	if n == nil || n.Task == nil {
 		return
-	}
-	if !a.inIteration(n) {
-		a.iterFilter = ""
 	}
 	a.selectNode(id)
 	a.mode = viewBoard
@@ -271,13 +257,6 @@ func (a *app) taskCard(c *ui.Context, tn model.TaskNode, showStatus bool) {
 				ui.Text(c, task.Priority.Label()).FontSize(11).TextColor(priorityColor(c, task.Priority)).NoWrap()
 			}
 		})
-		if bl := a.file.Blockers(n); len(bl) > 0 && task.Status != model.StatusDone {
-			more := ""
-			if len(bl) > 1 {
-				more = fmt.Sprintf(" 等 %d 项", len(bl))
-			}
-			ui.Text(c, "🔒 等待「"+bl[0].Title+"」"+more).FontSize(11).TextColor(ui.Hex("#d97706")).MaxLines(1)
-		}
 		where := tn.Parents
 		if len(where) > 0 {
 			where = where[1:] // the root says little
@@ -288,16 +267,10 @@ func (a *app) taskCard(c *ui.Context, tn model.TaskNode, showStatus bool) {
 		if len(where) > 0 {
 			ui.Text(c, strings.Join(where, " › ")).FontSize(11).TextColor(t.TextMuted).SingleLine()
 		}
-		if len(n.Tags) > 0 || task.Start != nil || task.Due != nil || task.Estimate > 0 || task.Iteration != "" {
+		if len(n.Tags) > 0 || task.Start != nil || task.Due != nil {
 			ui.Row(c).Wrap().Gap(6).AlignItems(ui.Center).Children(func() {
 				for _, tag := range n.Tags {
 					tagChip(c.Key("tag:"+tag), tag, tag, false, 11).PassThrough()
-				}
-				if task.Estimate > 0 {
-					ui.Text(c, strconv.FormatFloat(task.Estimate, 'f', -1, 64)+"h").FontSize(11).TextColor(t.TextMuted).NoWrap()
-				}
-				if it := a.file.Iteration(task.Iteration); it != nil {
-					ui.Text(c, it.Name).FontSize(11).TextColor(t.Accent).NoWrap()
 				}
 				if d := dateRange(task); d != "" {
 					col := t.TextMuted

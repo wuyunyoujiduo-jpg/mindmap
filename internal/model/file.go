@@ -17,13 +17,15 @@ type File struct {
 	// Project is the folder of the project's code, which relative links
 	// of nodes are in.
 	Project string `json:"project,omitempty"`
-	// GitHub is the repository ("owner/repo") whose issues sync as tasks.
+	// GitHub was the repository ("owner/repo") whose issues the app made
+	// tasks of, before 0.56: kept as written.
 	GitHub string `json:"github,omitempty"`
 	// Baseline is the commit of the project's code the map was last
 	// brought up to date with: updating it, an AI reads what changed
 	// since, not all the code again.
 	Baseline *Baseline `json:"baseline,omitempty"`
-	// Iterations are the periods tasks are planned in, as sprints.
+	// Iterations were the periods tasks were planned in, as sprints, shown
+	// before 0.56: kept as written.
 	Iterations []Iteration `json:"iterations,omitempty"`
 	// Measures were the numbers nodes were measured by, as hours or cost
 	// (Node.Values), which the app showed before 0.55: kept as written.
@@ -46,16 +48,6 @@ type Iteration struct {
 	End   *time.Time `json:"end,omitempty"`
 }
 
-// Iteration returns the iteration with the ID, or nil.
-func (f *File) Iteration(id string) *Iteration {
-	for i := range f.Iterations {
-		if f.Iterations[i].ID == id {
-			return &f.Iterations[i]
-		}
-	}
-	return nil
-}
-
 // Node returns the node with the ID, of any canvas, or nil.
 func (f *File) Node(id string) *Node {
 	if d := f.SheetOf(id); d != nil {
@@ -63,20 +55,6 @@ func (f *File) Node(id string) *Node {
 		return n
 	}
 	return nil
-}
-
-// Blockers are the tasks a task waits on that are not done yet.
-func (f *File) Blockers(n *Node) []*Node {
-	if n.Task == nil {
-		return nil
-	}
-	var out []*Node
-	for _, id := range n.Task.After {
-		if b := f.Node(id); b != nil && b.Task != nil && b.Task.Status != StatusDone {
-			out = append(out, b)
-		}
-	}
-	return out
 }
 
 // NewFile returns a file with one canvas whose root has the given title.

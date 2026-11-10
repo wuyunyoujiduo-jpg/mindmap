@@ -22,7 +22,6 @@ const (
 	paletteMaps
 	paletteSearch
 	paletteLink   // a node to link the node a.linkFrom to
-	paletteAfter  // a task for the task a.linkFrom to wait on
 	paletteMove   // a node to move the nodes selected under
 	paletteClip   // a clip of the library to link the node a.linkFrom to
 	paletteAttach // a node, of any map, to link a.attachRef to
@@ -92,7 +91,6 @@ func (a *app) commands() []command {
 		{"导出为 OPML", "", a.askExportOPML, hasDoc},
 		{"导出任务到日历（.ics）", "", a.askExportICS, hasDoc},
 		{"导出演说为 PDF", "", a.askExportSlides, hasDoc},
-		{"同步 GitHub Issues", "", a.syncGitHub, func() bool { return a.file != nil && a.file.GitHub != "" }},
 		{"历史版本", "⌘⇧H", a.openHistory, hasDoc},
 		{"AI：生成周报", "", func() { a.aiReport(7) }, hasDoc},
 		{"AI：生成日报", "", func() { a.aiReport(1) }, hasDoc},
@@ -180,21 +178,6 @@ func (a *app) paletteItems() []paletteItem {
 			items = append(items, paletteItem{"资料", h.Clip.Label(), cmpOr(h.Clip.Desc, h.Clip.Category), func() {
 				if n := a.file.Node(a.linkFrom); n != nil {
 					a.addLink(n, clipScheme+id)
-				}
-			}})
-		}
-	}
-	if a.paletteMode == paletteAfter && a.file != nil {
-		from := a.file.Node(a.linkFrom)
-		for _, tn := range a.file.Tasks() {
-			n := tn.Node
-			if from == nil || from.Task == nil || n.ID == from.ID || !match(n.Title) || slices.Contains(from.Task.After, n.ID) {
-				continue
-			}
-			id := n.ID
-			items = append(items, paletteItem{"任务", n.Title, strings.Join(tn.Parents, " › "), func() {
-				if f := a.file.Node(a.linkFrom); f != nil {
-					a.addAfter(f, id)
 				}
 			}})
 		}
@@ -466,7 +449,6 @@ func (a *app) paletteView(c *ui.Context) {
 			paletteMaps:   "切换到导图…",
 			paletteSearch: "搜索所有导图里的节点、备注和标签…",
 			paletteLink:   "输入关键词，选择要链接到的节点…",
-			paletteAfter:  "选择要先完成的任务…",
 			paletteMove:   "移到哪个节点下？输入关键词查找，或选择导图的中心主题…",
 			paletteClip:   "在收集里查找要链接的资料…",
 			paletteAttach: "把资料挂到哪个节点？输入关键词查找，或选择建议的节点…",

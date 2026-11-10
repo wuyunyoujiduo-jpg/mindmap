@@ -2373,77 +2373,6 @@ func TestLinks(t *testing.T) {
 	snapshot(t, tt, "mcp")
 }
 
-func TestDependenciesAndIterations(t *testing.T) {
-	a, tt := newTestApp(t)
-	search := find(t, a, "搜索")
-	login := find(t, a, "登录")
-	slow := find(t, a, "列表加载慢")
-	// 搜索 waits on 列表加载慢, through the palette.
-	clickNode(t, tt, a, "搜索")
-	clickInPanel(t, tt, "＋ 排期")
-	tt.Frame()
-	clickInPanel(t, tt, "添加前置任务…")
-	if a.paletteMode != paletteAfter {
-		t.Fatal("not choosing")
-	}
-	tt.Type("列表")
-	tt.Key(0, ui.KeyEnter)
-	if !slices.Equal(search.Task.After, []string{slow.ID}) || !a.blocked(search) {
-		t.Fatalf("after %v", search.Task.After)
-	}
-	// No cycles.
-	a.addAfter(slow, search.ID)
-	if len(slow.Task.After) != 0 || !strings.Contains(a.saveErr, "循环") {
-		t.Fatalf("cycle allowed: %v", slow.Task.After)
-	}
-	tt.Frame()
-	snapshot(t, tt, "depends")
-	// Done unblocks, and notes when.
-	a.setStatus(slow, model.StatusDone)
-	if a.blocked(search) || slow.Task.DoneAt == nil {
-		t.Fatal("still blocked")
-	}
-	a.setStatus(slow, model.StatusTodo)
-	if slow.Task.DoneAt != nil {
-		t.Fatal("done time kept")
-	}
-
-	// Iterations, in the overview.
-	tt.Key(ui.Cmd, ui.Key6)
-	a.mode = viewOverview
-	tt.Frame()
-	if err := tt.Click("＋ 新建迭代"); err != nil {
-		t.Fatal(err)
-	}
-	if len(a.file.Iterations) != 1 || a.file.Iterations[0].Name != "迭代 1" {
-		t.Fatalf("iterations %+v", a.file.Iterations)
-	}
-	it := a.file.Iterations[0]
-	a.mutate("", func() {
-		login.Task.Iteration = it.ID
-		login.Task.Estimate = 3
-		search.Task.Iteration = it.ID
-		search.Task.Estimate = 5
-	})
-	if done, total, hours := a.iterationProgress(it.ID); done != 1 || total != 2 || hours != "5" {
-		t.Fatalf("progress %d/%d %s", done, total, hours)
-	}
-	tt.Frame()
-	if !tt.HasText("1/2 完成 · 剩余 5 小时") {
-		t.Fatalf("texts %q", tt.Texts())
-	}
-	snapshot(t, tt, "overview")
-	// The board shows one iteration.
-	a.mode = viewBoard
-	a.iterFilter = it.ID
-	if got := len(a.visibleTasks()); got != 2 {
-		t.Fatalf("board shows %d", got)
-	}
-	tt.Frame()
-	snapshot(t, tt, "board-iteration")
-	a.iterFilter = ""
-}
-
 func TestTimeline(t *testing.T) {
 	a, tt := newTestApp(t)
 	search := find(t, a, "搜索")
@@ -2770,58 +2699,6 @@ func TestImportExportFormats(t *testing.T) {
 	} else if !errors.Is(err, exec.ErrNotFound) {
 		t.Fatalf("pdfinfo: %v\n%s", err, out)
 	}
-}
-
-func TestGitHubIssues(t *testing.T) {
-	a, tt := newTestApp(t)
-	issues := `[
-		{"number": 3, "title": "登录失败", "state": "open", "html_url": "https://github.com/o/r/issues/3", "body": "复现步骤…", "labels": [{"name": "bug"}]},
-		{"number": 2, "title": "一个 PR", "state": "open", "html_url": "https://github.com/o/r/pull/2", "pull_request": {"url": "x"}},
-		{"number": 1, "title": "旧的", "state": "closed", "html_url": "https://github.com/o/r/issues/1"}
-	]`
-	var auth string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		auth = r.Header.Get("Authorization")
-		if r.URL.Path != "/repos/o/r/issues" {
-			http.NotFound(w, r)
-			return
-		}
-		fmt.Fprint(w, issues)
-	}))
-	defer srv.Close()
-	a.cfg.GitHubAPI, a.cfg.GitHubToken = srv.URL, "ghp_test"
-	a.mutate("", func() { a.file.GitHub = "o/r" })
-	a.syncGitHub()
-	tt.Frame()
-	if auth != "Bearer ghp_test" {
-		t.Fatalf("auth %q", auth)
-	}
-	n := find(t, a, "#3 登录失败")
-	if n.Task.Status != model.StatusTodo || n.Links[0] != "https://github.com/o/r/issues/3" || n.Tags[0] != "bug" || n.Note != "复现步骤…" {
-		t.Fatalf("issue %+v", n)
-	}
-	if _, err := findIn(a.doc, "#2 一个 PR"); err == nil {
-		t.Fatal("pull request synced")
-	}
-	if _, err := findIn(a.doc, "#1 旧的"); err == nil {
-		t.Fatal("closed issue added")
-	}
-	// Closed and renamed on GitHub: followed.
-	issues = `[{"number": 3, "title": "登录偶尔失败", "state": "closed", "html_url": "https://github.com/o/r/issues/3"}]`
-	a.syncGitHub()
-	n = find(t, a, "#3 登录偶尔失败")
-	if n.Task.Status != model.StatusDone || !strings.Contains(a.ghResult, "更新 1") {
-		t.Fatalf("after %+v %q", n.Task, a.ghResult)
-	}
-	// Errors are told.
-	a.mutate("", func() { a.file.GitHub = "o/missing" })
-	a.syncGitHub()
-	if !strings.Contains(a.ghResult, "找不到仓库") {
-		t.Fatalf("result %q", a.ghResult)
-	}
-	a.panelTab = tabCanvas
-	tt.Frame()
-	snapshot(t, tt, "github")
 }
 
 func TestMoreStructures(t *testing.T) {

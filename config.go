@@ -41,10 +41,9 @@ type config struct {
 	CaptureKey string `json:"captureKey,omitempty"`
 	// NoTray hides the menu bar icon.
 	NoTray bool `json:"noTray,omitempty"`
-	// GitHubToken reads the issues of private repositories; GitHubAPI is
-	// the API's address, for GitHub Enterprise ("" is github.com's).
-	GitHubToken string `json:"githubToken,omitempty"`
-	GitHubAPI   string `json:"githubAPI,omitempty"`
+	// GitHubAPI is the address of GitHub's API the sync goes to, for
+	// GitHub Enterprise ("" is github.com's).
+	GitHubAPI string `json:"githubAPI,omitempty"`
 	// NoReminders turns off the notifications of tasks due.
 	NoReminders bool `json:"noReminders,omitempty"`
 	// ClipKey keeps what is on the clipboard in the library, from any

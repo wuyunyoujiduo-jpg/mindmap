@@ -95,12 +95,12 @@ type Task struct {
 	Priority Priority   `json:"priority,omitempty"`
 	Start    *time.Time `json:"start,omitempty"`
 	Due      *time.Time `json:"due,omitempty"`
-	// Estimate is the work it takes, in hours.
-	Estimate float64 `json:"estimate,omitempty"`
-	// After are the IDs of the tasks to finish before this one.
-	After []string `json:"after,omitempty"`
-	// Iteration is the ID of the iteration it is planned in (File.Iterations).
-	Iteration string `json:"iteration,omitempty"`
+	// Estimate (hours of work), After (the tasks to finish before this one)
+	// and Iteration (File.Iterations) were the planning the app showed
+	// before 0.56: kept as written, and shown nowhere.
+	Estimate  float64  `json:"estimate,omitempty"`
+	After     []string `json:"after,omitempty"`
+	Iteration string   `json:"iteration,omitempty"`
 	// DoneAt is when it was marked done.
 	DoneAt *time.Time `json:"doneAt,omitempty"`
 }

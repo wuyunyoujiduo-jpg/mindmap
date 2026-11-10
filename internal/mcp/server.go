@@ -16,7 +16,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -182,11 +181,7 @@ var tools = []tool{
 			"status":       statusProp,
 			"priority":     map[string]any{"type": "string", "enum": []string{"none", "low", "medium", "high"}},
 			"start":        str("Start date as YYYY-MM-DD, or empty to clear."), "due": str("Due date as YYYY-MM-DD, or empty to clear."),
-			"estimate": map[string]any{"type": "number", "description": "The work it takes, in hours."},
-			"add_after": map[string]any{"type": "array", "items": map[string]any{"type": "string"},
-				"description": "Ids of tasks to finish before this one."},
-			"remove_after": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-			"summary":      summaryProp}), nil},
+			"summary": summaryProp}), nil},
 	{"move_node", "Move a node", "Move a node, with all below it, under another node.",
 		schema([]string{"map", "id", "parent_id", "summary"}, map[string]any{"map": mapProp, "id": str("The node to move."),
 			"parent_id": str("The node to move it under."),
@@ -454,12 +449,6 @@ func nodeLine(n *model.Node) string {
 		if n.Task.Due != nil {
 			b.WriteString(" due:" + n.Task.Due.Format("2006-01-02"))
 		}
-		if n.Task.Estimate > 0 {
-			b.WriteString(" est:" + strconv.FormatFloat(n.Task.Estimate, 'f', -1, 64) + "h")
-		}
-		for _, id := range n.Task.After {
-			b.WriteString(" after:" + id)
-		}
 	}
 	for _, t := range n.Tags {
 		b.WriteString(" #" + t)
@@ -668,22 +657,6 @@ func updateNode(f *model.File, id string, args map[string]any) (string, error) {
 			return "", fmt.Errorf("未知的 priority %q", v)
 		}
 		task().Priority = p
-	}
-	if v, ok := args["estimate"].(float64); ok && v >= 0 {
-		task().Estimate = v
-	}
-	for _, id := range links(args["add_after"]) {
-		if f.Node(id) == nil || id == n.ID {
-			return "", fmt.Errorf("前置任务 %q 不存在", id)
-		}
-		if !slices.Contains(task().After, id) {
-			task().After = append(task().After, id)
-		}
-	}
-	for _, id := range links(args["remove_after"]) {
-		if n.Task != nil {
-			n.Task.After = slices.DeleteFunc(n.Task.After, func(x string) bool { return x == id })
-		}
 	}
 	for _, k := range []string{"start", "due"} {
 		v, ok := text(k)
