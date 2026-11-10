@@ -120,6 +120,36 @@ func (a *app) iconSettings(c *ui.Context) {
 	})
 }
 
+// groundSettings lets the color of the window's ground be chosen: the
+// rail's, and with it the shade of the trays.
+func (a *app) groundSettings(c *ui.Context) {
+	t := c.Theme()
+	ui.Field(c, "底色", func() {
+		ui.Column(c).Gap(6).Children(func() {
+			ui.Row(c).Gap(8).Wrap().GapY(8).Children(func() {
+				for _, g := range grounds {
+					on := a.cfg.Ground == g.key
+					box := ui.Row(c.Key("ground:"+g.key)).Height(30).Padding(0, 12, 0, 8).Gap(8).Radius(8).AlignItems(ui.Center).
+						Cursor(ui.CursorPointer).Label("底色 " + g.name)
+					key(box, t)
+					if on {
+						chosenCard(box, t)
+					}
+					if box.Clicked() {
+						a.cfg.Ground = g.key
+						a.cfg.save()
+					}
+					box.Children(func() {
+						ui.Box(c).Size(14, 14).Radius(7).Background(ui.Hex(g.ground)).Border(1, t.Text.Alpha(0.14)).PassThrough()
+						ui.Text(c, g.name).FontSize(textSmall).PassThrough()
+					})
+				}
+			})
+			ui.Text(c, "左边导航栏的颜色，区块的底色跟着变。只在浅色外观下生效。").FontSize(12).TextColor(t.TextMuted).Wrap()
+		})
+	})
+}
+
 // updateSettings shows the version, and checks for a newer one.
 func (a *app) updateSettings(c *ui.Context) {
 	ui.Field(c, "版本", func() {

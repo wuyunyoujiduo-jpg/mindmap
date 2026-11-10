@@ -239,3 +239,31 @@ func TestHomeTicksAndReads(t *testing.T) {
 	}
 	snapshot(t, tt, "home-typed")
 }
+
+// TestGroundChosen: the window's ground is white until another is chosen
+// in the settings, which is kept.
+func TestGroundChosen(t *testing.T) {
+	a, tt := newTestApp(t)
+	a.showLibrary()
+	a.libHome = true
+	tt.Frame()
+	if groundNow().key != "" || ground(a.theme()) != ui.Hex("#FDFDFC") {
+		t.Fatalf("the ground is %q", groundNow().name)
+	}
+	snapshot(t, tt, "ground-white")
+	a.openSettings()
+	tt.Frame()
+	if err := tt.Click("底色 墨色侧栏"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.cfg.Ground != "ink" || loadConfig().Ground != "ink" {
+		t.Fatalf("ground %q", a.cfg.Ground)
+	}
+	a.settingsOpen = false
+	tt.Frame()
+	snapshot(t, tt, "ground-ink")
+	a.cfg.Ground = "violet"
+	tt.Frame()
+	snapshot(t, tt, "ground-violet")
+}

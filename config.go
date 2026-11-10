@@ -14,6 +14,9 @@ type config struct {
 	// PanelOpen shows the panel of the topic chosen beside the canvas: put
 	// away at first, which leaves the canvas the room.
 	PanelOpen bool `json:"panelOpen,omitempty"`
+	// Ground is the color of the window's ground, a key of grounds: ""
+	// is white, as the page.
+	Ground string `json:"ground,omitempty"`
 	// ShowTree shows the maps' folders beside the rail (rail.go).
 	ShowTree bool `json:"showTree,omitempty"`
 	// Favorites are the maps starred, by their paths: first in their

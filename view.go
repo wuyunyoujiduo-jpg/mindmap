@@ -16,6 +16,7 @@ func (a *app) view(c *ui.Context) {
 	if a.noMotion {
 		c.DisableAnimations()
 	}
+	groundKey = a.cfg.Ground
 	t := quietTheme(c.Theme())
 	c.SetTheme(t)
 	a.lastTheme = t
@@ -27,9 +28,7 @@ func (a *app) view(c *ui.Context) {
 	// Selected text shows in the accent color, strong enough on the
 	// panels' gray: the system's highlight (a pale orange, say) hardly did.
 	root := ui.Row(c).Fill().AlignItems(ui.Stretch).SelectionColor(t.Accent.Alpha(0.32))
-	if !c.Vibrancy() { // else the sidebar's glass shows through
-		root.Background(ground(t))
-	}
+	root.Background(ground(t))
 	root.Children(func() {
 		a.rail(c)
 		main := func(fn func()) { ui.Row(c).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Stretch).Children(fn) }

@@ -497,6 +497,7 @@ func switchRow(c *ui.Context, on *bool, label, text string, changed func()) {
 func (a *app) generalSettings(c *ui.Context) {
 	t := c.Theme()
 	a.iconSettings(c)
+	a.groundSettings(c)
 	a.updateSettings(c)
 	a.shotSettings(c)
 	ui.Field(c, "全局快捷键", func() {

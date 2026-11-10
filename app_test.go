@@ -2525,6 +2525,8 @@ func TestTrayAndSettings(t *testing.T) {
 	// Settings: the capture shortcut.
 	a.settingsOpen = true
 	tt.Frame()
+	tt.Scroll(720, 400, 0, 160) // the shortcuts are under the icon and the ground
+	tt.Frame()
 	if err := tt.Click("快速记录快捷键"); err != nil {
 		t.Fatal(err)
 	}

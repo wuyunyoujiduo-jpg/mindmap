@@ -89,7 +89,62 @@ func ground(t *ui.Theme) ui.Color {
 	if t.Dark {
 		return ui.Hex("#131211")
 	}
-	return ui.Hex("#EEEDE9")
+	return ui.Hex(groundNow().ground)
+}
+
+// A groundLook is a color the window's ground may take, in the light
+// theme, with the leaf and the trays that go with it. The ink's has the
+// rail dark, its words light.
+type groundLook struct {
+	key, name          string
+	ground, tray, leaf string
+	dark               bool // the rail's words are light on it
+}
+
+// grounds are the grounds to choose from in the settings; the first, the
+// leaf's own white, is the one taken until another is chosen.
+var grounds = []groundLook{
+	{"", "纯白", "#FDFDFC", "#F5F4F2", "#FDFDFC", false},
+	{"gray", "暖灰", "#EEEDE9", "#F2F1EE", "#FDFDFC", false},
+	{"violet", "淡紫", "#ECEBF7", "#F3F2F9", "#FEFEFF", false},
+	{"blue", "淡蓝", "#E9EEF5", "#F1F4F8", "#FEFEFF", false},
+	{"cream", "米色", "#F3EEE6", "#F6F2EB", "#FEFCF9", false},
+	{"ink", "墨色侧栏", "#1F1E24", "#F2F1EE", "#FDFDFC", true},
+}
+
+// groundKey is the ground chosen (config.Ground), set as each frame begins.
+var groundKey string
+
+func groundNow() groundLook {
+	for _, g := range grounds {
+		if g.key == groundKey {
+			return g
+		}
+	}
+	return grounds[0]
+}
+
+// railInks are the rail's colors on the ground: its words chosen and not,
+// and the shades of the part shown and of the one under the pointer.
+func railInks(t *ui.Theme) (ink, muted, on, hover ui.Color) {
+	g := groundNow()
+	switch {
+	case !t.Dark && g.dark:
+		return ui.Hex("#FFFFFF"), ui.Hex("#A9A7B4"), ui.RGBA(255, 255, 255, 0.13), ui.RGBA(255, 255, 255, 0.07)
+	case !t.Dark && g.key == "violet":
+		return ui.Hex("#3F3FB0"), t.TextMuted, t.Accent.Alpha(0.13), t.Text.Alpha(0.04)
+	}
+	return t.Text, t.TextMuted, t.Text.Alpha(0.075), t.Text.Alpha(0.04)
+}
+
+// sideGround is what the maps' list stands on: the ground, or, where the
+// ground is dark under a light page, the trays' shade, its words being
+// the page's.
+func sideGround(t *ui.Theme) ui.Color {
+	if g := groundNow(); !t.Dark && g.dark {
+		return ui.Hex(g.tray)
+	}
+	return ground(t)
 }
 
 // cardEdge is the thin ring a card is told by.
@@ -509,9 +564,6 @@ func softButton(c *ui.Context, text, tip string) ui.Element {
 // and for the AI, used sparingly. Color is kept for small things that
 // mean something: a map's dot, a kind's pill.
 func quietTheme(base *ui.Theme) *ui.Theme {
-	if base.Accent == ui.Hex("#5B5BD6") || base.Accent == ui.Hex("#9A9AF2") {
-		return base // already ours
-	}
 	t := *base
 	if t.Dark {
 		t.Background, t.Surface = ui.Hex("#1B1A18"), ui.Hex("#232120")
@@ -521,7 +573,8 @@ func quietTheme(base *ui.Theme) *ui.Theme {
 		t.Accent, t.AccentHover, t.AccentPressed = ui.Hex("#9A9AF2"), ui.Hex("#ABABF5"), ui.Hex("#8585E6")
 		t.Danger = ui.Hex("#F0806A")
 	} else {
-		t.Background, t.Surface = ui.Hex("#FDFDFC"), ui.Hex("#F2F1EE")
+		g := groundNow()
+		t.Background, t.Surface = ui.Hex(g.leaf), ui.Hex(g.tray)
 		t.SurfaceHover, t.SurfacePressed = ui.Hex("#EAE8E4"), ui.Hex("#E1DFDA")
 		t.Border = ui.Hex("#E4E2DD")
 		t.Text, t.TextMuted = ui.Hex("#1C1B19"), ui.Hex("#6F6B65")

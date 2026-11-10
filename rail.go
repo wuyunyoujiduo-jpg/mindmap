@@ -20,22 +20,22 @@ func (a *app) rail(c *ui.Context) {
 	// over the rail and what is beside it keeps clear of them.
 	a.railNow = max(railWidth, bar.Left+12)
 	col := ui.Column(c.Key("rail")).Width(a.railNow).Shrink(0).FillHeight().AlignItems(ui.Center).Padding(0, 0, 10).Gap(4)
-	if !c.Vibrancy() {
-		col.Background(ground(t))
-	}
+	col.Background(ground(t)) // the ground chosen, not the system's glass
+	railInk, railMuted, railOn, railHover := railInks(t)
 	page := a.libOpen
 	item := func(key string, kind int, label, count, tip string, on bool, click func()) {
 		b := ui.Column(c.Key("rail:"+key)).Width(62).Padding(9, 0, 7).Gap(4).Radius(12).AlignItems(ui.Center).
 			Cursor(ui.CursorPointer).Label(label).Tooltip(tip)
 		// Quiet lines in the muted ink; the part shown in the ink, on a
 		// shade of the rail.
-		ink, text := t.TextMuted, t.TextMuted
+		ink, text := railMuted, railMuted
+		b.Background(railOn.Alpha(0)).Transition(easeLook)
 		switch {
 		case on:
-			b.Background(t.Text.Alpha(0.075))
-			ink, text = t.Text, t.Text
+			b.Background(railOn)
+			ink, text = railInk, railInk
 		case b.Hovered():
-			b.Background(t.Text.Alpha(0.04))
+			b.Background(railHover)
 		}
 		if b.Clicked() {
 			a.later(click)
@@ -81,12 +81,12 @@ func (a *app) rail(c *ui.Context) {
 		foot := func(kind int, label, tip string, click func()) {
 			b := ui.Box(c.Key("rail-foot:"+label)).Size(40, 40).Radius(12).Cursor(ui.CursorPointer).Label(label).Tooltip(tip)
 			if b.Hovered() {
-				b.Background(t.Text.Alpha(0.05))
+				b.Background(railHover)
 			}
 			if b.Clicked() {
 				a.later(click)
 			}
-			b.Draw(func(p *ui.Painter, r ui.Rect) { drawRailIcon(p, r, 21, kind, t.TextMuted) })
+			b.Draw(func(p *ui.Painter, r ui.Rect) { drawRailIcon(p, r, 21, kind, railMuted) })
 		}
 		foot(railSearch, "搜索全部", "搜索导图、主题、灵感和资料，#标签 按标签找（⌘K）", func() { a.openPalette(paletteAll) })
 		foot(railGear, "设置", "设置（⌘,）", a.openSettings)

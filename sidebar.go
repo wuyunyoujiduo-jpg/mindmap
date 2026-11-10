@@ -23,9 +23,7 @@ type fileDrag struct {
 func (a *app) sidebar(c *ui.Context) {
 	t := c.Theme()
 	side := ui.Column(c).Fill()
-	if !c.Vibrancy() {
-		side.Background(ground(t))
-	}
+	side.Background(sideGround(t))
 	side.Children(func() {
 		// One row, as high as the toolbar beside it: what the list is, the
 		// button that puts it away, and what is new. The folder the maps are

@@ -28,7 +28,9 @@ by AI, and an AI assistant.
   centered; the rail's and the lists' are one family of thin lines,
   `drawRailIcon`). It is laid out as Detent's components are
   (detentui.com, whose tokens `design.go` follows): the window is a quiet
-  ground (`ground`) the rail and the maps' list stand on; what is read and
+  ground (`ground`: white as the page unless another of `grounds` is
+  chosen in the settings, `config.Ground`) the rail and the maps' list
+  stand on; what is read and
   worked on is a leaf on it (`view.go`), near white, its corners round; a
   part of a page is a tray (`tray`, `trayHead`), a shade darker than the
   leaf, with its heading on it and what it holds in a white card
