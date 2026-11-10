@@ -228,6 +228,53 @@ func (a *app) paletteItems() []paletteItem {
 			}})
 		}
 	}
+	// #标签: what carries the tag, wherever it is: notes and clips of the
+	// collection, and topics of every map.
+	if tag, ok := strings.CutPrefix(strings.TrimSpace(a.paletteQuery), "#"); ok && a.paletteMode == paletteAll {
+		tag = strings.ToLower(strings.TrimSpace(tag))
+		items = nil // a tag is asked for: the commands and names give way
+		has := func(tags []string) bool {
+			for _, x := range tags {
+				if x := strings.ToLower(x); tag != "" && (x == tag || strings.HasPrefix(x, tag)) {
+					return true
+				}
+			}
+			return false
+		}
+		if a.lib != nil {
+			for _, cl := range a.lib.Clips {
+				if len(items) >= 60 {
+					break
+				}
+				if has(cl.Tags) || has(memoTags(cl.Text)) {
+					id, kind := cl.ID, "资料"
+					if isMemo(cl) {
+						kind = "灵感"
+					}
+					items = append(items, paletteItem{kind, firstSentence(cl.Label()), "#" + strings.Join(cl.Tags, " #"), func() { a.showClip(id) }})
+				}
+			}
+		}
+		for _, f := range a.files {
+			file := a.file
+			if f.Path != a.path {
+				file = a.indexed(f.Path)
+			}
+			if file == nil {
+				continue
+			}
+			for _, d := range file.Sheets {
+				d.Walk(func(n, _ *model.Node, _ int) bool {
+					if len(items) < 200 && has(n.Tags) {
+						path, sheet, id := f.Path, d.ID, n.ID
+						items = append(items, paletteItem{"主题", n.Title, mapName(path) + " · #" + strings.Join(n.Tags, " #"), func() { a.goToNode(path, sheet, id) }})
+					}
+					return true
+				})
+			}
+		}
+		return items
+	}
 	if a.paletteMode == paletteMove && q == "" { // the maps' roots
 		for _, f := range a.recentFiles() {
 			file := a.file
@@ -416,7 +463,7 @@ func (a *app) paletteView(c *ui.Context) {
 			a.paletteIndex = max(len(items)-1, 0)
 		}
 		placeholder := map[int]string{
-			paletteAll:    "输入命令、节点或导图名…",
+			paletteAll:    "搜索导图、主题、灵感和资料，#标签 按标签找，或输入命令…",
 			paletteMaps:   "切换到导图…",
 			paletteSearch: "搜索所有导图里的节点、备注和标签…",
 			paletteLink:   "输入关键词，选择要链接到的节点…",

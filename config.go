@@ -11,6 +11,8 @@ import (
 type config struct {
 	Dir  string `json:"dir"`  // the folder of mind maps shown in the sidebar
 	File string `json:"file"` // the map open last
+	// ShowTree shows the maps' folders beside the rail (rail.go).
+	ShowTree bool `json:"showTree,omitempty"`
 	// Favorites are 快捷访问, first in the sidebar, in the order put there:
 	// maps by their paths, documents as "clip:<id>".
 	Favorites []string `json:"favorites,omitempty"`

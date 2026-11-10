@@ -11,6 +11,9 @@ import (
 type File struct {
 	Version int         `json:"version"`
 	Sheets  []*Document `json:"sheets"`
+	// Color is the map's own color ("#RRGGBB"), which its tasks and what
+	// comes from it are marked with; "" is one chosen by its name.
+	Color string `json:"color,omitempty"`
 	// Project is the folder of the project's code, which relative links
 	// of nodes are in.
 	Project string `json:"project,omitempty"`

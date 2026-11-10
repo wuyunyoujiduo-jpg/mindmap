@@ -221,29 +221,56 @@ func pageHead(c *ui.Context, title, count, link string) bool {
 	return clicked
 }
 
-// quietTheme is the app's palette over the system's theme: warm grays for
-// the text and the lines, and coral, the icon's color, for what acts.
+// quietTheme is the app's palette over the system's theme: a warm white
+// ground with white cards on it, an ink of deep blue, and indigo for what
+// acts; the colors of the maps carry the meaning (mapColor).
 func quietTheme(base *ui.Theme) *ui.Theme {
-	if base.Accent == ui.Hex("#D4705F") || base.Accent == ui.Hex("#E0846F") {
+	if base.Accent == ui.Hex("#4F5BFF") || base.Accent == ui.Hex("#8690FF") {
 		return base // already ours
 	}
 	t := *base
 	if t.Dark {
-		t.Background, t.Surface = ui.Hex("#1C1C1E"), ui.Hex("#252527")
-		t.SurfaceHover, t.SurfacePressed = ui.Hex("#2F2F32"), ui.Hex("#38383C")
-		t.Border = ui.Hex("#3A3A3D")
-		t.Text, t.TextMuted = ui.Hex("#EDEDEF"), ui.Hex("#9C9CA3")
-		t.Accent, t.AccentHover, t.AccentPressed = ui.Hex("#E0846F"), ui.Hex("#E89786"), ui.Hex("#C9715D")
+		t.Background, t.Surface = ui.Hex("#17181F"), ui.Hex("#20222C")
+		t.SurfaceHover, t.SurfacePressed = ui.Hex("#2A2D39"), ui.Hex("#343746")
+		t.Border = ui.Hex("#343746")
+		t.Text, t.TextMuted = ui.Hex("#ECEDF3"), ui.Hex("#9A9DB0")
+		t.Accent, t.AccentHover, t.AccentPressed = ui.Hex("#8690FF"), ui.Hex("#99A1FF"), ui.Hex("#6F7AF5")
+		t.Danger = ui.Hex("#FF8A70")
 	} else {
-		t.Surface, t.SurfaceHover, t.SurfacePressed = ui.Hex("#F5F4F1"), ui.Hex("#ECEAE6"), ui.Hex("#E3E1DC")
-		t.Border = ui.Hex("#E3E1DC")
-		t.Text, t.TextMuted = ui.Hex("#1D1D1F"), ui.Hex("#76767C")
-		t.Accent, t.AccentHover, t.AccentPressed = ui.Hex("#D4705F"), ui.Hex("#C4604F"), ui.Hex("#B4574A")
+		t.Background, t.Surface = ui.Hex("#FBFAF7"), ui.Hex("#F3F1EC")
+		t.SurfaceHover, t.SurfacePressed = ui.Hex("#EAE7E0"), ui.Hex("#E0DDD5")
+		t.Border = ui.Hex("#E6E3DC")
+		t.Text, t.TextMuted = ui.Hex("#1F2233"), ui.Hex("#5A5D70")
+		t.Accent, t.AccentHover, t.AccentPressed = ui.Hex("#4F5BFF"), ui.Hex("#3F4AE6"), ui.Hex("#3340D6")
+		t.Danger = ui.Hex("#D9482B")
 	}
 	t.AccentText = ui.Hex("#FFFFFF")
+	t.Success = ui.Hex("#12B886")
 	t.Selection = t.Accent.Alpha(0.25)
 	t.Focus = t.Accent.Alpha(0.5)
 	return &t
+}
+
+// cardColor is the fill of a card on the page: white on the warm ground,
+// or, dark, a little lighter than it.
+func cardColor(t *ui.Theme) ui.Color {
+	if t.Dark {
+		return t.Surface
+	}
+	return ui.Hex("#FFFFFF")
+}
+
+// mapPalette are the colors maps take: coral, amber, green, blue, purple
+// and rose, as bright as each other.
+var mapPalette = []string{"#FF6B4A", "#F5A300", "#12B886", "#2D9CDB", "#9B5DE5", "#E64980"}
+
+// tinted is a color as a light fill and as a deep ink to write on it: a
+// chip of the color that reads.
+func tinted(t *ui.Theme, col ui.Color) (bg, ink ui.Color) {
+	if t.Dark {
+		return col.Alpha(0.22), col.MixOklab(t.Text, 0.45)
+	}
+	return col.Alpha(0.14), col.MixOklab(t.Text, 0.5)
 }
 
 // tabGroup is a few tabs in a gray box, the one chosen raised on white,

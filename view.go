@@ -28,7 +28,16 @@ func (a *app) view(c *ui.Context) {
 		root.Background(t.Background)
 	}
 	root.Children(func() {
-		ui.Split(c, &a.sidebarWidth, func() { a.sidebar(c) }, func() {
+		a.rail(c)
+		main := func(fn func()) { ui.Row(c).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Stretch).Children(fn) }
+		if a.cfg.ShowTree {
+			main = func(fn func()) {
+				ui.Row(c).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Stretch).Children(func() {
+					ui.Split(c, &a.sidebarWidth, func() { a.sidebar(c) }, fn).Fill()
+				})
+			}
+		}
+		main(func() {
 			ui.Row(c).Fill().AlignItems(ui.Stretch).Background(t.Background).Children(func() {
 				if a.libOpen {
 					if a.auto.open {
@@ -88,7 +97,7 @@ func (a *app) view(c *ui.Context) {
 					a.panel(c)
 				}
 			})
-		}).Fill()
+		})
 		if a.lightbox != "" && a.doc != nil {
 			a.lightboxView(c)
 		}
@@ -128,7 +137,7 @@ func (a *app) panelResizer(c *ui.Context) {
 		if dx, _, ok := edge.Dragged(); ok {
 			a.resizingPanel = true
 			w, _ := c.Size()
-			a.panelWidth = max(min(a.panelWidth-dx, 720, w-a.sidebarWidth-360), panelMin)
+			a.panelWidth = max(min(a.panelWidth-dx, 720, w-a.sideWidth()-360), panelMin)
 		} else if a.resizingPanel {
 			a.resizingPanel = false
 			a.cfg.PanelWidth = a.panelWidth
@@ -187,7 +196,7 @@ func (a *app) toolbar(c *ui.Context) {
 	// The room between the sidebar and the panel: the status gives way
 	// first, then the search narrows, and the buttons keep their size.
 	w, _ := c.Size()
-	room := w - a.sidebarWidth - a.panelWidth
+	room := w - a.sideWidth() - a.panelWidth
 	if a.aiBeside(c) {
 		room -= a.panelWidth + 1
 	}
@@ -203,7 +212,13 @@ func (a *app) toolbar(c *ui.Context) {
 			return
 		}
 		ui.Column(c).Gap(1).Shrink(1).MinWidth(40).Children(func() {
-			ui.Text(c, mapName(a.path)).Bold().FontSize(textTitle).NoWrap().MaxWidth(240).Ellipsis("…")
+			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+				// The map's color, which a click changes.
+				dot := ui.Box(c.Key("map-color")).Size(14, 14).Radius(5).Background(a.mapColor(a.path)).Shrink(0).
+					Cursor(ui.CursorPointer).Label("导图颜色").Tooltip("这张导图的颜色：它的任务、从它来的东西都带这个颜色")
+				dot.Menu(a.mapColorMenu)
+				ui.Text(c, mapName(a.path)).Bold().FontSize(textTitle).NoWrap().MaxWidth(240).Ellipsis("…")
+			})
 			status, col := "已自动保存", t.TextMuted
 			switch {
 			case a.saveErr != "":
@@ -362,7 +377,7 @@ const aiBesideCanvas = 640
 // aiBeside tells whether the AI shows in a column beside the inspector.
 func (a *app) aiBeside(c *ui.Context) bool {
 	w, _ := c.Size()
-	return a.aiOpen && a.doc != nil && !a.libOpen && w-a.sidebarWidth-2*a.panelWidth-1 >= aiBesideCanvas
+	return a.aiOpen && a.doc != nil && !a.libOpen && w-a.sideWidth()-2*a.panelWidth-1 >= aiBesideCanvas
 }
 
 // panelShown tells whether the right panel shows: not turned off (⌥⌘I),
@@ -372,5 +387,5 @@ func (a *app) panelShown(c *ui.Context) bool {
 		return true
 	}
 	w, _ := c.Size()
-	return !a.panelOff && w-a.sidebarWidth-a.panelWidth >= panelMinCanvas
+	return !a.panelOff && w-a.sideWidth()-a.panelWidth >= panelMinCanvas
 }

@@ -32,8 +32,7 @@ func (a *app) sidebar(c *ui.Context) {
 		// The title bar's part over the sidebar holds the window's controls;
 		// under it the folder of maps, whose menu opens another, then the
 		// search of everything and what is new.
-		bar := c.TitleBar()
-		ui.Row(c.Key("side-bar")).Height(max(bar.Height, 38)).Shrink(0).DragWindow()
+		ui.Row(c.Key("side-bar")).Height(14).Shrink(0).DragWindow()
 		folder := ui.Row(c.Key("folder-switch")).Height(32).Padding(0, 8).Margin(0, 8, 0).Gap(8).Radius(8).AlignItems(ui.Center).
 			Cursor(ui.CursorPointer).Label("切换文件夹").Tooltip(a.dir)
 		if folder.Hovered() {
@@ -57,19 +56,7 @@ func (a *app) sidebar(c *ui.Context) {
 			ui.Text(c, "⌄").FontSize(textSmall).TextColor(t.TextMuted).PassThrough()
 		})
 		ui.Row(c.Key("side-search")).Padding(8, 10, 10).Gap(6).AlignItems(ui.Center).Children(func() {
-			search := ui.Row(c.Key("side-search-box")).Height(30).Grow(1).Padding(0, 10).Gap(6).Radius(8).AlignItems(ui.Center).
-				Background(t.Text.Alpha(0.06)).Cursor(ui.CursorPointer).Label("搜索全部").Tooltip("搜索导图、任务、灵感和资料，或执行命令（⌘K）")
-			if search.Hovered() {
-				search.Background(t.Text.Alpha(0.09))
-			}
-			if search.Clicked() {
-				a.later(func() { a.openPalette(paletteAll) })
-			}
-			search.Children(func() {
-				glyph(c, iconSearch, 14, t.TextMuted)
-				ui.Text(c, "搜索").FontSize(textBody).TextColor(t.TextMuted).Grow(1).PassThrough()
-				ui.Text(c, "⌘K").FontSize(textCaption).TextColor(t.TextMuted).PassThrough()
-			})
+			ui.Spacer(c)
 			iconButton(c, iconPlus, "新建", "新建导图、文件夹，或导入", 30, true).Menu(func(m *ui.Menu) {
 				if m.Item("新建导图").Shortcut(ui.Cmd, ui.KeyN).Chosen() {
 					a.later(a.newMap)
@@ -98,11 +85,6 @@ func (a *app) sidebar(c *ui.Context) {
 			list := ui.Column(c.Key("side-list")).Padding(0, 6, 12).Gap(2).FillWidth().Label("侧栏").FocusBind(&a.sideFocus, "side")
 			a.sideKeys(list)
 			list.Children(func() {
-				a.homeRow(c)
-				a.tasksRow(c)
-				a.memosRow(c)
-				a.libraryRow(c) // the documents, links and pictures
-				a.autoRow(c)
 				a.favorites(c)
 				a.section(c, "导图", &a.filesOpen, a.dir, func() {
 					a.folderContents(c, a.tree, 0)
@@ -111,10 +93,6 @@ func (a *app) sidebar(c *ui.Context) {
 		})
 		ui.Row(c.Key("side-foot")).Padding(6, 8).Gap(2).AlignItems(ui.Center).BorderWidth(1, 0, 0, 0).BorderColor(hairline(t)).Children(func() {
 			a.syncFoot(c)
-			ui.Spacer(c)
-			if iconButton(c, iconGear, "设置", "设置（⌘,）", 28, true).Clicked() {
-				a.later(a.openSettings)
-			}
 		})
 	})
 	switch ui.AlertDialog(c, &a.confirmDelete, "把「"+mapName(a.deletePath)+"」移到废纸篓？", "可以在废纸篓中找回。", "取消", "移到废纸篓") {

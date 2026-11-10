@@ -59,6 +59,9 @@ type Clip struct {
 	Analysis  string     `json:"analysis,omitempty"`
 	Organized *time.Time `json:"organized,omitempty"`
 	Starred   bool       `json:"starred,omitempty"`
+	// Kept says the clip stays in the collection: it is not offered a
+	// place on a map again.
+	Kept bool `json:"kept,omitempty"`
 	// Folder is the folder of maps the clip is kept in, as a document
 	// beside the maps: its path relative to the maps folder, with
 	// slashes, "." for the maps folder itself; "" for none.

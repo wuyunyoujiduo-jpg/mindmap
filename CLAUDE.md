@@ -23,19 +23,22 @@ by AI, and an AI assistant.
 
 ## Notes
 
-- The UI's look is in `design.go` (sizes, helpers) and `icons.go` (icons
-  drawn as lines, not glyphs, so that they sit centered). It is quiet, as
-  Things or Craft: muted colors (`style.go`'s default scheme, the kinds'
-  colors in `home.go`, tags and markers), icons as lines in a muted shade
-  rather than on colored tiles (`tile`), parts under hairlines rather than
-  in gray cards (`section`), the row chosen on a neutral gray (`chosen`),
-  the accent kept for what acts. On the canvas only the central topic is
-  solid; main topics are tinted, the topics below them a faint gray.
+- The UI's look is in `design.go` (sizes, helpers, the theme of
+  `quietTheme`) and `icons.go` (icons drawn, not glyphs, so that they sit
+  centered). The page is a warm white with white cards on it (`cardColor`),
+  the ink a deep blue, indigo for what acts. Colors carry meaning: each map
+  has its own (`mapcolor.go`), which marks its card, its tasks and what was
+  put on it, shown as a dot or a tint with a deep ink (`tinted`). A narrow
+  rail has the app's parts (`rail.go`), the maps' folders beside it when
+  asked; the desk (`today.go`) is the first page: write it down, today's
+  tasks, what waits for a place. Design drafts are in the Design artifact
+  the user reviews before a page is built.
 - The app's icon is drawn by `tools/icon/`; `resources/icon.png` is the
-  vivid note, coral (`tools/icon/vivid.py`: a large white note, a task on
-  it ticked, the AI's spark, on a bright color, to stand out in the Dock), and `appicons/` the icons to choose in
-  the settings (the vivid note in three colors, the knowledge cards of
-  `bold.py`, the orbit), with their menu bar icons (`tray.py`).
+  desk (`tools/icon/desk.py`: a white note on the app's indigo, three lines
+  each led by a dot of a map's color, the last ticked, the AI's spark), and
+  `appicons/` the icons to choose in the settings (the desk, the vivid note
+  of `vivid.py` in three colors, the knowledge cards of `bold.py`, the
+  orbit), with their menu bar icons (`tray.py`).
 - The semantic search model is a plugin downloaded from the public
   `mindmap-models` repository (`plugin.go`).
 - Auto-updates: `mygo.json`'s `updates` and MyGo's updater plugin. Releases

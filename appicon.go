@@ -21,8 +21,9 @@ var appIconFiles embed.FS
 type appIcon struct{ key, name, file, tray string }
 
 var appIcons = []appIcon{
-	{"", "珊瑚", "appicons/vivid.png", "appicons/tray-vivid.png"},
-	{"vivid-blue", "靛蓝", "appicons/vivid-blue.png", "appicons/tray-vivid.png"},
+	{"", "工作台", "appicons/desk.png", "appicons/tray-vivid.png"},
+	{"vivid-coral", "珊瑚", "appicons/vivid.png", "appicons/tray-vivid.png"},
+	{"vivid-blue", "深蓝", "appicons/vivid-blue.png", "appicons/tray-vivid.png"},
 	{"vivid-teal", "青绿", "appicons/vivid-teal.png", "appicons/tray-vivid.png"},
 	{"cards", "知识卡片", "appicons/cards.png", "appicons/tray-cards.png"},
 	{"orbit", "知识星图", "appicons/orbit.png", "appicons/tray-orbit.png"},
@@ -113,7 +114,7 @@ func (a *app) iconSettings(c *ui.Context) {
 					})
 				}
 			})
-			ui.Text(c, "换上的图标在程序坞（Windows 是任务栏）和菜单栏里显示；访达和启动台里仍是默认的「珊瑚」。").
+			ui.Text(c, "换上的图标在程序坞（Windows 是任务栏）和菜单栏里显示；访达和启动台里仍是默认的「工作台」。").
 				FontSize(12).TextColor(t.TextMuted).Wrap()
 		})
 	})

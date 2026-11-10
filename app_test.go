@@ -98,8 +98,9 @@ func newTestApp(t *testing.T) (*app, *ui.Tester) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	dir := t.TempDir()
 	clock = func() time.Time { return testNow }
-	a := newApp(&fakePlatform{}, config{Dir: dir})
-	a.noLocalModel = true // the built-in model only where a test asks for it
+	a := newApp(&fakePlatform{}, config{Dir: dir, ShowTree: true})
+	a.noLocalModel = true       // the built-in model only where a test asks for it
+	a.sidebarWidth -= railWidth // the rail and the maps' list in the room the tests' places count on
 	if a.doc == nil {
 		t.Fatal("no map opened")
 	}
@@ -1346,7 +1347,7 @@ func TestToolbarFitsNarrowWindow(t *testing.T) {
 			t.Fatalf("width %d: no AI", w)
 		}
 		right := float32(w) // the panel hides in a narrow window
-		if float32(w)-a.sidebarWidth-a.panelWidth >= panelMinCanvas {
+		if float32(w)-a.sideWidth()-a.panelWidth >= panelMinCanvas {
 			right -= a.panelWidth
 		}
 		if redo.X+redo.W > right {
@@ -3087,7 +3088,7 @@ func TestChooseAppIcon(t *testing.T) {
 	if a.cfg.Icon != "orbit" || !bytes.Equal(fp.icon, appIconPNG("orbit")) || !bytes.Equal(fp.tray, trayIcon("orbit")) {
 		t.Fatalf("icon %q, %d bytes set", a.cfg.Icon, len(fp.icon))
 	}
-	if err := tt.Click("图标 珊瑚"); err != nil { // the default
+	if err := tt.Click("图标 工作台"); err != nil { // the default
 		t.Fatal(err)
 	}
 	tt.Frame()

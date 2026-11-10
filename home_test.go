@@ -18,14 +18,14 @@ func TestHome(t *testing.T) {
 		}
 		clip.Created = testNow.Add(-time.Duration(i) * time.Hour)
 	}
-	if err := tt.Click("今天"); err != nil {
+	if err := tt.Click("工作台"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
 	if !a.libOpen || !a.libHome {
-		t.Fatal("今天 not shown")
+		t.Fatal("工作台 not shown")
 	}
-	for _, want := range []string{greeting(testNow), dateLabel(testNow), "今天要做", "最近记下的", "最近打开的导图", "导图 使用指南"} {
+	for _, want := range []string{greeting(testNow), dateLabel(testNow), "今天要做", "待归位", "我的导图", "导图 使用指南", "留在收集 资料 0"} {
 		if !tt.HasText(want) {
 			t.Fatalf("no %q: %q", want, tt.Texts())
 		}
@@ -49,8 +49,20 @@ func TestHome(t *testing.T) {
 		t.Fatalf("no note: %d", len(a.lib.Clips))
 	}
 	snapshot(t, tt, "home-filled")
+	// The task waits for a place, the note too; a clip said to stay in the
+	// collection waits no more.
+	if n := len(a.waiting()); n != 6 {
+		t.Fatalf("waiting %d", n)
+	}
+	if err := tt.Click("留在收集 灵感来了"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !a.lib.Clips[0].Kept || len(a.waiting()) != 5 {
+		t.Fatalf("kept %v, waiting %d", a.lib.Clips[0].Kept, len(a.waiting()))
+	}
 
-	// A map leads to it; 打开任务 to the tasks.
+	// A map leads to it; 全部任务 to the tasks.
 	if err := tt.Click("导图 使用指南"); err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +73,7 @@ func TestHome(t *testing.T) {
 	a.showLibrary()
 	a.libHome = true
 	tt.Frame()
-	if err := tt.Click("打开任务 今天要做"); err != nil {
+	if err := tt.Click("全部任务 今天要做"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
@@ -117,5 +129,20 @@ func TestMidEllipsis(t *testing.T) {
 	s := midEllipsis("资料 6：关于工作的一些记录和后续安排", 120)
 	if []rune(s)[0] != '资' || !strings.HasSuffix(s, "安排") || !strings.Contains(s, "…") {
 		t.Fatalf("cut %q", s)
+	}
+}
+
+// #标签 in the palette finds what carries the tag: notes, clips, topics.
+func TestPaletteTag(t *testing.T) {
+	a, _ := newTestApp(t)
+	a.addMemo("列表可以用虚拟滚动 #性能", "灵感")
+	a.addMemo("周末去爬山", "灵感")
+	a.paletteMode, a.paletteQuery = paletteAll, "#性能"
+	var kinds []string
+	for _, it := range a.paletteItems() {
+		kinds = append(kinds, it.kind+":"+it.title)
+	}
+	if len(kinds) != 2 || kinds[0] != "灵感:列表可以用虚拟滚动 #性能" || kinds[1] != "主题:列表加载慢" {
+		t.Fatalf("items %q", kinds)
 	}
 }
