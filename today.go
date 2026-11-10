@@ -474,15 +474,18 @@ func (a *app) waitingCard(c *ui.Context, w waitingItem, i int) {
 			}
 		})
 		words, site := titleAndSite(full)
-		if site != "" || w.clip != nil && len(w.clip.Tags) > 0 {
+		var tags []string // those its words do not already say
+		if w.clip != nil {
+			for _, tag := range w.clip.Tags {
+				if !strings.Contains(full, "#"+tag) && len(tags) < 3 {
+					tags = append(tags, tag)
+				}
+			}
+		}
+		if site != "" || len(tags) > 0 {
 			ui.Row(c).Gap(6).Wrap().GapY(4).AlignItems(ui.Center).FillWidth().Children(func() {
-				if w.clip != nil {
-					for i, tag := range w.clip.Tags {
-						if i == 3 {
-							break
-						}
-						softTag(c, "#"+tag)
-					}
+				for _, tag := range tags {
+					softTag(c, "#"+tag)
 				}
 				if site != "" {
 					siteChip(c, site)
