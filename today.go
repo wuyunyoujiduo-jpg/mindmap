@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -18,37 +19,30 @@ import (
 
 // homeView is 工作台.
 func (a *app) homeView(c *ui.Context) {
-	t := c.Theme()
 	now := a.now()
 	ui.Column(c.Key("home")).Grow(1).Label("工作台").Children(func() {
-		ui.Row(c.Key("home-head")).Height(toolbarHeight-14).Padding(0, 14, 0, 20).Gap(10).AlignItems(ui.Center).Shrink(0).
-			DragWindow().Children(func() {
-			ui.Spacer(c)
-			if iconTextButton(c, iconSparkle, "问 AI", "AI 助手", "问问导图和资料里的内容", a.aiOpen).Clicked() {
-				a.aiOpen = !a.aiOpen
-			}
-		})
-		ui.Scroll(c.Key("home-scroll")).Grow(1).Padding(0, 44, 32).Children(func() {
-			ui.Column(c).MaxWidth(1080).Margin(0, ui.Auto).FillWidth().Gap(22).Children(func() {
-				due, inbox := len(a.dueToday(now)), 0
-				for _, w := range a.waiting() {
-					if w.task != nil {
-						inbox++
-					}
+		pageColumn(c, "home-column", true).Children(func() {
+			due, inbox := len(a.dueToday(now)), 0
+			for _, w := range a.waiting() {
+				if w.task != nil {
+					inbox++
 				}
-				ui.Column(c).Gap(3).Children(func() {
-					ui.Text(c, greeting(now)).FontSize(26).FontWeight(700)
-					sub := dateLabel(now)
-					if due > 0 {
-						sub += fmt.Sprintf(" · 今天 %d 件事", due)
-					}
-					if inbox > 0 {
-						sub += fmt.Sprintf(" · 收件箱 %d 个任务", inbox)
-					}
-					ui.Text(c, sub).FontSize(textBody).TextColor(t.TextMuted)
-				})
-				a.homeLine(c)
-				ui.Row(c).Gap(28).AlignItems(ui.Start).FillWidth().Children(func() {
+			}
+			sub := dateLabel(now)
+			if due > 0 {
+				sub += fmt.Sprintf(" · 今天 %d 件事", due)
+			}
+			if inbox > 0 {
+				sub += fmt.Sprintf(" · 收件箱 %d 个任务", inbox)
+			}
+			pageHeader(c, "home-head", "工作台", sub, func() {
+				if iconTextButton(c, iconSparkle, "问 AI", "AI 助手", "问问导图和资料里的内容", a.aiOpen).Clicked() {
+					a.aiOpen = !a.aiOpen
+				}
+			})
+			a.homeLine(c)
+			ui.Scroll(c.Key("home-scroll")).Grow(1).Basis(0).Margin(18, 0, 0).Children(func() {
+				ui.Row(c).Gap(28).AlignItems(ui.Start).FillWidth().Padding(0, 0, 32).Children(func() {
 					ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(24).Children(func() {
 						a.homeTasks(c, now)
 						a.homeMaps(c, now)
@@ -60,21 +54,6 @@ func (a *app) homeView(c *ui.Context) {
 			})
 		})
 	})
-}
-
-// greeting is said by the hour.
-func greeting(now time.Time) string {
-	switch h := now.Hour(); {
-	case h < 5:
-		return "夜深了"
-	case h < 11:
-		return "早上好"
-	case h < 13:
-		return "中午好"
-	case h < 18:
-		return "下午好"
-	}
-	return "晚上好"
 }
 
 var weekdays = []string{"周日", "周一", "周二", "周三", "周四", "周五", "周六"}
@@ -89,12 +68,12 @@ func dateLabel(d time.Time) string {
 // the line says which as it is written.
 func (a *app) homeLine(c *ui.Context) {
 	t := c.Theme()
-	box := ui.Row(c.Key("home-line")).Height(52).Padding(0, 8, 0, 18).Gap(12).Radius(16).AlignItems(ui.Center).FillWidth().
-		Background(cardColor(t)).Border(1.5, t.Accent).Shadow(0, 6, 20, 0, t.Accent.Alpha(0.12))
+	box := captureBox(c, "home-line")
 	box.Children(func() {
-		glyph(c, iconPlus, 16, t.Accent)
+		glyph(c, iconPlus, 15, t.Accent)
 		in := ui.TextInputBase(c.Key("home-line-input"), &a.homeDraft).Placeholder("记点什么：一个想法，或「周五 给客户发报价单」这样的任务").
-			FontSize(15).Grow(1).Label("记一条灵感或任务")
+			FontSize(textBody + 1).Grow(1).Label("记一条灵感或任务")
+		captureFocus(c, box, in)
 		in.HandleInput(func(ev ui.InputEvent) bool {
 			if ev.Kind == ui.InputKeyDown && ev.Key == ui.KeyEnter {
 				a.later(a.saveHomeLine)
@@ -115,7 +94,7 @@ func (a *app) homeLine(c *ui.Context) {
 				pill(c, "灵感", bg, ink)
 			}
 		}
-		if accentButton(c, "记下 ↩", "记下（回车）").Clicked() {
+		if strings.TrimSpace(a.homeDraft) != "" && accentButton(c, "记下 ↩", "记下（回车）").Clicked() {
 			a.later(a.saveHomeLine)
 		}
 	})
@@ -199,12 +178,6 @@ func (a *app) homeTasks(c *ui.Context, now time.Time) {
 		if deskHead(c, "今天要做", count, "", "全部任务") {
 			a.later(a.openTasks)
 		}
-		if len(due)+done > 0 {
-			k := float32(done) / float32(len(due)+done)
-			ui.Box(c).Height(6).FillWidth().Radius(3).Background(t.Text.Alpha(0.07)).Margin(2, 0, 4).Children(func() {
-				ui.Box(c).Height(6).WidthPercent(k * 100).Radius(3).Background(t.Success)
-			})
-		}
 		if len(due) == 0 {
 			msg := "今天没有要做的事。"
 			if done > 0 {
@@ -214,30 +187,35 @@ func (a *app) homeTasks(c *ui.Context, now time.Time) {
 			return
 		}
 		day := today(now)
-		for i, it := range due {
-			if i == homeTaskCount {
-				break
-			}
-			row := ui.Row(c.Key("home-task:"+it.key())).Height(38).Padding(0, 2).Gap(10).AlignItems(ui.Center).FillWidth().
-				Cursor(ui.CursorPointer).Label("任务 " + it.node.Title)
-			if row.Clicked() {
-				a.later(func() {
-					a.openTasks()
-					a.showTask(it)
+		listCard(c, "home-task-list").Margin(4, 0, 0).Children(func() {
+			for i, it := range due {
+				if i == homeTaskCount {
+					break
+				}
+				row := listCardRow(c, "home-task:"+it.key(), i).Cursor(ui.CursorPointer).Label("任务 " + it.node.Title)
+				if row.Hovered() {
+					row.Background(t.Text.Alpha(0.03))
+				}
+				if row.Clicked() {
+					a.later(func() {
+						a.openTasks()
+						a.showTask(it)
+					})
+				}
+				row.Children(func() {
+					a.taskCircle(c, it, 18)
+					ui.Text(c, it.node.Title).FontSize(14).Grow(1).Shrink(1).MinWidth(0).SingleLine().PassThrough()
+					if d := it.date(); d.Before(day) {
+						n := int(day.Sub(today(*d)).Hours()/24 + 0.5)
+						ui.Text(c, fmt.Sprintf("过期 %d 天", n)).FontSize(textSmall).FontWeight(600).TextColor(t.Danger).Shrink(0).PassThrough()
+					}
+					mapDot(c, a.mapColor(it.path), 8).Tooltip(it.mapName)
+					ui.Text(c, it.mapName).FontSize(textSmall).TextColor(t.TextMuted).Shrink(0).MaxWidth(120).SingleLine().PassThrough()
 				})
 			}
-			row.Children(func() {
-				a.taskCircle(c, it, 18)
-				ui.Text(c, it.node.Title).FontSize(14).Grow(1).Shrink(1).MinWidth(0).SingleLine().PassThrough()
-				if d := it.date(); d.Before(day) {
-					n := int(day.Sub(today(*d)).Hours()/24 + 0.5)
-					ui.Text(c, fmt.Sprintf("过期 %d 天", n)).FontSize(textSmall).FontWeight(600).TextColor(t.Danger).Shrink(0).PassThrough()
-				}
-				mapDot(c, a.mapColor(it.path), 8).Tooltip(it.mapName)
-			})
-		}
+		})
 		if more := len(due) - homeTaskCount; more > 0 {
-			l := ui.Box(c.Key("home-more-tasks")).Padding(4, 30, 0).Cursor(ui.CursorPointer).Label("还有任务")
+			l := ui.Box(c.Key("home-more-tasks")).Padding(4, 16, 0).Cursor(ui.CursorPointer).Label("还有任务")
 			if l.Clicked() {
 				a.later(a.openTasks)
 			}
@@ -269,11 +247,10 @@ func (a *app) homeMaps(c *ui.Context, now time.Time) {
 		ui.Grid(c).Columns(2).Gap(12).FillWidth().Children(func() {
 			for _, fi := range files {
 				col := a.mapColor(fi.Path)
-				bg, ink := tinted(t, col)
-				card := ui.Column(c.Key("home-map:" + fi.Path)).Padding(14).Gap(7).Radius(14).Background(bg).Cursor(ui.CursorPointer).
-					Label("导图 " + mapName(fi.Path))
+				card := ui.Column(c.Key("home-map:"+fi.Path)).Padding(14, 16).Gap(8).Radius(14).Background(cardColor(t)).Cursor(ui.CursorPointer).
+					Shadow(0, 1, 2, 0, ui.RGBA(31, 34, 51, 0.06)).Label("导图 " + mapName(fi.Path))
 				if card.Hovered() {
-					card.Background(col.Alpha(0.2))
+					card.Shadow(0, 4, 14, 0, ui.RGBA(31, 34, 51, 0.1))
 				}
 				if card.Clicked() {
 					a.later(func() { _ = a.open(fi.Path) })
@@ -292,15 +269,18 @@ func (a *app) homeMaps(c *ui.Context, now time.Time) {
 					}
 				}
 				card.Children(func() {
-					ui.Text(c, mapName(fi.Path)).FontSize(textTitle).FontWeight(700).SingleLine().PassThrough()
+					ui.Row(c).Gap(8).AlignItems(ui.Center).PassThrough().Children(func() {
+						mapDot(c, col, 10)
+						ui.Text(c, mapName(fi.Path)).FontSize(textTitle).FontWeight(600).SingleLine().Grow(1).Shrink(1).MinWidth(0)
+					})
 					sub := "没有任务"
 					if total > 0 {
-						sub = fmt.Sprintf("%d 个任务", total)
+						sub = fmt.Sprintf("%d / %d 个任务", done, total)
 					}
-					ui.Text(c, sub+" · "+relTime(now, modTime(fi.Path))).FontSize(textSmall).TextColor(ink).SingleLine().PassThrough()
-					ui.Box(c).Height(5).FillWidth().Radius(3).Background(t.Text.Alpha(0.08)).PassThrough().Children(func() {
+					ui.Text(c, sub+" · "+relTime(now, modTime(fi.Path))).FontSize(textSmall).TextColor(t.TextMuted).SingleLine().PassThrough()
+					ui.Box(c).Height(4).FillWidth().Radius(2).Background(t.Text.Alpha(0.07)).PassThrough().Children(func() {
 						if total > 0 {
-							ui.Box(c).Height(5).WidthPercent(float32(done) / float32(total) * 100).Radius(3).Background(col)
+							ui.Box(c).Height(4).WidthPercent(float32(done) / float32(total) * 100).Radius(2).Background(col)
 						}
 					})
 				})
@@ -354,7 +334,13 @@ const homeWaitingCount = 6
 // has its place, 收集, and may be put on a map as well.
 func (a *app) homeWaiting(c *ui.Context) {
 	t := c.Theme()
-	items := a.waiting()
+	listed := map[string]bool{} // the tasks of 今天要做 are not listed twice
+	for i, it := range a.dueToday(a.now()) {
+		if i < homeTaskCount {
+			listed[it.key()] = true
+		}
+	}
+	items := slices.DeleteFunc(a.waiting(), func(w waitingItem) bool { return w.task != nil && listed[w.task.key()] })
 	suggested := len(a.tasks.places) + len(a.clipPlaces)
 	ui.Column(c.Key("home-waiting")).Gap(12).FillWidth().Children(func() {
 		ui.Row(c).Gap(8).AlignItems(ui.Center).FillWidth().MinHeight(24).Children(func() {
@@ -399,19 +385,23 @@ func (a *app) homeWaiting(c *ui.Context) {
 			ui.Text(c, "这几天记下的会出现在这里。").FontSize(textBody).TextColor(t.TextMuted).Margin(6, 2)
 			return
 		}
-		for i, w := range items {
-			if i == homeWaitingCount {
-				ui.Text(c, fmt.Sprintf("还有 %d 条，在任务的收件箱和收集里", len(items)-i)).FontSize(textSmall).TextColor(t.TextMuted).Margin(0, 4)
-				break
+		listCard(c, "home-lately").Children(func() {
+			for i, w := range items {
+				if i == homeWaitingCount {
+					break
+				}
+				a.waitingCard(c, w, i)
 			}
-			a.waitingCard(c, w)
+		})
+		if more := len(items) - homeWaitingCount; more > 0 {
+			ui.Text(c, fmt.Sprintf("还有 %d 条，在任务的收件箱和收集里", more)).FontSize(textSmall).TextColor(t.TextMuted).Margin(0, 16)
 		}
 	})
 }
 
-// waitingCard is one thing that waits: what it is, and under it where it
-// may go.
-func (a *app) waitingCard(c *ui.Context, w waitingItem) {
+// waitingCard is one thing written down, the i-th row of its card: what
+// it is, and under it where it may go.
+func (a *app) waitingCard(c *ui.Context, w waitingItem, i int) {
 	t := c.Theme()
 	key, text, kind := "", "", ""
 	var place taskPlace
@@ -436,8 +426,11 @@ func (a *app) waitingCard(c *ui.Context, w waitingItem) {
 		}
 		place, has = a.clipPlaces[cl.ID]
 	}
-	ui.Column(c.Key("waiting:"+key)).Padding(11, 16).Gap(10).Radius(14).Background(cardColor(t)).FillWidth().
-		Shadow(0, 1, 2, 0, ui.RGBA(31, 34, 51, 0.06)).Children(func() {
+	card := ui.Column(c.Key("waiting:"+key)).Padding(10, 16).Gap(10).FillWidth().MinHeight(46).Center()
+	if i > 0 {
+		card.BorderWidth(1, 0, 0, 0).BorderColor(hairline(t))
+	}
+	card.Children(func() {
 		actions := func() {
 			if has {
 				b := ui.Box(c.Key("take")).Height(28).Padding(0, 12).Radius(8).Center().Background(t.Text).Cursor(ui.CursorPointer).Label("放过去 " + text)

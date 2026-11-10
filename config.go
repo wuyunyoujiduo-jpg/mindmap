@@ -11,6 +11,9 @@ import (
 type config struct {
 	Dir  string `json:"dir"`  // the folder of mind maps shown in the sidebar
 	File string `json:"file"` // the map open last
+	// PanelOpen shows the panel of the topic chosen beside the canvas: put
+	// away at first, which leaves the canvas the room.
+	PanelOpen bool `json:"panelOpen,omitempty"`
 	// ShowTree shows the maps' folders beside the rail (rail.go).
 	ShowTree bool `json:"showTree,omitempty"`
 	// Favorites are the maps starred, by their paths: first in their

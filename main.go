@@ -609,7 +609,7 @@ func main() {
 				mygo.Separator(),
 				item("在导图中查找", "CmdOrCtrl+F", func() { a.searchOpen = true; a.mode = viewMap }),
 				mygo.Separator(),
-				item("显示/隐藏右侧面板", "CmdOrCtrl+Alt+I", func() { a.panelOff = !a.panelOff }),
+				item("显示/隐藏右侧面板", "CmdOrCtrl+Alt+I", a.togglePanel),
 				mygo.Separator(),
 				item("放大", "CmdOrCtrl+=", func() { a.zoomStep(true) }),
 				item("缩小", "CmdOrCtrl+-", func() { a.zoomStep(false) }),

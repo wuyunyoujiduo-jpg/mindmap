@@ -23,9 +23,71 @@ const (
 // toolbarHeight is the toolbar's, which is the window's title bar.
 const toolbarHeight = 52
 
-// pageWidth is the most a page's column of lists takes, in the middle of
-// the room it has: wider, a line's end is far from its start.
-const pageWidth = 920
+// pageWidth is the most a page takes, in the middle of the room it has:
+// the desk, the tasks and 收集 are columns of this width, so that their
+// headings and what is under them start at the same place.
+const pageWidth = 1080
+
+// pageColumn is a page's column, in the middle of the room it has; grow
+// has it take the height left.
+func pageColumn(c *ui.Context, key string, grow bool) ui.Element {
+	col := ui.Column(c.Key(key)).FillWidth().MaxWidth(pageWidth+56).Margin(0, ui.Auto).Padding(0, 28)
+	if grow {
+		return col.Grow(1).Basis(0).MinHeight(0)
+	}
+	return col.Shrink(0)
+}
+
+// pageHeader is a page's heading, the same on every page: its name, a
+// word on it, and at the end what right builds. It is the window's title
+// bar there, and drags the window.
+func pageHeader(c *ui.Context, key, title, sub string, right func()) {
+	t := c.Theme()
+	ui.Row(c.Key(key)).Height(toolbarHeight).Gap(10).AlignItems(ui.Center).Shrink(0).FillWidth().DragWindow().Children(func() {
+		ui.Text(c, title).FontSize(textHeadline).FontWeight(700).NoWrap()
+		if sub != "" {
+			ui.Text(c, sub).FontSize(textSmall).TextColor(t.TextMuted).SingleLine().Shrink(1).MinWidth(0)
+		}
+		ui.Spacer(c)
+		if right != nil {
+			right()
+		}
+	})
+}
+
+// captureBox is the box of a line to write something down in, the same
+// on the desk, the tasks and 收集: a white card with a thin line, a plus
+// before what the caller builds. The caller outlines it in the accent
+// while its field has the focus (captureFocus).
+func captureBox(c *ui.Context, key string) ui.Element {
+	t := c.Theme()
+	return ui.Row(c.Key(key)).MinHeight(46).Padding(5, 8, 5, 14).Gap(10).Radius(12).AlignItems(ui.Center).FillWidth().Shrink(0).
+		Background(cardColor(t)).Border(1.5, hairline(t))
+}
+
+// captureFocus outlines a captureBox whose field has the focus.
+func captureFocus(c *ui.Context, box, field ui.Element) {
+	if field.Focused() {
+		box.Border(1.5, c.Theme().Accent)
+	}
+}
+
+// listCard is a white card of rows (listCardRow), a thin line between
+// them: the lists of the desk.
+func listCard(c *ui.Context, key string) ui.Element {
+	t := c.Theme()
+	return ui.Column(c.Key(key)).FillWidth().Radius(14).Background(cardColor(t)).Shadow(0, 1, 2, 0, ui.RGBA(31, 34, 51, 0.06)).Clip()
+}
+
+// listCardRow is the i-th row of a listCard.
+func listCardRow(c *ui.Context, key string, i int) ui.Element {
+	t := c.Theme()
+	row := ui.Row(c.Key(key)).MinHeight(46).Padding(8, 16).Gap(10).AlignItems(ui.Center).FillWidth()
+	if i > 0 {
+		row.BorderWidth(1, 0, 0, 0).BorderColor(hairline(t))
+	}
+	return row
+}
 
 // hairline is the color of the thin lines between parts.
 func hairline(t *ui.Theme) ui.Color { return t.Border.Alpha(0.75) }

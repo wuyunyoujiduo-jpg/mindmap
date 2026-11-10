@@ -328,110 +328,116 @@ func (a *app) tasksView(c *ui.Context) {
 		items = slices.DeleteFunc(slices.Clone(all), func(it taskItem) bool { return it.path != a.tasks.onMap })
 	}
 	now := a.now()
-	// The lists are a column in the middle of what is left of the page
-	// by the pane on the right: the week, or the details of the task
-	// chosen. The week and the month take the page's width.
+	// The page's column, as every page's: its heading, the line to add a
+	// task, then the lists with the week beside them. The week and the
+	// month take the page's width under the heading. The details of the
+	// task chosen stand on the right, the page's height.
 	calendar := a.tasks.view == tasksWeek || a.tasks.view == tasksMonth
 	ui.Row(c.Key("tasks")).Grow(1).AlignItems(ui.Stretch).Label("任务").Children(func() {
 		ui.Column(c).Grow(1).Basis(0).MinWidth(0).Children(func() {
-			column := ui.Column(c.Key("tasks-column")).Grow(1).FillWidth()
-			if !calendar {
-				column.MaxWidth(pageWidth).Margin(0, ui.Auto)
+			pageColumn(c, "tasks-top", false).Children(func() {
+				a.tasksHead(c, all)
+				a.tasksAdd(c, now)
+			})
+			if calendar {
+				ui.Column(c).Grow(1).Basis(0).MinHeight(0).FillWidth().Margin(10, 0, 0).Children(func() {
+					if a.tasks.view == tasksWeek {
+						a.weekView(c, items)
+					} else {
+						a.monthView(c, items)
+					}
+				})
+				return
 			}
-			column.Children(func() { a.tasksColumn(c, all, items, now) })
+			pageColumn(c, "tasks-column", true).Children(func() {
+				ui.Row(c).Grow(1).Basis(0).MinHeight(0).Gap(28).AlignItems(ui.Stretch).FillWidth().Margin(8, 0, 0).Children(func() {
+					ui.Column(c).Grow(1).Basis(0).MinWidth(0).Children(func() {
+						t := c.Theme()
+						counts := a.taskListCounts(items)
+						ui.Row(c.Key("tasks-lists")).Gap(22).Shrink(0).FillWidth().
+							BorderWidth(0, 0, 1, 0).BorderColor(hairline(t)).Children(func() {
+							for _, l := range taskLists {
+								if underlineTab(c, "list:"+l.name, l.name, counts[l.view], a.tasks.view == l.view).Clicked() {
+									a.tasks.view = l.view
+								}
+							}
+						})
+						ui.Column(c).Grow(1).Basis(0).MinHeight(0).FillWidth().Children(func() { a.taskList(c, items) })
+					})
+					if a.tasks.sel == "" {
+						a.weekPane(c, items, now)
+					}
+				})
+			})
 		})
 		for _, it := range all {
 			if it.key() == a.tasks.sel {
 				a.taskDetail(c, it)
-				return
 			}
-		}
-		if !calendar {
-			a.weekPane(c, items, now)
 		}
 	})
 }
 
-// tasksColumn is the tasks' page but the details: its heading, its lists,
-// the line to add a task, and the tasks.
-func (a *app) tasksColumn(c *ui.Context, all, items []taskItem, now time.Time) {
-	t := c.Theme()
-	func() {
-		ui.Row(c.Key("tasks-head")).Height(toolbarHeight).Padding(0, 16, 0, 28).Gap(12).AlignItems(ui.Center).Shrink(0).
-			DragWindow().Children(func() {
-			ui.Text(c, "任务").FontSize(textHeadline).FontWeight(600)
-			ui.Spacer(c)
-			a.taskMapMenu(c, all)
-			if a.tasks.view == tasksWeek || a.tasks.view == tasksMonth || a.tasks.view == tasksDay {
-				a.calendarNav(c)
-			}
-			mode := 0
-			switch a.tasks.view {
-			case tasksWeek:
-				mode = 1
-			case tasksMonth:
-				mode = 2
-			}
-			if m := tabGroup(c, "tasks-mode", []string{"列表", "周", "月"}, mode); m != mode {
-				a.tasks.view = []int{tasksToday, tasksWeek, tasksMonth}[m]
-			}
-		})
-		if a.tasks.view != tasksWeek && a.tasks.view != tasksMonth {
-			counts := a.taskListCounts(items)
-			ui.Row(c.Key("tasks-lists")).Padding(0, 28).Gap(22).Shrink(0).FillWidth().
-				BorderWidth(0, 0, 1, 0).BorderColor(hairline(t)).Children(func() {
-				for _, l := range taskLists {
-					if underlineTab(c, "list:"+l.name, l.name, counts[l.view], a.tasks.view == l.view).Clicked() {
-						a.tasks.view = l.view
-					}
-				}
-			})
+// tasksHead is the tasks' heading: the map whose tasks show, the weeks or
+// months to go through, and how they show.
+func (a *app) tasksHead(c *ui.Context, all []taskItem) {
+	pageHeader(c, "tasks-head", "任务", "", func() {
+		a.taskMapMenu(c, all)
+		if a.tasks.view == tasksWeek || a.tasks.view == tasksMonth || a.tasks.view == tasksDay {
+			a.calendarNav(c)
 		}
-		ui.Row(c.Key("tasks-add")).Margin(14, 28, 4).Height(40).Padding(0, 12).Gap(10).Radius(9).AlignItems(ui.Center).Shrink(0).
-			Background(t.Text.Alpha(0.045)).Children(func() {
-			glyph(c, iconPlus, 15, t.Accent)
-			ph := "添加任务，如「明天 写周报 !高」，回车放进收件箱"
-			if a.tasks.view == tasksDay || a.tasks.view == tasksWeek || a.tasks.view == tasksMonth {
-				ph = "添加任务，不写日期就记在" + dayLabel(a.tasks.day, now) + "，回车保存"
+		mode := 0
+		switch a.tasks.view {
+		case tasksWeek:
+			mode = 1
+		case tasksMonth:
+			mode = 2
+		}
+		if m := tabGroup(c, "tasks-mode", []string{"列表", "周", "月"}, mode); m != mode {
+			a.tasks.view = []int{tasksToday, tasksWeek, tasksMonth}[m]
+		}
+	})
+}
+
+// tasksAdd is the line to add a task, which says the day and the
+// priority it reads as it is written.
+func (a *app) tasksAdd(c *ui.Context, now time.Time) {
+	t := c.Theme()
+	box := captureBox(c, "tasks-add")
+	box.Children(func() {
+		glyph(c, iconPlus, 15, t.Accent)
+		ph := "添加任务，如「明天 写周报 !高」，回车放进收件箱"
+		if a.tasks.view == tasksDay || a.tasks.view == tasksWeek || a.tasks.view == tasksMonth {
+			ph = "添加任务，不写日期就记在" + dayLabel(a.tasks.day, now) + "，回车保存"
+		}
+		in := ui.TextInputBase(c.Key("task-add"), &a.tasks.add).Placeholder(ph).FontSize(textBody + 1).Grow(1).Label("添加任务")
+		captureFocus(c, box, in)
+		// What the line says, as it is written: its day and priority.
+		if strings.TrimSpace(a.tasks.add) != "" {
+			_, due, prio := parseTaskLine(a.tasks.add, now)
+			if due != nil {
+				pill(c, dayLabel(*due, now), t.Background, t.Text)
 			}
-			in := ui.TextInputBase(c.Key("task-add"), &a.tasks.add).Placeholder(ph).FontSize(textBody).Grow(1).Label("添加任务")
-			// What the line says, as it is written: its day and priority.
-			if strings.TrimSpace(a.tasks.add) != "" {
-				_, due, prio := parseTaskLine(a.tasks.add, now)
-				if due != nil {
-					pill(c, dayLabel(*due, now), t.Background, t.Text)
-				}
-				if prio != model.PriorityNone {
-					pill(c, prio.Label(), t.Background, taskPriorityColor(t, prio))
-				}
-				ui.Text(c, "↩").FontSize(textCaption).TextColor(t.TextMuted)
+			if prio != model.PriorityNone {
+				pill(c, prio.Label(), t.Background, taskPriorityColor(t, prio))
 			}
-			if in.Submitted() && strings.TrimSpace(a.tasks.add) != "" {
-				line := a.tasks.add
-				a.tasks.add = ""
-				var day *time.Time
-				switch a.tasks.view {
-				case tasksDay, tasksWeek, tasksMonth:
-					d := a.tasks.day
-					day = &d
-				case tasksToday:
-					d := today(now)
-					day = &d
-				}
-				a.later(func() { a.addTask(line, day) })
-			}
-		})
-		ui.Column(c).Grow(1).Basis(0).MinHeight(0).FillWidth().Children(func() {
+			ui.Text(c, "↩").FontSize(textCaption).TextColor(t.TextMuted)
+		}
+		if in.Submitted() && strings.TrimSpace(a.tasks.add) != "" {
+			line := a.tasks.add
+			a.tasks.add = ""
+			var day *time.Time
 			switch a.tasks.view {
-			case tasksWeek:
-				a.weekView(c, items)
-			case tasksMonth:
-				a.monthView(c, items)
-			default:
-				a.taskList(c, items)
+			case tasksDay, tasksWeek, tasksMonth:
+				d := a.tasks.day
+				day = &d
+			case tasksToday:
+				d := today(now)
+				day = &d
 			}
-		})
-	}()
+			a.later(func() { a.addTask(line, day) })
+		}
+	})
 }
 
 // taskMapMenu chooses the map whose tasks show alone, as TickTick's lists.
@@ -841,7 +847,7 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 		empty = empty && len(g.items) == 0
 	}
 	ui.Scroll(c.Key(fmt.Sprint("task-list:", a.tasks.view))).Grow(1).Children(func() {
-		ui.Column(c).Padding(8, 20, 32).Gap(2).FillWidth().Children(func() {
+		ui.Column(c).Padding(8, 0, 32).Gap(2).FillWidth().Children(func() {
 			if empty && len(done) == 0 {
 				ui.Column(c).Padding(60, 0).Gap(8).AlignItems(ui.Center).FillWidth().Children(func() {
 					glyph(c, iconCheck, 36, t.TextMuted.Alpha(0.6))
@@ -866,7 +872,7 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 					a.dropTaskOn(box, *g.drop)
 				}
 				box.Children(func() {
-					ui.Row(c).Padding(14, 4, 6).Gap(8).AlignItems(ui.Center).FillWidth().Children(func() {
+					ui.Row(c).Padding(14, 8, 6).Gap(8).AlignItems(ui.Center).FillWidth().Children(func() {
 						col := t.Text
 						switch {
 						case g.danger:
@@ -885,7 +891,7 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 				})
 			}
 			if len(done) > 0 {
-				head := ui.Row(c.Key("group:done")).Padding(18, 4, 6).Gap(6).AlignItems(ui.Center).Cursor(ui.CursorPointer).
+				head := ui.Row(c.Key("group:done")).Padding(18, 8, 6).Gap(6).AlignItems(ui.Center).Cursor(ui.CursorPointer).
 					Label("已完成")
 				if head.Clicked() {
 					a.tasks.showDone = !a.tasks.showDone
@@ -1260,14 +1266,14 @@ func (a *app) weekPane(c *ui.Context, items []taskItem, now time.Time) {
 	t := c.Theme()
 	day := today(now)
 	start := weekStart(day)
-	ui.Column(c.Key("week-pane")).Width(340).Shrink(0).BorderWidth(0, 0, 0, 1).BorderColor(hairline(t)).Children(func() {
-		ui.Row(c).Height(toolbarHeight).Padding(0, 20).Gap(8).AlignItems(ui.Center).Shrink(0).DragWindow().Children(func() {
+	ui.Column(c.Key("week-pane")).Width(300).Shrink(0).Children(func() {
+		ui.Row(c).Height(33).Padding(0, 10).Gap(8).AlignItems(ui.Center).Shrink(0).Children(func() {
 			ui.Text(c, "这一周").FontSize(textBody).FontWeight(600)
 			ui.Text(c, fmt.Sprintf("%d月%d日 – %d月%d日", start.Month(), start.Day(), start.AddDate(0, 0, 6).Month(), start.AddDate(0, 0, 6).Day())).
 				FontSize(textSmall).TextColor(t.TextMuted)
 		})
-		ui.Scroll(c.Key("week-days")).Grow(1).Children(func() {
-			ui.Column(c).Padding(0, 10, 16).Gap(2).Children(func() {
+		ui.Scroll(c.Key("week-days")).Grow(1).Basis(0).Children(func() {
+			ui.Column(c).Padding(8, 0, 16).Gap(2).Children(func() {
 				for i := range 7 {
 					a.weekDay(c, items, start.AddDate(0, 0, i), day, i)
 				}

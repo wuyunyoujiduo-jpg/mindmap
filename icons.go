@@ -45,6 +45,7 @@ const (
 	iconTag      // a tag: a label with a hole
 	iconLevels   // levels shown: an outline, each row further in
 	iconSidebar  // the list beside: a frame, its left part marked off
+	iconPanel    // the panel beside: a frame, its right part marked off
 	iconBack     // back: a chevron to the left
 	iconForward  // on: a chevron to the right
 	iconGear     // settings: a wheel with teeth
@@ -93,9 +94,13 @@ func drawIcon(p *ui.Painter, r ui.Rect, s float32, ic icon, col ui.Color) {
 			k = -1
 		}
 		p.StrokePath(new(ui.Path).MoveTo(cx+k*h*0.25, cy-h*0.55).LineTo(cx-k*h*0.3, cy).LineTo(cx+k*h*0.25, cy+h*0.55), w*1.1, col)
-	case iconSidebar:
+	case iconSidebar, iconPanel:
 		p.StrokePath(roundedRect(cx-h*0.9, cy-h*0.7, h*1.8, h*1.4, h*0.28), w, col)
-		p.Line(cx-h*0.3, cy-h*0.7, cx-h*0.3, cy+h*0.7, w, col)
+		x := cx - h*0.3
+		if ic == iconPanel {
+			x = cx + h*0.3
+		}
+		p.Line(x, cy-h*0.7, x, cy+h*0.7, w, col)
 	case iconPlay:
 		tri := new(ui.Path).MoveTo(cx-h*0.45, cy-h*0.7).LineTo(cx+h*0.7, cy).LineTo(cx-h*0.45, cy+h*0.7).Close()
 		p.FillPath(tri, col)

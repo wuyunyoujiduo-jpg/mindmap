@@ -25,7 +25,7 @@ func TestHome(t *testing.T) {
 	if !a.libOpen || !a.libHome {
 		t.Fatal("工作台 not shown")
 	}
-	for _, want := range []string{greeting(testNow), dateLabel(testNow), "今天要做", "刚记下的", "我的导图", "导图 使用指南", "放到导图 资料 0"} {
+	for _, want := range []string{"工作台", "今天要做", "刚记下的", "我的导图", "导图 使用指南", "放到导图 资料 0"} {
 		if !tt.HasText(want) {
 			t.Fatalf("no %q: %q", want, tt.Texts())
 		}
@@ -174,5 +174,31 @@ func TestRailClearsWindowControls(t *testing.T) {
 	r, ok := tt.Find("导图颜色")
 	if !ok || r.X < 80+12 {
 		t.Fatalf("the map's title starts at %v, under the window's controls", r.X)
+	}
+}
+
+// The topic's panel is put away at first, the canvas having the room; the
+// toolbar's button shows it, and the choice is kept.
+func TestPanelPutAway(t *testing.T) {
+	dir := t.TempDir()
+	a := newApp(&fakePlatform{}, config{Dir: dir})
+	a.now = func() time.Time { return testNow }
+	tt := ui.NewTester(a.view, 1280, 800)
+	a.openDir(dir)
+	if len(a.files) > 0 {
+		_ = a.open(a.files[0].Path)
+	}
+	a.libOpen = false
+	tt.Frame()
+	if _, ok := tt.Find("备注内容"); ok || !a.panelOff {
+		t.Fatalf("the panel shows at first: %q", tt.Texts())
+	}
+	snapshot(t, tt, "map-panel-away")
+	if err := tt.Click("主题面板"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if _, ok := tt.Find("备注内容"); !ok || !a.cfg.PanelOpen {
+		t.Fatalf("the panel is not shown: %q", tt.Texts())
 	}
 }

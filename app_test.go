@@ -98,7 +98,7 @@ func newTestApp(t *testing.T) (*app, *ui.Tester) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	dir := t.TempDir()
 	clock = func() time.Time { return testNow }
-	a := newApp(&fakePlatform{}, config{Dir: dir, ShowTree: true})
+	a := newApp(&fakePlatform{}, config{Dir: dir, ShowTree: true, PanelOpen: true})
 	a.noLocalModel = true       // the built-in model only where a test asks for it
 	a.sidebarWidth -= railWidth // the rail and the maps' list in the room the tests' places count on
 	if a.doc == nil {

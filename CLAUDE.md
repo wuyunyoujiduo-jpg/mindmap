@@ -35,9 +35,11 @@ by AI, and an AI assistant.
   its own. A narrow rail has the app's parts (`rail.go`), the maps' folders
   beside it when asked; the desk (`today.go`) is the first page: write it
   down, today's tasks, what was written lately (only the inbox's tasks
-  wait for a map: a note's place is 收集). A page's column of lists is
-  `pageWidth` at most, a pane on the right (the week, a task's or a
-  clip's details) taking the rest. On the canvas the main
+  wait for a map: a note's place is 收集). The desk, the tasks and 收集
+  are laid out the same (`design.go`): a `pageColumn` in the middle, its
+  `pageHeader`, a `captureBox` to write in, then white cards; what is
+  chosen shows its details in a pane on the right, as the topic's panel
+  on the maps' page, which is put away until asked for. On the canvas the main
   topics are on a pastel of their branch's color, those below on a faint
   tint (the scheme 明亮 of `style.go`). Notes and clips are one page, 收集
   (`libview.go`: a wall of cards, narrowed by kind and by tag; its 回顾

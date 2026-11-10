@@ -26,11 +26,7 @@ func (a *app) libraryView(c *ui.Context) {
 		// list and, beside it, the clip, the page's height.
 		ui.Row(c).Grow(1).AlignItems(ui.Stretch).Children(func() {
 			ui.Column(c).Grow(1).Basis(0).MinWidth(0).Children(func() {
-				column := ui.Column(c.Key("lib-column")).Grow(1).FillWidth()
-				if sel == nil {
-					column.MaxWidth(1080).Margin(0, ui.Auto)
-				}
-				column.Children(func() { a.libraryColumn(c) })
+				pageColumn(c, "lib-column", true).Children(func() { a.libraryColumn(c) })
 			})
 			if sel != nil {
 				ui.Box(c).Width(1).FillHeight().Background(hairline(t))
@@ -49,10 +45,7 @@ func (a *app) libraryColumn(c *ui.Context) {
 	t := c.Theme()
 	l := a.lib
 	func() {
-		ui.Row(c.Key("lib-head")).Height(toolbarHeight).Padding(0, 10, 0, 16).Gap(10).AlignItems(ui.Center).Shrink(0).
-			DragWindow().Children(func() {
-			ui.Text(c, "收集").FontSize(textHeadline).FontWeight(700).NoWrap()
-			ui.Text(c, fmt.Sprintf("%d 条灵感和资料", len(l.Clips))).FontSize(textSmall).TextColor(t.TextMuted).NoWrap()
+		pageHeader(c, "lib-head", "收集", fmt.Sprintf("%d 条灵感和资料", len(l.Clips)), func() {
 			if a.libWorking != "" {
 				ui.Spinner(c)
 				ui.Text(c, fmt.Sprintf("整理中，还有 %d 条", len(a.libQueue)+1)).FontSize(12).TextColor(t.TextMuted).NoWrap()
@@ -67,7 +60,6 @@ func (a *app) libraryColumn(c *ui.Context) {
 			if a.embedErr != "" {
 				ui.Text(c, "语义检索不可用").FontSize(12).TextColor(t.Warning).NoWrap().Tooltip(a.embedErr + "（在设置里检查向量模型）")
 			}
-			ui.Spacer(c)
 			search := searchBox(c, "lib-search", &a.libQuery, "搜索资料", "搜索收集", "按标题、内容、摘要、标签和关键词查找资料", 200)
 			if a.libQuery != "" && search.Shortcut(0, ui.KeyEscape) {
 				a.libQuery = ""
@@ -87,18 +79,18 @@ func (a *app) libraryColumn(c *ui.Context) {
 		a.clipComposer(c)
 		a.clipFilters(c)
 		if a.libErr != "" {
-			ui.Row(c).Padding(0, 12, 6).Gap(8).AlignItems(ui.Center).Children(func() {
+			ui.Row(c).Padding(0, 0, 6).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, a.libErr).FontSize(12).TextColor(t.Danger).Wrap().Grow(1)
 				if ui.Link(c, "知道了", "").FontSize(12).Clicked() {
 					a.libErr = ""
 				}
 			})
 		}
-		ui.Box(c).Padding(0, 12).Children(func() { a.clipPlaceBar(c) })
+		a.clipPlaceBar(c)
 		hits := a.libHits()
 		ui.Row(c).Grow(1).AlignItems(ui.Stretch).Children(func() {
 			if len(hits) == 0 {
-				ui.Column(c).Grow(1).Basis(0).Padding(8, 10, 16).Children(func() {
+				ui.Column(c).Grow(1).Basis(0).Padding(8, 0, 16).Children(func() {
 					msg := "还没有资料。在上面记点什么、粘贴链接，或把图片和文件拖进来。\n在任何应用里复制内容后按 " + keyLabel(a.clipKey()) + "，也能直接存到收集。"
 					if len(l.Clips) > 0 || a.libKind == kindMaps {
 						msg = "没有符合条件的资料。"
@@ -118,11 +110,11 @@ func (a *app) libraryColumn(c *ui.Context) {
 				rows := (len(hits) + cols - 1) / cols
 				ui.List(c.Key(fmt.Sprint("clips:", cols)), nil, rows).Grow(1).Basis(0).ItemKey(func(i int) any { return hits[i*cols].Clip.ID }).
 					Rows(func(r ui.ListRow) {
-						ui.Row(r.Context).Padding(6, 12).Gap(12).AlignItems(ui.Stretch).FillWidth().Children(func() {
+						ui.Row(r.Context).Padding(6, 2).Gap(12).AlignItems(ui.Stretch).FillWidth().Children(func() {
 							for k := range cols {
 								i := r.Index*cols + k
 								if i >= len(hits) {
-									ui.Box(r.Context).Grow(1).Basis(0)
+									ui.Box(r.Context).Grow(1).Basis(0).MinWidth(0)
 									continue
 								}
 								if clip := hits[i].Clip; clip.Kind == kindMap {
@@ -230,10 +222,9 @@ func (a *app) searchClips() []library.Hit {
 func (a *app) clipComposer(c *ui.Context) {
 	t := c.Theme()
 	empty := strings.TrimSpace(a.libDraft) == ""
-	box := ui.Row(c.Key("lib-compose")).Margin(10, 12, 8).Padding(4, 6, 4, 12).Gap(6).AlignItems(ui.Center).Radius(10).
-		Background(t.Text.Alpha(0.045))
+	box := captureBox(c, "lib-compose").Margin(0, 0, 12)
 	box.Children(func() {
-		glyph(c, iconPlus, 14, t.TextMuted)
+		glyph(c, iconPlus, 15, t.Accent)
 		in := ui.TextAreaBase(c.Key("lib-draft"), &a.libDraft).Lines(1, 5).
 			Placeholder("记点什么，#标签 归类；也可以粘贴链接、图片或文件…").Label("新资料").
 			OnPaste(func(text string) bool { // a picture or files copied: kept at once
@@ -247,7 +238,8 @@ func (a *app) clipComposer(c *ui.Context) {
 				a.libSel = clips[0].ID
 				return true
 			}).
-			Padding(5, 4).FontSize(13).Grow(1)
+			Padding(5, 0).FontSize(textBody + 1).Grow(1)
+		captureFocus(c, box, in)
 		keep := in.Shortcut(ui.Cmd, ui.KeyEnter)
 		if !empty { // the button when there is something to keep
 			ui.Text(c, "⌘↩").FontSize(textCaption).TextColor(t.TextMuted)
@@ -292,13 +284,12 @@ func (a *app) dropClips(files []string) {
 func (a *app) clipFilters(c *ui.Context) {
 	t := c.Theme()
 	l := a.lib
-	ui.Row(c.Key("lib-kinds")).Padding(2, 12, 10).Gap(6).FillWidth().AlignItems(ui.Center).Children(func() {
+	ui.Row(c.Key("lib-kinds")).Gap(22).FillWidth().AlignItems(ui.End).Shrink(0).
+		BorderWidth(0, 0, 1, 0).BorderColor(hairline(t)).Children(func() {
 		for _, k := range []struct {
 			kind int
 			name string
-			col  ui.Color
-		}{{kindAll, "全部", t.Text}, {kindMemos, "灵感", clipColor(library.KindText)}, {kindLinks, "链接", clipColor(library.KindLink)},
-			{kindDocs, "文档", clipColor(library.KindFile)}, {kindImages, "图片", clipColor(library.KindImage)}} {
+		}{{kindAll, "全部"}, {kindMemos, "灵感"}, {kindLinks, "链接"}, {kindDocs, "文档"}, {kindImages, "图片"}} {
 			n := 0
 			for _, cl := range l.Clips {
 				if ofKind(cl, k.kind) {
@@ -306,28 +297,13 @@ func (a *app) clipFilters(c *ui.Context) {
 				}
 			}
 			on := a.libKind == k.kind && a.libReview == reviewOff
-			b := ui.Row(c.Key("kind:"+k.name)).Height(32).Padding(0, 14).Gap(6).Radius(10).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(k.name)
-			bg, ink := tinted(t, k.col)
-			switch {
-			case on && k.kind == kindAll:
-				bg, ink = t.Text, t.Background
-			case on:
-				bg = k.col.Alpha(0.3)
-			case k.kind == kindAll:
-				bg, ink = t.Text.Alpha(0.06), t.Text
-			}
-			b.Background(bg)
-			if b.Clicked() {
+			if underlineTab(c, "kind:"+k.name, k.name, fmt.Sprint(n), on).Clicked() {
 				a.libKind, a.libReview = k.kind, reviewOff
 			}
-			b.Children(func() {
-				ui.Text(c, k.name).FontSize(textBody).FontWeight(600).TextColor(ink).PassThrough()
-				ui.Text(c, fmt.Sprint(n)).FontSize(textSmall).TextColor(ink.Alpha(0.75)).PassThrough()
-			})
 		}
 		ui.Spacer(c)
 		// Looking back at the old notes, as flomo does.
-		ghostButton(c, "回顾 ⌄", "回头看以前记下的灵感").Menu(func(m *ui.Menu) {
+		ghostButton(c, "回顾 ⌄", "回头看以前记下的灵感").Margin(0, 0, 6).Menu(func(m *ui.Menu) {
 			if m.Item("每日回顾：几条以前的灵感，每天换").Checked(a.libReview == reviewDaily).Chosen() {
 				a.libReview, a.libSel = reviewDaily, ""
 			}
@@ -336,7 +312,7 @@ func (a *app) clipFilters(c *ui.Context) {
 			}
 		})
 	})
-	ui.Row(c.Key("lib-tags")).Padding(0, 12, 8).Gap(6).Wrap().GapY(6).AlignItems(ui.Center).Children(func() {
+	ui.Row(c.Key("lib-tags")).Padding(10, 0, 6).MinHeight(46).Gap(6).Wrap().GapY(6).AlignItems(ui.Center).Children(func() {
 		chip := func(key, label string, active bool) bool {
 			b := ui.Box(c.Key("cat:"+key)).Padding(4, 10).Radius(999).Cursor(ui.CursorPointer).Label(label)
 			switch { // quiet pills, the one chosen dark
@@ -445,18 +421,13 @@ func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 	kcol := clipColor(clip.Kind)
 	row := ui.Column(c).Grow(1).Basis(0).MinWidth(0).Padding(14, 16).Gap(9).Radius(14).Cursor(ui.CursorPointer).
 		Label("资料 " + clip.Label())
-	// A note is a slip of its color; the others white cards, each kind's
-	// icon in its own.
-	if memo {
-		bg, _ := tinted(t, kcol)
-		row.Background(bg)
-	} else {
-		row.Background(cardColor(t)).Shadow(0, 1, 2, 0, ui.RGBA(31, 34, 51, 0.06))
-	}
+	// A white card, as all are: a note is its text, the others have their
+	// kind's icon by their title.
+	row.Background(cardColor(t)).Shadow(0, 1, 2, 0, ui.RGBA(31, 34, 51, 0.06))
 	switch {
 	case a.libSel == clip.ID:
 		row.Border(2, t.Accent)
-	case row.Hovered() && !memo:
+	case row.Hovered():
 		row.Shadow(0, 4, 14, 0, ui.RGBA(31, 34, 51, 0.1))
 	}
 	if row.Clicked() {
@@ -476,8 +447,7 @@ func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 			ui.Text(c, library.Excerpt(text, a.libQuery, 400)).FontSize(14).LineHeight(1.65).Wrap().MaxLines(7).PassThrough()
 		} else {
 			ui.Row(c).Gap(10).AlignItems(ui.Center).PassThrough().Children(func() {
-				bg, ink := tinted(t, kcol)
-				ui.Box(c).Size(30, 30).Radius(9).Background(bg).Center().Shrink(0).Children(func() { glyph(c, kindTile(clip.Kind), 15, ink) })
+				glyph(c, kindTile(clip.Kind), 16, t.TextMuted)
 				ui.Text(c, clip.Label()).FontSize(14).FontWeight(600).Grow(1).Shrink(1).MinWidth(0).MaxLines(2)
 				if clip.Starred {
 					glyph(c, iconStarFilled, 12, t.Warning)
@@ -513,6 +483,7 @@ func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 			if memo {
 				kind = "灵感"
 			}
+			mapDot(c, kcol, 6)
 			ui.Text(c, kind).FontSize(textCaption).FontWeight(600).TextColor(ink).NoWrap()
 			ui.Text(c, clip.Created.Format("1/2 15:04")).FontSize(textCaption).TextColor(t.TextMuted).NoWrap()
 			for i, tag := range clip.Tags {

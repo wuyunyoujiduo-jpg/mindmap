@@ -525,7 +525,6 @@ func (a *app) canvasArea(c *ui.Context) {
 			a.relationHandle(c)
 		}
 		a.focusBar(c)
-		a.structurePicker(c)
 		if shown == a.doc {
 			a.nodeBar(c, r, max(len(shown.Path(a.selected))-1, 0))
 		}
@@ -1744,12 +1743,13 @@ func drawLineEdges(p *ui.Painter, r layout.Result, fishbone bool, ox, oy, z, wid
 	}
 }
 
-// structurePicker is the button over the canvas's top left corner that
-// chooses the canvas's structure, from pictures of each.
-func (a *app) structurePicker(c *ui.Context) {
+// structurePicker is the toolbar's button that chooses the canvas's
+// structure, from pictures of each, and its colors; short, it says the
+// structure alone.
+func (a *app) structurePicker(c *ui.Context, short bool) {
 	t := c.Theme()
-	btn := ui.Box(c.Key("structure")).Absolute().Left(12).Top(12).Height(28).Padding(0, 10).Radius(7).Center().
-		Background(t.Background.Alpha(0.9)).Cursor(ui.CursorPointer).Label("结构").Tooltip("换这个画布的结构（思维导图、逻辑图…）和配色")
+	btn := ui.Box(c.Key("structure")).Height(30).Padding(0, 10).Radius(7).Center().Shrink(0).
+		Cursor(ui.CursorPointer).Label("结构").Tooltip("换这个画布的结构（思维导图、逻辑图…）和配色")
 	if btn.Hovered() || a.structureOpen {
 		btn.Background(t.SurfaceHover)
 	}
@@ -1757,8 +1757,11 @@ func (a *app) structurePicker(c *ui.Context) {
 		a.structureOpen = !a.structureOpen
 	}
 	btn.Children(func() {
-		ui.Text(c, a.doc.Structure.Label()+" · "+schemeOf(a.doc.Style.Scheme).name+"配色 ⌄").FontSize(textSmall).
-			TextColor(t.Text.MixOklab(t.TextMuted, 0.6)).PassThrough()
+		label := a.doc.Structure.Label() + " · " + schemeOf(a.doc.Style.Scheme).name + "配色 ⌄"
+		if short {
+			label = a.doc.Structure.Label() + " ⌄"
+		}
+		ui.Text(c, label).FontSize(textSmall).TextColor(t.Text.MixOklab(t.TextMuted, 0.6)).NoWrap().PassThrough()
 	})
 	ui.Popover(c, btn, &a.structureOpen, func() {
 		sectionHeader(c, "结构").Margin(4, 6, 2)

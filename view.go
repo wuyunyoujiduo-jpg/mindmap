@@ -252,6 +252,9 @@ func (a *app) toolbar(c *ui.Context) {
 		if a.searchOpen || a.search != "" {
 			a.searchField(c, searchWidth(room))
 		}
+		if a.mode == viewMap && room >= 560 {
+			a.structurePicker(c, room < 900)
+		}
 		if room >= 450 && iconButton(c, iconPlay, "开始演说", "开始演说 ⌘↩", 30, true).Clicked() {
 			a.later(func() { a.startPresenting("") })
 		}
@@ -262,7 +265,23 @@ func (a *app) toolbar(c *ui.Context) {
 		if iconTextButton(c, iconSparkle, aiText, "AI 助手", "问 AI：关于这张导图和收集的资料", a.aiOpen).Clicked() {
 			a.aiOpen = !a.aiOpen
 		}
+		// The panel of the topic chosen, put away or shown.
+		tip := "显示主题面板：备注、任务、标签、链接 ⌘⌥I"
+		if !a.panelOff {
+			tip = "收起主题面板 ⌘⌥I"
+		}
+		if iconButton(c, iconPanel, "主题面板", tip, 30, true).Clicked() {
+			a.togglePanel()
+		}
 	})
+}
+
+// togglePanel shows the panel of the topic chosen, or puts it away, and
+// keeps which.
+func (a *app) togglePanel() {
+	a.panelOff = !a.panelOff
+	a.cfg.PanelOpen = !a.panelOff
+	a.cfg.save()
 }
 
 // The views a map's toolbar shows, the others in its 更多 menu.

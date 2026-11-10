@@ -405,6 +405,7 @@ func newApp(plat platform, cfg config) *app {
 	a := &app{
 		plat:          plat,
 		cfg:           cfg,
+		panelOff:      !cfg.PanelOpen,
 		now:           clock,
 		hist:          model.NewHistory(200),
 		hists:         map[string]*model.History{},
