@@ -56,7 +56,9 @@ func (a *app) view(c *ui.Context) {
 				}
 				ui.Column(c).Grow(1).Children(func() {
 					a.toolbar(c)
-					ui.Divider(c)
+					if a.doc == nil || a.mode != viewMap && a.mode != viewOutline {
+						ui.Divider(c) // the map and the outline are the page itself
+					}
 					a.conflictBar(c)
 					a.brokenBar(c)
 					switch {
@@ -67,7 +69,6 @@ func (a *app) view(c *ui.Context) {
 					case a.mode == viewOutline:
 						ui.Column(c).Grow(1).Children(func() {
 							a.outlineView(c)
-							ui.Divider(c)
 							a.sheetTabs(c)
 						})
 					case a.mode == viewBoard:

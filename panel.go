@@ -58,14 +58,18 @@ func (a *app) inspector(c *ui.Context) {
 	func() {
 		// The inspector's tabs sit in the title bar's band, which drags the
 		// window, with a hairline under them.
-		ui.Row(c.Key("panel-head")).Height(toolbarHeight).Padding(0, 12).AlignItems(ui.Center).Shrink(0).
-			BorderWidth(0, 0, 1, 0).BorderColor(hairline(t)).DragWindow().Children(func() {
+		head := ui.Row(c.Key("panel-head")).Height(toolbarHeight).Padding(0, 12).AlignItems(ui.Center).Shrink(0).DragWindow()
+		if a.panelTab == tabNode || a.doc == nil {
+			head.Height(20) // a strip to drag the window by, over the topic's page
+		} else {
+			head.BorderWidth(0, 0, 1, 0).BorderColor(hairline(t))
+		}
+		head.Children(func() {
 			// One page, the topic's: its style and markers open from the bar
 			// over the canvas, the canvas's and the talk's from its corner,
 			// each with the way back.
 			if a.panelTab == tabNode || a.doc == nil {
-				ui.Text(c, "主题").FontSize(textBody).FontWeight(600)
-				return
+				return // the topic's page needs no heading: its title is one
 			}
 			back := ui.Row(c.Key("panel-back")).Height(28).Padding(0, 8, 0, 4).Gap(4).Radius(6).AlignItems(ui.Center).
 				Cursor(ui.CursorPointer).Label("返回主题")

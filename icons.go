@@ -363,7 +363,14 @@ func (a *app) noteMark(c *ui.Context, n *model.Node, size float32, col ui.Color)
 	if hover {
 		mark.Background(col.Alpha(0.15))
 	}
-	mark.Draw(func(p *ui.Painter, r ui.Rect) { drawIcon(p, r, size*0.8, iconPencil, col) })
+	// A few lines, lightly: it says there is a note, no more.
+	mark.Draw(func(p *ui.Painter, r ui.Rect) {
+		ink, w := col.Alpha(0.7), max(size/11, 1)
+		for i, k := range []float32{0.62, 0.62, 0.36} {
+			y := r.Y + r.H*(0.3+0.2*float32(i))
+			p.Line(r.X+r.W*0.19, y, r.X+r.W*(0.19+k), y, w, ink)
+		}
+	})
 	if mark.Clicked() {
 		a.noteEditing = n.ID
 	}

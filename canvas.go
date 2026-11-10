@@ -373,7 +373,6 @@ func statusColor(s model.Status) ui.Color {
 func (a *app) canvasView(c *ui.Context) {
 	ui.Column(c).Grow(1).Children(func() {
 		a.canvasArea(c)
-		ui.Divider(c)
 		a.sheetTabs(c)
 	})
 }
@@ -493,19 +492,6 @@ func (a *app) canvasArea(c *ui.Context) {
 		a.later(func() { a.addFloatingAt(x, y) }) // a floating topic where it was double-clicked
 	}
 	cv.Draw(func(p *ui.Painter, rect ui.Rect) {
-		// A grid of dots, which moves with the map.
-		step := 28 * z
-		for step < 16 {
-			step *= 2
-		}
-		dot := t.Border.Alpha(0.7)
-		x0 := rect.X + mod(cam.X, step)
-		y0 := rect.Y + mod(cam.Y, step)
-		for y := y0; y < rect.Y+rect.H && !exporting; y += step {
-			for x := x0; x < rect.X+rect.W; x += step {
-				p.Fill(ui.Rect{X: x - 1, Y: y - 1, W: 2, H: 2}, dot, 1)
-			}
-		}
 		color := func(id string) ui.Color {
 			col := lk.branch(branch[id])
 			if a.filtering() {
@@ -564,12 +550,12 @@ func (a *app) canvasArea(c *ui.Context) {
 			a.nodeBar(c, r, max(len(shown.Path(a.selected))-1, 0))
 		}
 		// Zoom and recenter, over the canvas's corner.
-		ui.Row(c).Absolute().Right(12).Bottom(12).Gap(2).Padding(3).Radius(8).
-			Background(t.Surface).Border(1, t.Border).Children(func() {
-			if iconButton(c, iconMinus, "缩小", "缩小 ⌘-", 30, true).Clicked() {
+		ui.Row(c).Absolute().Right(12).Bottom(12).Gap(0).Padding(2).Radius(9).AlignItems(ui.Center).
+			Background(t.Background).Border(1, hairline(t)).Shadow(0, 2, 10, 0, ui.RGBA(0, 0, 0, 0.06)).Children(func() {
+			if iconButton(c, iconMinus, "缩小", "缩小 ⌘-", 28, true).Clicked() {
 				a.zoomStep(false)
 			}
-			zoom := ui.Box(c.Key("zoom")).Height(30).MinWidth(54).Padding(0, 8).Radius(6).Center().Cursor(ui.CursorPointer).
+			zoom := ui.Box(c.Key("zoom")).Height(28).MinWidth(48).Padding(0, 8).Radius(6).Center().Cursor(ui.CursorPointer).
 				Label("缩放比例").Tooltip("实际大小 ⌘0")
 			if zoom.Hovered() {
 				zoom.Background(t.SurfaceHover)
@@ -578,17 +564,17 @@ func (a *app) canvasArea(c *ui.Context) {
 				a.setZoom(1)
 			}
 			zoom.Children(func() {
-				ui.Text(c, fmt.Sprintf("%d%%", int(cam.Zoom*100+0.5))).FontSize(12).PassThrough()
+				ui.Text(c, fmt.Sprintf("%d%%", int(cam.Zoom*100+0.5))).FontSize(11).TextColor(t.TextMuted).PassThrough()
 			})
-			if iconButton(c, iconPlus, "放大", "放大 ⌘=", 30, true).Clicked() {
+			if iconButton(c, iconPlus, "放大", "放大 ⌘=", 28, true).Clicked() {
 				a.zoomStep(true)
 			}
-			ui.Box(c).Width(1).Height(16).Background(t.Border).Margin(0, 2)
-			if iconButton(c, iconTarget, "回到中心", "回到中心 ⌘⇧0", 30, true).Clicked() {
+			ui.Box(c).Width(1).Height(14).Background(hairline(t)).Margin(0, 2)
+			if iconButton(c, iconTarget, "回到中心", "回到中心 ⌘⇧0", 28, true).Clicked() {
 				a.recenter()
 			}
-			iconButton(c, iconLevels, "层级", "折叠 / 展开到第几层", 30, true).Menu(a.levelMenu)
-			iconButton(c, iconDownload, "导出", "导出图片、Markdown、XMind…", 30, true).Menu(a.exportMenu)
+			iconButton(c, iconLevels, "层级", "折叠 / 展开到第几层", 28, true).Menu(a.levelMenu)
+			iconButton(c, iconDownload, "导出", "导出图片、Markdown、XMind…", 28, true).Menu(a.exportMenu)
 		})
 	})
 }
@@ -652,8 +638,8 @@ func (a *app) canvasInput(ev ui.InputEvent) bool {
 // double click renames it, and its context menu copies, moves or deletes it.
 func (a *app) sheetTabs(c *ui.Context) {
 	t := c.Theme()
-	ui.ScrollHorizontal(c.Key("sheets")).Background(t.Surface).Children(func() {
-		ui.Row(c).Padding(4, 8).Gap(4).AlignItems(ui.Center).Children(func() {
+	ui.ScrollHorizontal(c.Key("sheets")).Background(t.Background).BorderWidth(1, 0, 0, 0).BorderColor(hairline(t)).Children(func() {
+		ui.Row(c).Padding(5, 10).Gap(2).AlignItems(ui.Center).Children(func() {
 			for _, d := range a.file.Sheets {
 				a.sheetTab(c.Key(d.ID), d)
 			}
@@ -680,9 +666,9 @@ func (a *app) sheetTab(c *ui.Context, d *model.Document) {
 	active := d == a.doc
 	tab := ui.Row(c).Padding(4, 12).Radius(6).Cursor(ui.CursorPointer).Label(d.Title)
 	if active {
-		tab.Background(t.Background).Border(1, t.Border)
+		tab.Background(chosen(t))
 	} else if tab.Hovered() {
-		tab.Background(t.SurfaceHover)
+		tab.Background(t.Text.Alpha(0.04))
 	}
 	if a.renamingSheet == d.ID && !a.confirmSheet {
 		tab.Children(func() {
