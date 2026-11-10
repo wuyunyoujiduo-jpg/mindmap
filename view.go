@@ -152,17 +152,20 @@ func (a *app) empty(c *ui.Context) {
 
 // tagChip draws a tag as a small pill, colored by its name.
 func tagChip(c *ui.Context, tag, label string, active bool, size float32) ui.Element {
+	// Quietly: a gray pill with a dot of the tag's color, which says which
+	// tag it is without a patch of color; the one chosen is tinted with it.
+	t := c.Theme()
 	col := tagColor(tag)
-	chip := ui.Box(c).Padding(size*0.15, size*0.55).Radius(999).Cursor(ui.CursorPointer)
+	chip := ui.Row(c).Padding(size*0.15, size*0.6, size*0.15, size*0.5).Gap(size*0.35).Radius(999).AlignItems(ui.Center).
+		Cursor(ui.CursorPointer)
+	bg, ink := t.Text.Alpha(0.055), t.Text.MixOklab(t.TextMuted, 0.7)
 	if active {
-		chip.Background(col).Children(func() {
-			ui.Text(c, label).FontSize(size).TextColor(ui.Hex("#ffffff")).NoWrap()
-		})
-	} else {
-		chip.Background(col.Alpha(0.14)).Children(func() {
-			ui.Text(c, label).FontSize(size).TextColor(col).NoWrap()
-		})
+		bg, ink = col.Alpha(0.16), col.MixOklab(t.Text, 0.45)
 	}
+	chip.Background(bg).Children(func() {
+		ui.Box(c).Size(size*0.45, size*0.45).Radius(999).Background(col).Shrink(0).PassThrough()
+		ui.Text(c, label).FontSize(size).TextColor(ink).NoWrap().PassThrough()
+	})
 	return chip
 }
 
