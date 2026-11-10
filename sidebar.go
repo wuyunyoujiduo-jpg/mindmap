@@ -55,7 +55,11 @@ func (a *app) sidebar(c *ui.Context) {
 				ui.Text(c, name).FontSize(14).FontWeight(600).Shrink(1).MinWidth(0).SingleLine().PassThrough()
 				ui.Text(c, "⌄").FontSize(textSmall).TextColor(t.TextMuted).PassThrough()
 			})
-			iconButton(c, iconPlus, "新建", "新建导图、文件夹，或导入", 30, true).Menu(func(m *ui.Menu) {
+			if iconButton(c, iconSidebar, "收起导图列表", "收起导图列表（点左边的「导图」可以再打开）", 28, true).Clicked() {
+				a.cfg.ShowTree = false
+				a.cfg.save()
+			}
+			iconButton(c, iconPlus, "新建", "新建导图、文件夹，或导入", 28, true).Menu(func(m *ui.Menu) {
 				if m.Item("新建导图").Shortcut(ui.Cmd, ui.KeyN).Chosen() {
 					a.later(a.newMap)
 				}

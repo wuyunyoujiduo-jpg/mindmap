@@ -194,6 +194,12 @@ func (a *app) toolbar(c *ui.Context) {
 			ui.Spacer(c)
 			return
 		}
+		if !a.cfg.ShowTree { // the maps' list, put away, comes back from here
+			if iconButton(c, iconSidebar, "显示导图列表", "显示导图列表", 30, true).Clicked() {
+				a.cfg.ShowTree = true
+				a.cfg.save()
+			}
+		}
 		ui.Column(c).Gap(1).Shrink(1).MinWidth(40).Children(func() {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				// The map's color, which a click changes.

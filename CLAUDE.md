@@ -34,7 +34,10 @@ by AI, and an AI assistant.
   put on it, or as a pastel with a deep ink (`tinted`); a kind of clip has
   its own. A narrow rail has the app's parts (`rail.go`), the maps' folders
   beside it when asked; the desk (`today.go`) is the first page: write it
-  down, today's tasks, what waits for a place. On the canvas the main
+  down, today's tasks, what was written lately (only the inbox's tasks
+  wait for a map: a note's place is 收集). A page's column of lists is
+  `pageWidth` at most, a pane on the right (the week, a task's or a
+  clip's details) taking the rest. On the canvas the main
   topics are on a pastel of their branch's color, those below on a faint
   tint (the scheme 明亮 of `style.go`). Notes and clips are one page, 收集
   (`libview.go`: a wall of cards, narrowed by kind and by tag; its 回顾

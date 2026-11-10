@@ -25,7 +25,7 @@ func TestHome(t *testing.T) {
 	if !a.libOpen || !a.libHome {
 		t.Fatal("工作台 not shown")
 	}
-	for _, want := range []string{greeting(testNow), dateLabel(testNow), "今天要做", "待归位", "我的导图", "导图 使用指南", "留在收集 资料 0"} {
+	for _, want := range []string{greeting(testNow), dateLabel(testNow), "今天要做", "刚记下的", "我的导图", "导图 使用指南", "放到导图 资料 0"} {
 		if !tt.HasText(want) {
 			t.Fatalf("no %q: %q", want, tt.Texts())
 		}
@@ -49,18 +49,29 @@ func TestHome(t *testing.T) {
 		t.Fatalf("no note: %d", len(a.lib.Clips))
 	}
 	snapshot(t, tt, "home-filled")
-	// The task waits for a place, the note too; a clip said to stay in the
-	// collection waits no more.
-	if n := len(a.waiting()); n != 6 {
-		t.Fatalf("waiting %d", n)
+	// What was written lately is there: the inbox's task, which waits for
+	// a map, and the notes, which need nothing; older ones leave by
+	// themselves, as those put on a map.
+	if n := len(a.waiting()); n != 6 || tt.HasText("留在收集") || tt.HasText("待归位") {
+		t.Fatalf("lately %d: %q", n, tt.Texts())
 	}
-	if err := tt.Click("留在收集 灵感来了"); err != nil {
+	if !tt.HasText(dateLabel(testNow) + " · 今天 1 件事 · 收件箱 1 个任务") {
+		t.Fatalf("the day's line: %q", tt.Texts())
+	}
+	a.lib.Clips[0].Created = testNow.AddDate(0, 0, -8)
+	if n := len(a.waiting()); n != 5 {
+		t.Fatalf("an old note stays: %d", n)
+	}
+	a.lib.Clips[0].Created = testNow
+	if err := tt.Click("放到导图 灵感来了"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if !a.lib.Clips[0].Kept || len(a.waiting()) != 5 {
-		t.Fatalf("kept %v, waiting %d", a.lib.Clips[0].Kept, len(a.waiting()))
+	if !a.paletteOpen || a.paletteMode != paletteAttach {
+		t.Fatal("no topic asked for")
 	}
+	a.paletteOpen = false
+	tt.Frame()
 
 	// A map leads to it; 全部任务 to the tasks.
 	if err := tt.Click("导图 使用指南"); err != nil {

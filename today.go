@@ -30,15 +30,20 @@ func (a *app) homeView(c *ui.Context) {
 		})
 		ui.Scroll(c.Key("home-scroll")).Grow(1).Padding(0, 44, 32).Children(func() {
 			ui.Column(c).MaxWidth(1080).Margin(0, ui.Auto).FillWidth().Gap(22).Children(func() {
-				due, waiting := len(a.dueToday(now)), len(a.waiting())
+				due, inbox := len(a.dueToday(now)), 0
+				for _, w := range a.waiting() {
+					if w.task != nil {
+						inbox++
+					}
+				}
 				ui.Column(c).Gap(3).Children(func() {
 					ui.Text(c, greeting(now)).FontSize(26).FontWeight(700)
 					sub := dateLabel(now)
 					if due > 0 {
 						sub += fmt.Sprintf(" · 今天 %d 件事", due)
 					}
-					if waiting > 0 {
-						sub += fmt.Sprintf(" · %d 条等你归位", waiting)
+					if inbox > 0 {
+						sub += fmt.Sprintf(" · 收件箱 %d 个任务", inbox)
 					}
 					ui.Text(c, sub).FontSize(textBody).TextColor(t.TextMuted)
 				})
@@ -304,17 +309,17 @@ func (a *app) homeMaps(c *ui.Context, now time.Time) {
 	})
 }
 
-// waitingItem is something written down that has no place yet: a task of
-// the inbox, or a note or a clip no topic links to.
+// waitingItem is something written down lately: a task of the inbox, or
+// a note or a clip no topic links to.
 type waitingItem struct {
 	task *taskItem
 	clip *library.Clip
 }
 
-// waiting are the things that wait for a place: the open tasks of the
-// inbox, and the notes and clips of the last two weeks that no topic
-// links to and that were not said to stay in the collection. Not all
-// that is kept belongs on a map: 留在收集 takes one off the list for good.
+// waiting are the things written down lately: the open tasks of the
+// inbox, which wait for a map, and the notes and clips of the last week
+// that no topic links to. These leave by themselves: nothing has to be
+// done with them.
 func (a *app) waiting() []waitingItem {
 	var out []waitingItem
 	for _, it := range a.taskItems() {
@@ -322,7 +327,7 @@ func (a *app) waiting() []waitingItem {
 			out = append(out, waitingItem{task: &it})
 		}
 	}
-	since := a.now().AddDate(0, 0, -14)
+	since := a.now().AddDate(0, 0, -7)
 	for _, cl := range a.lib.Clips {
 		if !cl.Kept && cl.Created.After(since) && len(a.clipBacklinks(cl.ID)) == 0 {
 			out = append(out, waitingItem{clip: cl})
@@ -343,21 +348,18 @@ func shortPlace(p taskPlace) string {
 // homeWaitingCount is how many waiting things the desk shows.
 const homeWaitingCount = 6
 
-// homeWaiting is 待归位: what waits for a place, each a card with where
-// the AI would put it, to take, to choose another, or to leave where it
-// is.
+// homeWaiting is 刚记下的: what was written down lately, each a card with
+// where the AI would put it, to take or to choose another. Only the
+// inbox's tasks wait for a place, a map to be done on; a note or a clip
+// has its place, 收集, and may be put on a map as well.
 func (a *app) homeWaiting(c *ui.Context) {
 	t := c.Theme()
 	items := a.waiting()
 	suggested := len(a.tasks.places) + len(a.clipPlaces)
 	ui.Column(c.Key("home-waiting")).Gap(12).FillWidth().Children(func() {
 		ui.Row(c).Gap(8).AlignItems(ui.Center).FillWidth().MinHeight(24).Children(func() {
-			ui.Text(c, "待归位").FontSize(textTitle).FontWeight(700)
-			if len(items) > 0 {
-				bg, ink := tinted(t, ui.Hex("#8B6FE0"))
-				pill(c, fmt.Sprint(len(items)), bg, ink)
-			}
-			ui.Text(c, "记下的东西，可以放进导图，也可以就留在收集里").FontSize(textSmall).TextColor(t.TextMuted).Shrink(1).MinWidth(0).SingleLine()
+			ui.Text(c, "刚记下的").FontSize(textTitle).FontWeight(700)
+			ui.Text(c, "收件箱的任务，和这几天记的").FontSize(textSmall).TextColor(t.TextMuted).Shrink(1).MinWidth(0).SingleLine()
 			ui.Spacer(c)
 			switch {
 			case a.tasks.placing || a.clipPlacing:
@@ -394,7 +396,7 @@ func (a *app) homeWaiting(c *ui.Context) {
 			}
 		})
 		if len(items) == 0 {
-			ui.Text(c, "都归位了。新记下的东西会先出现在这里。").FontSize(textBody).TextColor(t.TextMuted).Margin(6, 2)
+			ui.Text(c, "这几天记下的会出现在这里。").FontSize(textBody).TextColor(t.TextMuted).Margin(6, 2)
 			return
 		}
 		for i, w := range items {
@@ -461,12 +463,11 @@ func (a *app) waitingCard(c *ui.Context, w waitingItem) {
 					it := *w.task
 					a.later(func() { a.moveTaskTo(it) })
 				}
-			} else if addButton(c, "留在收集", "不放进导图，就留在收集里；以后不再问").Label("留在收集 " + text).Clicked() {
-				cl := w.clip
+			} else if addButton(c, "放到导图…", "放到某张导图的某个主题下；不放也行，它在收集里").Label("放到导图 " + text).Clicked() {
+				ref := clipScheme + w.clip.ID
 				a.later(func() {
-					cl.Kept = true
-					delete(a.clipPlaces, cl.ID)
-					a.saveClip(cl)
+					a.attachRef = ref
+					a.openPalette(paletteAttach)
 				})
 			}
 		}

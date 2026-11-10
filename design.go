@@ -23,6 +23,10 @@ const (
 // toolbarHeight is the toolbar's, which is the window's title bar.
 const toolbarHeight = 52
 
+// pageWidth is the most a page's column of lists takes, in the middle of
+// the room it has: wider, a line's end is far from its start.
+const pageWidth = 920
+
 // hairline is the color of the thin lines between parts.
 func hairline(t *ui.Theme) ui.Color { return t.Border.Alpha(0.75) }
 
