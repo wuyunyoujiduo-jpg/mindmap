@@ -217,7 +217,18 @@ func (a *app) toolbar(c *ui.Context) {
 				dot := ui.Box(c.Key("map-color")).Size(14, 14).Radius(5).Background(a.mapColor(a.path)).Shrink(0).
 					Cursor(ui.CursorPointer).Label("导图颜色").Tooltip("这张导图的颜色：它的任务、从它来的东西都带这个颜色")
 				dot.Menu(a.mapColorMenu)
-				ui.Text(c, mapName(a.path)).Bold().FontSize(textTitle).NoWrap().MaxWidth(240).Ellipsis("…")
+				// The map's name switches maps: those opened last, the list,
+				// a new one.
+				name := ui.Row(c.Key("map-switch")).Gap(4).AlignItems(ui.Center).Radius(6).Padding(1, 4).Margin(0, 0, 0, -4).
+					Cursor(ui.CursorPointer).Label("切换导图").Tooltip("切换到其他导图")
+				if name.Hovered() {
+					name.Background(t.Text.Alpha(0.06))
+				}
+				name.Menu(a.mapSwitchMenu)
+				name.Children(func() {
+					ui.Text(c, mapName(a.path)).Bold().FontSize(textTitle).NoWrap().MaxWidth(220).Ellipsis("…").PassThrough()
+					ui.Text(c, "⌄").FontSize(textSmall).TextColor(t.TextMuted).PassThrough()
+				})
 			})
 			status, col := "已自动保存", t.TextMuted
 			switch {

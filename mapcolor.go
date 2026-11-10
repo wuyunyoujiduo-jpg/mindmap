@@ -47,3 +47,32 @@ func (a *app) mapColorMenu(m *ui.Menu) {
 func mapDot(c *ui.Context, col ui.Color, size float32) ui.Element {
 	return ui.Box(c).Size(size, size).Radius(size / 2).Background(col).Shrink(0).PassThrough()
 }
+
+// mapSwitchMenu is the menu of the map's name: the maps opened last, to
+// go to; the maps' list beside the rail; a new map; the search of all.
+func (a *app) mapSwitchMenu(m *ui.Menu) {
+	for i, f := range a.recentFiles() {
+		if i == 10 {
+			break
+		}
+		path := f.Path
+		if m.Item(mapName(path)).Checked(path == a.path).Chosen() && path != a.path {
+			a.later(func() { _ = a.open(path) })
+		}
+	}
+	m.Separator()
+	list := "显示导图列表"
+	if a.cfg.ShowTree {
+		list = "收起导图列表"
+	}
+	if m.Item(list).Chosen() {
+		a.cfg.ShowTree = !a.cfg.ShowTree
+		a.cfg.save()
+	}
+	if m.Item("搜索导图…").Shortcut(ui.Cmd, ui.KeyP).Chosen() {
+		a.later(func() { a.openPalette(paletteMaps) })
+	}
+	if m.Item("新建导图").Shortcut(ui.Cmd, ui.KeyN).Chosen() {
+		a.later(a.newMap)
+	}
+}

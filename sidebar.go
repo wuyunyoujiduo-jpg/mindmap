@@ -32,31 +32,31 @@ func (a *app) sidebar(c *ui.Context) {
 		// The title bar's part over the sidebar holds the window's controls;
 		// under it the folder of maps, whose menu opens another, then the
 		// search of everything and what is new.
-		ui.Row(c.Key("side-bar")).Height(14).Shrink(0).DragWindow()
-		folder := ui.Row(c.Key("folder-switch")).Height(32).Padding(0, 8).Margin(0, 8, 0).Gap(8).Radius(8).AlignItems(ui.Center).
-			Cursor(ui.CursorPointer).Label("切换文件夹").Tooltip(a.dir)
-		if folder.Hovered() {
-			folder.Background(t.Text.Alpha(0.06))
-		}
-		folder.Menu(func(m *ui.Menu) {
-			if m.Item("打开其他文件夹…").Shortcut(ui.Cmd, ui.KeyO).Chosen() {
-				a.pickWorkspace()
+		// One row, as high as the toolbar beside it: the folder of maps, whose
+		// menu opens another, and at its end what is new.
+		ui.Row(c.Key("side-head")).Height(toolbarHeight).Padding(0, 10, 0, 8).Gap(4).AlignItems(ui.Center).Shrink(0).DragWindow().Children(func() {
+			folder := ui.Row(c.Key("folder-switch")).Height(32).Padding(0, 8).Gap(8).Radius(8).AlignItems(ui.Center).Grow(1).Shrink(1).MinWidth(0).
+				Cursor(ui.CursorPointer).Label("切换文件夹").Tooltip(a.dir)
+			if folder.Hovered() {
+				folder.Background(t.Text.Alpha(0.06))
 			}
-			if m.Item("在 Finder 中显示").Chosen() {
-				a.plat.ShowInFolder(a.dir)
-			}
-		})
-		name := filepath.Base(a.dir)
-		folder.Children(func() {
-			initial := string([]rune(name + " ")[0])
-			ui.Box(c).Size(20, 20).Radius(6).Background(t.Text.MixOklab(t.Background, 0.08)).Center().Shrink(0).PassThrough().Children(func() {
-				ui.Text(c, strings.ToUpper(initial)).FontSize(textCaption).FontWeight(600).TextColor(t.Background).PassThrough()
+			folder.Menu(func(m *ui.Menu) {
+				if m.Item("打开其他文件夹…").Shortcut(ui.Cmd, ui.KeyO).Chosen() {
+					a.pickWorkspace()
+				}
+				if m.Item("在 Finder 中显示").Chosen() {
+					a.plat.ShowInFolder(a.dir)
+				}
 			})
-			ui.Text(c, name).FontSize(14).FontWeight(600).Grow(1).Shrink(1).MinWidth(0).SingleLine().PassThrough()
-			ui.Text(c, "⌄").FontSize(textSmall).TextColor(t.TextMuted).PassThrough()
-		})
-		ui.Row(c.Key("side-search")).Padding(8, 10, 10).Gap(6).AlignItems(ui.Center).Children(func() {
-			ui.Spacer(c)
+			name := filepath.Base(a.dir)
+			folder.Children(func() {
+				initial := string([]rune(name + " ")[0])
+				ui.Box(c).Size(20, 20).Radius(6).Background(t.Text.MixOklab(t.Background, 0.08)).Center().Shrink(0).PassThrough().Children(func() {
+					ui.Text(c, strings.ToUpper(initial)).FontSize(textCaption).FontWeight(600).TextColor(t.Background).PassThrough()
+				})
+				ui.Text(c, name).FontSize(14).FontWeight(600).Shrink(1).MinWidth(0).SingleLine().PassThrough()
+				ui.Text(c, "⌄").FontSize(textSmall).TextColor(t.TextMuted).PassThrough()
+			})
 			iconButton(c, iconPlus, "新建", "新建导图、文件夹，或导入", 30, true).Menu(func(m *ui.Menu) {
 				if m.Item("新建导图").Shortcut(ui.Cmd, ui.KeyN).Chosen() {
 					a.later(a.newMap)

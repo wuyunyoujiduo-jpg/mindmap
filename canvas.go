@@ -1780,7 +1780,7 @@ func drawLineEdges(p *ui.Painter, r layout.Result, fishbone bool, ox, oy, z, wid
 func (a *app) structurePicker(c *ui.Context) {
 	t := c.Theme()
 	btn := ui.Box(c.Key("structure")).Absolute().Left(12).Top(12).Height(28).Padding(0, 10).Radius(7).Center().
-		Background(t.Background.Alpha(0.9)).Cursor(ui.CursorPointer).Label("结构").Tooltip("这个画布的结构、配色和演说")
+		Background(t.Background.Alpha(0.9)).Cursor(ui.CursorPointer).Label("结构").Tooltip("换这个画布的结构（思维导图、逻辑图…）和配色")
 	if btn.Hovered() || a.structureOpen {
 		btn.Background(t.SurfaceHover)
 	}
@@ -1788,20 +1788,11 @@ func (a *app) structurePicker(c *ui.Context) {
 		a.structureOpen = !a.structureOpen
 	}
 	btn.Children(func() {
-		ui.Text(c, a.doc.Structure.Label()+" · "+schemeOf(a.doc.Style.Scheme).name+" ⌄").FontSize(textSmall).
+		ui.Text(c, a.doc.Structure.Label()+" · "+schemeOf(a.doc.Style.Scheme).name+"配色 ⌄").FontSize(textSmall).
 			TextColor(t.Text.MixOklab(t.TextMuted, 0.6)).PassThrough()
 	})
 	ui.Popover(c, btn, &a.structureOpen, func() {
-		ui.Row(c).Gap(4).Padding(4, 4, 0).Children(func() {
-			if ghostButton(c, "画布", "配色、连线、字体和背景").Clicked() {
-				a.structureOpen = false
-				a.panelTab, a.panelOff = tabCanvas, false
-			}
-			if ghostButton(c, "演说", "演说模式的幻灯片和讲稿").Clicked() {
-				a.structureOpen = false
-				a.panelTab, a.panelOff = tabPresent, false
-			}
-		})
+		sectionHeader(c, "结构").Margin(4, 6, 2)
 		ui.Grid(c).Columns(3).Gap(8).Padding(4).Children(func() {
 			for _, st := range model.Structures {
 				card := ui.Column(c.Key(string(st))).Gap(6).Padding(8).Radius(8).
@@ -1821,6 +1812,42 @@ func (a *app) structurePicker(c *ui.Context) {
 					})
 					ui.Text(c, st.Label()).FontSize(12).TextAlign(ui.Center)
 				})
+			}
+		})
+		// The colors of the branches, a scheme a chip: its first colors and
+		// its name.
+		sectionHeader(c, "配色").Margin(8, 6, 2)
+		ui.Row(c).Gap(6).Wrap().GapY(6).Padding(4).MaxWidth(430).Children(func() {
+			for _, sc := range schemes {
+				chip := ui.Row(c.Key("scheme:"+sc.id)).Height(30).Padding(0, 10, 0, 8).Gap(6).Radius(8).AlignItems(ui.Center).
+					Border(1, t.Border).Cursor(ui.CursorPointer).Label("配色 " + sc.name)
+				if sc.id == schemeOf(a.doc.Style.Scheme).id {
+					chip.Border(2, t.Accent)
+				} else if chip.Hovered() {
+					chip.Background(t.SurfaceHover)
+				}
+				if chip.Clicked() {
+					id := sc.id
+					a.later(func() { a.setStyle("scheme", func(s *model.CanvasStyle) { s.Scheme = id }) })
+				}
+				chip.Children(func() {
+					ui.Row(c).Gap(2).PassThrough().Children(func() {
+						for i := range 4 {
+							ui.Box(c).Size(9, 9).Radius(5).Background(ui.Hex(sc.colors[i]))
+						}
+					})
+					ui.Text(c, sc.name).FontSize(textSmall).PassThrough()
+				})
+			}
+		})
+		ui.Row(c).Gap(4).Padding(6, 4, 2).Children(func() {
+			if ghostButton(c, "画布", "连线、字体、背景等更多画布设置").Clicked() {
+				a.structureOpen = false
+				a.panelTab, a.panelOff = tabCanvas, false
+			}
+			if ghostButton(c, "演说", "演说模式的幻灯片和讲稿").Clicked() {
+				a.structureOpen = false
+				a.panelTab, a.panelOff = tabPresent, false
 			}
 		})
 	})
