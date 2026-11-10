@@ -232,12 +232,39 @@ func TestHomeTicksAndReads(t *testing.T) {
 	}
 	tt.Type("周五 给客户发报价单 #报价")
 	tt.Frame()
-	for _, want := range []string{"#报价", "记下 ↩", "任务 · 周五"} {
+	for _, want := range []string{"记下 ↩", "任务 · 周五", "加图片", "编号列表"} {
 		if !tt.HasText(want) {
 			t.Fatalf("the line does not say %q: %q", want, tt.Texts())
 		}
 	}
 	snapshot(t, tt, "home-typed")
+
+	// A # offers the tags used last; a click writes one.
+	for i, tag := range []string{"会议", "产品"} {
+		cl, _ := a.addMemo("旧的一条 #"+tag, "手动")
+		cl.Created = testNow.Add(time.Duration(i) * time.Minute)
+	}
+	a.homeDraft = "新的想法 #"
+	tt.Frame()
+	if got := a.recentTags("", 6); len(got) < 2 || got[0] != "产品" {
+		t.Fatalf("tags offered %q", got)
+	}
+	if err := tt.Click("用标签 会议"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.homeDraft != "新的想法 #会议 " || tt.HasText("用标签 产品") {
+		t.Fatalf("draft %q", a.homeDraft)
+	}
+	a.homeDraft = "要点"
+	tt.Frame()
+	tt.Click("列表")
+	tt.Frame()
+	tt.Click("编号列表")
+	tt.Frame()
+	if a.homeDraft != "要点\n- \n1. " {
+		t.Fatalf("lists %q", a.homeDraft)
+	}
 }
 
 // TestGroundChosen: the window's ground is white until another is chosen

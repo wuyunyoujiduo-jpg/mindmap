@@ -74,6 +74,10 @@ func (a *app) homeLine(c *ui.Context) {
 	box.Children(func() {
 		in := ui.TextAreaBase(c.Key("home-line-input"), &a.homeDraft).Lines(2, 5).
 			Placeholder("现在的想法是…  以「周五」这样的日子开头就是任务").FontSize(textTitle).LineHeight(1.5).FillWidth().Label("记一条灵感或任务")
+		if a.homeRefocus {
+			a.homeRefocus = false
+			in.Focus()
+		}
 		captureFocus(c, box, in)
 		in.HandleInput(func(ev ui.InputEvent) bool {
 			if ev.Kind == ui.InputKeyDown && ev.Key == ui.KeyEnter && ev.Mods&ui.Shift == 0 {
@@ -84,29 +88,69 @@ func (a *app) homeLine(c *ui.Context) {
 		})
 		text := strings.TrimSpace(a.homeDraft)
 		ui.Row(c.Key("tools")).Gap(6).AlignItems(ui.Center).FillWidth().Children(func() {
-			tool := ui.Box(c.Key("tag")).Size(32, 30).Radius(7).Center().Cursor(ui.CursorPointer).Label("加标签").Tooltip("加一个 #标签").
-				Background(t.Text.Alpha(0)).Transition(easeLook)
-			ink := t.TextMuted
-			if tool.Hovered() {
-				tool.Background(t.Text.Alpha(0.05))
-				ink = t.Text
-			}
-			if tool.Clicked() {
-				a.homeDraft = strings.TrimRight(a.homeDraft, " ") + " #"
-			}
-			tool.Children(func() { ui.Text(c, "#").FontSize(17).TextColor(ink).PassThrough() })
-			if text != "" {
-				if _, due, _ := parseTaskLine(text, a.now()); taskLike(text, a.now()) {
-					label := "任务"
-					if due != nil {
-						label += " · " + dayLabel(*due, a.now())
-					}
-					softTag(c, label)
-				} else {
-					softTag(c, "灵感")
+			// What the line can take, as a note in flomo: a tag, a picture,
+			// a list with points or with numbers.
+			tool := func(key, mark string, ic icon, tip string, click func()) {
+				b := ui.Box(c.Key(key)).Size(32, 30).Radius(7).Center().Cursor(ui.CursorPointer).Label(key).Tooltip(tip).
+					Background(t.Text.Alpha(0)).Transition(easeLook)
+				ink := t.TextMuted
+				if b.Hovered() {
+					b.Background(t.Text.Alpha(0.05))
+					ink = t.Text
 				}
-				for _, tag := range memoTags(text) {
-					softTag(c, "#"+tag)
+				if b.Clicked() {
+					click()
+					a.homeRefocus = true // writing goes on
+				}
+				b.Children(func() {
+					if mark != "" {
+						ui.Text(c, mark).FontSize(17).TextColor(ink).PassThrough()
+					} else {
+						glyph(c, ic, 17, ink)
+					}
+				})
+			}
+			line := func(lead string) { // a new line beginning so, or the first
+				d := a.homeDraft
+				if d != "" && !strings.HasSuffix(d, "\n") {
+					d += "\n"
+				}
+				a.homeDraft = d + lead
+			}
+			tool("加标签", "#", 0, "加一个 #标签", func() { a.homeDraft = strings.TrimRight(a.homeDraft, " ") + " #" })
+			tool("加图片", "", iconImage, "收一张图片（也可以直接粘贴或拖进来）", func() {
+				a.plat.OpenFile("选择图片", nil, func(path string) {
+					if path != "" {
+						a.dropClips([]string{path})
+					}
+				})
+			})
+			ui.Box(c).Width(1).Height(16).Margin(0, 4).Background(hairline(t))
+			tool("列表", "", iconLevels, "列表：每行一个点", func() { line("- ") })
+			tool("编号列表", "1.", 0, "编号列表：1. 2. 3.", func() {
+				n := 1
+				for _, l := range strings.Split(a.homeDraft, "\n") {
+					if len(l) > 1 && l[0] >= '1' && l[0] <= '9' && strings.Contains(l[:min(len(l), 4)], ". ") {
+						n++
+					}
+				}
+				line(fmt.Sprintf("%d. ", n))
+			})
+			if _, due, _ := parseTaskLine(text, a.now()); text != "" && taskLike(text, a.now()) {
+				label := "任务"
+				if due != nil {
+					label += " · " + dayLabel(*due, a.now())
+				}
+				softTag(c, label)
+			}
+			// While a tag is being written, the tags used last that begin so:
+			// a click writes one.
+			if part, ok := tagBeingWritten(a.homeDraft); ok {
+				for _, tag := range a.recentTags(part, 6) {
+					chip := softTag(c, "#"+tag).Cursor(ui.CursorPointer).Label("用标签 " + tag).Tooltip("用这个标签")
+					if chip.Clicked() {
+						a.homeDraft = a.homeDraft[:len(a.homeDraft)-len(part)] + tag + " "
+					}
 				}
 			}
 			ui.Spacer(c)
@@ -125,6 +169,32 @@ func (a *app) homeLine(c *ui.Context) {
 			send.Children(func() { glyph(c, iconSend, 16, ui.Hex("#FFFFFF")) })
 		})
 	})
+}
+
+// tagBeingWritten tells whether a draft ends in a tag not yet finished,
+// a # and what follows it with no space, and gives what follows.
+func tagBeingWritten(draft string) (string, bool) {
+	i := strings.LastIndex(draft, "#")
+	if i < 0 || strings.ContainsAny(draft[i:], " \n\t　") {
+		return "", false
+	}
+	return draft[i+1:], true
+}
+
+// recentTags are the tags of the notes and clips, those used last first,
+// that begin with part: n at most.
+func (a *app) recentTags(part string, n int) []string {
+	clips := slices.Clone(a.lib.Clips)
+	slices.SortStableFunc(clips, func(x, y *library.Clip) int { return y.Created.Compare(x.Created) })
+	var out []string
+	for _, cl := range clips {
+		for _, tag := range cl.Tags {
+			if len(out) < n && strings.HasPrefix(tag, part) && tag != part && !slices.Contains(out, tag) {
+				out = append(out, tag)
+			}
+		}
+	}
+	return out
 }
 
 // softTag is a word on a pale wash of the accent, as a tag in a note: it
