@@ -6,10 +6,10 @@ import (
 )
 
 // nodeBarWidth is the width of the bar by the node selected.
-const nodeBarWidth = 6*30 + 2*4 + 9
+const nodeBarWidth = 5*30 + 2*4 + 9
 
 // nodeBar is the small bar of the node selected, over the canvas's top:
-// a child, a sibling, its style and markers, a task, and the rest of its
+// a child, its style and markers, a task, and the rest of its
 // menu. It is not there while the node is edited, or with many
 // selected.
 func (a *app) nodeBar(c *ui.Context, r layout.Result, depth int) {
@@ -27,11 +27,10 @@ func (a *app) nodeBar(c *ui.Context, r layout.Result, depth int) {
 	bar := ui.Row(c.Key("node-bar")).Absolute().Left(x).Top(y).Height(34).Padding(0, 2).Gap(0).AlignItems(ui.Center).
 		Radius(9).Background(t.Background).Border(1, hairline(t)).Shadow(0, 4, 16, 0, ui.RGBA(0, 0, 0, 0.1)).Label("主题操作")
 	bar.Children(func() {
-		if iconButton(c, iconLevels, "加子主题", "加子主题（Tab）", 30, true).Clicked() {
+		// One button to add: a topic under this one, the usual; a sibling is
+		// Return's, and in the menu at the bar's end.
+		if iconButton(c, iconPlus, "加子主题", "加子主题（Tab）；加同级主题按回车", 30, true).Clicked() {
 			a.later(a.addChild)
-		}
-		if iconButton(c, iconPlus, "加同级", "加同级主题（↩）", 30, true).Clicked() {
-			a.later(a.addSibling)
 		}
 		ui.Box(c).Size(1, 16).Margin(0, 3).Background(hairline(t))
 		col := a.branchColor(n.ID)
