@@ -146,3 +146,16 @@ func TestPaletteTag(t *testing.T) {
 		t.Fatalf("items %q", kinds)
 	}
 }
+
+// The window's controls sit over the rail: what is beside it keeps clear.
+func TestRailClearsWindowControls(t *testing.T) {
+	a, tt := newTestApp(t)
+	a.cfg.ShowTree = false
+	tt.SetTitleBar(ui.TitleBar{Height: 38, Left: 80})
+	tt.Frame()
+	tt.Frame()
+	r, ok := tt.Find("导图颜色")
+	if !ok || r.X < 80+12 {
+		t.Fatalf("the map's title starts at %v, under the window's controls", r.X)
+	}
+}

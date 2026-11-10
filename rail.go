@@ -6,7 +6,7 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// railWidth is the width of the rail of the app's parts.
+// railWidth is the least width of the rail of the app's parts.
 const railWidth = 76
 
 // rail is the narrow bar on the left: the parts of the app, each an icon
@@ -16,7 +16,10 @@ const railWidth = 76
 func (a *app) rail(c *ui.Context) {
 	t := c.Theme()
 	bar := c.TitleBar()
-	col := ui.Column(c.Key("rail")).Width(railWidth).Shrink(0).FillHeight().AlignItems(ui.Center).Padding(0, 0, 10).Gap(4)
+	// As wide as the window's controls and a little more, so that they sit
+	// over the rail and what is beside it keeps clear of them.
+	a.railNow = max(railWidth, bar.Left+12)
+	col := ui.Column(c.Key("rail")).Width(a.railNow).Shrink(0).FillHeight().AlignItems(ui.Center).Padding(0, 0, 10).Gap(4)
 	if !c.Vibrancy() {
 		col.Background(t.Surface)
 	}
@@ -93,8 +96,9 @@ func (a *app) rail(c *ui.Context) {
 
 // sideWidth is the room the rail and, when shown, the maps' list take.
 func (a *app) sideWidth() float32 {
+	rail := max(a.railNow, railWidth)
 	if a.cfg.ShowTree {
-		return railWidth + a.sidebarWidth
+		return rail + a.sidebarWidth
 	}
-	return railWidth
+	return rail
 }

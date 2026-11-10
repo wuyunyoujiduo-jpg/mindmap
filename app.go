@@ -377,6 +377,7 @@ type app struct {
 	// panelShow are the parts of the topic's page opened to add to, by
 	// the node and the part (panel.go).
 	panelShow map[string]bool
+	railNow   float32 // the rail's width as last drawn (rail.go)
 	// clipPlaces are where the AI would put notes and clips, by their
 	// IDs (sortout.go); clipPlacing while it is asked.
 	clipPlaces    map[string]taskPlace
