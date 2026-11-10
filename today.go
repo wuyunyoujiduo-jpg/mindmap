@@ -87,6 +87,14 @@ func (a *app) homeLine(c *ui.Context) {
 			}
 			return false
 		})
+		// Where what is written goes, said as it is written.
+		if text := strings.TrimSpace(a.homeDraft); text != "" {
+			if _, due, _ := parseTaskLine(text, a.now()); due != nil {
+				pill(c, "任务 · "+dayLabel(*due, a.now()), t.Background, t.Accent)
+			} else {
+				pill(c, "灵感", t.Background, t.TextMuted)
+			}
+		}
 		ui.Text(c, "↩").FontSize(textCaption).TextColor(t.TextMuted)
 	})
 }

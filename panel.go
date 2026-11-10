@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -129,42 +130,110 @@ func (a *app) nodePanel(c *ui.Context) {
 				a.mutate("title:"+n.ID, func() { n.Title = title })
 			}
 
-			// What it is, as rows of properties, then what is written of it
-			// and what it links to, each part under a hairline.
-			ui.Column(c.Key("props")).Gap(2).FillWidth().Children(func() {
-				a.taskEditor(c, n)
-				propRow(c, "标签", func() { a.tagPicker(c, n) })
-			})
+			// Only what the topic has shows: its task's rows, its tags, its
+			// note, what it links to. The rest is a row of quiet buttons
+			// that add it, so that a plain topic has a plain page.
+			shown := func(kind string, has bool) bool { return has || a.panelShow[n.ID+":"+kind] }
+			show := func(kind string) {
+				if a.panelShow == nil || len(a.panelShow) > 64 {
+					a.panelShow = map[string]bool{}
+				}
+				a.panelShow[n.ID+":"+kind] = true
+			}
+			tags := shown("tags", len(n.Tags) > 0)
+			links := shown("links", len(n.Links) > 0 || len(a.backlinks(n.ID)) > 0)
+			image := shown("image", n.Image != nil)
+			files := shown("files", len(n.Files) > 0)
+			plan := n.Task != nil && shown("plan", n.Task.Estimate > 0 || n.Task.Iteration != "" || len(n.Task.After) > 0)
+			measures := a.file != nil && len(a.file.Measures) > 0
+
+			if n.Task != nil || tags {
+				ui.Column(c.Key("props")).Gap(2).FillWidth().Children(func() {
+					if n.Task != nil {
+						a.taskEditor(c, n)
+					}
+					if tags {
+						propRow(c, "标签", func() {
+							if a.panelShow[n.ID+":tags"] {
+								a.tagPicker(c, n) // all the map's tags, and a new one
+								return
+							}
+							// Its own tags, a click taking one off, and a way to the rest.
+							for _, tag := range n.Tags {
+								if tagChip(c.Key("own:"+tag), tag, tag, true, 12).Label("标签 " + tag).Clicked() {
+									a.toggleTag(n, tag)
+								}
+							}
+							if addButton(c, "＋", "加标签").Label("＋ 标签").Clicked() {
+								show("tags")
+							}
+						})
+					}
+				})
+			}
 
 			// The note shows as it is written: Markdown typed formats as it
 			// goes.
 			sectionCard(c, iconPencil, tileYellow, "备注", func() { a.notePictureButton(c, "panel", n) }, func() {
 				a.noteEditor(c, "panel", n, textBody, "实现要点、决策、注意事项…（# 标题、- 列表、**粗体** 输入即显示）").
-					FillWidth().MinHeight(96).MaxHeight(420)
+					FillWidth().MinHeight(72).MaxHeight(420)
 			})
 
-			sectionCard(c, iconLink, tileBlue, "链接、附件与资料", nil, func() {
-				a.linksSection(c, n)
-				a.imageSection(c, n)
-				a.filesSection(c, n)
-				a.nodeRelatedSection(c, n)
-				a.annotationsSection(c, n)
-			})
+			clips, nodes := a.relatedOfCached(n)
+			rels := slices.ContainsFunc(a.doc.Relations, func(r model.Relation) bool { return r.From == n.ID || r.To == n.ID })
+			if links || image || files || len(clips)+len(nodes) > 0 || n.Summary != nil || n.Boundary != nil || rels {
+				sectionCard(c, iconLink, tileBlue, "链接、附件与资料", nil, func() {
+					if links {
+						a.linksSection(c, n)
+					}
+					if image {
+						a.imageSection(c, n)
+					}
+					if files {
+						a.filesSection(c, n)
+					}
+					a.nodeRelatedSection(c, n)
+					a.annotationsSection(c, n)
+				})
+			}
 
-			sectionCard(c, iconLevels, tileBlue, "度量与迭代", nil, func() {
-				a.measuresSection(c, n)
-				if n.Task != nil {
-					a.planEditor(c, n)
+			if plan || measures {
+				sectionCard(c, iconLevels, tileBlue, "度量与迭代", nil, func() {
+					a.measuresSection(c, n)
+					if plan {
+						a.planEditor(c, n)
+					}
+				})
+			}
+
+			// What can be added, each a quiet button, gone once it is there.
+			ui.Row(c.Key("panel-add")).Gap(2).Wrap().GapY(2).Margin(0, 0, 0, -8).AlignItems(ui.Center).Children(func() {
+				add := func(text, tip, kind string) {
+					if addButton(c, text, tip).Clicked() {
+						show(kind)
+					}
+				}
+				if n.Task == nil && addButton(c, "＋ 任务", "设为任务：安排状态、日期和优先级，出现在看板和任务里").Label("作为任务").Clicked() {
+					a.later(func() { a.toggleTask(n) })
+				}
+				if !tags {
+					add("＋ 标签", "给这个主题打标签", "tags")
+				}
+				if !links {
+					add("＋ 链接", "链接到网址、文件、其他主题或资料", "links")
+				}
+				if !image {
+					add("＋ 图片", "给主题配一张图片（也可以选中后 ⌘V 粘贴）", "image")
+				}
+				if !files {
+					add("＋ 附件", "把文件附在主题上（也可以拖到主题上）", "files")
+				}
+				if n.Task != nil && !plan {
+					add("＋ 排期", "开始日期、估时、所属迭代和前置任务", "plan")
 				}
 			})
 
 			ui.Text(c, a.nodeStats(n)).FontSize(textCaption).TextColor(t.TextMuted)
-			if n != a.doc.Root {
-				if ui.Button(c, "删除节点").TextColor(t.Danger).Clicked() {
-					a.selected = n.ID
-					a.deleteSelected()
-				}
-			}
 		})
 	}()
 }
@@ -206,17 +275,6 @@ func (a *app) breadcrumbs(c *ui.Context, n *model.Node) {
 func (a *app) taskEditor(c *ui.Context, n *model.Node) {
 	t := c.Theme()
 	if n.Task == nil {
-		propRow(c, "状态", func() {
-			b := ui.Box(c.Key("make-task")).Padding(3, 8).Margin(0, 0, 0, -8).Radius(6).Cursor(ui.CursorPointer).
-				Label("作为任务").Tooltip("设为任务后，可以安排状态、优先级和日期，并出现在看板和任务里")
-			if b.Hovered() {
-				b.Background(t.SurfaceHover)
-			}
-			if b.Clicked() {
-				a.later(func() { a.toggleTask(n) })
-			}
-			b.Children(func() { ui.Text(c, "设为任务").FontSize(textBody).TextColor(t.TextMuted).PassThrough() })
-		})
 		return
 	}
 	task := n.Task
@@ -240,7 +298,7 @@ func (a *app) taskEditor(c *ui.Context, n *model.Node) {
 		}).Label("任务状态").FontSize(textSmall)
 	})
 	a.dateField(c, "截止", "截止日期", &task.Due)
-	if task.Start != nil || task.Due != nil {
+	if task.Start != nil || a.panelShow[n.ID+":plan"] {
 		a.dateField(c, "开始", "开始日期", &task.Start)
 	}
 	if task.Overdue(a.now()) {

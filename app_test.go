@@ -289,6 +289,8 @@ func TestPanelEditsNode(t *testing.T) {
 	if n.Note != "PNG 和 SVG" {
 		t.Fatalf("note %q", n.Note)
 	}
+	clickInPanel(t, tt, "＋ 标签") // a plain topic's page has it to add
+	tt.Frame()
 	if err := tt.Click("新标签"); err != nil {
 		t.Fatal(err)
 	}
@@ -1589,6 +1591,8 @@ func TestPickImage(t *testing.T) {
 	os.WriteFile(path, testPNG(t, 120, 200), 0o644)
 	a.plat.(*fakePlatform).picked = path
 	clickNode(t, tt, a, "后端")
+	clickInPanel(t, tt, "＋ 图片")
+	tt.Frame()
 	if err := tt.Click("添加图片…"); err != nil {
 		t.Fatal(err)
 	}
@@ -1695,6 +1699,10 @@ func TestGlobalTags(t *testing.T) {
 		t.Fatal(err)
 	}
 	n, _ := a.selectedNode()
+	if _, ok := tt.Find("＋ 标签"); ok {
+		clickInPanel(t, tt, "＋ 标签")
+		tt.Frame()
+	}
 	clickInPanel(t, tt, "标签 待评审")
 	if !n.HasTag("待评审") {
 		t.Fatalf("tags %v", n.Tags)
@@ -2338,6 +2346,8 @@ func TestLinks(t *testing.T) {
 
 	// Adding links in the panel; the code opens in the editor at its line.
 	clickNode(t, tt, a, "登录")
+	clickInPanel(t, tt, "＋ 链接")
+	tt.Frame()
 	clickInPanel(t, tt, "添加链接")
 	tt.Type("src/login.go:42")
 	tt.Key(0, ui.KeyEnter)
@@ -2403,6 +2413,8 @@ func TestDependenciesAndIterations(t *testing.T) {
 	slow := find(t, a, "列表加载慢")
 	// 搜索 waits on 列表加载慢, through the palette.
 	clickNode(t, tt, a, "搜索")
+	clickInPanel(t, tt, "＋ 排期")
+	tt.Frame()
 	clickInPanel(t, tt, "添加前置任务…")
 	if a.paletteMode != paletteAfter {
 		t.Fatal("not choosing")

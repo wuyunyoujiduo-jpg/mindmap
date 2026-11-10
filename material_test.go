@@ -247,7 +247,7 @@ func TestQuickAccess(t *testing.T) {
 	a.unfiledOpen = true
 	a.favoritesOpen = true
 	tt.Frame()
-	if !tt.HasText("把导图或文档拖到这里，方便随时切换") {
+	if !tt.HasText("快捷访问") { // its hint is its tooltip
 		t.Fatalf("texts %q", tt.Texts())
 	}
 	drag := func(from string) {

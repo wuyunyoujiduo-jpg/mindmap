@@ -171,9 +171,11 @@ func (a *app) section(c *ui.Context, title string, open *bool, dropDir string, f
 func (a *app) favorites(c *ui.Context) {
 	t := c.Theme()
 	box := ui.Column(c.Key("quick")).Gap(2).Radius(6)
-	if _, over := ui.DragOver[fileDrag](box); over {
+	_, over := ui.DragOver[fileDrag](box)
+	if over {
 		box.Background(t.Accent.Alpha(0.12))
 	}
+	box.Tooltip("把导图或文档拖到这里，方便随时切换")
 	if d, ok := ui.Drop[fileDrag](box); ok {
 		a.later(func() { a.addQuick(d) })
 	}
@@ -193,8 +195,8 @@ func (a *app) favorites(c *ui.Context) {
 					n++
 				}
 			}
-			if n == 0 {
-				ui.Text(c, "把导图或文档拖到这里，方便随时切换").FontSize(12).TextColor(t.TextMuted).Margin(2, 12, 4).Wrap()
+			if n == 0 && over { // said only while something is dragged over
+				ui.Text(c, "松开，放进快捷访问").FontSize(12).TextColor(t.TextMuted).Margin(2, 12, 4)
 			}
 		})
 	})

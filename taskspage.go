@@ -829,7 +829,7 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 		empty = empty && len(g.items) == 0
 	}
 	ui.Scroll(c.Key(fmt.Sprint("task-list:", a.tasks.view))).Grow(1).Children(func() {
-		ui.Column(c).Padding(12, 20, 32).Gap(2).MaxWidth(820).FillWidth().Children(func() {
+		ui.Column(c).Padding(8, 20, 32).Gap(2).FillWidth().Children(func() {
 			if empty && len(done) == 0 {
 				ui.Column(c).Padding(60, 0).Gap(8).AlignItems(ui.Center).FillWidth().Children(func() {
 					glyph(c, iconCheck, 36, t.TextMuted.Alpha(0.6))
@@ -1002,9 +1002,27 @@ func (a *app) taskMenu(m *ui.Menu, it taskItem) {
 			}
 		}
 	})
+	if m.Item("移到导图…").Chosen() {
+		a.later(func() { a.moveTaskTo(it) })
+	}
 	if m.Item("在导图中打开").Chosen() {
 		a.later(func() { a.libOpen = false; a.goToNode(it.path, it.sheet, it.node.ID) })
 	}
+}
+
+// moveTaskTo asks which topic of which map a task goes under, and moves
+// it there, its own topics with it: the way out of the inbox, without
+// leaving the tasks' page.
+func (a *app) moveTaskTo(it taskItem) {
+	a.saveTaskDrafts()
+	a.goToNode(it.path, it.sheet, it.node.ID)
+	if a.path != it.path || a.selected != it.node.ID {
+		a.tell("没有找到这个任务")
+		return
+	}
+	a.openTasks()
+	a.tasks.sel, a.tasks.draftOf = "", ""
+	a.openPalette(paletteMove)
 }
 
 // dropTaskOn makes el take tasks dropped on it, which go to the day.

@@ -371,9 +371,12 @@ type app struct {
 	lastTheme *ui.Theme
 
 	// Chrome.
-	mode          int
-	search        string
-	searchOpen    bool // the map's search shows: ⌘F, until Esc
+	mode       int
+	search     string
+	searchOpen bool // the map's search shows: ⌘F, until Esc
+	// panelShow are the parts of the topic's page opened to add to, by
+	// the node and the part (panel.go).
+	panelShow     map[string]bool
 	tagFilter     string
 	sidebarWidth  float32
 	panelWidth    float32

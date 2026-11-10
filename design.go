@@ -301,3 +301,21 @@ func underlineTab(c *ui.Context, key, name, count string, on bool) ui.Element {
 	})
 	return b
 }
+
+// addButton is a button that adds a part to a page: as ghostButton, in
+// the muted text, for a row of them is not what the page is about.
+func addButton(c *ui.Context, text, tip string) ui.Element {
+	t := c.Theme()
+	b := ui.Box(c.Key("add:"+text)).Padding(4, 8).Radius(6).Cursor(ui.CursorPointer).Label(text).Tooltip(tip).Shrink(0)
+	col := t.TextMuted
+	switch {
+	case b.Pressed():
+		b.Background(t.Text.Alpha(0.1))
+		col = t.Text
+	case b.Hovered():
+		b.Background(t.Text.Alpha(0.06))
+		col = t.Text
+	}
+	b.Children(func() { ui.Text(c, text).FontSize(textSmall).TextColor(col).PassThrough() })
+	return b
+}

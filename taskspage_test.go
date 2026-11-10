@@ -300,3 +300,42 @@ func TestTaskDetail(t *testing.T) {
 	}
 	snapshot(t, tt, "tasks-detail")
 }
+
+// A task of the inbox moves under a topic of a map, from the tasks' page.
+func TestTaskMoveToMap(t *testing.T) {
+	a, tt := newTestApp(t)
+	guide := a.path
+	a.addTask("明天 写周报", nil)
+	tt.Frame()
+	a.openTasks()
+	a.tasks.view = tasksInbox
+	tt.Frame()
+	var it taskItem
+	for _, x := range a.taskItems() {
+		if x.node.Title == "写周报" {
+			it = x
+		}
+	}
+	if it.node == nil {
+		t.Fatal("no task in the inbox")
+	}
+	a.moveTaskTo(it)
+	tt.Frame()
+	if !a.paletteOpen || !a.tasks.open {
+		t.Fatalf("palette %v, tasks %v", a.paletteOpen, a.tasks.open)
+	}
+	tt.Type("待优化")
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	g, err := model.Load(guide)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opt, err := findIn(g.Sheets[0], "待优化")
+	if err != nil || opt.Children[len(opt.Children)-1].Title != "写周报" || opt.Children[len(opt.Children)-1].Task == nil {
+		t.Fatalf("not moved: %v", err)
+	}
+	if !a.tasks.open {
+		t.Fatal("left the tasks' page")
+	}
+}
