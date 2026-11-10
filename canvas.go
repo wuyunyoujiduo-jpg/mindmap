@@ -503,7 +503,7 @@ func (a *app) canvasArea(c *ui.Context) {
 		if exporting {
 			view = ui.Rect{} // all of it
 		}
-		soft := func(id string) ui.Color { return color(id).Alpha(0.8) } // the lines a little lighter than the topics
+		soft := func(id string) ui.Color { return color(id) } // the lines in their branch's color
 		lines := func() {
 			a.drawBoundaries(p, r, shown, rect.X+cam.X, rect.Y+cam.Y, z, color)
 			drawEdges(p, r, a.doc.Structure, rect.X+cam.X, rect.Y+cam.Y, z, lk.line, view, soft)
@@ -752,25 +752,24 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 	// Quietly: the central topic solid, the main topics tinted with their
 	// branch's color and written in a deep shade of it, and the topics
 	// below them all alike, on a faint gray.
-	branchText := accent.MixOklab(t.Text, 0.45)
+	// In color: the central topic the ink's, the main topics filled with
+	// their branch's color and written in the ink, which reads on each of
+	// them, and the topics below them on a tint of it.
+	branchText := ui.Hex("#1F2233")
 	switch depth {
 	case 0:
 		fill, filled = lookOf(a.doc.Style).root(t), true
-		el.Radius(12 * z)
+		el.Radius(14 * z)
 	case 1:
-		tint := float32(0.15)
+		fill = accent
+		el.Radius(11 * z)
+	default:
+		tint := float32(0.13)
 		if t.Dark {
-			tint, branchText = 0.24, accent.MixOklab(t.Text, 0.3)
+			tint = 0.22
 		}
 		fill = accent.Alpha(tint)
-		el.Radius(10 * z)
-	default:
-		tint := float32(0.045)
-		if t.Dark {
-			tint = 0.08
-		}
-		fill = t.Text.Alpha(tint)
-		el.Radius(7 * z)
+		el.Radius(9 * z)
 	}
 	// A summary's topic: a pill outlined in its branch's color, its text
 	// in it too, lightly tinted, unlike the topics it sums up.
@@ -916,7 +915,7 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 	// Marks read on the node's fill: on filled topics, in the fill's text
 	// color.
 	muted := t.TextMuted
-	if filled {
+	if filled || depth == 1 { // on a main topic's color too
 		muted = onFill.Alpha(0.75)
 	}
 	el.Children(func() {
@@ -1049,7 +1048,14 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 				})
 				continue
 			}
-			tagChip(c.Key("tag:"+tag), tag, tag, false, markSize*z).PassThrough()
+			if depth == 1 && !summary && st.Fill == "" { // on the branch's color: a light pill, in the ink
+				size := markSize * z
+				ui.Box(c.Key("tag:"+tag)).Padding(size*0.15, size*0.6).Radius(999).Background(ui.Hex("#FFFFFF").Alpha(0.5)).PassThrough().Children(func() {
+					ui.Text(c, tag).FontSize(size).TextColor(onFill).NoWrap().PassThrough()
+				})
+			} else {
+				tagChip(c.Key("tag:"+tag), tag, tag, false, markSize*z).PassThrough()
+			}
 		}
 		if p.more > 0 {
 			ui.Text(c, "+"+strconv.Itoa(p.more)).FontSize(markSize * z).TextColor(muted).NoWrap()

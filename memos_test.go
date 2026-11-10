@@ -23,7 +23,13 @@ func TestMemoTags(t *testing.T) {
 // filtered by a tag, edited and found again; quick capture writes there.
 func TestMemos(t *testing.T) {
 	a, tt := newTestApp(t)
-	if err := tt.Click("灵感"); err != nil {
+	// 收集 has the notes with the clips; 回顾 is their page, with the days
+	// written on and the ways to look back.
+	if err := tt.Click("收集"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if err := tt.Click("回顾"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()

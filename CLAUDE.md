@@ -31,8 +31,12 @@ by AI, and an AI assistant.
   put on it, shown as a dot or a tint with a deep ink (`tinted`). A narrow
   rail has the app's parts (`rail.go`), the maps' folders beside it when
   asked; the desk (`today.go`) is the first page: write it down, today's
-  tasks, what waits for a place. Design drafts are in the Design artifact
-  the user reviews before a page is built.
+  tasks, what waits for a place. On the canvas the main topics are filled
+  with their branch's color and written in the ink, those below on a tint
+  of it (the scheme 明亮 of `style.go`). Notes and clips are one page, 收集
+  (`libview.go`: a wall of cards, a kind a color), the notes' days and
+  reviews behind its 回顾 (`memos.go`). Design drafts are in the Design
+  artifact the user reviews before a page is built.
 - The app's icon is drawn by `tools/icon/`; `resources/icon.png` is the
   desk (`tools/icon/desk.py`: a white note on the app's indigo, three lines
   each led by a dot of a map's color, the last ticked, the AI's spark), and

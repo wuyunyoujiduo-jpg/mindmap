@@ -386,6 +386,7 @@ func (a *app) tasksColumn(c *ui.Context, all, items []taskItem, now time.Time) {
 			}
 		})
 		if a.tasks.view != tasksWeek && a.tasks.view != tasksMonth {
+			a.weekStrip(c, items, now)
 			counts := a.taskListCounts(items)
 			ui.Row(c.Key("tasks-lists")).Padding(0, 28).Gap(22).Shrink(0).FillWidth().
 				BorderWidth(0, 0, 1, 0).BorderColor(hairline(t)).Children(func() {
@@ -948,7 +949,10 @@ func (a *app) taskRow(c *ui.Context, it taskItem, overdue bool) {
 			if it.where != "" && it.where != it.mapName {
 				sub += " · " + it.where
 			}
-			ui.Text(c, sub).FontSize(textCaption).TextColor(t.TextMuted).SingleLine()
+			ui.Row(c).Gap(5).AlignItems(ui.Center).Children(func() {
+				mapDot(c, a.mapColor(it.path), 7) // its map's color
+				ui.Text(c, sub).FontSize(textCaption).TextColor(t.TextMuted).SingleLine().Shrink(1).MinWidth(0)
+			})
 		})
 		if p, ok := a.tasks.places[it.node.ID]; ok { // where the AI would put it
 			ui.Text(c, "→ "+p.label).FontSize(textSmall).TextColor(t.Accent).SingleLine().Shrink(2).MinWidth(60).PassThrough()
@@ -1257,4 +1261,91 @@ func (a *app) taskListCounts(items []taskItem) map[int]string {
 		}
 	}
 	return out
+}
+
+// weekStrip is this week over the lists: a tile a day, with a dot for
+// each of its tasks in its map's color, today's in the accent. A click
+// shows the day; a task dropped on a tile goes to its day.
+func (a *app) weekStrip(c *ui.Context, items []taskItem, now time.Time) {
+	t := c.Theme()
+	day := today(now)
+	start := weekStart(day)
+	ui.Row(c.Key("week-strip")).Padding(4, 28, 14).Gap(10).FillWidth().Shrink(0).Children(func() {
+		for i := range 7 {
+			d := start.AddDate(0, 0, i)
+			var open []taskItem
+			done := 0
+			for _, it := range items {
+				if date := it.date(); date != nil && sameDay(*date, d) {
+					if it.done() {
+						done++
+					} else {
+						open = append(open, it)
+					}
+				}
+			}
+			isToday := sameDay(d, day)
+			shown := a.tasks.view == tasksDay && sameDay(a.tasks.day, d)
+			tile := ui.Column(c.Key(fmt.Sprint("week-day:", i))).Grow(1).Basis(0).MinWidth(0).MinHeight(74).Padding(9, 11).Gap(6).Radius(14).
+				Cursor(ui.CursorPointer).Label(fmt.Sprintf("%s %d日", weekdayName(d), d.Day()))
+			ink, soft := t.Text, t.TextMuted
+			switch {
+			case isToday:
+				tile.Background(t.Accent)
+				ink, soft = ui.Hex("#FFFFFF"), ui.Hex("#FFFFFF")
+			case i >= 5 && len(open)+done == 0:
+				tile.Background(t.Text.Alpha(0.04))
+			default:
+				tile.Background(cardColor(t))
+			}
+			if shown && !isToday {
+				tile.Border(2, t.Accent)
+			}
+			over := false
+			if _, o := ui.DragOver[taskDrag](tile); o {
+				over = true
+			}
+			a.dropTaskOn(tile, d)
+			if over {
+				tile.Border(2, t.Accent)
+			}
+			if tile.Clicked() {
+				a.tasks.view, a.tasks.day = tasksDay, d
+			}
+			tile.Children(func() {
+				name := weekdayName(d)
+				if isToday {
+					name = "今天"
+				}
+				head := ui.Text(c, fmt.Sprintf("%s %d", name, d.Day())).FontSize(textSmall).TextColor(soft).PassThrough()
+				if isToday {
+					head.FontWeight(700)
+				}
+				ui.Row(c).Gap(4).Height(8).AlignItems(ui.Center).PassThrough().Children(func() {
+					for k, it := range open {
+						if k == 6 {
+							break
+						}
+						col := a.mapColor(it.path)
+						if isToday {
+							col = ui.Hex("#FFFFFF")
+						}
+						mapDot(c, col, 8)
+					}
+				})
+				note := ""
+				switch {
+				case over:
+					note = "松开，改到这天"
+				case len(open) > 0 && done > 0:
+					note = fmt.Sprintf("%d 件 · 做完 %d", len(open), done)
+				case len(open) > 0:
+					note = fmt.Sprintf("%d 件", len(open))
+				case done > 0:
+					note = fmt.Sprintf("做完 %d", done)
+				}
+				ui.Text(c, note).FontSize(textCaption).TextColor(ink.Alpha(0.75)).SingleLine().PassThrough()
+			})
+		}
+	})
 }

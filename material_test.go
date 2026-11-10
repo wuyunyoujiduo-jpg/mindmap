@@ -90,7 +90,7 @@ func TestAIMergeMaterial(t *testing.T) {
 	a.sendAI = fake.send
 	a.cfg.AIKey = "sk-ant-test"
 	a.showLibrary()
-	a.libKind = kindDocs
+	a.libKind = kindMemos
 	tt.Frame()
 	tt.Click("AI 整理资料")
 	if err := tt.ChooseMenuItem("并入「使用指南」"); err != nil {
@@ -221,7 +221,7 @@ func TestDropClipOnMap(t *testing.T) {
 	a, tt := newTestApp(t)
 	clip, _ := a.addClipText("季度复盘模板", "手动")
 	a.showLibrary()
-	a.libKind = kindDocs
+	a.libKind = kindMemos
 	tt.Frame()
 	src, ok1 := tt.Find("资料 " + clip.Label())
 	dst, ok2 := tt.Find("使用指南")

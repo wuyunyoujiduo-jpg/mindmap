@@ -218,7 +218,7 @@ func TestTasksDragInList(t *testing.T) {
 	var head ui.Rect
 	found := false
 	for _, s := range tt.Texts() {
-		if strings.HasPrefix(s, label) {
+		if strings.HasPrefix(s, label+"  ") { // the list's heading of the day, not the week's tile
 			head, found = tt.Find(s)
 			break
 		}

@@ -50,8 +50,8 @@ func TestDocumentsInFolders(t *testing.T) {
 	}
 	snapshot(t, tt, "sidebar-library")
 
-	// 文档 lists text, pictures and files; not maps or links.
-	a.libKind = kindDocs
+	// 灵感 lists the texts; not maps, links, pictures or files.
+	a.libKind = kindMemos
 	if hits := a.libHits(); len(hits) != 1 || hits[0].Clip != clip {
 		t.Fatalf("documents %d", len(hits))
 	}

@@ -71,8 +71,7 @@ func (a *app) rail(c *ui.Context) {
 			due = fmt.Sprint(n)
 		}
 		item("tasks", iconCheck, "任务", due, "所有导图里的任务", page && a.tasks.open, a.openTasks)
-		item("memos", iconPencil, "灵感", "", "随手记下的想法", page && a.memos.open, a.openMemos)
-		item("library", iconLibrary, "资料库", "", "文档、链接和图片", page && !a.libHome && !a.auto.open && !a.tasks.open && !a.memos.open, func() { a.openList(kindAll, "") })
+		item("library", iconLibrary, "收集", "", "灵感、链接、文档和图片", page && !a.libHome && !a.auto.open && !a.tasks.open, func() { a.openList(kindAll, "") })
 		item("auto", iconBolt, "自动化", "", "把日常任务写成程序，手动或定时运行", page && a.auto.open, a.openAutomations)
 		ui.Spacer(c)
 		if iconButton(c, iconSearch, "搜索全部", "搜索导图、任务、灵感和资料，或执行命令（⌘K）", 36, true).Clicked() {

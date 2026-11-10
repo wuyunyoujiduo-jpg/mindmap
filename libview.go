@@ -28,7 +28,7 @@ func (a *app) libraryView(c *ui.Context) {
 			ui.Column(c).Grow(1).Basis(0).MinWidth(0).Children(func() {
 				column := ui.Column(c.Key("lib-column")).Grow(1).FillWidth()
 				if sel == nil {
-					column.MaxWidth(820).Margin(0, ui.Auto)
+					column.MaxWidth(1080).Margin(0, ui.Auto)
 				}
 				column.Children(func() { a.libraryColumn(c) })
 			})
@@ -51,8 +51,11 @@ func (a *app) libraryColumn(c *ui.Context) {
 	func() {
 		ui.Row(c.Key("lib-head")).Height(toolbarHeight).Padding(0, 10, 0, 16).Gap(10).AlignItems(ui.Center).Shrink(0).
 			DragWindow().Children(func() {
-			ui.Text(c, "资料库").FontSize(textHeadline).FontWeight(600).NoWrap()
-			ui.Text(c, fmt.Sprintf("%d 条文档、链接和图片", len(l.Clips))).FontSize(textSmall).TextColor(t.TextMuted).NoWrap()
+			ui.Text(c, "收集").FontSize(textHeadline).FontWeight(700).NoWrap()
+			ui.Text(c, fmt.Sprintf("%d 条灵感和资料", len(l.Clips))).FontSize(textSmall).TextColor(t.TextMuted).NoWrap()
+			if ghostButton(c, "回顾", "灵感的热力图、每日回顾和随机漫步").Clicked() {
+				a.later(a.openMemos)
+			}
 			if a.libWorking != "" {
 				ui.Spinner(c)
 				ui.Text(c, fmt.Sprintf("整理中，还有 %d 条", len(a.libQueue)+1)).FontSize(12).TextColor(t.TextMuted).NoWrap()
@@ -106,14 +109,27 @@ func (a *app) libraryColumn(c *ui.Context) {
 					ui.Text(c, msg).FontSize(13).TextColor(t.TextMuted).Wrap().Padding(20, 10)
 				})
 			} else {
-				// A virtual list: only the rows in view are built.
-				ui.List(c.Key("clips"), nil, len(hits)).Grow(1).Basis(0).ItemKey(func(i int) any { return hits[i].Clip.ID }).
+				// A wall of cards, three across, one beside a clip chosen; a
+				// virtual list of its rows, so that only those in view are built.
+				cols := 3
+				if a.lib.Find(a.libSel) != nil {
+					cols = 1
+				}
+				rows := (len(hits) + cols - 1) / cols
+				ui.List(c.Key(fmt.Sprint("clips:", cols)), nil, rows).Grow(1).Basis(0).ItemKey(func(i int) any { return hits[i*cols].Clip.ID }).
 					Rows(func(r ui.ListRow) {
-						ui.Box(r.Context).Padding(3, 10).Children(func() {
-							if clip := hits[r.Index].Clip; clip.Kind == kindMap {
-								a.mapRow(r.Context, clip)
-							} else {
-								a.clipRow(r.Context, clip)
+						ui.Row(r.Context).Padding(6, 12).Gap(12).AlignItems(ui.Stretch).FillWidth().Children(func() {
+							for k := range cols {
+								i := r.Index*cols + k
+								if i >= len(hits) {
+									ui.Box(r.Context).Grow(1).Basis(0)
+									continue
+								}
+								if clip := hits[i].Clip; clip.Kind == kindMap {
+									ui.Box(r.Context.Key(clip.ID)).Grow(1).Basis(0).MinWidth(0).Children(func() { a.mapRow(r.Context, clip) })
+								} else {
+									a.clipRow(r.Context.Key(clip.ID), clip)
+								}
 							}
 						})
 					})
@@ -264,15 +280,38 @@ func (a *app) dropClips(files []string) {
 func (a *app) clipFilters(c *ui.Context) {
 	t := c.Theme()
 	l := a.lib
-	ui.Row(c.Key("lib-kinds")).Padding(4, 16, 0).Margin(0, 0, 8).Gap(20).FillWidth().
-		BorderWidth(0, 0, 1, 0).BorderColor(hairline(t)).Children(func() {
+	ui.Row(c.Key("lib-kinds")).Padding(2, 12, 10).Gap(6).FillWidth().AlignItems(ui.Center).Children(func() {
 		for _, k := range []struct {
 			kind int
 			name string
-		}{{kindAll, "全部"}, {kindDocs, "文档"}, {kindLinks, "链接"}, {kindImages, "图片"}} {
-			if underlineTab(c, "kind:"+k.name, k.name, "", a.libKind == k.kind).Clicked() {
+			col  ui.Color
+		}{{kindAll, "全部", t.Text}, {kindMemos, "灵感", clipColor(library.KindText)}, {kindLinks, "链接", clipColor(library.KindLink)},
+			{kindDocs, "文档", clipColor(library.KindFile)}, {kindImages, "图片", clipColor(library.KindImage)}} {
+			n := 0
+			for _, cl := range l.Clips {
+				if ofKind(cl, k.kind) {
+					n++
+				}
+			}
+			on := a.libKind == k.kind
+			b := ui.Row(c.Key("kind:"+k.name)).Height(32).Padding(0, 14).Gap(6).Radius(10).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(k.name)
+			bg, ink := tinted(t, k.col)
+			switch {
+			case on && k.kind == kindAll:
+				bg, ink = t.Text, t.Background
+			case on:
+				bg, ink = k.col, ui.Hex("#1F2233")
+			case k.kind == kindAll:
+				bg, ink = t.Text.Alpha(0.06), t.Text
+			}
+			b.Background(bg)
+			if b.Clicked() {
 				a.libKind = k.kind
 			}
+			b.Children(func() {
+				ui.Text(c, k.name).FontSize(textBody).FontWeight(600).TextColor(ink).PassThrough()
+				ui.Text(c, fmt.Sprint(n)).FontSize(textSmall).TextColor(ink.Alpha(0.75)).PassThrough()
+			})
 		}
 	})
 	ui.Row(c).Padding(0, 12, 8).Gap(6).Wrap().GapY(6).AlignItems(ui.Center).Children(func() {
@@ -334,13 +373,23 @@ func kindIcon(kind string) icon {
 // clipRow is a clip in the list.
 func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 	t := c.Theme()
-	row := ui.Row(c).Padding(8, 10).Gap(10).Radius(8).Cursor(ui.CursorPointer).Label("资料 " + clip.Label()).
-		Drag(fileDrag{Clip: clip.ID}) // onto a folder of the sidebar
+	memo := isMemo(clip)
+	kcol := clipColor(clip.Kind)
+	row := ui.Column(c).Grow(1).Basis(0).MinWidth(0).Padding(14, 16).Gap(9).Radius(14).Cursor(ui.CursorPointer).
+		Label("资料 " + clip.Label()).Drag(fileDrag{Clip: clip.ID}) // onto a folder of the maps' list
+	// A note is a slip of its color; the others white cards, each kind's
+	// icon in its own.
+	if memo {
+		bg, _ := tinted(t, kcol)
+		row.Background(bg)
+	} else {
+		row.Background(cardColor(t)).Shadow(0, 1, 2, 0, ui.RGBA(31, 34, 51, 0.06))
+	}
 	switch {
 	case a.libSel == clip.ID:
-		row.Background(chosen(t))
-	case row.Hovered():
-		row.Background(t.SurfaceHover)
+		row.Border(2, t.Accent)
+	case row.Hovered() && !memo:
+		row.Shadow(0, 4, 14, 0, ui.RGBA(31, 34, 51, 0.1))
 	}
 	if row.Clicked() {
 		if a.libSel == clip.ID {
@@ -351,14 +400,26 @@ func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 	}
 	row.ContextMenu(func(m *ui.Menu) { a.clipMenu(m, clip) })
 	row.Children(func() {
-		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(3).Children(func() {
-			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-				tile(c, kindTile(clip.Kind), kindColor(clip.Kind), 20)
-				ui.Text(c, clip.Label()).FontSize(13).Bold().SingleLine().Shrink(1).MinWidth(0)
+		if memo {
+			text := clip.Text
+			if r := []rune(text); len(r) > 600 {
+				text = string(r[:600]) + "…"
+			}
+			ui.Text(c, library.Excerpt(text, a.libQuery, 400)).FontSize(14).LineHeight(1.65).Wrap().MaxLines(7).PassThrough()
+		} else {
+			ui.Row(c).Gap(10).AlignItems(ui.Center).PassThrough().Children(func() {
+				bg, ink := tinted(t, kcol)
+				ui.Box(c).Size(30, 30).Radius(9).Background(bg).Center().Shrink(0).Children(func() { glyph(c, kindTile(clip.Kind), 15, ink) })
+				ui.Text(c, clip.Label()).FontSize(14).FontWeight(600).Grow(1).Shrink(1).MinWidth(0).MaxLines(2)
 				if clip.Starred {
 					glyph(c, iconStarFilled, 12, t.Warning)
 				}
 			})
+			if clip.Kind == library.KindImage {
+				if b := a.fileBitmap(a.lib.FilePath(clip)); b != nil {
+					ui.Image(c, b).Height(110).FillWidth().Fit(ui.Cover).Radius(8).PassThrough()
+				}
+			}
 			sub := cmpOr(clip.Desc, clip.Summary)
 			if sub == "" {
 				sub = cmpOr(clip.Note, clip.Text)
@@ -370,40 +431,65 @@ func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 				sub = "" // the label says it all
 			}
 			if sub != "" {
-				if r := []rune(sub); len(r) > 3000 { // the rows are drawn every frame
+				if r := []rune(sub); len(r) > 3000 { // the cards are drawn every frame
 					sub = string(r[:3000])
 				}
-				ui.Text(c, library.Excerpt(sub, a.libQuery, 140)).FontSize(12).TextColor(t.TextMuted).Wrap().MaxLines(2)
-			}
-			a.clipPlaceLine(c, clip)
-			ui.Row(c).Gap(6).Wrap().GapY(4).AlignItems(ui.Center).Children(func() {
-				if clip.Category != "" {
-					ui.Box(c).Padding(1, 7).Radius(4).Background(t.Text.Alpha(0.07)).Children(func() {
-						ui.Text(c, clip.Category).FontSize(11).TextColor(t.TextMuted).NoWrap()
-					})
-				}
-				for i, tag := range clip.Tags {
-					if i == 4 {
-						break
-					}
-					tagChip(c.Key("t"+tag), tag, "#"+tag, false, 11)
-				}
-				ui.Text(c, clip.Created.Format("1/2 15:04")).FontSize(11).TextColor(t.TextMuted).NoWrap()
-				if s, ok := a.libStatus[clip.ID]; ok {
-					col := t.TextMuted
-					if strings.Contains(s, "失败") {
-						col = t.Danger
-					}
-					ui.Text(c, s).FontSize(11).TextColor(col).SingleLine().Shrink(1).MinWidth(0)
-				}
-			})
-		})
-		if clip.Kind == library.KindImage {
-			if b := a.fileBitmap(a.lib.FilePath(clip)); b != nil {
-				ui.Image(c, b).Size(64, 48).Fit(ui.Cover).Radius(6).Shrink(0).PassThrough()
+				ui.Text(c, library.Excerpt(sub, a.libQuery, 140)).FontSize(textBody).LineHeight(1.55).TextColor(t.TextMuted).Wrap().MaxLines(3).PassThrough()
 			}
 		}
+		a.clipPlaceLine(c, clip)
+		ui.Spacer(c)
+		ui.Row(c).Gap(6).Wrap().GapY(4).AlignItems(ui.Center).Children(func() {
+			_, ink := tinted(t, kcol)
+			kind := library.KindLabel(clip.Kind)
+			if memo {
+				kind = "灵感"
+			}
+			ui.Text(c, kind).FontSize(textCaption).FontWeight(600).TextColor(ink).NoWrap()
+			ui.Text(c, clip.Created.Format("1/2 15:04")).FontSize(textCaption).TextColor(t.TextMuted).NoWrap()
+			if clip.Category != "" {
+				ui.Text(c, clip.Category).FontSize(textCaption).TextColor(t.TextMuted).NoWrap()
+			}
+			for i, tag := range clip.Tags {
+				if i == 3 {
+					break
+				}
+				b := ui.Text(c.Key("t"+tag), "#"+tag).FontSize(textCaption).TextColor(t.TextMuted).NoWrap().Cursor(ui.CursorPointer)
+				if b.Clicked() {
+					a.libTag = tag
+				}
+			}
+			if s, ok := a.libStatus[clip.ID]; ok {
+				col := t.TextMuted
+				if strings.Contains(s, "失败") {
+					col = t.Danger
+				}
+				ui.Text(c, s).FontSize(textCaption).TextColor(col).SingleLine().Shrink(1).MinWidth(0)
+			}
+			// The map it is on, by its color.
+			if back := a.clipBacklinks(clip.ID); len(back) > 0 {
+				ui.Spacer(c)
+				ui.Row(c).Gap(5).AlignItems(ui.Center).Shrink(1).MinWidth(0).Children(func() {
+					mapDot(c, a.mapColor(back[0].path), 7)
+					ui.Text(c, "在 "+mapName(back[0].path)).FontSize(textCaption).TextColor(t.TextMuted).SingleLine()
+				})
+			}
+		})
 	})
+}
+
+// clipColor is the color of a kind of clip: amber notes, blue links,
+// rose pictures, green documents.
+func clipColor(kind string) ui.Color {
+	switch kind {
+	case library.KindText:
+		return ui.Hex("#F5A300")
+	case library.KindLink:
+		return ui.Hex("#2D9CDB")
+	case library.KindImage:
+		return ui.Hex("#E64980")
+	}
+	return ui.Hex("#12B886")
 }
 
 // fileBitmap is the picture of a file, decoded once.
