@@ -25,20 +25,23 @@ by AI, and an AI assistant.
 
 - The UI's look is in `design.go` (sizes, helpers, the theme of
   `quietTheme`) and `icons.go` (icons drawn, not glyphs, so that they sit
-  centered). The page is a warm white with white cards on it (`cardColor`),
-  the ink a deep blue, indigo for what acts. Colors carry meaning: each map
-  has its own (`mapcolor.go`), which marks its card, its tasks and what was
-  put on it, shown as a dot or a tint with a deep ink (`tinted`). A narrow
-  rail has the app's parts (`rail.go`), the maps' folders beside it when
-  asked; the desk (`today.go`) is the first page: write it down, today's
-  tasks, what waits for a place. On the canvas the main topics are filled
-  with their branch's color and written in the ink, those below on a tint
-  of it (the scheme 明亮 of `style.go`). Notes and clips are one page, 收集
-  (`libview.go`: a wall of cards, a kind a color), the notes' days and
-  reviews behind its 回顾 (`memos.go`). Design drafts are in the Design
-  artifact the user reviews before a page is built.
+  centered; the rail's and the lists' are one family of thin lines,
+  `drawRailIcon`). The palette is warm and restrained: paper for the page,
+  a shade of beige for the panels, the rail and the board's columns, white
+  cards (`cardColor`), a near-black ink, thin warm lines, a violet-blue
+  for what acts. Color is kept for small things that mean something: each
+  map has its own (`mapcolor.go`), shown as a dot by its tasks and what was
+  put on it, or as a pastel with a deep ink (`tinted`); a kind of clip has
+  its own. A narrow rail has the app's parts (`rail.go`), the maps' folders
+  beside it when asked; the desk (`today.go`) is the first page: write it
+  down, today's tasks, what waits for a place. On the canvas the main
+  topics are on a pastel of their branch's color, those below on a faint
+  tint (the scheme 明亮 of `style.go`). Notes and clips are one page, 收集
+  (`libview.go`: a wall of cards), the notes' days and reviews behind its
+  回顾 (`memos.go`). Design drafts are in the Design artifact the user
+  reviews before a page is built.
 - The app's icon is drawn by `tools/icon/`; `resources/icon.png` is the
-  desk (`tools/icon/desk.py`: a white note on the app's indigo, three lines
+  desk (`tools/icon/desk.py`: a white note on the app's violet-blue, three lines
   each led by a dot of a map's color, the last ticked, the AI's spark), and
   `appicons/` the icons to choose in the settings (the desk, the vivid note
   of `vivid.py` in three colors, the knowledge cards of `bold.py`, the

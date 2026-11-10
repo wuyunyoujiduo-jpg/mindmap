@@ -255,7 +255,7 @@ func (a *app) folderRow(c *ui.Context, f model.Folder, depth int) {
 			arrow = "▸"
 		}
 		ui.Text(c, arrow).FontSize(10).TextColor(t.TextMuted).Width(10)
-		sideIcon(c, iconFolder, false)
+		sideTile(c, iconFolder, t.TextMuted)
 		if a.renaming == path {
 			a.renameInput(c)
 			return
@@ -344,7 +344,7 @@ func (a *app) fileRow(c *ui.Context, f model.FileInfo, depth int, inFavorites bo
 			a.renameInput(c)
 			return
 		}
-		sideIcon(c, iconMap, current)
+		sideTile(c, iconMap, a.mapColor(f.Path))
 		text := ui.Text(c, midEllipsis(f.Name, a.sidebarWidth-90-float32(depth)*14)).FontSize(13).Grow(1).Shrink(1).MinWidth(0).SingleLine()
 		if current {
 			text.Bold()
@@ -618,15 +618,20 @@ func sideFootButton(c *ui.Context, text, tip string) ui.Element {
 	return b
 }
 
-// sideIcon is a row's icon in the sidebar, in the accent color, stronger
-// on the row chosen.
-func sideIcon(c *ui.Context, ic icon, current bool) {
+// sideTile is a row's icon in the maps' list, of the rail's family: thin
+// lines in the muted ink. A map's carries a dot of the map's color, the
+// one place its color shows there.
+func sideTile(c *ui.Context, ic icon, col ui.Color) {
 	t := c.Theme()
-	col := t.TextMuted // quiet: the accent only for the row shown
-	if current {
-		col = t.Accent
-	}
-	ui.Box(c).Size(16, 16).Shrink(0).PassThrough().Draw(func(p *ui.Painter, r ui.Rect) { drawIcon(p, r, 14, ic, col) })
+	ui.Box(c).Size(18, 18).Shrink(0).PassThrough().Draw(func(p *ui.Painter, r ui.Rect) {
+		switch ic {
+		case iconMap:
+			drawRailIcon(p, r, 17, railMap, t.TextMuted)
+			p.FillPath(new(ui.Path).Circle(r.X+r.W*0.29, r.Y+r.H/2, 2.6), col) // its topic, in its color
+		default:
+			drawIcon(p, r, 15, ic, t.TextMuted)
+		}
+	})
 }
 
 // folderOpen tells whether a folder of the sidebar is shown open: those

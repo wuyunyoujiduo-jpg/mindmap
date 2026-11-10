@@ -122,7 +122,7 @@ func (a *app) docRow(c *ui.Context, clip *library.Clip, depth int) {
 	}
 	row.ContextMenu(func(m *ui.Menu) { a.clipMenu(m, clip) })
 	row.Children(func() {
-		sideIcon(c, kindIcon(clip.Kind), current)
+		sideTile(c, kindIcon(clip.Kind), clipColor(clip.Kind))
 		ui.Text(c, midEllipsis(clip.Label(), a.sidebarWidth-70-float32(depth)*14)).FontSize(13).Grow(1).Shrink(1).MinWidth(0).SingleLine()
 	})
 }
@@ -243,7 +243,7 @@ func (a *app) unfiledRow(c *ui.Context) {
 			arrow = "▸"
 		}
 		ui.Text(c, arrow).FontSize(10).TextColor(t.TextMuted).Width(10)
-		sideIcon(c, iconInbox, false)
+		sideTile(c, iconInbox, t.TextMuted)
 		ui.Text(c, "未归档").FontSize(13).Grow(1).NoWrap()
 		if n := len(docs); n > 0 {
 			ui.Text(c, fmt.Sprint(n)).FontSize(11).TextColor(t.TextMuted)

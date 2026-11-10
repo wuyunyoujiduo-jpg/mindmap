@@ -106,7 +106,7 @@ func (a *app) boardColumns(c *ui.Context, tasks []model.TaskNode) {
 					col = append(col, tn)
 				}
 			}
-			column := ui.Column(c.Key(string(s))).Grow(1).Basis(0).Radius(10)
+			column := ui.Column(c.Key(string(s))).Grow(1).Basis(0).Radius(12).Background(t.Surface).Padding(0, 8)
 			if _, over := ui.DragOver[nodeDrag](column); over {
 				column.Background(statusColor(s).Alpha(0.08))
 			}
@@ -172,8 +172,7 @@ func (a *app) showOnBoard(id string) {
 // how many.
 func boardHead(c *ui.Context, mark func(), name string, n int) {
 	t := c.Theme()
-	ui.Row(c).Padding(4, 4, 10).Margin(0, 0, 10).Gap(8).AlignItems(ui.Center).
-		BorderWidth(0, 0, 1, 0).BorderColor(hairline(t)).Children(func() {
+	ui.Row(c).Padding(12, 6, 10).Gap(8).AlignItems(ui.Center).Children(func() {
 		mark()
 		ui.Text(c, name).FontSize(textBody).FontWeight(600)
 		ui.Text(c, fmt.Sprint(n)).FontSize(textSmall).TextColor(t.TextMuted)
@@ -184,7 +183,7 @@ func (a *app) keyIssueColumn(c *ui.Context) {
 	t := c.Theme()
 	col := a.keyIssues()
 	red := ui.Hex("#D9605B")
-	column := ui.Column(c.Key("key-issues")).Grow(1).Basis(0).Radius(10)
+	column := ui.Column(c.Key("key-issues")).Grow(1).Basis(0).Radius(12).Background(t.Surface).Padding(0, 8)
 	if _, over := ui.DragOver[nodeDrag](column); over {
 		column.Background(red.Alpha(0.08))
 	}
@@ -221,7 +220,7 @@ func (a *app) taskCard(c *ui.Context, tn model.TaskNode, showStatus bool) {
 	if task == nil { // a 重点问题 that is not a task
 		task = &model.Task{}
 	}
-	card := ui.Column(c).Padding(10, 12).Gap(6).Radius(10).Background(t.Background).Border(1, hairline(t)).
+	card := ui.Column(c).Padding(10, 12).Gap(6).Radius(10).Background(cardColor(t)).
 		Drag(nodeDrag{n.ID}).Cursor(ui.CursorPointer).Label(n.Title)
 	if n.ID == a.selected {
 		card.Border(2, t.Accent)

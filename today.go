@@ -107,7 +107,7 @@ func (a *app) homeLine(c *ui.Context) {
 				bg, ink := tinted(t, t.Success)
 				pill(c, label, bg, ink)
 			} else {
-				bg, ink := tinted(t, ui.Hex("#F5A300"))
+				bg, ink := tinted(t, ui.Hex("#E8A13A"))
 				pill(c, "灵感", bg, ink)
 			}
 		}
@@ -355,7 +355,7 @@ func (a *app) homeWaiting(c *ui.Context) {
 		ui.Row(c).Gap(8).AlignItems(ui.Center).FillWidth().MinHeight(24).Children(func() {
 			ui.Text(c, "待归位").FontSize(textTitle).FontWeight(700)
 			if len(items) > 0 {
-				bg, ink := tinted(t, ui.Hex("#9B5DE5"))
+				bg, ink := tinted(t, ui.Hex("#8B6FE0"))
 				pill(c, fmt.Sprint(len(items)), bg, ink)
 			}
 			ui.Text(c, "记下的东西，可以放进导图，也可以就留在收集里").FontSize(textSmall).TextColor(t.TextMuted).Shrink(1).MinWidth(0).SingleLine()
@@ -486,7 +486,7 @@ func (a *app) waitingCard(c *ui.Context, w waitingItem) {
 		if has {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).FillWidth().Padding(0, 0, 0, 26).Children(func() {
 				if has {
-					glyph(c, iconSparkle, 13, ui.Hex("#9B5DE5"))
+					glyph(c, iconSparkle, 13, ui.Hex("#8B6FE0"))
 					bg, ink := tinted(t, a.mapColor(place.path))
 					ui.Row(c).Padding(4, 10).Gap(6).Radius(8).AlignItems(ui.Center).Background(bg).Shrink(1).MinWidth(0).Tooltip(place.label).Children(func() {
 						mapDot(c, a.mapColor(place.path), 8)

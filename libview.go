@@ -300,7 +300,7 @@ func (a *app) clipFilters(c *ui.Context) {
 			case on && k.kind == kindAll:
 				bg, ink = t.Text, t.Background
 			case on:
-				bg, ink = k.col, ui.Hex("#1F2233")
+				bg = k.col.Alpha(0.3)
 			case k.kind == kindAll:
 				bg, ink = t.Text.Alpha(0.06), t.Text
 			}
@@ -483,13 +483,13 @@ func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 func clipColor(kind string) ui.Color {
 	switch kind {
 	case library.KindText:
-		return ui.Hex("#F5A300")
+		return ui.Hex("#E8A13A")
 	case library.KindLink:
-		return ui.Hex("#2D9CDB")
+		return ui.Hex("#3B8FE0")
 	case library.KindImage:
-		return ui.Hex("#E64980")
+		return ui.Hex("#D95C8C")
 	}
-	return ui.Hex("#12B886")
+	return ui.Hex("#3DAA7D")
 }
 
 // fileBitmap is the picture of a file, decoded once.

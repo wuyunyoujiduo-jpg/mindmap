@@ -752,24 +752,27 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 	// Quietly: the central topic solid, the main topics tinted with their
 	// branch's color and written in a deep shade of it, and the topics
 	// below them all alike, on a faint gray.
-	// In color: the central topic the ink's, the main topics filled with
-	// their branch's color and written in the ink, which reads on each of
-	// them, and the topics below them on a tint of it.
-	branchText := ui.Hex("#1F2233")
+	// The central topic in the ink; the main topics on a pastel of their
+	// branch's color, written in the ink; those below on a faint tint.
+	branchText := t.Text
 	switch depth {
 	case 0:
 		fill, filled = lookOf(a.doc.Style).root(t), true
-		el.Radius(14 * z)
+		el.Radius(12 * z)
 	case 1:
-		fill = accent
-		el.Radius(11 * z)
-	default:
-		tint := float32(0.13)
+		tint := float32(0.26)
 		if t.Dark {
-			tint = 0.22
+			tint = 0.34
 		}
 		fill = accent.Alpha(tint)
-		el.Radius(9 * z)
+		el.Radius(10 * z)
+	default:
+		tint := float32(0.09)
+		if t.Dark {
+			tint = 0.16
+		}
+		fill = accent.Alpha(tint)
+		el.Radius(8 * z)
 	}
 	// A summary's topic: a pill outlined in its branch's color, its text
 	// in it too, lightly tinted, unlike the topics it sums up.
@@ -915,7 +918,7 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 	// Marks read on the node's fill: on filled topics, in the fill's text
 	// color.
 	muted := t.TextMuted
-	if filled || depth == 1 { // on a main topic's color too
+	if filled {
 		muted = onFill.Alpha(0.75)
 	}
 	el.Children(func() {
@@ -1048,7 +1051,7 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 				})
 				continue
 			}
-			if depth == 1 && !summary && st.Fill == "" { // on the branch's color: a light pill, in the ink
+			if false { // main topics are pastel now: the usual chip reads on them
 				size := markSize * z
 				ui.Box(c.Key("tag:"+tag)).Padding(size*0.15, size*0.6).Radius(999).Background(ui.Hex("#FFFFFF").Alpha(0.5)).PassThrough().Children(func() {
 					ui.Text(c, tag).FontSize(size).TextColor(onFill).NoWrap().PassThrough()

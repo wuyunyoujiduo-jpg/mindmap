@@ -12,19 +12,19 @@ from PIL import Image
 from concepts import base, layers, sparkle
 from make import S, SHAPE, shadow
 
-INDIGO = [(0, "#6E79FF"), (0.55, "#4F5BFF"), (1, "#3340D6")]
-INK = "#1F2233"
+INDIGO = [(0, "#7878E6"), (0.55, "#5B5BD6"), (1, "#4040A8")]
+INK = "#1C1B1A"
 
 
 def desk(canvas):
     note = '<rect x="232" y="226" width="520" height="580" rx="104" fill="{c}"/>'
     rows = ""
-    for y, color, width, opacity in ((390, "#FF6B4A", 250, 1), (516, "#F5A300", 190, 0.55)):
+    for y, color, width, opacity in ((390, "#E8684A", 250, 1), (516, "#E8A13A", 190, 0.55)):
         rows += (f'<circle cx="345" cy="{y}" r="34" fill="{color}"/>'
                  f'<path d="M430,{y} L{430 + width},{y}" stroke="{INK}" stroke-width="42" '
                  f'stroke-linecap="round" stroke-opacity="{opacity}"/>')
     # the last line, done: a green disc with a tick, its line lighter
-    rows += ('<circle cx="345" cy="652" r="46" fill="#12B886"/>'
+    rows += ('<circle cx="345" cy="652" r="46" fill="#3DAA7D"/>'
              '<path d="M322,654 L339,671 L370,636" fill="none" stroke="#FFFFFF" stroke-width="20" '
              'stroke-linecap="round" stroke-linejoin="round"/>'
              f'<path d="M430,652 L640,652" stroke="{INK}" stroke-width="42" stroke-linecap="round" stroke-opacity="0.28"/>')

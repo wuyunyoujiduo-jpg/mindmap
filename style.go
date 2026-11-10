@@ -20,7 +20,7 @@ type scheme struct {
 // schemes are the color schemes a canvas can take; the first is the
 // default.
 var schemes = []scheme{
-	{"", "明亮", []string{"#FF6B4A", "#12B886", "#F5A300", "#2D9CDB", "#B388F0", "#F06595"}, "#1F2233"},
+	{"", "明亮", []string{"#E8684A", "#3DAA7D", "#E8A13A", "#3B8FE0", "#8B6FE0", "#D95C8C"}, "#1C1B1A"},
 	{"quiet", "素雅", []string{"#D9776B", "#D49A52", "#6BAE8C", "#4FA3A8", "#6B8FD6", "#9B7FCF"}, "#2B2D31"},
 	{"dawn", "晨曦", []string{"#F76D6D", "#FFA45B", "#7ECC9B", "#6FD3CB", "#68BFF2", "#D88BEA"}, "#1F1F1F"},
 	{"classic", "经典", []string{"#3B82F6", "#10B981", "#F59E0B", "#EC4899", "#8B5CF6", "#06B6D4"}, "#111827"},
@@ -61,7 +61,7 @@ var lines = []struct {
 	width    float32
 }{
 	{"thin", "细", 1},
-	{"", "默认", 2.2},
+	{"", "默认", 1.8},
 	{"thick", "粗", 2.6},
 	{"bolder", "特粗", 4},
 }
@@ -75,7 +75,7 @@ type look struct {
 }
 
 func lookOf(s model.CanvasStyle) look {
-	l := look{style: s, scheme: schemeOf(s.Scheme), font: s.Font, line: 2.2}
+	l := look{style: s, scheme: schemeOf(s.Scheme), font: s.Font, line: 1.8}
 	for _, w := range lines {
 		if w.id == s.Line {
 			l.line = w.width

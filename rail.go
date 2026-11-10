@@ -22,16 +22,17 @@ func (a *app) rail(c *ui.Context) {
 	}
 	page := a.libOpen
 	item := func(key string, kind int, label, count, tip string, on bool, click func()) {
-		b := ui.Column(c.Key("rail:"+key)).Width(62).Padding(9, 0, 7).Gap(4).Radius(14).AlignItems(ui.Center).
+		b := ui.Column(c.Key("rail:"+key)).Width(62).Padding(9, 0, 7).Gap(4).Radius(12).AlignItems(ui.Center).
 			Cursor(ui.CursorPointer).Label(label).Tooltip(tip)
-		ink := t.TextMuted
+		// Quiet lines in the muted ink; the part shown in the ink, on a
+		// shade of the rail.
+		ink, text := t.TextMuted, t.TextMuted
 		switch {
 		case on:
-			bg, deep := tinted(t, t.Accent)
-			b.Background(bg)
-			ink = deep
+			b.Background(t.Text.Alpha(0.075))
+			ink, text = t.Text, t.Text
 		case b.Hovered():
-			b.Background(t.Text.Alpha(0.05))
+			b.Background(t.Text.Alpha(0.04))
 		}
 		if b.Clicked() {
 			a.later(click)
@@ -46,7 +47,7 @@ func (a *app) rail(c *ui.Context) {
 					})
 				}
 			})
-			txt := ui.Text(c, label).FontSize(textCaption).TextColor(ink).PassThrough()
+			txt := ui.Text(c, label).FontSize(textCaption).TextColor(text).PassThrough()
 			if on {
 				txt.FontWeight(600)
 			}
