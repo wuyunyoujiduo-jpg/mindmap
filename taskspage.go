@@ -53,6 +53,11 @@ type tasksState struct {
 	// and saved as they are left; the subtask being written.
 	title, note, draftOf string
 	subtask              string
+	// places are where the AI would put the tasks of the inbox, by their
+	// nodes' IDs (sortout.go); placing while it is asked.
+	places   map[string]taskPlace
+	placing  bool
+	placeErr string
 }
 
 func (it taskItem) key() string { return it.path + "#" + it.node.ID }
@@ -330,14 +335,37 @@ func weekStart(d time.Time) time.Time {
 
 // tasksView is the tasks' page.
 func (a *app) tasksView(c *ui.Context) {
-	t := c.Theme()
 	all := a.taskItems()
 	items := all
 	if a.tasks.onMap != "" {
 		items = slices.DeleteFunc(slices.Clone(all), func(it taskItem) bool { return it.path != a.tasks.onMap })
 	}
 	now := a.now()
-	ui.Column(c.Key("tasks")).Grow(1).Label("任务").Children(func() {
+	// A list is one calm column in the middle of the page, its heading,
+	// its lists and its tasks one under the other; the week and the month
+	// take the page's width. The details stand beside, the page's height.
+	calendar := a.tasks.view == tasksWeek || a.tasks.view == tasksMonth
+	ui.Row(c.Key("tasks")).Grow(1).AlignItems(ui.Stretch).Label("任务").Children(func() {
+		ui.Column(c).Grow(1).Basis(0).MinWidth(0).Children(func() {
+			column := ui.Column(c.Key("tasks-column")).Grow(1).FillWidth()
+			if !calendar {
+				column.MaxWidth(820).Margin(0, ui.Auto)
+			}
+			column.Children(func() { a.tasksColumn(c, all, items, now) })
+		})
+		for _, it := range all {
+			if it.key() == a.tasks.sel {
+				a.taskDetail(c, it)
+			}
+		}
+	})
+}
+
+// tasksColumn is the tasks' page but the details: its heading, its lists,
+// the line to add a task, and the tasks.
+func (a *app) tasksColumn(c *ui.Context, all, items []taskItem, now time.Time) {
+	t := c.Theme()
+	func() {
 		ui.Row(c.Key("tasks-head")).Height(toolbarHeight).Padding(0, 16, 0, 28).Gap(12).AlignItems(ui.Center).Shrink(0).
 			DragWindow().Children(func() {
 			ui.Text(c, "任务").FontSize(textHeadline).FontWeight(600)
@@ -402,24 +430,17 @@ func (a *app) tasksView(c *ui.Context) {
 				a.later(func() { a.addTask(line, day) })
 			}
 		})
-		ui.Row(c).Grow(1).AlignItems(ui.Stretch).Children(func() {
-			ui.Column(c).Grow(1).Basis(0).MinWidth(0).Children(func() {
-				switch a.tasks.view {
-				case tasksWeek:
-					a.weekView(c, items)
-				case tasksMonth:
-					a.monthView(c, items)
-				default:
-					a.taskList(c, items)
-				}
-			})
-			for _, it := range all {
-				if it.key() == a.tasks.sel {
-					a.taskDetail(c, it)
-				}
+		ui.Column(c).Grow(1).Basis(0).MinHeight(0).FillWidth().Children(func() {
+			switch a.tasks.view {
+			case tasksWeek:
+				a.weekView(c, items)
+			case tasksMonth:
+				a.monthView(c, items)
+			default:
+				a.taskList(c, items)
 			}
 		})
-	})
+	}()
 }
 
 // taskMapMenu chooses the map whose tasks show alone, as TickTick's lists.
@@ -838,6 +859,9 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 				})
 				return
 			}
+			if a.tasks.view == tasksInbox {
+				a.placeBar(c, len(groups[0].items))
+			}
 			for _, g := range groups {
 				// Empty, a group of a day still shows, quietly: a place to drop
 				// a task on; others empty do not.
@@ -921,11 +945,20 @@ func (a *app) taskRow(c *ui.Context, it taskItem, overdue bool) {
 				title.TextColor(t.TextMuted).Strikethrough()
 			}
 			sub := it.mapName
-			if it.where != "" {
+			if it.where != "" && it.where != it.mapName {
 				sub += " · " + it.where
 			}
 			ui.Text(c, sub).FontSize(textCaption).TextColor(t.TextMuted).SingleLine()
 		})
+		if p, ok := a.tasks.places[it.node.ID]; ok { // where the AI would put it
+			ui.Text(c, "→ "+p.label).FontSize(textSmall).TextColor(t.Accent).SingleLine().Shrink(2).MinWidth(60).PassThrough()
+			if ghostButton(c.Key("take:"+it.node.ID), "放过去", "移到「"+p.label+"」下").Label("放过去 " + it.node.Title).Clicked() {
+				a.later(func() { a.takePlace(it) })
+			}
+			if iconButton(c.Key("skip:"+it.node.ID), iconClose, "不放 "+it.node.Title, "不采纳这个建议", 22, true).Clicked() {
+				delete(a.tasks.places, it.node.ID)
+			}
+		}
 		if d := it.date(); d != nil {
 			col := t.TextMuted
 			if overdue || !it.done() && d.Before(today(a.now())) {

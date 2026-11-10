@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
@@ -39,11 +39,51 @@ const (
 	captureInbox   = iota
 	captureLibrary // a note of 灵感, a text of the library: the default
 	captureHere    // under the node selected in the open map
+	captureAuto    // a line that says a day or a priority is a task, else a note
 )
+
+// taskLike tells whether a text reads as a task rather than a note: one
+// line, with a day or a priority said as a word of its own (明天 写周报,
+// 写周报 !高), or lines of "- [ ]". 今天很好 is a note.
+func taskLike(text string, now time.Time) bool {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return false
+	}
+	lines := strings.Split(text, "\n")
+	boxes := 0
+	for _, l := range lines {
+		if strings.HasPrefix(strings.TrimSpace(l), "- [ ]") {
+			boxes++
+		}
+	}
+	if boxes == len(lines) {
+		return true
+	}
+	if len(lines) > 1 {
+		return false
+	}
+	words := strings.Fields(text)
+	if len(words) < 2 {
+		return false
+	}
+	for _, w := range words {
+		if title, due, prio := parseTaskLine(w, now); title == "" && (due != nil || prio != model.PriorityNone) {
+			return true
+		}
+	}
+	return false
+}
 
 // capture adds text to the inbox, or under the node selected: a node a
 // line, nested by indentation, as a pasted outline is.
 func (a *app) capture(text string, where int) error {
+	if where == captureAuto {
+		where = captureLibrary
+		if taskLike(text, a.now()) {
+			where = captureInbox
+		}
+	}
 	if where == captureLibrary { // a note of 灵感
 		if _, err := a.addMemo(text, "快速记录"); err != nil {
 			return err
@@ -129,28 +169,16 @@ func (a *app) captureView(c *ui.Context) {
 		a.plat.HideCapture()
 	}
 	ui.Column(c).Fill().Padding(16, 18, 14).Gap(12).Background(t.Background).Children(func() {
-		ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
-			// The places in the order of the segments: 灵感, 任务, and the
-			// node selected in the open map when there is one.
-			order := []int{captureLibrary, captureInbox}
-			labels := []string{"灵感", "任务"}
-			if n, _ := a.selectedNode(); n != nil && a.path != a.inboxPath() {
-				order = append(order, captureHere)
-				labels = append(labels, "「"+n.Title+"」下")
-			}
-			seg := slices.Index(order, a.captureWhere)
-			if seg < 0 {
-				seg = 0
-			}
-			ui.Segmented(c, &seg, labels...).FontSize(textSmall).Label("记到")
-			a.captureWhere = order[seg]
-			ui.Spacer(c)
-			ui.Text(c, keyLabel(a.captureKey())+" 随时呼出").FontSize(textCaption).TextColor(t.TextMuted)
-		})
-		placeholder := "现在的想法是……  #标签 归类"
-		if a.captureWhere == captureInbox {
-			placeholder = "一行一个任务，例如：明天 写周报 !高"
+		// Nothing to choose: what is written says what it is. A topic
+		// selected in the open map may take it instead.
+		here, hereTitle := false, ""
+		if n, _ := a.selectedNode(); n != nil && a.path != a.inboxPath() {
+			here, hereTitle = true, n.Title
 		}
+		if a.captureWhere == captureHere && !here {
+			a.captureWhere = captureAuto
+		}
+		placeholder := "写下想法；写「明天 交周报」这样带日期的一句，就是任务"
 		in := ui.TextAreaBase(c.Key("capture"), &a.captureText).Placeholder(placeholder).FontSize(15).LineHeight(1.6).
 			Lines(3, 8).AutoFocus().FillWidth().Grow(1).Label("快速记录")
 		in.HandleInput(func(ev ui.InputEvent) bool {
@@ -173,9 +201,41 @@ func (a *app) captureView(c *ui.Context) {
 					a.plat.HideCapture()
 				}
 			}
+			if here {
+				on := a.captureWhere == captureHere
+				b := ui.Box(c.Key("capture-here")).Padding(4, 8).Radius(6).Cursor(ui.CursorPointer).Label("记到选中的主题下").
+					Tooltip("记成导图里「" + hereTitle + "」下的子主题")
+				switch {
+				case on:
+					b.Background(t.Accent.Alpha(0.14))
+				case b.Hovered():
+					b.Background(t.Text.Alpha(0.06))
+				}
+				if b.Clicked() {
+					if on {
+						a.captureWhere = captureAuto
+					} else {
+						a.captureWhere = captureHere
+					}
+				}
+				b.Children(func() {
+					col := t.TextMuted
+					if on {
+						col = t.Accent
+					}
+					ui.Text(c, "记到「"+hereTitle+"」下").FontSize(textSmall).TextColor(col).SingleLine().MaxWidth(160).Ellipsis("…").PassThrough()
+				})
+			}
 			ui.Spacer(c)
 			if a.captureErr != "" {
 				ui.Text(c, a.captureErr).FontSize(textSmall).TextColor(t.Danger).Shrink(1).SingleLine()
+			} else if strings.TrimSpace(a.captureText) != "" && a.captureWhere != captureHere {
+				// Where it goes, said as it is written.
+				if a.captureWhere == captureInbox || a.captureWhere == captureAuto && taskLike(a.captureText, a.now()) {
+					pill(c, "任务 → 收件箱", t.Text.Alpha(0.06), t.Accent)
+				} else {
+					pill(c, "灵感", t.Text.Alpha(0.06), t.TextMuted)
+				}
 			} else {
 				ui.Text(c, "⇧↩ 换行 · Esc 关闭").FontSize(textCaption).TextColor(t.TextMuted)
 			}

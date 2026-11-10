@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
@@ -337,5 +339,67 @@ func TestTaskMoveToMap(t *testing.T) {
 	}
 	if !a.tasks.open {
 		t.Fatal("left the tasks' page")
+	}
+}
+
+// The AI says where the inbox's tasks belong; taken, they move there.
+func TestInboxPlaces(t *testing.T) {
+	a, tt := newTestApp(t)
+	guide := a.path
+	a.addTask("明天 首页加载优化", nil)
+	a.addTask("买咖啡豆", nil)
+	tt.Frame()
+	a.openTasks()
+	a.tasks.view = tasksInbox
+	tt.Frame()
+	if !tt.HasText("AI 归位") {
+		t.Fatalf("no button: %q", tt.Texts())
+	}
+	fake := &fakeClaude{}
+	a.sendAI = func(ctx context.Context, cfg config, p anthropic.BetaMessageNewParams, on func(string)) (*anthropic.BetaMessage, error) {
+		// The topic of 待优化, by its number in the list sent.
+		prompt := p.Messages[0].Content[0].OfText.Text
+		ref := ""
+		for _, line := range strings.Split(prompt, "\n") {
+			if strings.HasSuffix(line, "› 待优化") {
+				ref = strings.Fields(line)[0]
+			}
+		}
+		fake.replies = []string{reply(fmt.Sprintf(`{"places":[{"task":1,"topic":"%s"},{"task":9,"topic":"t999"}]}`, ref))}
+		return fake.send(ctx, cfg, p, on)
+	}
+	a.cfg.AIKey = "sk-ant-test"
+	if err := tt.Click("AI 归位"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if len(a.tasks.places) != 1 || !tt.HasText("放过去 首页加载优化") {
+		t.Fatalf("places %v, err %q", a.tasks.places, a.tasks.placeErr)
+	}
+	snapshot(t, tt, "tasks-places")
+	if err := tt.Click("放过去 首页加载优化"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	a.flush()
+	g, _ := model.Load(guide)
+	opt, err := findIn(g.Sheets[0], "待优化")
+	if err != nil || opt.Children[len(opt.Children)-1].Title != "首页加载优化" {
+		t.Fatalf("not moved: %v", err)
+	}
+	in, _ := model.Load(a.inboxPath())
+	if len(in.Sheets[0].Root.Children) != 1 || in.Sheets[0].Root.Children[0].Title != "买咖啡豆" {
+		t.Fatalf("inbox %d", len(in.Sheets[0].Root.Children))
+	}
+}
+
+func TestTaskLike(t *testing.T) {
+	for text, want := range map[string]bool{
+		"明天 写周报": true, "写周报 !高": true, "周五 交报告": true, "- [ ] 买票\n- [ ] 订酒店": true, "11月20日 发版": true,
+		"今天很好": false, "明天": false, "产品要做减法 #产品": false, "第一行\n明天 第二行": false, "": false,
+	} {
+		if got := taskLike(text, testNow); got != want {
+			t.Errorf("%q: %v", text, got)
+		}
 	}
 }

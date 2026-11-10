@@ -89,8 +89,12 @@ func (a *app) homeLine(c *ui.Context) {
 		})
 		// Where what is written goes, said as it is written.
 		if text := strings.TrimSpace(a.homeDraft); text != "" {
-			if _, due, _ := parseTaskLine(text, a.now()); due != nil {
-				pill(c, "任务 · "+dayLabel(*due, a.now()), t.Background, t.Accent)
+			if _, due, _ := parseTaskLine(text, a.now()); taskLike(text, a.now()) {
+				label := "任务"
+				if due != nil {
+					label += " · " + dayLabel(*due, a.now())
+				}
+				pill(c, label, t.Background, t.Accent)
 			} else {
 				pill(c, "灵感", t.Background, t.TextMuted)
 			}
@@ -105,7 +109,7 @@ func (a *app) saveHomeLine() {
 	if text == "" {
 		return
 	}
-	if _, due, _ := parseTaskLine(text, a.now()); due != nil {
+	if taskLike(text, a.now()) {
 		a.addTask(text, nil)
 	} else {
 		if _, err := a.addMemo(text, "今天"); err != nil {

@@ -422,7 +422,7 @@ func newApp(plat platform, cfg config) *app {
 		catsOpen:      true,
 		tagsOpen:      true,
 		favoritesOpen: true,
-		captureWhere:  captureLibrary, // 灵感
+		captureWhere:  captureAuto, // a note, or a task when it says a day
 		bitmaps:       map[string]*ui.Bitmap{},
 		sendAI:        sendToClaude,
 		sendDeepSeek:  sendToDeepSeek,
