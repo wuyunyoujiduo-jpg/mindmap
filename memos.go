@@ -137,8 +137,13 @@ func (a *app) memosView(c *ui.Context) {
 						}
 						ui.Text(c, title).FontSize(textTitle).FontWeight(600)
 						ui.Spacer(c)
-						searchBox(c, "memo-search", &a.memos.query, "搜索灵感", "搜索灵感", "", 220)
+						if iconTextButton(c, iconSparkle, "AI 归位", "AI 归位", "让 AI 建议这些灵感该放到哪张导图的哪个主题下，你确认后才加进去", false).Clicked() {
+							shown := list
+							a.later(func() { a.suggestClipPlaces(shown) })
+						}
+						searchBox(c, "memo-search", &a.memos.query, "搜索灵感", "搜索灵感", "", 200)
 					})
+					a.clipPlaceBar(c)
 					if a.memos.mode == memosAll {
 						a.memoComposer(c)
 					}
@@ -467,6 +472,7 @@ func (a *app) memoCard(c *ui.Context, m *library.Clip) {
 			return
 		}
 		a.memoText(c, m.Text)
+		a.clipPlaceLine(c, m)
 		if extra := slices.DeleteFunc(slices.Clone(m.Tags), func(s string) bool { return slices.Contains(memoTags(m.Text), s) }); len(extra) > 0 {
 			ui.Row(c).Gap(6).Wrap().Children(func() {
 				for _, tag := range extra { // the AI's

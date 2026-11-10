@@ -170,6 +170,10 @@ func (a *app) materialBar(c *ui.Context) {
 			clips := a.listedMaterial()
 			a.later(func() { a.aiMergeMaterial(clips) })
 		}
+		if m.Item("AI 归位：建议放到哪个主题下").Disabled(noKey).Chosen() {
+			clips := a.listedMaterial()
+			a.later(func() { a.suggestClipPlaces(clips) })
+		}
 		m.Separator()
 		a.reviewMenu(m)
 	})

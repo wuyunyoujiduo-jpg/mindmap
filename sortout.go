@@ -9,6 +9,7 @@ import (
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/egoist/mygo/ui"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
 
@@ -44,8 +45,35 @@ func (a *app) suggestPlaces() {
 	if len(tasks) == 0 {
 		return
 	}
-	// The topics to choose from: of every other map, its central topic
-	// and the two levels below it.
+	topics := a.placeTopics()
+	if len(topics) == 0 {
+		a.tell("还没有可以归位的导图")
+		return
+	}
+	titles := make([]string, len(tasks))
+	for i, it := range tasks {
+		titles[i] = it.node.Title
+	}
+	a.tasks.placing, a.tasks.placeErr = true, ""
+	a.askPlaces("任务", titles, topics, func(got map[int]taskPlace, err error) {
+		a.tasks.placing = false
+		if err != nil {
+			a.tasks.placeErr = err.Error()
+			return
+		}
+		a.tasks.places = map[string]taskPlace{}
+		for i, p := range got {
+			a.tasks.places[tasks[i].node.ID] = p
+		}
+		if len(got) == 0 {
+			a.tasks.placeErr = "AI 觉得这些任务都不属于现有的主题，可以右键「移到导图…」自己放"
+		}
+	})
+}
+
+// placeTopics are the topics the AI chooses from: of every map but the
+// inbox, its central topic and the two levels below it.
+func (a *app) placeTopics() []taskPlace {
 	var topics []taskPlace
 	for _, fi := range a.files {
 		if fi.Path == a.inboxPath() {
@@ -77,28 +105,30 @@ func (a *app) suggestPlaces() {
 			}
 		}
 	}
-	if len(topics) == 0 {
-		a.tell("还没有可以归位的导图")
-		return
-	}
+	return topics
+}
+
+// askPlaces asks the AI which of the topics each of the items, of a kind
+// said in what, belongs under; done gets the places by the items' indexes,
+// those it was sure of only.
+func (a *app) askPlaces(what string, items []string, topics []taskPlace, done func(map[int]taskPlace, error)) {
 	var b strings.Builder
-	b.WriteString("任务：\n")
-	for i, it := range tasks {
-		fmt.Fprintf(&b, "%d. %s\n", i+1, it.node.Title)
+	b.WriteString(what + "：\n")
+	for i, it := range items {
+		fmt.Fprintf(&b, "%d. %s\n", i+1, it)
 	}
 	b.WriteString("\n主题（编号 路径）：\n")
 	for i, p := range topics {
 		fmt.Fprintf(&b, "t%d %s\n", i+1, p.label)
 	}
-	b.WriteString("\n回答 JSON：{\"places\":[{\"task\":任务序号,\"topic\":\"主题编号\"}]}，拿不准的任务不要列出。")
-	a.tasks.placing, a.tasks.placeErr = true, ""
+	b.WriteString("\n回答 JSON：{\"places\":[{\"task\":序号,\"topic\":\"主题编号\"}]}，拿不准的不要列出。")
 	cfg, send, sendDS, prompt := a.cfg, a.sendAI, a.sendDeepSeek, b.String()
+	system := strings.ReplaceAll(placeSystem, "任务", what)
 	a.async(func() (any, error) {
-		return askJSON(context.Background(), cfg, send, sendDS, placeSystem, prompt)
+		return askJSON(context.Background(), cfg, send, sendDS, system, prompt)
 	}, func(v any, err error) {
-		a.tasks.placing = false
 		if err != nil {
-			a.tasks.placeErr = "AI 没有给出建议：" + err.Error()
+			done(nil, errors.New("AI 没有给出建议："+err.Error()))
 			return
 		}
 		text, _ := v.(string)
@@ -110,20 +140,18 @@ func (a *app) suggestPlaces() {
 		}
 		i, j := strings.Index(text, "{"), strings.LastIndex(text, "}")
 		if i < 0 || j < i || json.Unmarshal([]byte(text[i:j+1]), &out) != nil {
-			a.tasks.placeErr = "AI 没有按格式回答，请重试"
+			done(nil, errors.New("AI 没有按格式回答，请重试"))
 			return
 		}
-		a.tasks.places = map[string]taskPlace{}
+		got := map[int]taskPlace{}
 		for _, p := range out.Places {
 			var k int
-			if _, err := fmt.Sscanf(p.Topic, "t%d", &k); err != nil || k < 1 || k > len(topics) || p.Task < 1 || p.Task > len(tasks) {
+			if _, err := fmt.Sscanf(p.Topic, "t%d", &k); err != nil || k < 1 || k > len(topics) || p.Task < 1 || p.Task > len(items) {
 				continue // made up
 			}
-			a.tasks.places[tasks[p.Task-1].node.ID] = topics[k-1]
+			got[p.Task-1] = topics[k-1]
 		}
-		if len(a.tasks.places) == 0 {
-			a.tasks.placeErr = "AI 觉得这些任务都不属于现有的主题，可以右键「移到导图…」自己放"
-		}
+		done(got, nil)
 	})
 }
 
@@ -273,4 +301,163 @@ func askJSON(ctx context.Context, cfg config, send aiSender, sendDS deepseekSend
 		}
 	}
 	return text, nil
+}
+
+// The same for 灵感 and the library: the AI says the topic each note or
+// clip not yet on a map belongs under; taken, a topic of it is added
+// there, linked to it.
+
+// suggestClipPlaces asks where the clips belong: those of them no topic
+// links to yet, the first 40.
+func (a *app) suggestClipPlaces(clips []*library.Clip) {
+	if a.clipPlacing {
+		return
+	}
+	if providerKey(a.cfg) == "" {
+		a.tell("先在 AI 设置里选好模型")
+		a.openKeySettings()
+		return
+	}
+	var loose []*library.Clip
+	for _, cl := range clips {
+		if len(a.clipBacklinks(cl.ID)) == 0 && len(loose) < 40 {
+			loose = append(loose, cl)
+		}
+	}
+	if len(loose) == 0 {
+		a.clipPlaceErr = "这些都已经在导图里了"
+		return
+	}
+	topics := a.placeTopics()
+	if len(topics) == 0 {
+		a.tell("还没有可以归位的导图")
+		return
+	}
+	items := make([]string, len(loose))
+	for i, cl := range loose {
+		text := cl.Label()
+		for _, more := range []string{cl.Summary, cl.Desc, cl.Text} {
+			if more = strings.TrimSpace(more); more != "" && more != text {
+				if r := []rune(more); len(r) > 120 {
+					more = string(r[:120])
+				}
+				text += "（" + strings.ReplaceAll(more, "\n", " ") + "）"
+				break
+			}
+		}
+		items[i] = text
+	}
+	a.clipPlacing, a.clipPlaceErr = true, ""
+	a.askPlaces("资料", items, topics, func(got map[int]taskPlace, err error) {
+		a.clipPlacing = false
+		if err != nil {
+			a.clipPlaceErr = err.Error()
+			return
+		}
+		a.clipPlaces = map[string]taskPlace{}
+		for i, p := range got {
+			a.clipPlaces[loose[i].ID] = p
+		}
+		if len(got) == 0 {
+			a.clipPlaceErr = "AI 觉得这些都不属于现有的主题"
+		}
+	})
+}
+
+// takeClipPlace adds a topic of the clip where the AI suggested, linked
+// to it; the clip stays in the library.
+func (a *app) takeClipPlace(cl *library.Clip) bool {
+	p, ok := a.clipPlaces[cl.ID]
+	if !ok {
+		return false
+	}
+	delete(a.clipPlaces, cl.ID)
+	n := model.NewNode(firstSentence(cl.Label()))
+	var note []string
+	for _, s := range []string{cl.Desc, cl.Summary, cl.Note} {
+		if s = strings.TrimSpace(s); s != "" {
+			note = append(note, s)
+		}
+	}
+	if cl.Kind == library.KindText && strings.TrimSpace(cl.Text) != n.Title {
+		note = append(note, cl.Text)
+	}
+	n.Note = strings.Join(note, "\n\n")
+	n.Links = []string{clipScheme + cl.ID}
+	if cl.URL != "" {
+		n.Links = append(n.Links, cl.URL)
+	}
+	err := a.editMapAt(p.path, "放进资料", func(f *model.File) error {
+		d := f.SheetOf(p.node)
+		if d == nil {
+			return errors.New("目标主题已不存在")
+		}
+		target, _ := d.Find(p.node)
+		target.Children = append(target.Children, n)
+		target.Collapsed = false
+		return nil
+	})
+	if err != nil {
+		a.tell("没有放过去：" + err.Error())
+		return false
+	}
+	a.tell("已放到「" + p.label + "」下")
+	return true
+}
+
+// clipPlaceBar is the line of the AI's suggestions over a list of clips:
+// while it is asked, what it said, and the way to take all of it.
+func (a *app) clipPlaceBar(c *ui.Context) {
+	t := c.Theme()
+	if !a.clipPlacing && len(a.clipPlaces) == 0 && a.clipPlaceErr == "" {
+		return
+	}
+	ui.Row(c.Key("clip-place-bar")).Padding(4, 4).Gap(8).AlignItems(ui.Center).FillWidth().Children(func() {
+		switch {
+		case a.clipPlacing:
+			ui.Spinner(c)
+			ui.Text(c, "AI 正在看这些该放到哪…").FontSize(textSmall).TextColor(t.TextMuted)
+		case len(a.clipPlaces) > 0:
+			ui.Text(c, fmt.Sprintf("AI 建议了 %d 条的去处，逐条确认，或", len(a.clipPlaces))).FontSize(textSmall).TextColor(t.TextMuted)
+			if ghostButton(c, "全部放过去", "按建议在对应的主题下各加一个主题，链接到它").Clicked() {
+				a.later(func() {
+					n := 0
+					for id := range a.clipPlaces {
+						if cl := a.lib.Find(id); cl != nil && a.takeClipPlace(cl) {
+							n++
+						}
+					}
+					a.clipPlaces = nil
+					a.tell(fmt.Sprintf("已归位 %d 条", n))
+				})
+			}
+			if addButton(c, "不用了", "不采纳这些建议").Clicked() {
+				a.clipPlaces = nil
+			}
+		default:
+			ui.Text(c, a.clipPlaceErr).FontSize(textSmall).TextColor(t.TextMuted).Shrink(1).MinWidth(0).Wrap()
+			if addButton(c, "知道了", "").Clicked() {
+				a.clipPlaceErr = ""
+			}
+		}
+	})
+}
+
+// clipPlaceLine is the AI's suggestion on a clip: where, and the buttons
+// to take it or leave it.
+func (a *app) clipPlaceLine(c *ui.Context, cl *library.Clip) {
+	p, ok := a.clipPlaces[cl.ID]
+	if !ok {
+		return
+	}
+	t := c.Theme()
+	ui.Row(c.Key("clip-place:" + cl.ID)).Gap(6).AlignItems(ui.Center).FillWidth().Children(func() {
+		ui.Text(c, "→ "+p.label).FontSize(textSmall).TextColor(t.Accent).SingleLine().Shrink(1).MinWidth(0)
+		if ghostButton(c.Key("take-clip:"+cl.ID), "放过去", "在「"+p.label+"」下加一个主题，链接到它").Label("放过去 " + cl.Label()).Clicked() {
+			a.later(func() { a.takeClipPlace(cl) })
+		}
+		if iconButton(c.Key("skip-clip:"+cl.ID), iconClose, "不放 "+cl.Label(), "不采纳这个建议", 22, true).Clicked() {
+			delete(a.clipPlaces, cl.ID)
+		}
+	})
 }

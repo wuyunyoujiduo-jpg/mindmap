@@ -1,11 +1,15 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/egoist/mygo/ui"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
 )
 
 func TestMemoTags(t *testing.T) {
@@ -61,5 +65,59 @@ func TestMemos(t *testing.T) {
 	ct.Key(0, ui.KeyEnter)
 	if list := a.memoList(); len(list) != 3 || list[0].Text != "随手一记 #想法" {
 		t.Fatalf("captured: %d %q", len(list), list[0].Text)
+	}
+}
+
+// The AI says where notes belong; taken, a topic linked to the note is
+// added there, and the note stays.
+func TestMemoPlaces(t *testing.T) {
+	a, tt := newTestApp(t)
+	m, err := a.addMemo("列表可以用虚拟滚动 #性能", "灵感")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.addMemo("周末去爬山", "灵感")
+	a.openMemos()
+	tt.Frame()
+	fake := &fakeClaude{}
+	a.sendAI = func(ctx context.Context, cfg config, p anthropic.BetaMessageNewParams, on func(string)) (*anthropic.BetaMessage, error) {
+		prompt := p.Messages[0].Content[0].OfText.Text
+		ref, item := "", 0
+		for _, line := range strings.Split(prompt, "\n") {
+			if strings.HasSuffix(line, "› 待优化") {
+				ref = strings.Fields(line)[0]
+			}
+			if strings.Contains(line, "虚拟滚动") {
+				fmt.Sscanf(line, "%d.", &item)
+			}
+		}
+		fake.replies = []string{reply(fmt.Sprintf(`{"places":[{"task":%d,"topic":"%s"}]}`, item, ref))}
+		return fake.send(ctx, cfg, p, on)
+	}
+	a.cfg.AIKey = "sk-ant-test"
+	if err := tt.Click("AI 归位"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if len(a.clipPlaces) != 1 || a.clipPlaces[m.ID].label == "" {
+		t.Fatalf("places %v, %q", a.clipPlaces, a.clipPlaceErr)
+	}
+	snapshot(t, tt, "memos-places")
+	if err := tt.Click("放过去 " + m.Label()); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	opt := find(t, a, "待优化")
+	last := opt.Children[len(opt.Children)-1]
+	if len(last.Links) == 0 || last.Links[0] != clipScheme+m.ID {
+		t.Fatalf("not placed: %q %v", last.Title, last.Links)
+	}
+	if a.lib.Find(m.ID) == nil || len(a.clipPlaces) != 0 {
+		t.Fatal("the note is gone, or its suggestion stays")
+	}
+	// Placed, it is not asked about again.
+	a.suggestClipPlaces([]*library.Clip{m})
+	if a.clipPlaceErr == "" {
+		t.Fatal("asked again of a note already on a map")
 	}
 }

@@ -94,6 +94,7 @@ func (a *app) libraryColumn(c *ui.Context) {
 				}
 			})
 		}
+		ui.Box(c).Padding(0, 12).Children(func() { a.clipPlaceBar(c) })
 		hits := a.libHits()
 		ui.Row(c).Grow(1).AlignItems(ui.Stretch).Children(func() {
 			if len(hits) == 0 {
@@ -374,6 +375,7 @@ func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 				}
 				ui.Text(c, library.Excerpt(sub, a.libQuery, 140)).FontSize(12).TextColor(t.TextMuted).Wrap().MaxLines(2)
 			}
+			a.clipPlaceLine(c, clip)
 			ui.Row(c).Gap(6).Wrap().GapY(4).AlignItems(ui.Center).Children(func() {
 				if clip.Category != "" {
 					ui.Box(c).Padding(1, 7).Radius(4).Background(t.Text.Alpha(0.07)).Children(func() {

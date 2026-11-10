@@ -376,7 +376,12 @@ type app struct {
 	searchOpen bool // the map's search shows: ⌘F, until Esc
 	// panelShow are the parts of the topic's page opened to add to, by
 	// the node and the part (panel.go).
-	panelShow     map[string]bool
+	panelShow map[string]bool
+	// clipPlaces are where the AI would put notes and clips, by their
+	// IDs (sortout.go); clipPlacing while it is asked.
+	clipPlaces    map[string]taskPlace
+	clipPlacing   bool
+	clipPlaceErr  string
 	tagFilter     string
 	sidebarWidth  float32
 	panelWidth    float32
