@@ -114,9 +114,6 @@ func TestNodeLinksToClips(t *testing.T) {
 	// A node about it finds it, and links it.
 	slow := find(t, a, "列表加载慢")
 	a.mutate("", func() { slow.Title = "性能优化" })
-	if hits := a.nodeClips(slow); len(hits) != 1 || hits[0].Clip != clip {
-		t.Fatalf("node clips %v", hits)
-	}
 	a.selectNode(slow.ID)
 	a.panelTab = tabNode
 	tt.Frame()
@@ -126,9 +123,6 @@ func TestNodeLinksToClips(t *testing.T) {
 	a.addLink(slow, clipScheme+clip.ID)
 	if icon, label := a.linkLabel(clipScheme + clip.ID); icon != "📚" || label != "性能优化清单" {
 		t.Fatalf("label %s %s", icon, label)
-	}
-	if hits := a.nodeClips(slow); len(hits) != 0 {
-		t.Fatal("linked clip still suggested")
 	}
 	// The clip knows the node, and the link opens the clip.
 	if back := a.clipBacklinks(clip.ID); len(back) != 1 || back[0].id != slow.ID {
@@ -372,10 +366,10 @@ func TestTour(t *testing.T) {
 	}
 	snapshot(t, tt, "tour")
 	tt.Click("下一步")
-	if !tt.HasText("资料库：随手收藏，AI 整理") {
+	if !tt.HasText("收集：随手记下，再放到导图上") {
 		t.Fatal("step 2")
 	}
-	tt.Click("打开资料库")
+	tt.Click("打开收集")
 	tt.Frame()
 	if a.tourStep != 0 || !a.libOpen || !a.cfg.TourDone {
 		t.Fatalf("step %d lib %v done %v", a.tourStep, a.libOpen, a.cfg.TourDone)
@@ -383,7 +377,7 @@ func TestTour(t *testing.T) {
 	// The settings, a tab a part.
 	a.libOpen = false
 	a.openSettings()
-	a.settingsTab = 1 // 资料库
+	a.settingsTab = 1 // 收集
 	tt.Frame()
 	if !tt.HasText("自动整理资料") {
 		t.Fatalf("library tab: %q", tt.Texts())

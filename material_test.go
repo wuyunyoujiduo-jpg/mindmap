@@ -244,7 +244,6 @@ func TestDropClipOnMap(t *testing.T) {
 func TestQuickAccess(t *testing.T) {
 	a, tt := newTestApp(t)
 	clip, _ := a.addClipText("周会纪要模板", "手动")
-	a.unfiledOpen = true
 	a.favoritesOpen = true
 	tt.Frame()
 	if !tt.HasText("快捷访问") { // its hint is its tooltip
@@ -264,7 +263,11 @@ func TestQuickAccess(t *testing.T) {
 		tt.Release(src.X+30, dst.Y+dst.H/2)
 		tt.Frame()
 	}
-	drag("文档 " + clip.Label())
+	a.addQuick(fileDrag{Clip: clip.ID}) // a card of 收集 dropped there
+	tt.Frame()
+	if _, ok := tt.Find("文档 " + clip.Label()); !ok {
+		t.Fatalf("the document is not at hand: %q", tt.Texts())
+	}
 	drag("使用指南")
 	if len(a.cfg.Favorites) != 2 || a.cfg.Favorites[0] != clipScheme+clip.ID || a.cfg.Favorites[1] != a.path {
 		t.Fatalf("quick %v", a.cfg.Favorites)

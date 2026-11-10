@@ -64,9 +64,6 @@ func (a *app) sidebar(c *ui.Context) {
 				if m.Item("从模板新建…").Chosen() {
 					a.templatesOpen = true
 				}
-				if m.Item("新建文档").Chosen() { // written in the list of 资料
-					a.later(func() { a.openList(kindAll, "") })
-				}
 				if m.Item("新建文件夹").Chosen() {
 					a.later(func() { a.newFolder(a.currentFolder()) })
 				}
@@ -95,9 +92,21 @@ func (a *app) sidebar(c *ui.Context) {
 			a.syncFoot(c)
 		})
 	})
-	switch ui.AlertDialog(c, &a.confirmDelete, "把「"+mapName(a.deletePath)+"」移到废纸篓？", "可以在废纸篓中找回。", "取消", "移到废纸篓") {
+	title, says := "把「"+mapName(a.deletePath)+"」移到废纸篓？", "可以在废纸篓中找回。"
+	folder := a.deletePath != "" && !strings.HasSuffix(a.deletePath, model.Ext)
+	if folder {
+		title = "把文件夹「" + filepath.Base(a.deletePath) + "」移到废纸篓？"
+		if n := len(a.mapsIn(a.deletePath)); n > 0 {
+			says = fmt.Sprintf("里面的 %d 张导图会一起移走，可以在废纸篓中找回。", n)
+		}
+	}
+	switch ui.AlertDialog(c, &a.confirmDelete, title, says, "取消", "移到废纸篓") {
 	case 1:
-		a.deleteMap(a.deletePath)
+		if folder {
+			a.deleteFolder(a.deletePath)
+		} else {
+			a.deleteMap(a.deletePath)
+		}
 	}
 }
 
@@ -195,60 +204,41 @@ func (a *app) addQuick(d fileDrag) {
 }
 
 // folderContents shows a folder's folders, then its maps, indented by
-// depth.
+// depth. What was collected is not here: it is 收集's, and on the topics
+// of the maps it was put on.
 func (a *app) folderContents(c *ui.Context, f model.Folder, depth int) {
-	if depth == 0 {
-		a.unfiledRow(c.Key("unfiled")) // first, always there
-	}
 	for _, sub := range f.Folders {
 		a.folderRow(c.Key("folder:"+sub.Path), sub, depth)
 	}
 	for _, file := range f.Files {
 		a.fileRow(c.Key("file:"+file.Path), file, depth, false)
 	}
-	docs := a.clipsIn(f.Path) // the documents kept here
-	for _, clip := range docs {
-		a.docRow(c.Key("doc:"+clip.ID), clip, depth)
-	}
-	if depth == 0 && len(f.Files) == 0 && len(f.Folders) == 0 && len(docs) == 0 {
-		ui.Text(c, "还没有导图和文档").FontSize(12).TextColor(c.Theme().TextMuted).Margin(4, 12)
+	if depth == 0 && len(f.Files) == 0 && len(f.Folders) == 0 {
+		ui.Text(c, "还没有导图").FontSize(12).TextColor(c.Theme().TextMuted).Margin(4, 12)
 	}
 }
 
 func (a *app) folderRow(c *ui.Context, f model.Folder, depth int) {
 	t := c.Theme()
 	open := a.folderOpen(f.Path)
-	row := ui.Row(c).Padding(5, 8, 5, 8+float32(depth)*14).Gap(6).Radius(6).AlignItems(ui.Center).
+	row := ui.Row(c).Padding(3, 4, 3, 8+float32(depth)*14).Gap(6).Radius(6).AlignItems(ui.Center).MinHeight(30).
 		Cursor(ui.CursorPointer).Label(f.Name)
-	if row.Hovered() {
+	hover := row.Hovered()
+	if hover {
 		row.Background(t.Text.Alpha(0.06))
 	}
 	if draggedOver(row) {
 		row.Background(t.Accent.Alpha(0.15))
 	}
 	a.dropOnFolder(row, f.Path)
-	if row.Clicked() {
+	path := f.Path
+	if row.Clicked() && a.renaming != path {
 		a.setFolderOpen(f.Path, !open)
 	}
 	if a.renaming == f.Path {
 		row.ScrollIntoView() // a folder just made shows, wherever it sorts
 	}
-	path := f.Path
-	row.ContextMenu(func(m *ui.Menu) {
-		if m.Item("在此新建导图").Chosen() {
-			a.later(func() { a.newMapIn(path) })
-		}
-		if m.Item("新建子文件夹").Chosen() {
-			a.later(func() { a.newFolder(path) })
-		}
-		if m.Item("重命名").Chosen() {
-			a.renaming, a.renameText = path, filepath.Base(path)
-		}
-		m.Separator()
-		if m.Item("在 Finder 中显示").Chosen() {
-			a.plat.ShowInFolder(path)
-		}
-	})
+	row.ContextMenu(func(m *ui.Menu) { a.folderMenu(m, path) })
 	row.Children(func() {
 		arrow := "▾"
 		if !open {
@@ -260,14 +250,85 @@ func (a *app) folderRow(c *ui.Context, f model.Folder, depth int) {
 			a.renameInput(c)
 			return
 		}
-		ui.Text(c, f.Name).FontSize(13).Grow(1).SingleLine()
-		if n := a.docCount(f); n > 0 {
-			ui.Text(c, fmt.Sprint(n)).FontSize(11).TextColor(t.TextMuted)
+		ui.Text(c, f.Name).FontSize(13).Grow(1).Shrink(1).MinWidth(0).SingleLine()
+		if n := len(f.AllFiles()); n > 0 && !hover {
+			ui.Text(c, fmt.Sprint(n)).FontSize(11).TextColor(t.TextMuted).Margin(0, 6, 0, 0)
 		}
+		a.rowMore(c, hover, "文件夹菜单", func(m *ui.Menu) { a.folderMenu(m, path) })
 	})
 	if open {
 		a.folderContents(c, f, depth+1)
 	}
+}
+
+// rowMore is the "···" of a row of the list, shown while the pointer is on
+// the row: its menu, which a right click opens too.
+func (a *app) rowMore(c *ui.Context, hover bool, label string, menu func(m *ui.Menu)) {
+	more := iconButton(c, iconMore, label, "重命名、移动、删除…", 22, true)
+	if !hover {
+		more.Width(0).Opacity(0) // no room taken, and its menu, if open, stays
+	}
+	more.Menu(menu)
+}
+
+// folderMenu is what can be done with a folder of the list.
+func (a *app) folderMenu(m *ui.Menu, path string) {
+	if m.Item("在此新建导图").Chosen() {
+		a.later(func() { a.newMapIn(path) })
+	}
+	if m.Item("新建子文件夹").Chosen() {
+		a.later(func() { a.newFolder(path) })
+	}
+	m.Separator()
+	if m.Item("重命名").Chosen() {
+		a.renaming, a.renameText = path, filepath.Base(path)
+	}
+	if m.Item("在 Finder 中显示").Chosen() {
+		a.plat.ShowInFolder(path)
+	}
+	m.Separator()
+	if m.Item("移到废纸篓…").Chosen() {
+		a.deletePath, a.confirmDelete = path, true
+	}
+}
+
+// mapsIn are the maps of a folder and of those in it.
+func (a *app) mapsIn(dir string) []model.FileInfo {
+	var out []model.FileInfo
+	for _, f := range a.files {
+		if inside(f.Path, dir) {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// deleteFolder moves a folder, with the maps in it, to the trash.
+func (a *app) deleteFolder(dir string) {
+	if dir == "" || dir == a.dir || !inside(dir, a.dir) {
+		return
+	}
+	a.flush()
+	maps := a.mapsIn(dir)
+	if err := a.plat.Trash(dir); err != nil {
+		a.saveErr = err.Error()
+		return
+	}
+	for _, f := range maps {
+		a.removeMapMeta(f.Path)
+	}
+	gone := func(p string) bool { return inside(p, dir) }
+	a.cfg.Favorites = slices.DeleteFunc(a.cfg.Favorites, gone)
+	a.cfg.OpenFolders = slices.DeleteFunc(a.cfg.OpenFolders, gone)
+	a.cfg.save()
+	a.refreshFiles()
+	if a.path != "" && inside(a.path, dir) {
+		a.path, a.file, a.doc, a.dirty = "", nil, nil, false
+		if len(a.files) > 0 {
+			_ = a.open(a.files[0].Path)
+		}
+	}
+	a.tell("已把文件夹「" + filepath.Base(dir) + "」移到废纸篓")
 }
 
 func (a *app) fileRow(c *ui.Context, f model.FileInfo, depth int, inFavorites bool) {
@@ -277,7 +338,7 @@ func (a *app) fileRow(c *ui.Context, f model.FileInfo, depth int, inFavorites bo
 	if !inFavorites {
 		a.sideItems = append(a.sideItems, sideItem{path: f.Path})
 	}
-	row := ui.Row(c).Padding(5, 8, 5, 22+float32(depth)*14).Gap(6).Radius(6).AlignItems(ui.Center).
+	row := ui.Row(c).Padding(3, 4, 3, 22+float32(depth)*14).Gap(6).Radius(6).AlignItems(ui.Center).MinHeight(30).
 		Cursor(ui.CursorPointer).Label(f.Name).Drag(fileDrag{Path: f.Path})
 	// A clip, or another map, dropped on a map goes under its center;
 	// in 快捷访问, it joins it instead.
@@ -307,38 +368,8 @@ func (a *app) fileRow(c *ui.Context, f model.FileInfo, depth int, inFavorites bo
 		})
 	}
 	path := f.Path
-	row.ContextMenu(func(m *ui.Menu) {
-		label := "加入快捷访问"
-		if fav {
-			label = "从快捷访问移除"
-		}
-		if m.Item(label).Chosen() {
-			a.toggleFavorite(path)
-		}
-		if m.Item("重命名").Chosen() {
-			a.renaming, a.renameText = path, mapName(path)
-		}
-		m.Submenu("移动到", func(m *ui.Menu) {
-			for _, dir := range a.tree.FolderPaths() {
-				name := filepath.Base(dir)
-				if dir != a.dir {
-					rel, _ := filepath.Rel(a.dir, dir)
-					name = strings.ReplaceAll(rel, string(filepath.Separator), " / ")
-				}
-				if m.Item(name).Disabled(dir == filepath.Dir(path)).Chosen() {
-					to := dir
-					a.later(func() { a.moveMap(path, to) })
-				}
-			}
-		})
-		m.Separator()
-		if m.Item("在 Finder 中显示").Chosen() {
-			a.plat.ShowInFolder(path)
-		}
-		if m.Item("移到废纸篓…").Chosen() {
-			a.deletePath, a.confirmDelete = path, true
-		}
-	})
+	hover := row.Hovered()
+	row.ContextMenu(func(m *ui.Menu) { a.mapMenu(m, path) })
 	row.Children(func() {
 		if a.renaming == path && !inFavorites {
 			a.renameInput(c)
@@ -349,10 +380,45 @@ func (a *app) fileRow(c *ui.Context, f model.FileInfo, depth int, inFavorites bo
 		if current {
 			text.Bold()
 		}
-		if fav && !inFavorites {
-			ui.Text(c, "★").FontSize(11).TextColor(ui.Hex("#D4A836"))
+		if fav && !inFavorites && !hover {
+			ui.Text(c, "★").FontSize(11).TextColor(ui.Hex("#D4A836")).Margin(0, 6, 0, 0)
+		}
+		a.rowMore(c, hover, "导图菜单", func(m *ui.Menu) { a.mapMenu(m, path) })
+	})
+}
+
+// mapMenu is what can be done with a map of the list.
+func (a *app) mapMenu(m *ui.Menu, path string) {
+	label := "加入快捷访问"
+	if slices.Contains(a.cfg.Favorites, path) {
+		label = "从快捷访问移除"
+	}
+	if m.Item(label).Chosen() {
+		a.toggleFavorite(path)
+	}
+	if m.Item("重命名").Chosen() {
+		a.renaming, a.renameText = path, mapName(path)
+	}
+	m.Submenu("移动到", func(m *ui.Menu) {
+		for _, dir := range a.tree.FolderPaths() {
+			name := filepath.Base(dir)
+			if dir != a.dir {
+				rel, _ := filepath.Rel(a.dir, dir)
+				name = strings.ReplaceAll(rel, string(filepath.Separator), " / ")
+			}
+			if m.Item(name).Disabled(dir == filepath.Dir(path)).Chosen() {
+				to := dir
+				a.later(func() { a.moveMap(path, to) })
+			}
 		}
 	})
+	m.Separator()
+	if m.Item("在 Finder 中显示").Chosen() {
+		a.plat.ShowInFolder(path)
+	}
+	if m.Item("移到废纸篓…").Chosen() {
+		a.deletePath, a.confirmDelete = path, true
+	}
 }
 
 // renameInput edits the name of the map or folder being renamed.
@@ -431,7 +497,6 @@ func (a *app) moved(from, to string) {
 		}
 	}
 	a.moveMapMetas(follow) // and their analyses
-	a.moveClipFolders(follow)
 	a.path = follow(a.path)
 	a.renameViews(follow)
 	if a.path != "" {
@@ -605,17 +670,6 @@ func filterTags(tags []string, query string) []string {
 		}
 	}
 	return out
-}
-
-// sideFootButton is a button of the sidebar's foot.
-func sideFootButton(c *ui.Context, text, tip string) ui.Element {
-	t := c.Theme()
-	b := ui.Box(c.Key(text)).Padding(5, 10).Radius(6).Cursor(ui.CursorPointer).Label(text).Tooltip(tip)
-	if b.Hovered() {
-		b.Background(t.Text.Alpha(0.06))
-	}
-	b.Children(func() { ui.Text(c, text).FontSize(textSmall).TextColor(t.TextMuted).PassThrough() })
-	return b
 }
 
 // sideTile is a row's icon in the maps' list, of the rail's family: thin

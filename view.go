@@ -40,10 +40,6 @@ func (a *app) view(c *ui.Context) {
 		main(func() {
 			ui.Row(c).Fill().AlignItems(ui.Stretch).Background(t.Background).Children(func() {
 				if a.libOpen {
-					if a.auto.open {
-						a.autoView(c)
-						return
-					}
 					if a.tasks.open {
 						a.tasksView(c)
 						return
@@ -73,8 +69,6 @@ func (a *app) view(c *ui.Context) {
 					switch {
 					case a.doc == nil:
 						a.empty(c)
-					case a.mode == viewMap:
-						a.canvasView(c)
 					case a.mode == viewOutline:
 						ui.Column(c).Grow(1).Children(func() {
 							a.outlineView(c)
@@ -89,7 +83,7 @@ func (a *app) view(c *ui.Context) {
 					case a.mode == viewTable:
 						a.tableView(c)
 					default:
-						a.agendaView(c)
+						a.canvasView(c)
 					}
 				})
 				if a.panelShown(c) {
@@ -111,11 +105,6 @@ func (a *app) view(c *ui.Context) {
 		a.tourView(c)
 		a.shotAlertView(c)
 		a.cardWindow(c)
-		a.autoNewView(c)
-		a.autoFixView(c)
-		a.approvalView(c)
-		a.installView(c)
-		a.confirmView(c)
 	})
 	if len(a.pending) > 0 {
 		a.runPending()
@@ -270,7 +259,7 @@ func (a *app) toolbar(c *ui.Context) {
 		if room < 760 {
 			aiText = ""
 		}
-		if iconTextButton(c, iconSparkle, aiText, "AI 助手", "问 AI：关于这张导图和资料库", a.aiOpen).Clicked() {
+		if iconTextButton(c, iconSparkle, aiText, "AI 助手", "问 AI：关于这张导图和收集的资料", a.aiOpen).Clicked() {
 			a.aiOpen = !a.aiOpen
 		}
 	})

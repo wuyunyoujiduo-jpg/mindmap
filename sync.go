@@ -112,7 +112,7 @@ func (a *app) syncFoot(c *ui.Context) {
 	}
 	tip := a.syncErr
 	if tip == "" {
-		tip = "导图和资料库同步到 GitHub：" + a.cfg.SyncRepo
+		tip = "导图和收集的资料同步到 GitHub：" + a.cfg.SyncRepo
 	}
 	b := ui.Row(c.Key("sync-foot")).Padding(5, 8).Gap(5).Radius(6).AlignItems(ui.Center).Cursor(ui.CursorPointer).
 		Label("同步状态").Tooltip(tip)
@@ -136,7 +136,7 @@ func (a *app) syncFoot(c *ui.Context) {
 // it runs by itself.
 func (a *app) syncSettings(c *ui.Context) {
 	t := c.Theme()
-	ui.Text(c, "把导图和资料库同步到你的一个私有 GitHub 仓库：在这台电脑上的修改会自动上传，其他电脑的修改会自动下载。两台电脑改了同一张导图时，两份都会保留。超过 50MB 的文件只留在本机。").
+	ui.Text(c, "把导图和收集的资料同步到你的一个私有 GitHub 仓库：在这台电脑上的修改会自动上传，其他电脑的修改会自动下载。两台电脑改了同一张导图时，两份都会保留。超过 50MB 的文件只留在本机。").
 		FontSize(12).TextColor(t.TextMuted).Wrap()
 	saveDrafts := func() {
 		repo := strings.Trim(ghsync.Clean(a.syncDrafts[0]), "/")

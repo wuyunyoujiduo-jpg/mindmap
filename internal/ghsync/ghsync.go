@@ -699,7 +699,7 @@ func (cfg Config) start(ctx context.Context) (string, error) {
 	}
 	err := cfg.call(ctx, "PUT", "/contents/"+marker, map[string]string{
 		"message": "MyMind 同步",
-		"content": base64.StdEncoding.EncodeToString([]byte("MyMind 的导图和资料库，由 MyMind 自动同步。\n")),
+		"content": base64.StdEncoding.EncodeToString([]byte("MyMind 的导图和收集的资料，由 MyMind 自动同步。\n")),
 		"branch":  cfg.branch(),
 	}, &out)
 	return out.Commit.SHA, err

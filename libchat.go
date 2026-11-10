@@ -13,7 +13,7 @@ import (
 // calls search_library and read_clip, which the app answers at once from
 // the local index, and goes on.
 
-const libraryPrompt = `用户还有一个本地「资料库」，收藏了文字、链接（网页正文）、图片和文件，每条有标题、摘要、分类和标签。当问题可能和用户收藏过的资料有关（“我之前存过…”、“资料里…”、查找某个主题的资料、引用资料来写东西等），先调用 search_library 检索（可以换不同关键词多搜几次），需要全文时用 read_clip 读取。回答时说明依据的是哪几条资料（写出标题），不要编造资料库里没有的内容；没找到就直说。
+const libraryPrompt = `用户还有一个本地「资料库」，收藏了文字、链接（网页正文）、图片和文件，每条有标题、摘要、分类和标签；界面上它叫「收集」，回答时也这样称呼它。当问题可能和用户收藏过的资料有关（“我之前存过…”、“资料里…”、查找某个主题的资料、引用资料来写东西等），先调用 search_library 检索（可以换不同关键词多搜几次），需要全文时用 read_clip 读取。回答时说明依据的是哪几条资料（写出标题），不要编造资料库里没有的内容；没找到就直说。
 用户的导图（项目、计划、知识整理）也是资料：问题可能和其他导图有关时，用 search_maps 按关键词找导图，用 read_map 读取某张导图的内容（当前打开的导图已在快照里，不用再读）。`
 
 // Tools of the library.
@@ -124,7 +124,7 @@ func (a *app) runLibraryTool(call aiCall) (result, shown string) {
 		Path     string `json:"path"`
 	}
 	if err := json.Unmarshal([]byte(call.input), &in); err != nil {
-		return "参数无法解析。", "资料库检索失败"
+		return "参数无法解析。", "检索收集失败"
 	}
 	switch call.name {
 	case toolSearchMaps:
@@ -134,7 +134,7 @@ func (a *app) runLibraryTool(call aiCall) (result, shown string) {
 		return a.readMapText(in.Path)
 	}
 	if a.lib == nil || len(a.lib.Clips) == 0 {
-		return "资料库是空的。", "资料库是空的"
+		return "收集是空的。", "收集是空的"
 	}
 	if call.name == toolReadClip {
 		c := a.lib.Find(strings.TrimSpace(in.ID))
@@ -144,7 +144,7 @@ func (a *app) runLibraryTool(call aiCall) (result, shown string) {
 		return library.Full(c, 20000), "📖 读取资料「" + c.Label() + "」"
 	}
 	text, n := library.SearchText(a.lib, in.Query, in.Category, 8, a.qvecs[strings.TrimSpace(in.Query)], a.embedder().Name())
-	return text, fmt.Sprintf("🔎 在资料库中检索「%s」：%d 条结果", in.Query, n)
+	return text, fmt.Sprintf("🔎 在收集中检索「%s」：%d 条结果", in.Query, n)
 }
 
 // librarySnapshot is what the AI is given of the library, when it is what

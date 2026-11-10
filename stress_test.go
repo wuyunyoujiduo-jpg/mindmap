@@ -61,7 +61,7 @@ func TestStress(t *testing.T) {
 	for _, v := range []struct {
 		name string
 		mode int
-	}{{"导图", viewMap}, {"大纲", viewOutline}, {"看板", viewBoard}, {"日程", viewAgenda}, {"时间线", viewTimeline}, {"总览", viewOverview}} {
+	}{{"导图", viewMap}, {"大纲", viewOutline}, {"看板", viewBoard}, {"时间线", viewTimeline}, {"总览", viewOverview}} {
 		a.mode = v.mode
 		tt.Frame()
 		time1(v.name, 10)
@@ -85,9 +85,9 @@ func TestStress(t *testing.T) {
 	t.Logf("adding 3000 clips: %v", time.Since(start))
 	a.showLibrary()
 	tt.Frame()
-	time1("资料库", 10)
+	time1("收集", 10)
 	a.libQuery = "数据库索引"
-	time1("资料库·搜索", 10)
+	time1("收集·搜索", 10)
 	a.libQuery, a.libSel = "", a.lib.Clips[0].ID
 	time1("资料详情", 10)
 	start = time.Now()

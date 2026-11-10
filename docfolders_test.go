@@ -3,115 +3,140 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
+
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
 
-func TestDocumentsInFolders(t *testing.T) {
+// The maps' list has the maps and their folders, not what was collected:
+// that is 收集's.
+func TestListHasMapsOnly(t *testing.T) {
 	a, tt := newTestApp(t)
 	dir := filepath.Join(a.dir, "项目资料")
 	if err := os.Mkdir(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	a.refreshFiles()
 	clip, err := a.addClipText("登录模块的接口说明：用户名密码登录、扫码登录", "手动")
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	// In no folder: under 未归档, first in the folders, closed at first.
+	clip.Folder = "项目资料" // as an earlier version kept it
+	a.refreshFiles()
+	a.setFolderOpen(dir, true)
 	tt.Frame()
-	if _, ok := tt.Find("文档 " + clip.Label()); ok {
-		t.Fatal("未归档 is open at first")
+	if _, ok := tt.Find("文档 " + clip.Label()); ok || tt.HasText("未归档") {
+		t.Fatalf("a document in the maps' list: %q", tt.Texts())
 	}
-	a.unfiledOpen = true
-	tt.Frame()
-	if len(a.unfiledClips()) != 1 || !tt.HasText("未归档") || !tt.HasText(clip.Label()) {
-		t.Fatalf("未归档: %d, %q", len(a.unfiledClips()), tt.Texts())
+	if !tt.HasText("项目资料") {
+		t.Fatalf("no folder: %q", tt.Texts())
 	}
-
-	// Kept in a folder: shown there in the sidebar, beside the maps.
-	a.moveClipTo(clip.ID, dir)
-	if clip.Folder != "项目资料" || len(a.unfiledClips()) != 0 {
-		t.Fatalf("folder %q", clip.Folder)
-	}
-	tt.Frame()
-	if !tt.HasText(clip.Label()) || tt.HasText("本导图标签 5") { // the map's tags are in the panel
-		t.Fatalf("sidebar %q", tt.Texts())
-	}
-	snapshot(t, tt, "sidebar-docs")
-
-	// A click shows it in 资料.
-	if err := tt.Click("文档 " + clip.Label()); err != nil {
-		t.Fatal(err)
-	}
-	tt.Frame()
-	if !a.libOpen || a.libSel != clip.ID {
-		t.Fatal("the document is not shown")
-	}
-	snapshot(t, tt, "sidebar-library")
-
-	// 灵感 lists the texts; not maps, links, pictures or files.
-	a.libKind = kindMemos
+	// It is in 收集, as all that is collected.
+	a.openList(kindAll, "")
 	if hits := a.libHits(); len(hits) != 1 || hits[0].Clip != clip {
-		t.Fatalf("documents %d", len(hits))
-	}
-
-	// The folder renamed, the document follows it.
-	to := filepath.Join(a.dir, "资料夹")
-	if err := os.Rename(dir, to); err != nil {
-		t.Fatal(err)
-	}
-	a.moved(dir, to)
-	if clip.Folder != "资料夹" || len(a.clipsIn(to)) != 1 {
-		t.Fatalf("after the rename: %q", clip.Folder)
-	}
-	// A folder gone, its documents are under 未归档 again.
-	if err := os.RemoveAll(to); err != nil {
-		t.Fatal(err)
-	}
-	if len(a.unfiledClips()) != 1 {
-		t.Fatal("a document of a folder gone is not under 未归档")
-	}
-	a.moveClipTo(clip.ID, "")
-	if clip.Folder != "" || len(a.clipsIn(to)) != 0 {
-		t.Fatal("not taken out")
+		t.Fatalf("收集 has %d", len(hits))
 	}
 }
 
-// A map, and a document, dragged onto a folder of the sidebar go into it.
+// A map dragged onto a folder of the sidebar goes into it.
 func TestDragIntoFolder(t *testing.T) {
 	a, tt := newTestApp(t)
 	dir := filepath.Join(a.dir, "team")
 	if err := os.Mkdir(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	clip, err := a.addClipText("季度评价模板", "手动")
-	if err != nil {
+	a.refreshFiles()
+	tt.Frame()
+	src, ok1 := tt.Find("使用指南")
+	dst, ok2 := tt.Find("team")
+	if !ok1 || !ok2 {
+		t.Fatal("no map or folder")
+	}
+	tt.Press(src.X+20, src.Y+src.H/2)
+	for i := 1; i <= 10; i++ {
+		tt.Move(src.X+20, src.Y+src.H/2+(dst.Y-src.Y)*float32(i)/10)
+	}
+	tt.Release(dst.X+20, dst.Y+dst.H/2)
+	tt.Frame()
+	if filepath.Dir(a.path) != dir {
+		t.Fatalf("map at %q", a.path)
+	}
+}
+
+// A folder is renamed and moved to the trash from its menu: its maps go
+// with it, and what pointed at them.
+func TestFolderRenameAndDelete(t *testing.T) {
+	a, tt := newTestApp(t)
+	plat := a.plat.(*fakePlatform)
+	dir := filepath.Join(a.dir, "旧项目")
+	if err := os.Mkdir(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	a.refreshFiles()
-	a.unfiledOpen = true
+	guide := a.path
+	a.newMap() // another map, which stays outside the folder
+	a.flush()
+	if err := a.open(guide); err != nil {
+		t.Fatal(err)
+	}
+	a.moveMap(a.path, dir)
+	a.toggleFavorite(a.path)
 	tt.Frame()
-	drag := func(from, to string) {
-		t.Helper()
-		src, ok1 := tt.Find(from)
-		dst, ok2 := tt.Find(to)
-		if !ok1 || !ok2 {
-			t.Fatalf("no %q or %q", from, to)
-		}
-		tt.Press(src.X+20, src.Y+src.H/2)
-		for i := 1; i <= 10; i++ {
-			tt.Move(src.X+20, src.Y+src.H/2+(dst.Y-src.Y)*float32(i)/10)
-		}
-		tt.Release(dst.X+20, dst.Y+dst.H/2)
-		tt.Frame()
+
+	// Renamed from the menu: the open map and 快捷访问 follow.
+	row, ok := tt.Find("旧项目")
+	if !ok {
+		t.Fatalf("no folder row: %q", tt.Texts())
 	}
-	drag("文档 "+clip.Label(), "team")
-	if clip.Folder != "team" {
-		t.Fatalf("document's folder %q", clip.Folder)
+	tt.Move(row.X+30, row.Y+row.H/2) // its "···" shows under the pointer
+	tt.Frame()
+	more, _ := tt.Find("文件夹菜单")
+	if more.W < 20 {
+		t.Fatalf("no ··· on the row under the pointer: %v", more)
 	}
-	drag("使用指南", "team")
-	if filepath.Dir(a.path) != dir {
-		t.Fatalf("map at %q", a.path)
+	if err := tt.Click("文件夹菜单"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.ChooseMenuItem("重命名"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.renaming != dir {
+		t.Fatalf("renaming %q", a.renaming)
+	}
+	a.renaming = ""
+	a.rename(dir, "归档项目")
+	to := filepath.Join(a.dir, "归档项目")
+	if filepath.Dir(a.path) != to || !slices.Contains(a.cfg.Favorites, a.path) {
+		t.Fatalf("after the rename: %q, %v", a.path, a.cfg.Favorites)
+	}
+	tt.Frame()
+	snapshot(t, tt, "folder-row")
+
+	// To the trash, once confirmed: with its map, another one opened.
+	row, _ = tt.Find("归档项目")
+	if err := tt.RightClick("归档项目"); err != nil { // a right click opens the same menu
+		t.Fatal(err)
+	}
+	if err := tt.ChooseMenuItem("移到废纸篓…"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !a.confirmDelete || !tt.HasText("把文件夹「归档项目」移到废纸篓？") || !tt.HasText("里面的 1 张导图会一起移走，可以在废纸篓中找回。") {
+		t.Fatalf("not asked: %q", tt.Texts())
+	}
+	snapshot(t, tt, "folder-delete")
+	if err := tt.Click("移到废纸篓"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !slices.Contains(plat.trashed, to) {
+		t.Fatalf("trashed %v", plat.trashed)
+	}
+	if len(a.cfg.Favorites) != 0 || a.path == "" || inside(a.path, to) {
+		t.Fatalf("left: favorites %v, open %q", a.cfg.Favorites, a.path)
+	}
+	if slices.ContainsFunc(a.files, func(f model.FileInfo) bool { return inside(f.Path, to) }) {
+		t.Fatal("the folder's maps are still listed")
 	}
 }

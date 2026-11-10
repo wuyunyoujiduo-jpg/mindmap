@@ -161,7 +161,7 @@ func (a *app) clipFromShortcut() {
 	a.dupe = false
 	clips, err := a.clipClipboard("剪贴板")
 	if err != nil {
-		a.plat.Notify("没有收进资料库", err.Error())
+		a.plat.Notify("没有存到收集", err.Error())
 		return
 	}
 	if a.dupe && len(clips) == 1 {
@@ -172,8 +172,8 @@ func (a *app) clipFromShortcut() {
 	if len(clips) > 1 {
 		body = fmt.Sprintf("%s 等 %d 项", body, len(clips))
 	}
-	a.plat.Notify("已收进资料库", body)
-	a.tell("已收进资料库")
+	a.plat.Notify("已存到收集", body)
+	a.tell("已存到收集")
 }
 
 // clipJob is a clip waiting for its page to be read or for the AI.

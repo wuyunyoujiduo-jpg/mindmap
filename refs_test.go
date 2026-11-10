@@ -81,7 +81,7 @@ func TestMoveKeepsIDsAndDropMaterial(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a.unfiledOpen = true
+	a.addQuick(fileDrag{Clip: clip.ID}) // at hand in 快捷访问, to drag from
 	target := find(t, a, "后端")
 	tt.Frame()
 	src, ok := tt.Find("文档 " + clip.Label())

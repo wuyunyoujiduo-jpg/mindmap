@@ -38,7 +38,9 @@ by AI, and an AI assistant.
   topics are on a pastel of their branch's color, those below on a faint
   tint (the scheme 明亮 of `style.go`). Notes and clips are one page, 收集
   (`libview.go`: a wall of cards), the notes' days and reviews behind its
-  回顾 (`memos.go`). Design drafts are in the Design artifact the user
+  回顾 (`memos.go`). The maps' list has maps and their folders only: what
+  is collected is 收集's (the word of the UI, never 资料库), and is on a map
+  by a topic's link. Design drafts are in the Design artifact the user
   reviews before a page is built.
 - The app's icon is drawn by `tools/icon/`; `resources/icon.png` is the
   desk (`tools/icon/desk.py`: a white note on the app's violet-blue, three lines

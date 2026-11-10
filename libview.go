@@ -16,7 +16,7 @@ import (
 func (a *app) libraryView(c *ui.Context) {
 	t := c.Theme()
 	l := a.lib
-	root := ui.Column(c.Key("library")).Grow(1).Label("资料库")
+	root := ui.Column(c.Key("library")).Grow(1).Label("收集")
 	if files := root.DroppedFiles(); len(files) > 0 {
 		a.later(func() { a.dropClips(files) })
 	}
@@ -71,7 +71,7 @@ func (a *app) libraryColumn(c *ui.Context) {
 				ui.Text(c, "语义检索不可用").FontSize(12).TextColor(t.Warning).NoWrap().Tooltip(a.embedErr + "（在设置里检查向量模型）")
 			}
 			ui.Spacer(c)
-			search := searchBox(c, "lib-search", &a.libQuery, "搜索资料", "搜索资料库", "按标题、内容、摘要、标签和关键词查找资料", 200)
+			search := searchBox(c, "lib-search", &a.libQuery, "搜索资料", "搜索收集", "按标题、内容、摘要、标签和关键词查找资料", 200)
 			if a.libQuery != "" && search.Shortcut(0, ui.KeyEscape) {
 				a.libQuery = ""
 			}
@@ -79,10 +79,10 @@ func (a *app) libraryColumn(c *ui.Context) {
 				a.libQueryAt = a.now()
 			}
 			a.searchQueryVector(c)
-			if iconButton(c, iconShot, "截图", "截图：框选屏幕、标注后收进资料库（"+keyLabel(a.shotKey())+"）", 30, true).Clicked() {
+			if iconButton(c, iconShot, "截图", "截图：框选屏幕、标注后存到收集（"+keyLabel(a.shotKey())+"）", 30, true).Clicked() {
 				a.later(a.screenshot)
 			}
-			if iconTextButton(c, iconSparkle, "问 AI", "AI 助手", "和 AI 聊资料库里的内容，它会检索相关资料来回答", a.aiOpen).Clicked() {
+			if iconTextButton(c, iconSparkle, "问 AI", "AI 助手", "和 AI 聊收集里的内容，它会检索相关资料来回答", a.aiOpen).Clicked() {
 				a.aiOpen = !a.aiOpen
 			}
 		})
@@ -102,7 +102,7 @@ func (a *app) libraryColumn(c *ui.Context) {
 		ui.Row(c).Grow(1).AlignItems(ui.Stretch).Children(func() {
 			if len(hits) == 0 {
 				ui.Column(c).Grow(1).Basis(0).Padding(8, 10, 16).Children(func() {
-					msg := "还没有资料。在上面记点什么、粘贴链接，或把图片和文件拖进来。\n在任何应用里复制内容后按 " + keyLabel(a.clipKey()) + "，也能直接收进资料库。"
+					msg := "还没有资料。在上面记点什么、粘贴链接，或把图片和文件拖进来。\n在任何应用里复制内容后按 " + keyLabel(a.clipKey()) + "，也能直接存到收集。"
 					if len(l.Clips) > 0 || a.libKind == kindMaps {
 						msg = "没有符合条件的资料。"
 					}
@@ -376,7 +376,7 @@ func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 	memo := isMemo(clip)
 	kcol := clipColor(clip.Kind)
 	row := ui.Column(c).Grow(1).Basis(0).MinWidth(0).Padding(14, 16).Gap(9).Radius(14).Cursor(ui.CursorPointer).
-		Label("资料 " + clip.Label()).Drag(fileDrag{Clip: clip.ID}) // onto a folder of the maps' list
+		Label("资料 " + clip.Label()).Drag(fileDrag{Clip: clip.ID}) // onto a map of the list, or 快捷访问
 	// A note is a slip of its color; the others white cards, each kind's
 	// icon in its own.
 	if memo {
@@ -520,7 +520,6 @@ func (a *app) clipMenu(m *ui.Menu, clip *library.Clip) {
 	if p := a.lib.FilePath(clip); p != "" && m.Item("打开文件").Chosen() {
 		a.plat.OpenPath(p)
 	}
-	a.clipFolderMenu(m, clip)
 	if m.Item("生成分享卡片…").Chosen() {
 		a.openCard(clip)
 	}
@@ -816,45 +815,6 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 	a.relatedSection(c, clip)
 }
 
-// homeRow is 今天's entry in the sidebar, the page the app opens on.
-func (a *app) homeRow(c *ui.Context) {
-	home := navRow(c.Key("home-row"), iconCategory, tilePurple, "今天", "", a.libOpen && a.libHome && !a.auto.open && !a.tasks.open && !a.memos.open)
-	if home.Clicked() {
-		a.later(func() {
-			a.showLibrary()
-			a.libHome = true
-		})
-	}
-}
-
-// libraryRow is the library's entry in the sidebar.
-func (a *app) libraryRow(c *ui.Context) {
-	all := navRow(c.Key("library-row"), iconLibrary, tileBlue, "资料库", fmt.Sprint(len(a.lib.Clips)),
-		a.libOpen && !a.libHome && a.libCat == "" && !a.auto.open && !a.tasks.open && !a.memos.open)
-	if all.Clicked() {
-		a.later(func() { a.openList(kindAll, "") })
-	}
-}
-
-// categoryList is the sidebar's section of the categories of all the
-// material: the clips' and the maps'.
-func (a *app) categoryList(c *ui.Context) {
-	cats := a.allCategories()
-	if len(cats) == 0 {
-		return
-	}
-	a.section(c, "分类", &a.catsOpen, "", func() {
-		for _, k := range cats {
-			name := k.Name
-			r := dotRow(c.Key("cat-row:"+name), catColor(name), name, fmt.Sprint(k.N), a.libOpen && !a.libHome && a.libCat == name && !a.auto.open && !a.tasks.open && !a.memos.open)
-			r.Label("分类 " + name)
-			if r.Clicked() {
-				a.later(func() { a.openList(kindAll, name) })
-			}
-		}
-	})
-}
-
 // allCategories are the categories of the clips and the maps.
 func (a *app) allCategories() []library.Count {
 	return library.CategoriesOf(slices.Concat(a.lib.Clips, a.mapClips()))
@@ -864,5 +824,5 @@ func (a *app) allCategories() []library.Count {
 func (a *app) showLibrary() {
 	a.commitEditIfAny()
 	a.lightbox, a.presenting = "", false
-	a.libOpen, a.libHome, a.auto.open, a.tasks.open, a.memos.open = true, false, false, false, false
+	a.libOpen, a.libHome, a.tasks.open, a.memos.open = true, false, false, false
 }

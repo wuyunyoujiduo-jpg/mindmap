@@ -137,7 +137,7 @@ func TestLibraryClipboardAndCapture(t *testing.T) {
 	plat.clipImage = nil
 	plat.copied = "https://example.com/a"
 	a.clipFromShortcut()
-	if len(plat.notes) == 0 || !strings.Contains(plat.notes[len(plat.notes)-1], "已收进资料库") {
+	if len(plat.notes) == 0 || !strings.Contains(plat.notes[len(plat.notes)-1], "已存到收集") {
 		t.Fatalf("notes %v", plat.notes)
 	}
 	link := a.lib.Clips[0]
@@ -223,7 +223,7 @@ func TestAISearchesLibrary(t *testing.T) {
 	if !strings.Contains(string(third), "全文") {
 		t.Fatalf("read result: %s", third)
 	}
-	if !tt.HasText("🔎 在资料库中检索「索引 最左前缀」：1 条结果") || !tt.HasText("我查一下资料库。") {
+	if !tt.HasText("🔎 在收集中检索「索引 最左前缀」：1 条结果") || !tt.HasText("我查一下资料库。") {
 		t.Fatalf("chat: %q", tt.Texts())
 	}
 	snapshot(t, tt, "library-chat")
@@ -298,7 +298,7 @@ func TestScreenshotIntoLibrary(t *testing.T) {
 		t.Fatalf("clip %+v", c)
 	}
 	a.keepShot(testPNG(t, 20, 20), screenshot.Library, false)
-	if len(a.lib.Clips) != 2 || len(plat.notes) == 0 || !strings.Contains(plat.notes[len(plat.notes)-1], "截图已收进资料库") {
+	if len(a.lib.Clips) != 2 || len(plat.notes) == 0 || !strings.Contains(plat.notes[len(plat.notes)-1], "截图已存到收集") {
 		t.Fatalf("clips %d notes %v", len(a.lib.Clips), plat.notes)
 	}
 }

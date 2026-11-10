@@ -81,19 +81,6 @@ func (it taskItem) done() bool { return it.node.Task.Status == model.StatusDone 
 // taskDrag is a task dragged to a day.
 type taskDrag struct{ path, id string }
 
-// tasksRow is the sidebar's row of the tasks, with how many are due.
-func (a *app) tasksRow(c *ui.Context) {
-	count := ""
-	if n := a.tasksDue(); n > 0 {
-		count = fmt.Sprint(n)
-	}
-	row := navRow(c.Key("tasks-row"), iconCheck, tileRed, "任务", count, a.libOpen && a.tasks.open).
-		Tooltip("所有导图里的任务：今天、最近 7 天、日 / 周 / 月视图")
-	if row.Clicked() {
-		a.later(a.openTasks)
-	}
-}
-
 // openTasks shows the tasks in the main area.
 func (a *app) openTasks() {
 	a.showLibrary()

@@ -164,31 +164,6 @@ func (a *app) showClip(id string) {
 	a.libSel, a.libQuery, a.libCat, a.libTag, a.libKind = id, "", "", "", kindAll
 }
 
-// nodeClips are the clips of the library that the node selected may be
-// about: by its title and tags.
-func (a *app) nodeClips(n *model.Node) []library.Hit {
-	if a.lib == nil || len(a.lib.Clips) == 0 || strings.TrimSpace(n.Title) == "" {
-		return nil
-	}
-	linked := map[string]bool{}
-	for _, l := range n.Links {
-		if id, ok := strings.CutPrefix(l, clipScheme); ok {
-			linked[id] = true
-		}
-	}
-	q := n.Title + " " + strings.Join(n.Tags, " ")
-	var out []library.Hit
-	for _, h := range a.lib.Search(q, func(c *library.Clip) bool { return !linked[c.ID] }) {
-		if h.Coverage >= 0.5 {
-			out = append(out, h)
-		}
-		if len(out) == 3 {
-			break
-		}
-	}
-	return out
-}
-
 // nodeRelatedSection is the material a node may be about, not linked to
 // it yet: clips, and nodes of other maps, a click linking each.
 func (a *app) nodeRelatedSection(c *ui.Context, n *model.Node) {
@@ -232,7 +207,7 @@ func (a *app) nodeRelatedSection(c *ui.Context, n *model.Node) {
 					}
 				})
 			}
-			ui.Text(c, "按标题、标签和意思在资料库和其他导图里找到的").FontSize(11).TextColor(t.TextMuted)
+			ui.Text(c, "按标题、标签和意思在收集和其他导图里找到的").FontSize(11).TextColor(t.TextMuted)
 		})
 	})
 }
@@ -367,7 +342,7 @@ func (a *app) clipsToMap(name string, clips []*library.Clip) {
 	}
 	f := model.NewFile(name)
 	d := f.Sheets[0]
-	d.Root.Note = fmt.Sprintf("由资料库的 %d 条资料生成，%s。", len(clips), a.now().Format("2006-01-02"))
+	d.Root.Note = fmt.Sprintf("由收集的 %d 条资料生成，%s。", len(clips), a.now().Format("2006-01-02"))
 	branches := map[string]*model.Node{}
 	for _, c := range clips {
 		cat := c.Category
@@ -521,7 +496,7 @@ func (a *app) backupSettings(c *ui.Context) {
 	t := c.Theme()
 	ui.Field(c, "备份", func() {
 		ui.Column(c).Gap(8).Children(func() {
-			ui.Text(c, "把导图文件夹（含资料库、图片和附件）打包成 zip。建议把导图文件夹放在 iCloud 云盘里同步，再定期备份到另一个地方。").
+			ui.Text(c, "把导图文件夹（含收集的资料、图片和附件）打包成 zip。建议把导图文件夹放在 iCloud 云盘里同步，再定期备份到另一个地方。").
 				FontSize(12).TextColor(t.TextMuted).Wrap()
 			ui.Row(c).Gap(8).Wrap().GapY(6).AlignItems(ui.Center).Children(func() {
 				if ui.Button(c, "立即备份…").Disabled(a.backupBusy).Clicked() {

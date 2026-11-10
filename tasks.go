@@ -6,7 +6,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
@@ -332,102 +331,4 @@ func dateRange(task *model.Task) string {
 		return "开始 " + task.Start.Format("1/2")
 	}
 	return ""
-}
-
-// agendaGroup is a span of days of the agenda.
-type agendaGroup struct {
-	title string
-	tasks []model.TaskNode
-}
-
-// agenda sorts the unfinished tasks into overdue, today, this week, later
-// and unscheduled, by their due date, else their start date.
-func agenda(tasks []model.TaskNode, now time.Time) []agendaGroup {
-	day := today(now)
-	weekEnd := day.AddDate(0, 0, 7)
-	groups := []agendaGroup{{title: "已逾期"}, {title: "今天"}, {title: "未来 7 天"}, {title: "以后"}, {title: "未安排日期"}}
-	for _, tn := range tasks {
-		task := tn.Node.Task
-		if task.Status == model.StatusDone {
-			continue
-		}
-		date := task.Due
-		if date == nil {
-			date = task.Start
-		}
-		var g int
-		switch {
-		case date == nil:
-			g = 4
-		case date.Before(day):
-			g = 0
-			if task.Due == nil { // started in the past, with no deadline
-				g = 1
-			}
-		case date.Before(day.AddDate(0, 0, 1)):
-			g = 1
-		case date.Before(weekEnd):
-			g = 2
-		default:
-			g = 3
-		}
-		groups[g].tasks = append(groups[g].tasks, tn)
-	}
-	return groups
-}
-
-func (a *app) agendaView(c *ui.Context) {
-	t := c.Theme()
-	tasks := a.visibleTasks()
-	sortTasks(tasks)
-	groups := agenda(tasks, a.now())
-	// The groups' headings and cards as the rows of a virtual list: only
-	// those in view are built.
-	type row struct {
-		head  string
-		count int
-		tn    model.TaskNode
-	}
-	var rows []row
-	for _, g := range groups {
-		if len(g.tasks) > 0 {
-			rows = append(rows, row{head: g.title, count: len(g.tasks)})
-			for _, tn := range g.tasks {
-				rows = append(rows, row{tn: tn})
-			}
-		}
-	}
-	if len(rows) > 0 {
-		ui.List(c, nil, len(rows)).Grow(1).ItemKey(func(i int) any {
-			if rows[i].head != "" {
-				return "head:" + rows[i].head
-			}
-			return rows[i].tn.Node.ID
-		}).Rows(func(r ui.ListRow) {
-			c := r.Context
-			it := rows[r.Index]
-			ui.Box(c).Padding(0, 24).Children(func() {
-				ui.Box(c).MaxWidth(760).Children(func() {
-					if it.head != "" {
-						head := ui.Text(c, fmt.Sprintf("%s  %d", it.head, it.count)).Bold()
-						if it.head == "已逾期" {
-							head.TextColor(t.Danger)
-						}
-						head.Margin(16, 0, 8)
-						return
-					}
-					ui.Box(c).Padding(0, 0, 8).Children(func() { a.taskCard(c, it.tn, true) })
-				})
-			})
-		})
-		return
-	}
-	ui.Scroll(c).Grow(1).Children(func() {
-		ui.Column(c).Padding(16, 24).Gap(18).MaxWidth(760).Children(func() {
-			any := false
-			if !any {
-				ui.Text(c, "没有未完成的任务。在节点的详情面板中勾选「作为任务」来添加。").TextColor(t.TextMuted).Wrap()
-			}
-		})
-	})
 }

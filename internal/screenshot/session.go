@@ -320,7 +320,7 @@ func (s *session) toolbar(c *ui.Context, sh *screenShot, at pt) {
 			if toolButton(c, iconSave, "保存 "+cmdLabel("S")).TextColor(iconGray).Clicked() {
 				s.save(sh)
 			}
-			if toolButton(c, iconLibrary, "收进资料库 ⇧↩").TextColor(iconGray).Clicked() {
+			if toolButton(c, iconLibrary, "存到收集 ⇧↩").TextColor(iconGray).Clicked() {
 				s.keep(sh)
 			}
 			if toolButton(c, iconCheck, "复制到剪贴板 ↩").TextColor(iconConfirm).Clicked() {
@@ -371,7 +371,7 @@ func (s *session) save(sh *screenShot) {
 	s.finish(sh, Save)
 }
 
-// keep 把选区收进资料库并结束截图。
+// keep 把选区存到收集并结束截图。
 func (s *session) keep(sh *screenShot) {
 	sh.ed.commitText()
 	s.finish(sh, Library)

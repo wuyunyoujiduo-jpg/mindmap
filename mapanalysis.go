@@ -267,7 +267,7 @@ func (a *app) mapAnalysisSection(c *ui.Context) {
 			})
 		}
 		if an == nil {
-			msg := "AI 分析这张导图后，搜索时也能按它讲的内容、同义词找到它；资料库和 AI 助手也能检索到。"
+			msg := "AI 分析这张导图后，搜索时也能按它讲的内容、同义词找到它；收集和 AI 助手也能检索到。"
 			if providerKey(a.cfg) == "" {
 				msg += "先在 AI 助手的设置里填写 API Key。"
 			}

@@ -50,7 +50,6 @@ func (a *app) homeView(c *ui.Context) {
 					})
 					ui.Column(c).Grow(1.15).Basis(0).MinWidth(0).Gap(24).Children(func() {
 						a.homeWaiting(c)
-						a.homeAutomations(c)
 					})
 				})
 			})

@@ -193,7 +193,7 @@ func (a *app) captureView(c *ui.Context) {
 			return false
 		})
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-			if ghostButton(c, "收藏剪贴板", "把剪贴板里的文字、链接、图片或文件收进资料库（"+keyLabel(a.clipKey())+"）").Clicked() {
+			if ghostButton(c, "收藏剪贴板", "把剪贴板里的文字、链接、图片或文件存到收集（"+keyLabel(a.clipKey())+"）").Clicked() {
 				if _, err := a.clipClipboard("剪贴板"); err != nil {
 					a.captureErr = err.Error()
 				} else {
@@ -334,10 +334,10 @@ type trayTask struct {
 // trayMenu is the menu of the menu bar icon.
 func (a *app) trayMenu() []trayEntry {
 	items := []trayEntry{{label: "快速记录…", run: a.plat.ShowCapture},
-		{label: "收藏剪贴板到资料库", run: a.clipFromShortcut},
+		{label: "收藏剪贴板到收集", run: a.clipFromShortcut},
 		{label: "截图…", run: func() { a.plat.Screenshot(false) }},
 		{label: "延时 3 秒截图（截菜单）", run: func() { a.plat.DelayedScreenshot(3) }},
-		{label: fmt.Sprintf("资料库（%d）", len(a.lib.Clips)), run: func() {
+		{label: fmt.Sprintf("收集（%d）", len(a.lib.Clips)), run: func() {
 			a.plat.ShowMain()
 			a.showLibrary()
 		}}}
@@ -465,7 +465,7 @@ func (a *app) settingsView(c *ui.Context) {
 						})
 						ui.Field(c, "AI 编程工具（MCP）", func() {
 							ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-								ui.Text(c, "让 Claude Code、Cursor 等读写导图、检索资料库").FontSize(12).TextColor(t.TextMuted).Grow(1)
+								ui.Text(c, "让 Claude Code、Cursor 等读写导图、检索收集的资料").FontSize(12).TextColor(t.TextMuted).Grow(1)
 								if ui.Button(c, "连接说明…").Clicked() {
 									a.settingsOpen, a.mcpOpen = false, true
 								}
@@ -516,9 +516,9 @@ func (a *app) generalSettings(c *ui.Context) {
 			}{
 				{"快速记录快捷键", "快速记录：弹出小窗口记下想法", a.cfg.CaptureKey, defaultCaptureKey,
 					func(v string) { a.cfg.CaptureKey = v }, a.plat.SetCaptureKey, a.captureKey},
-				{"收藏剪贴板快捷键", "收藏剪贴板：复制后按下，直接收进资料库", a.cfg.ClipKey, defaultClipKey,
+				{"收藏剪贴板快捷键", "收藏剪贴板：复制后按下，直接存到收集", a.cfg.ClipKey, defaultClipKey,
 					func(v string) { a.cfg.ClipKey = v }, a.plat.SetClipKey, a.clipKey},
-				{"截图快捷键", "截图：框选屏幕、标注，收进资料库或复制", a.cfg.ShotKey, defaultShotKey,
+				{"截图快捷键", "截图：框选屏幕、标注，存到收集或复制", a.cfg.ShotKey, defaultShotKey,
 					func(v string) { a.cfg.ShotKey = v }, a.plat.SetShotKey, a.shotKey},
 			}
 			for _, r := range rows {

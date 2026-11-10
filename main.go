@@ -569,8 +569,8 @@ func main() {
 				mygo.Separator(),
 				item("快速记录…", "", plat.ShowCapture),
 				item("打开收件箱", "", func() { _ = a.open(a.inboxPath()) }),
-				item("打开资料库", "CmdOrCtrl+Shift+L", a.showLibrary),
-				item("收藏剪贴板到资料库", "", a.clipFromShortcut),
+				item("打开收集", "CmdOrCtrl+Shift+L", a.showLibrary),
+				item("收藏剪贴板到收集", "", a.clipFromShortcut),
 				mygo.Separator(),
 				item("导入 XMind…", "CmdOrCtrl+Shift+I", a.askImportXMind),
 				item("导入 Markdown / OPML…", "", a.askImportOutline),
@@ -636,7 +636,7 @@ func main() {
 			}},
 		}))
 	})
-	mygo.App.OnWillQuit(func(*mygo.QuitEvent) { a.flush(); a.autoStopAll() })
+	mygo.App.OnWillQuit(func(*mygo.QuitEvent) { a.flush() })
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)
 	}

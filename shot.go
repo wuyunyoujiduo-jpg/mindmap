@@ -57,16 +57,16 @@ func (a *app) keepShot(png []byte, act screenshot.Action, fromApp bool) {
 	case screenshot.Library:
 		clip, err := a.addClipImage(png, "截图")
 		if err != nil {
-			a.plat.Notify("截图没有收进资料库", err.Error())
+			a.plat.Notify("截图没有存到收集", err.Error())
 			return
 		}
 		if fromApp {
 			a.showLibrary()
 			a.libSel = clip.ID
 		} else {
-			a.plat.Notify("截图已收进资料库", clip.Label())
+			a.plat.Notify("截图已存到收集", clip.Label())
 		}
-		a.tell("截图已收进资料库")
+		a.tell("截图已存到收集")
 	case screenshot.Copy:
 		a.tell("截图已复制")
 	}
@@ -78,7 +78,7 @@ func (a *app) shotSettings(c *ui.Context) {
 	t := c.Theme()
 	ui.Field(c, "截图", func() {
 		ui.Column(c).Gap(8).Children(func() {
-			ui.Text(c, "屏幕定格后直接框选，可拖动、拉边调整；框选后加框线、箭头、画笔、文字，可选颜色。✓、回车或双击复制到剪贴板，书签按钮或 ⇧↩ 收进资料库，⌘S 保存，Esc 取消。").
+			ui.Text(c, "屏幕定格后直接框选，可拖动、拉边调整；框选后加框线、箭头、画笔、文字，可选颜色。✓、回车或双击复制到剪贴板，书签按钮或 ⇧↩ 存到收集，⌘S 保存，Esc 取消。").
 				FontSize(12).TextColor(t.TextMuted).Wrap()
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				if ui.Button(c, "试一下").Clicked() {

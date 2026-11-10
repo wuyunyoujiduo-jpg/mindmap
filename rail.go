@@ -58,7 +58,7 @@ func (a *app) rail(c *ui.Context) {
 	}
 	col.Children(func() {
 		ui.Box(c).Height(max(bar.Height, 38)).FillWidth().DragWindow()
-		item("home", railDesk, "工作台", "", "记下来、归位、今天要做的", page && a.libHome && !a.auto.open && !a.tasks.open && !a.memos.open, func() {
+		item("home", railDesk, "工作台", "", "记下来、归位、今天要做的", page && a.libHome && !a.tasks.open && !a.memos.open, func() {
 			a.showLibrary()
 			a.libHome = true
 		})
@@ -76,8 +76,7 @@ func (a *app) rail(c *ui.Context) {
 			due = fmt.Sprint(n)
 		}
 		item("tasks", railTasks, "任务", due, "所有导图里的任务", page && a.tasks.open, a.openTasks)
-		item("library", railCollect, "收集", "", "灵感、链接、文档和图片", page && !a.libHome && !a.auto.open && !a.tasks.open, func() { a.openList(kindAll, "") })
-		item("auto", railAuto, "自动化", "", "把日常任务写成程序，手动或定时运行", page && a.auto.open, a.openAutomations)
+		item("library", railCollect, "收集", "", "灵感、链接、文档和图片", page && !a.libHome && !a.tasks.open, func() { a.openList(kindAll, "") })
 		ui.Spacer(c)
 		foot := func(kind int, label, tip string, click func()) {
 			b := ui.Box(c.Key("rail-foot:"+label)).Size(40, 40).Radius(12).Cursor(ui.CursorPointer).Label(label).Tooltip(tip)

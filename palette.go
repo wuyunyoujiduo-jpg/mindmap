@@ -104,10 +104,10 @@ func (a *app) commands() []command {
 		{"快速记录", keyLabel(a.captureKey()), a.plat.ShowCapture, nil},
 		{"打开收件箱", "", func() { _ = a.open(a.inboxPath()) }, func() bool { _, err := os.Stat(a.inboxPath()); return err == nil }},
 		{"移到其他导图…", "", func() { a.openPalette(paletteMove) }, hasDoc},
-		{"打开资料库", "⌘⇧L", a.showLibrary, nil},
-		{"收藏剪贴板到资料库", keyLabel(a.clipKey()), a.clipFromShortcut, nil},
+		{"打开收集", "⌘⇧L", a.showLibrary, nil},
+		{"收藏剪贴板到收集", keyLabel(a.clipKey()), a.clipFromShortcut, nil},
 		{"截图", keyLabel(a.shotKey()), a.screenshot, nil},
-		{"AI 整理资料库", "", func() { a.showLibrary(); a.organizeAll() }, func() bool { return len(a.lib.Unorganized()) > 0 }},
+		{"AI 整理收集的资料", "", func() { a.showLibrary(); a.organizeAll() }, func() bool { return len(a.lib.Unorganized()) > 0 }},
 		{"设置", "⌘,", a.openSettings, nil},
 		{"连接 AI 编程工具（MCP）", "", func() { a.mcpOpen = true }, nil},
 		{"撤销", "⌘Z", a.undo, hasDoc},
@@ -469,7 +469,7 @@ func (a *app) paletteView(c *ui.Context) {
 			paletteLink:   "输入关键词，选择要链接到的节点…",
 			paletteAfter:  "选择要先完成的任务…",
 			paletteMove:   "移到哪个节点下？输入关键词查找，或选择导图的中心主题…",
-			paletteClip:   "在资料库里查找要链接的资料…",
+			paletteClip:   "在收集里查找要链接的资料…",
 			paletteAttach: "把资料挂到哪个节点？输入关键词查找，或选择建议的节点…",
 		}[a.paletteMode]
 		w, _ := c.Size()
@@ -543,7 +543,7 @@ var shortcuts = []struct {
 }{
 	{"全局", [][2]string{
 		{"⌘K", "命令面板"}, {"⌘P", "快速切换导图"}, {"⌘⇧F", "搜索所有导图"}, {"⌘N", "新建导图"},
-		{"⌘T", "新建画布"}, {"⌘1–6", "导图 / 大纲 / 看板 / 日程 / 时间线 / 总览"}, {"⌘↩", "开始演说"}, {"⌘?", "快捷键速查"},
+		{"⌘T", "新建画布"}, {"⌘1–6", "导图 / 大纲 / 看板 / 表格 / 时间线 / 总览"}, {"⌘↩", "开始演说"}, {"⌘?", "快捷键速查"},
 	}},
 	{"编辑节点", [][2]string{
 		{"Tab", "添加子节点"}, {"↩ / ⇧↩", "在下方 / 上方添加同级节点"}, {"Space / F2", "编辑标题"}, {"Delete", "删除"},

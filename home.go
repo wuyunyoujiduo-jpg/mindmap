@@ -2,17 +2,14 @@ package main
 
 import (
 	"fmt"
-	"hash/fnv"
 	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
 )
 
-// The look of the sidebar and of 概览 follows Pulse's: rows of the
-// sidebar with a line icon in a quiet shade of its color and a count on
-// the right, the current one on a light gray; pages of outlined cards with
-// large numbers. Colors are muted, as the rest is.
+// Pieces the pages share: the colors of the kinds of things, their tiles,
+// a row of a list, how long ago, a name cut in the middle.
 
 // Colors of the kinds of things, muted.
 var (
@@ -23,17 +20,7 @@ var (
 	tilePink   = ui.Hex("#C77796")
 	tileYellow = ui.Hex("#C9A443")
 	tileTeal   = ui.Hex("#4E9E9A")
-	tileRed    = ui.Hex("#C9655F")
 )
-
-var tilePalette = []ui.Color{tileBlue, tileOrange, tileGreen, tilePurple, tilePink, tileTeal, tileYellow, tileRed}
-
-// catColor is a category's color, the same each time.
-func catColor(name string) ui.Color {
-	h := fnv.New32a()
-	h.Write([]byte(name))
-	return tilePalette[h.Sum32()%uint32(len(tilePalette))]
-}
 
 // tile is an icon of a kind of thing, drawn as a line in a quiet shade of
 // its color: a hint of the color, no block of it.
@@ -71,33 +58,6 @@ func navRow(c *ui.Context, ic icon, _ ui.Color, label, count string, current boo
 		}
 	})
 	return r
-}
-
-// pageCard is a card of a page: soft, much rounded.
-func pageCard(c *ui.Context) ui.Element {
-	t := c.Theme()
-	return ui.Column(c).Padding(16, 18).Gap(12).Radius(12).Background(t.Background).Border(1, hairline(t)).FillWidth()
-}
-
-// cardHead is the head of a card: a tile, a title in its color, and a link
-// on the right when more is not "".
-func cardHead(c *ui.Context, ic icon, col ui.Color, title, more string) bool {
-	t := c.Theme()
-	clicked := false
-	ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
-		tile(c, ic, col, 26)
-		ui.Text(c, title).FontSize(15).Bold().Grow(1) // the tile says the color
-		if more != "" {
-			l := ui.Row(c.Key("more:" + title)).Gap(2).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(more + " " + title)
-			if l.Clicked() {
-				clicked = true
-			}
-			l.Children(func() {
-				ui.Text(c, more).FontSize(12).TextColor(t.Accent)
-			})
-		}
-	})
-	return clicked
 }
 
 // relTime says how long ago a time was.
@@ -146,30 +106,6 @@ func (a *app) openList(kind int, cat string) {
 // title in its color, with what right builds at its end, then body.
 func sectionCard(c *ui.Context, ic icon, col ui.Color, title string, right func(), body func()) {
 	section(c, ic, title, right, body)
-}
-
-// dotRow is a row of the sidebar with a small dot of a color, as Finder's
-// tags: for the categories, many, which tiles would make heavy.
-func dotRow(c *ui.Context, col ui.Color, label, count string, current bool) ui.Element {
-	t := c.Theme()
-	r := ui.Row(c).Padding(5, 8, 5, 14).Gap(10).Radius(8).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(label).FillWidth()
-	switch {
-	case current:
-		r.Background(chosen(t))
-	case r.Hovered():
-		r.Background(t.Text.Alpha(0.06))
-	}
-	r.Children(func() {
-		ui.Box(c).Size(8, 8).Radius(4).Background(col).Shrink(0).Margin(0, 5, 0, 1)
-		text := ui.Text(c, label).FontSize(13).Grow(1).Shrink(1).MinWidth(0).SingleLine()
-		if current {
-			text.Bold()
-		}
-		if count != "" {
-			ui.Text(c, count).FontSize(12).TextColor(t.TextMuted).Shrink(0)
-		}
-	})
-	return r
 }
 
 // midEllipsis cuts a name too long for width points in its middle,

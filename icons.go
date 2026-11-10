@@ -497,7 +497,6 @@ const (
 	railMap
 	railTasks
 	railCollect
-	railAuto
 	railSearch
 	railGear
 )
@@ -541,11 +540,6 @@ func drawRailIcon(p *ui.Painter, r ui.Rect, s float32, kind int, col ui.Color) {
 		line(new(ui.Path).MoveTo(x(5), y(9)).LineTo(x(5), y(18)).QuadTo(x(5), y(20), x(7), y(20)).
 			LineTo(x(17), y(20)).QuadTo(x(19), y(20), x(19), y(18)).LineTo(x(19), y(9)))
 		line(new(ui.Path).MoveTo(x(9.5), y(13.5)).LineTo(x(14.5), y(13.5)))
-	case railAuto: // what runs by itself: a bolt
-		bolt := new(ui.Path).MoveTo(x(13.2), y(3)).LineTo(x(5.5), y(13.5)).LineTo(x(11), y(13.5)).
-			LineTo(x(10.2), y(21)).LineTo(x(18.5), y(10.2)).LineTo(x(12.6), y(10.2)).Close()
-		p.FillPath(bolt, soft)
-		line(bolt)
 	case railSearch:
 		line(new(ui.Path).Circle(x(11), y(11), 6.5*k))
 		line(new(ui.Path).MoveTo(x(16), y(16)).LineTo(x(20.5), y(20.5)))

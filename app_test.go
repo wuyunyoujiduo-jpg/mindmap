@@ -375,7 +375,7 @@ func findIn(d *model.Document, title string) (*model.Node, error) {
 	return found, nil
 }
 
-func TestBoardAndAgenda(t *testing.T) {
+func TestBoard(t *testing.T) {
 	a, tt := newTestApp(t)
 	if err := tt.Click("看板"); err != nil {
 		t.Fatal(err)
@@ -386,14 +386,6 @@ func TestBoardAndAgenda(t *testing.T) {
 		}
 	}
 	snapshot(t, tt, "board")
-	a.mode = viewAgenda // no longer in the toolbar: the tasks' page has the days
-	tt.Frame()
-	for _, s := range []string{"未来 7 天  2", "未安排日期  1"} {
-		if !tt.HasText(s) {
-			t.Errorf("agenda misses %q in %q", s, tt.Texts())
-		}
-	}
-	snapshot(t, tt, "agenda")
 	_ = a
 }
 
@@ -459,32 +451,6 @@ func TestNewMapAndDelete(t *testing.T) {
 	a.deleteMap(a.path)
 	if len(a.files) != 1 || mapName(a.path) != "使用指南" {
 		t.Fatalf("after delete: files %d, path %q", len(a.files), a.path)
-	}
-}
-
-func TestAgendaGroups(t *testing.T) {
-	day := func(n int) *time.Time { d := today(testNow).AddDate(0, 0, n); return &d }
-	mk := func(title string, task model.Task) model.TaskNode {
-		return model.TaskNode{Node: &model.Node{Title: title, Task: &task}}
-	}
-	groups := agenda([]model.TaskNode{
-		mk("late", model.Task{Status: model.StatusTodo, Due: day(-1)}),
-		mk("today", model.Task{Status: model.StatusTodo, Due: day(0)}),
-		mk("started", model.Task{Status: model.StatusDoing, Start: day(-3)}),
-		mk("soon", model.Task{Status: model.StatusTodo, Due: day(3)}),
-		mk("later", model.Task{Status: model.StatusTodo, Due: day(30)}),
-		mk("none", model.Task{Status: model.StatusIdea}),
-		mk("done", model.Task{Status: model.StatusDone, Due: day(-1)}),
-	}, testNow)
-	want := [][]string{{"late"}, {"today", "started"}, {"soon"}, {"later"}, {"none"}}
-	for i, g := range groups {
-		var got []string
-		for _, tn := range g.tasks {
-			got = append(got, tn.Node.Title)
-		}
-		if !slices.Equal(got, want[i]) {
-			t.Errorf("%s: %v, want %v", g.title, got, want[i])
-		}
 	}
 }
 

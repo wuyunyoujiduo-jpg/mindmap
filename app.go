@@ -94,7 +94,7 @@ const (
 	viewMap = iota
 	viewOutline
 	viewBoard
-	viewAgenda
+	viewAgenda // no more a view: kept for the maps left on it
 	viewTimeline
 	viewOverview
 	viewTable
@@ -278,7 +278,6 @@ type app struct {
 	libHome       bool       // 今天 is shown, not the list
 	homeDraft     string     // what is typed in 今天's line: a note of 灵感, or a task
 	libDay        time.Time  // the day the list shows, from 概览's dots; zero for any
-	unfiledOpen   bool       // 未归档 of the sidebar is open
 	panelOff      bool       // the right panel is hidden
 	sideItems     []sideItem // the sidebar's maps and documents, in order
 	sideDrawn     []sideItem // as the frame before drew them
@@ -335,7 +334,6 @@ type app struct {
 	shotAlert                    bool
 	shotAlertTitle, shotAlertMsg string
 	shotAlertSettings            bool
-	shotModes                    bool                  // the choice of how, shown on any system (tests)
 	keyErr                       map[string]string     // why a shortcut recorded is not used
 	iconBitmaps                  map[string]*ui.Bitmap // the app's icons, in the settings
 	// The sync with GitHub (sync.go).
@@ -363,7 +361,6 @@ type app struct {
 	async        asyncRunner
 	post         func(fn func()) // runs fn on the main thread, from any
 
-	auto  autoState  // the automations (automation.go)
 	tasks tasksState // the tasks of all the maps (taskspage.go)
 	memos memosState // 灵感, the notes written as they come (memos.go)
 	// lastTheme is the theme the window was last drawn in, for what is
@@ -388,8 +385,6 @@ type app struct {
 	panelWidth    float32
 	resizingPanel bool
 	filesOpen     bool
-	catsOpen      bool
-	tagsOpen      bool
 	favoritesOpen bool
 	// Folders of the sidebar are shown closed but for those opened, which
 	// the config keeps.
@@ -425,8 +420,6 @@ func newApp(plat platform, cfg config) *app {
 		sidebarWidth:  220,
 		panelWidth:    300,
 		filesOpen:     true,
-		catsOpen:      true,
-		tagsOpen:      true,
 		favoritesOpen: true,
 		captureWhere:  captureAuto, // a note, or a task when it says a day
 		bitmaps:       map[string]*ui.Bitmap{},
@@ -488,8 +481,11 @@ func (a *app) refreshFiles() {
 		a.tree, a.files = model.Folder{Path: a.dir, Name: filepath.Base(a.dir)}, nil
 		return
 	}
-	// The automations' folder is theirs, not one of maps.
-	tree.Folders = slices.DeleteFunc(tree.Folders, func(f model.Folder) bool { return f.Path == a.autoRoot() })
+	// The folder the automations had, which the app has no more, is not
+	// shown while it holds no map.
+	tree.Folders = slices.DeleteFunc(tree.Folders, func(f model.Folder) bool {
+		return f.Name == "自动化" && len(f.AllFiles()) == 0
+	})
 	a.tree, a.files = tree, tree.AllFiles()
 }
 
@@ -661,7 +657,6 @@ func (a *app) tick(c *ui.Context) {
 		a.syncDue()
 		a.autoAnalyzeMaps()
 		a.keysBack()
-		a.autoTick()
 	}
 	if a.path != "" && a.checked == now {
 		if mt := modTime(a.path); !mt.IsZero() && !mt.Equal(a.modTime) {

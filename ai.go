@@ -953,7 +953,7 @@ func (a *app) aiPanel(c *ui.Context) {
 			BorderWidth(0, 0, 1, 0).BorderColor(hairline(t)).DragWindow().Children(func() {
 			ui.Box(c).Size(16, 16).Draw(func(p *ui.Painter, r ui.Rect) { drawIcon(p, r, 14, iconSparkle, t.Accent) })
 			ui.Text(c, "问 AI").FontSize(textBody).FontWeight(600)
-			about := "资料库"
+			about := "收集"
 			if !a.libOpen && a.doc != nil {
 				about = "「" + mapName(a.path) + "」"
 			}
@@ -983,11 +983,11 @@ func (a *app) aiPanel(c *ui.Context) {
 		}
 		ui.Scroll(c.Key("chat")).Grow(1).TrackScroll(&ai.scroll).Padding(4, 16, 12).Gap(10).Children(func() {
 			if len(ai.msgs) == 0 && a.libOpen {
-				ui.Text(c, "问问资料库里的内容：AI 会先在本地检索相关资料，再根据它们回答，并说明依据的是哪几条。").
+				ui.Text(c, "问问收集里的内容：AI 会先在本地检索相关资料，再根据它们回答，并说明依据的是哪几条。").
 					FontSize(12).TextColor(t.TextMuted).Wrap()
-				asks := []string{"我最近收藏了哪些资料？按主题归纳一下", "资料库里有哪些值得深入看的内容？"}
+				asks := []string{"我最近收藏了哪些资料？按主题归纳一下", "收集里有哪些值得深入看的内容？"}
 				if clip := a.lib.Find(a.libSel); clip != nil {
-					asks = append([]string{"总结选中的这条资料，并找找资料库里相关的内容"}, asks...)
+					asks = append([]string{"总结选中的这条资料，并找找收集里相关的内容"}, asks...)
 				}
 				for _, s := range asks {
 					if ui.Button(c.Key(s), s).FillWidth().Clicked() {
@@ -1047,7 +1047,7 @@ func (a *app) aiPanel(c *ui.Context) {
 		})
 		ui.Column(c).Padding(12, 16, 14).Gap(8).BorderWidth(1, 0, 0, 0).BorderColor(hairline(t)).Children(func() {
 			if a.libOpen {
-				ui.Text(c, "基于资料库对话；导图里提问时也能检索资料库").FontSize(11).TextColor(t.TextMuted)
+				ui.Text(c, "基于收集的资料对话；在导图里提问时也会检索它们").FontSize(11).TextColor(t.TextMuted)
 			}
 			attachRow(c, ai.attach, nil, func(i int) {
 				a.later(func() { ai.attach = slices.Delete(ai.attach, i, i+1) })

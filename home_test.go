@@ -93,8 +93,8 @@ func TestHomeDaysKeysAndDark(t *testing.T) {
 		}
 		clip.Created = testNow.Add(-time.Duration(i) * 24 * time.Hour)
 	}
-	// The sidebar's keys: down from the map to the next item.
-	a.unfiledOpen = true
+	// The sidebar's keys: up from the map to the document kept at hand.
+	a.addQuick(fileDrag{Clip: a.lib.Clips[0].ID})
 	a.libOpen = false
 	tt.Frame()
 	if err := tt.Click("使用指南"); err != nil {

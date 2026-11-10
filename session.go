@@ -106,8 +106,11 @@ func (a *app) restoreView(f *model.File) {
 		if d, _ := f.Sheet(v.Sheet); d != nil {
 			sheet = v.Sheet
 		}
-		if v.Mode >= viewMap && v.Mode <= viewOverview {
+		if v.Mode >= viewMap && v.Mode <= viewTable {
 			a.mode = v.Mode
+		}
+		if a.mode == viewAgenda { // a view the maps have no more: the tasks' page has the days
+			a.mode = viewBoard
 		}
 	}
 	a.doc = nil

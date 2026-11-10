@@ -15,6 +15,6 @@ var (
 	iconSave    = icon(`<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>`)
 	iconClose   = icon(`<path d="M6 6l12 12M18 6L6 18"/>`)
 	iconCheck   = icon(`<path d="M5 12l5 5 9-10"/>`)
-	iconLibrary = icon(`<rect x="9" y="4" width="11" height="11" rx="2.5"/><path d="M15 15v2.5a2.5 2.5 0 0 1-2.5 2.5h-6A2.5 2.5 0 0 1 4 17.5v-6A2.5 2.5 0 0 1 6.5 9H9"/>`) // 收进资料库：两张叠起的卡片
+	iconLibrary = icon(`<rect x="9" y="4" width="11" height="11" rx="2.5"/><path d="M15 15v2.5a2.5 2.5 0 0 1-2.5 2.5h-6A2.5 2.5 0 0 1 4 17.5v-6A2.5 2.5 0 0 1 6.5 9H9"/>`) // 存到收集：两张叠起的卡片
 	iconClear   = icon(`<circle cx="12" cy="12" r="9" fill="currentColor" stroke="none"/><path d="M9 9l6 6M15 9l-6 6" stroke="#fff"/>`)
 )

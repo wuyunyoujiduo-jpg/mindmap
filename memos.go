@@ -64,25 +64,6 @@ func (a *app) openMemos() {
 	a.memos.open = true
 }
 
-// memosRow is the sidebar's row of 灵感.
-func (a *app) memosRow(c *ui.Context) {
-	n := 0
-	for _, cl := range a.lib.Clips {
-		if isMemo(cl) {
-			n++
-		}
-	}
-	count := ""
-	if n > 0 {
-		count = fmt.Sprint(n)
-	}
-	row := navRow(c.Key("memos-row"), iconPencil, tileOrange, "灵感", count, a.libOpen && a.memos.open).
-		Tooltip("随手记下的想法，#标签 归类（" + keyLabel(a.captureKey()) + " 在任何地方记）")
-	if row.Clicked() {
-		a.later(a.openMemos)
-	}
-}
-
 // memoList are the notes shown, the last first: of the tag chosen, with
 // the words searched.
 func (a *app) memoList() []*library.Clip {
@@ -426,7 +407,7 @@ func (a *app) memoCard(c *ui.Context, m *library.Clip) {
 					a.plat.CopyText(m.Text)
 					a.tell("已复制")
 				}
-				if mm.Item("在资料库中打开").Chosen() {
+				if mm.Item("在收集中打开").Chosen() {
 					id := m.ID
 					a.later(func() { a.openList(kindAll, ""); a.libSel = id })
 				}

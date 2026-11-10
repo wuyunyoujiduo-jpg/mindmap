@@ -194,33 +194,6 @@ func softButton(c *ui.Context, text, tip string) ui.Element {
 	return b
 }
 
-// pageHead is the heading of a part of a page: its title, how many, and a
-// link at the end, over a hairline. It tells whether the link was clicked.
-func pageHead(c *ui.Context, title, count, link string) bool {
-	t := c.Theme()
-	clicked := false
-	ui.Row(c.Key("head:"+title)).Padding(0, 0, 8).Gap(8).AlignItems(ui.Center).FillWidth().
-		BorderWidth(0, 0, 1, 0).BorderColor(hairline(t)).Children(func() {
-		ui.Text(c, title).FontSize(textBody).FontWeight(600).TextColor(t.Text.MixOklab(t.TextMuted, 0.5))
-		if count != "" {
-			ui.Text(c, count).FontSize(textSmall).TextColor(t.TextMuted)
-		}
-		ui.Spacer(c)
-		if link != "" {
-			l := ui.Box(c.Key("link:" + title)).Cursor(ui.CursorPointer).Label(link + " " + title)
-			if l.Clicked() {
-				clicked = true
-			}
-			col := t.Accent
-			if l.Hovered() {
-				col = t.Accent.MixOklab(t.Text, 0.25)
-			}
-			l.Children(func() { ui.Text(c, link).FontSize(textSmall).TextColor(col).PassThrough() })
-		}
-	})
-	return clicked
-}
-
 // quietTheme is the app's palette over the system's theme: warm paper,
 // its panels a shade of beige, white cards, a near-black ink, lines thin
 // and warm; a violet-blue for what acts, used sparingly. Color is kept

@@ -62,9 +62,9 @@ type Clip struct {
 	// Kept says the clip stays in the collection: it is not offered a
 	// place on a map again.
 	Kept bool `json:"kept,omitempty"`
-	// Folder is the folder of maps the clip is kept in, as a document
-	// beside the maps: its path relative to the maps folder, with
-	// slashes, "." for the maps folder itself; "" for none.
+	// Folder is the folder of maps the clip was kept in, while the maps'
+	// list showed documents beside the maps (before 0.54): kept as it was
+	// written, and shown nowhere.
 	Folder string `json:"folder,omitempty"`
 	// Hash is the SHA-256 of a picture's or file's data, to find it again.
 	Hash    string    `json:"hash,omitempty"`

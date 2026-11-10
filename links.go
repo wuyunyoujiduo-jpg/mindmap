@@ -304,7 +304,7 @@ func (a *app) linksSection(c *ui.Context, n *model.Node) {
 					a.linkFrom = n.ID
 					a.openPalette(paletteLink)
 				}
-				if len(a.lib.Clips) > 0 && ghostButton(c, "链接到资料…", "链接到资料库里的一条").Clicked() {
+				if len(a.lib.Clips) > 0 && ghostButton(c, "链接到资料…", "链接到收集里的一条").Clicked() {
 					a.linkFrom = n.ID
 					a.openPalette(paletteClip)
 				}
