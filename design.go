@@ -17,10 +17,10 @@ import (
 
 // Sizes of text.
 const (
-	textCaption  = 11
-	textSmall    = 12
-	textBody     = 13
-	textTitle    = 15
+	textCaption  = 12
+	textSmall    = 13
+	textBody     = 14
+	textTitle    = 16
 	textHeadline = 20
 	textPage     = 22 // a page's name
 )
@@ -45,17 +45,17 @@ func pageColumn(c *ui.Context, key string, grow bool) ui.Element {
 
 // pageHeadHeight is the height of a page's heading: more than the
 // toolbar's, for its name stands under the window's edge with room over it.
-const pageHeadHeight = 68
+const pageHeadHeight = 56
 
 // pageHeader is a page's heading, the same on every page: its name, a
 // word on it, and at the end what right builds. It is the window's title
 // bar there, and drags the window.
 func pageHeader(c *ui.Context, key, title, sub string, right func()) {
 	t := c.Theme()
-	ui.Row(c.Key(key)).Height(pageHeadHeight).Padding(16, 0, 0).Gap(10).AlignItems(ui.Center).Shrink(0).FillWidth().DragWindow().Children(func() {
-		ui.Text(c, title).FontSize(textPage).FontWeight(600).NoWrap()
+	ui.Row(c.Key(key)).Height(pageHeadHeight).Gap(12).AlignItems(ui.Center).Shrink(0).FillWidth().DragWindow().Children(func() {
+		ui.Text(c, title).FontSize(17).FontWeight(600).NoWrap()
 		if sub != "" {
-			ui.Text(c, sub).FontSize(textSmall).TextColor(t.TextMuted).SingleLine().Shrink(1).MinWidth(0)
+			ui.Text(c, sub).FontSize(textBody).TextColor(t.TextMuted).SingleLine().Shrink(1).MinWidth(0)
 		}
 		ui.Spacer(c)
 		if right != nil {
@@ -70,16 +70,14 @@ func pageHeader(c *ui.Context, key, title, sub string, right func()) {
 // while its field has the focus (captureFocus).
 func captureBox(c *ui.Context, key string) ui.Element {
 	t := c.Theme()
-	return raise(ui.Row(c.Key(key)).MinHeight(48).Padding(5, 8, 5, 16).Gap(10).Radius(12).AlignItems(ui.Center).FillWidth().Shrink(0), t)
+	return ui.Row(c.Key(key)).MinHeight(52).Padding(5, 8, 5, 16).Gap(10).Radius(12).AlignItems(ui.Center).FillWidth().Shrink(0).
+		Background(cardColor(t)).Border(1.5, t.Border).Transition(easeLook)
 }
 
 // captureFocus outlines a captureBox whose field has the focus.
 func captureFocus(c *ui.Context, box, field ui.Element) {
 	if field.Focused() {
-		t := c.Theme()
-		box.Border(1, t.Accent.Alpha(0.55)).Shadow(0, 0, 0, 4, t.Accent.Alpha(0.14)) // a soft halo, not a loud line
-	} else {
-		box.Shadow(0, 0, 0, 0, c.Theme().Accent.Alpha(0)) // the halo's place, for it to grow from
+		box.Border(1.5, c.Theme().Accent) // the one thing outlined in the accent
 	}
 }
 
@@ -87,7 +85,7 @@ func captureFocus(c *ui.Context, box, field ui.Element) {
 // stand on and the leaf lies on.
 func ground(t *ui.Theme) ui.Color {
 	if t.Dark {
-		return ui.Hex("#131211")
+		return ui.Hex("#1A1A19")
 	}
 	return ui.Hex(groundNow().ground)
 }
@@ -104,12 +102,10 @@ type groundLook struct {
 // grounds are the grounds to choose from in the settings; the first, the
 // leaf's own white, is the one taken until another is chosen.
 var grounds = []groundLook{
-	{"", "纯白", "#FDFDFC", "#F5F4F2", "#FDFDFC", false},
-	{"gray", "暖灰", "#EEEDE9", "#F2F1EE", "#FDFDFC", false},
-	{"violet", "淡紫", "#ECEBF7", "#F3F2F9", "#FEFEFF", false},
-	{"blue", "淡蓝", "#E9EEF5", "#F1F4F8", "#FEFEFF", false},
-	{"cream", "米色", "#F3EEE6", "#F6F2EB", "#FEFCF9", false},
-	{"ink", "墨色侧栏", "#1F1E24", "#F2F1EE", "#FDFDFC", true},
+	{"", "浅灰", "#F6F6F5", "#EDEDEB", "#FFFFFF", false},
+	{"violet", "淡紫", "#F3F2FA", "#E9E8F5", "#FFFFFF", false},
+	{"blue", "淡蓝", "#F1F4F8", "#E6EBF2", "#FFFFFF", false},
+	{"cream", "米色", "#F7F3EC", "#EFE9DF", "#FFFFFF", false},
 }
 
 // groundKey is the ground chosen (config.Ground), set as each frame begins.
@@ -127,14 +123,7 @@ func groundNow() groundLook {
 // railInks are the rail's colors on the ground: its words chosen and not,
 // and the shades of the part shown and of the one under the pointer.
 func railInks(t *ui.Theme) (ink, muted, on, hover ui.Color) {
-	g := groundNow()
-	switch {
-	case !t.Dark && g.dark:
-		return ui.Hex("#FFFFFF"), ui.Hex("#A9A7B4"), ui.RGBA(255, 255, 255, 0.13), ui.RGBA(255, 255, 255, 0.07)
-	case !t.Dark && g.key == "violet":
-		return ui.Hex("#3F3FB0"), t.TextMuted, t.Accent.Alpha(0.13), t.Text.Alpha(0.04)
-	}
-	return t.Text, t.TextMuted, t.Text.Alpha(0.075), t.Text.Alpha(0.04)
+	return t.Text, t.TextMuted, t.Accent, t.Text.Alpha(0.045)
 }
 
 // sideGround is what the maps' list stands on: the ground, or, where the
@@ -161,15 +150,9 @@ var shadowColor = ui.RGBA(40, 32, 16, 0.05)
 // raise gives an element a card's look: white, a thin ring, a faint
 // shadow under it.
 func raise(el ui.Element, t *ui.Theme) ui.Element {
-	// Lit from above: a line of light inside its top edge, a short shadow
-	// close under it and a long faint one further down. Its colors and
-	// shadows go smoothly where they change, as under the pointer.
-	light := ui.RGBA(255, 255, 255, 0.9)
-	if t.Dark {
-		light = ui.RGBA(255, 255, 255, 0.05)
-	}
-	return el.Background(cardColor(t)).Border(1, cardEdge(t)).InsetShadow(0, 1, 0, 0, light).
-		Shadow(0, 1, 1, 0, shadowColor).Shadow(0, 3, 8, -3, ui.RGBA(40, 32, 16, 0.08)).Transition(easeLook)
+	// Flat: a white card on the pale ground is told by its color alone,
+	// with no line and no shadow. Its color goes smoothly where it changes.
+	return el.Background(cardColor(t)).Transition(easeLook)
 }
 
 // easeLook has an element's colors and shadows change smoothly, and no
@@ -199,14 +182,14 @@ func press(el ui.Element, by float32) ui.Element {
 // chosenCard marks the card chosen: its ring in the accent, a soft halo
 // around it; its size is as it was.
 func chosenCard(el ui.Element, t *ui.Theme) ui.Element {
-	return el.Border(1, t.Accent).Shadow(0, 0, 0, 3, t.Accent.Alpha(0.18))
+	return el.Shadow(0, 0, 0, 1.5, t.Accent)
 }
 
 // tray is a part of a page: a soft ground with its heading on it
 // (trayHead) and what it holds in a white card (listCard), as the columns
 // of the board.
 func tray(c *ui.Context, key string) ui.Element {
-	return ui.Column(c.Key(key)).Padding(6).Radius(16).Background(c.Theme().Surface).FillWidth()
+	return ui.Column(c.Key(key)).FillWidth()
 }
 
 // trayHead is a tray's heading: its title, a word on it, and at its end
@@ -214,8 +197,8 @@ func tray(c *ui.Context, key string) ui.Element {
 // side start level.
 func trayHead(c *ui.Context, key, title, sub string, right func()) ui.Element {
 	t := c.Theme()
-	return ui.Row(c.Key(key)).Height(38).Padding(0, 4, 2, 10).Gap(8).AlignItems(ui.Center).FillWidth().Shrink(0).Children(func() {
-		ui.Text(c, title).FontSize(textBody).FontWeight(600).NoWrap()
+	return ui.Row(c.Key(key)).Height(30).Padding(0, 4, 6).Gap(8).AlignItems(ui.Center).FillWidth().Shrink(0).Children(func() {
+		ui.Text(c, title).FontSize(textSmall).FontWeight(600).TextColor(t.Text.MixOklab(t.TextMuted, 0.45)).NoWrap()
 		if sub != "" {
 			ui.Text(c, sub).FontSize(textSmall).TextColor(t.TextMuted).Shrink(1).MinWidth(0).SingleLine()
 		}
@@ -228,14 +211,14 @@ func trayHead(c *ui.Context, key, title, sub string, right func()) ui.Element {
 
 // listCard is a white card of rows (listCardRow): the lists of a tray.
 func listCard(c *ui.Context, key string) ui.Element {
-	return raise(ui.Column(c.Key(key)).FillWidth().Padding(4).Gap(1).Radius(10), c.Theme())
+	return raise(ui.Column(c.Key(key)).FillWidth().Padding(6).Gap(1).Radius(12), c.Theme())
 }
 
 // listCardRow is a row of a listCard: no lines between rows, each lit
 // under the pointer.
 func listCardRow(c *ui.Context, key string) ui.Element {
 	t := c.Theme()
-	row := ui.Row(c.Key(key)).MinHeight(40).Padding(6, 10).Gap(10).Radius(7).AlignItems(ui.Center).FillWidth().
+	row := ui.Row(c.Key(key)).MinHeight(46).Padding(8, 12).Gap(12).Radius(8).AlignItems(ui.Center).FillWidth().
 		Background(t.Text.Alpha(0)).Transition(rowMotion)
 	if row.Hovered() {
 		row.Background(t.Text.Alpha(0.045))
@@ -247,31 +230,28 @@ func listCardRow(c *ui.Context, key string) ui.Element {
 // that it ends where the part it heads ends.
 func textLink(c *ui.Context, text, label string) ui.Element {
 	t := c.Theme()
-	l := ui.Box(c.Key("link:"+label)).Padding(0, 6).Cursor(ui.CursorPointer).Label(label).Shrink(0)
-	col := t.Accent
+	l := ui.Box(c.Key("link:"+label)).Padding(0, 4).Cursor(ui.CursorPointer).Label(label).Shrink(0)
+	col := t.TextMuted
 	if l.Hovered() {
-		col = t.AccentHover
+		col = t.Accent
 	}
-	l.Children(func() { ui.Text(c, text).FontSize(textSmall).FontWeight(500).TextColor(col).PassThrough() })
+	l.Children(func() { ui.Text(c, text).FontSize(textSmall).TextColor(col).PassThrough() })
 	return l
 }
 
 // key gives a button the look of a key: a white face with a thin ring,
 // a shade under the pointer.
 func key(b ui.Element, t *ui.Theme) ui.Element {
+	// No ring: a shade of the ground, a little more under the pointer.
 	switch {
 	case b.Pressed():
-		b.Background(t.SurfacePressed)
+		b.Background(t.Text.Alpha(0.11))
 	case b.Hovered():
-		b.Background(t.SurfaceHover)
+		b.Background(t.Text.Alpha(0.08))
 	default:
-		b.Background(cardColor(t))
+		b.Background(t.Text.Alpha(0.05))
 	}
-	light := ui.RGBA(255, 255, 255, 0.9)
-	if t.Dark {
-		light = ui.RGBA(255, 255, 255, 0.05)
-	}
-	return press(b.Border(1, cardEdge(t)).InsetShadow(0, 1, 0, 0, light).Shadow(0, 1, 1, 0, shadowColor).Transition(easeLook), 0.97)
+	return press(b.Transition(easeLook), 0.97)
 }
 
 // dropButton is a key that opens a menu (the caller's Menu): its text
@@ -514,15 +494,15 @@ func section(c *ui.Context, ic icon, title string, right func(), body func()) {
 func accentButton(c *ui.Context, text, tip string) ui.Element {
 	t := c.Theme()
 	b := ui.Box(c.Key("accent:"+text)).Height(30).Padding(0, 14).Radius(8).Center().
-		Cursor(ui.CursorPointer).Label(text).Tooltip(tip).Shrink(0).Background(t.Text)
+		Cursor(ui.CursorPointer).Label(text).Tooltip(tip).Shrink(0).Background(t.Accent)
 	switch {
 	case b.Pressed():
-		b.Background(t.Text.MixOklab(t.Background, 0.3))
+		b.Background(t.AccentPressed)
 	case b.Hovered():
-		b.Background(t.Text.MixOklab(t.Background, 0.15))
+		b.Background(t.AccentHover)
 	}
 	b.Children(func() {
-		ui.Text(c, text).FontSize(textSmall).FontWeight(600).TextColor(t.Background).NoWrap().PassThrough()
+		ui.Text(c, text).FontSize(textSmall).FontWeight(600).TextColor(t.AccentText).NoWrap().PassThrough()
 	})
 	return press(b.Transition(easeLook), 0.97)
 }
@@ -535,16 +515,16 @@ func inkButton(c *ui.Context, text string, enabled bool) ui.Element {
 	b := ui.ButtonBase(c.Key("ink:"+text)).Height(30).Padding(0, 14).Radius(8).Label(text).Shrink(0).Disabled(!enabled)
 	switch {
 	case !enabled:
-		b.Background(t.Text.Alpha(0.22))
+		b.Background(t.Text.Alpha(0.18))
 	case b.Pressed():
-		b.Background(t.Text.MixOklab(t.Background, 0.3))
+		b.Background(t.AccentPressed)
 	case b.Hovered():
-		b.Background(t.Text.MixOklab(t.Background, 0.15)).Cursor(ui.CursorPointer)
+		b.Background(t.AccentHover).Cursor(ui.CursorPointer)
 	default:
-		b.Background(t.Text).Cursor(ui.CursorPointer)
+		b.Background(t.Accent).Cursor(ui.CursorPointer)
 	}
 	b.Children(func() {
-		ui.Text(c, text).FontSize(textSmall).FontWeight(600).TextColor(t.Background).NoWrap().PassThrough()
+		ui.Text(c, text).FontSize(textSmall).FontWeight(600).TextColor(t.AccentText).NoWrap().PassThrough()
 	})
 	return press(b.Transition(easeLook), 0.97)
 }
@@ -566,18 +546,18 @@ func softButton(c *ui.Context, text, tip string) ui.Element {
 func quietTheme(base *ui.Theme) *ui.Theme {
 	t := *base
 	if t.Dark {
-		t.Background, t.Surface = ui.Hex("#1B1A18"), ui.Hex("#232120")
-		t.SurfaceHover, t.SurfacePressed = ui.Hex("#2E2C29"), ui.Hex("#393632")
-		t.Border = ui.Hex("#37342F")
-		t.Text, t.TextMuted = ui.Hex("#EDEBE7"), ui.Hex("#A39E96")
-		t.Accent, t.AccentHover, t.AccentPressed = ui.Hex("#9A9AF2"), ui.Hex("#ABABF5"), ui.Hex("#8585E6")
+		t.Background, t.Surface = ui.Hex("#252523"), ui.Hex("#2E2E2B")
+		t.SurfaceHover, t.SurfacePressed = ui.Hex("#383835"), ui.Hex("#43433F")
+		t.Border = ui.Hex("#3A3A37")
+		t.Text, t.TextMuted = ui.Hex("#E9E8E4"), ui.Hex("#8F8E8A")
+		t.Accent, t.AccentHover, t.AccentPressed = ui.Hex("#8F8FF0"), ui.Hex("#A0A0F4"), ui.Hex("#7C7CE2")
 		t.Danger = ui.Hex("#F0806A")
 	} else {
 		g := groundNow()
 		t.Background, t.Surface = ui.Hex(g.leaf), ui.Hex(g.tray)
-		t.SurfaceHover, t.SurfacePressed = ui.Hex("#EAE8E4"), ui.Hex("#E1DFDA")
-		t.Border = ui.Hex("#E4E2DD")
-		t.Text, t.TextMuted = ui.Hex("#1C1B19"), ui.Hex("#6F6B65")
+		t.SurfaceHover, t.SurfacePressed = ui.Hex("#E6E6E3"), ui.Hex("#DCDCD9")
+		t.Border = ui.Hex("#E6E6E3")
+		t.Text, t.TextMuted = ui.Hex("#2F2F2D"), ui.Hex("#8E8D89")
 		t.Accent, t.AccentHover, t.AccentPressed = ui.Hex("#5B5BD6"), ui.Hex("#4D4DC4"), ui.Hex("#4040A8")
 		t.Danger = ui.Hex("#D2452D")
 	}
@@ -592,7 +572,7 @@ func quietTheme(base *ui.Theme) *ui.Theme {
 // tray it is in.
 func cardColor(t *ui.Theme) ui.Color {
 	if t.Dark {
-		return ui.Hex("#2A2826")
+		return ui.Hex("#252523")
 	}
 	return ui.Hex("#FFFFFF")
 }
@@ -648,7 +628,7 @@ func pillTab(c *ui.Context, key, name, count string, on bool) ui.Element {
 	b := ui.Row(c.Key(key)).Height(28).Padding(0, 10).Gap(5).Radius(7).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(name).Shrink(0)
 	switch {
 	case on:
-		b.Background(t.Text.Alpha(0.07))
+		b.Background(cardColor(t))
 	case b.Hovered():
 		b.Background(t.Text.Alpha(0.04))
 	}

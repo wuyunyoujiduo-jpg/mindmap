@@ -31,20 +31,15 @@ func (a *app) view(c *ui.Context) {
 	root.Background(ground(t))
 	root.Children(func() {
 		a.rail(c)
-		main := func(fn func()) { ui.Row(c).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Stretch).Children(fn) }
-		if a.treeShown() {
-			main = func(fn func()) {
-				ui.Row(c).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Stretch).Children(func() {
-					ui.Split(c, &a.sidebarWidth, func() { a.sidebar(c) }, fn).Fill()
-				})
+		func() {
+			// The pages of lists lie on the ground, as the sidebar; a map is on
+			// white, a thin line between it and the sidebar.
+			page := ui.Row(c.Key("page")).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Stretch)
+			if !a.libOpen {
+				page.Background(t.Background).BorderWidth(0, 0, 0, 1).BorderColor(hairline(t))
 			}
-		}
-		main(func() {
-			// What is read and worked on is a leaf on the window's ground: near
-			// white, its corners round, a thin ring around it.
-			ui.Box(c.Key("leaf-room")).Fill().Padding(leafGap, leafGap, leafGap, 0).Children(func() {
-				ui.Row(c.Key("leaf")).Fill().AlignItems(ui.Stretch).Background(t.Background).Radius(leafRadius).
-					Border(1, cardEdge(t)).Shadow(0, 1, 3, 0, shadowColor).Clip().Children(func() {
+			func() {
+				page.Children(func() {
 					if a.libOpen {
 						if a.tasks.open {
 							a.tasksView(c)
@@ -91,8 +86,8 @@ func (a *app) view(c *ui.Context) {
 						a.panel(c)
 					}
 				})
-			})
-		})
+			}()
+		}()
 		if a.lightbox != "" && a.doc != nil {
 			a.lightboxView(c)
 		}
@@ -112,12 +107,6 @@ func (a *app) view(c *ui.Context) {
 		c.Invalidate()
 	}
 }
-
-// The leaf: how far it is from the window's edges, and how round.
-const (
-	leafGap    = 8
-	leafRadius = 12
-)
 
 // panelResizer is the line left of the panel, which the pointer drags to
 // make the panel wider or narrower.

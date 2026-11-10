@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -17,44 +18,38 @@ import (
 // and the maps; on the right what waits for a place, with where the AI
 // would put it.
 
-// homeView is 工作台: the day heads it, large and light, with how far it
-// is; under it the line to write in, today's tasks beside what was
-// written lately, and the maps.
+// homeView is 工作台: its name and the day, the line to write in, then
+// today's tasks and the maps beside the stream of what was written lately.
 func (a *app) homeView(c *ui.Context) {
 	now := a.now()
 	t := c.Theme()
 	ui.Column(c.Key("home")).Grow(1).Label("工作台").Children(func() {
 		pageColumn(c, "home-column", true).Children(func() {
-			due, done := len(a.dueToday(now)), len(a.doneToday(now))
-			ui.Row(c.Key("home-head")).Height(92).Padding(0, 0, 16).Gap(14).AlignItems(ui.End).Shrink(0).FillWidth().DragWindow().Children(func() {
-				ui.Row(c).Gap(12).AlignItems(ui.End).Children(func() {
-					ui.Text(c, weekdays[now.Weekday()]).FontSize(28).LineHeight(1.2).FontWeight(600).NoWrap()
-					ui.Text(c, fmt.Sprintf("%d月%d日", now.Month(), now.Day())).FontSize(28).LineHeight(1.2).FontWeight(300).NoWrap()
+			pageHeader(c, "home-head", "工作台", fmt.Sprintf("%s · %d月%d日", weekdays[now.Weekday()], now.Month(), now.Day()), func() {
+				find := ui.Row(c.Key("home-find")).Width(240).Height(34).Padding(0, 12).Gap(8).Radius(9).AlignItems(ui.Center).
+					Background(t.Text.Alpha(0.05)).Cursor(ui.CursorPointer).Label("搜索").Transition(easeLook)
+				if find.Hovered() {
+					find.Background(t.Text.Alpha(0.08))
+				}
+				if find.Clicked() {
+					a.later(func() { a.openPalette(paletteAll) })
+				}
+				find.Children(func() {
+					glyph(c, iconSearch, 14, t.TextMuted)
+					ui.Text(c, "⌘K 搜索").FontSize(textBody).TextColor(t.TextMuted).PassThrough()
 				})
-				ui.Row(c.Key("sum")).Gap(5).AlignItems(ui.Center).Padding(0, 0, 6).Children(func() {
-					word := func(s string) { ui.Text(c, s).FontSize(textBody).TextColor(t.TextMuted).NoWrap() }
-					num := func(n int) { ui.Text(c, fmt.Sprint(n)).FontSize(textBody).FontWeight(600).NoWrap() }
-					word("今天")
-					num(due)
-					word("件事")
-					if done > 0 {
-						word("· 做完")
-						num(done)
-					}
-				})
-				ui.Spacer(c)
-				if iconTextButton(c, iconSparkle, "问 AI", "AI 助手", "问问导图和资料里的内容", a.aiOpen).Margin(0, 0, 2).Clicked() {
+				if iconTextButton(c, iconSparkle, "问 AI", "AI 助手", "问问导图和资料里的内容", a.aiOpen).Height(34).Clicked() {
 					a.aiOpen = !a.aiOpen
 				}
 			})
 			a.homeLine(c)
-			ui.Scroll(c.Key("home-scroll")).Grow(1).Basis(0).Margin(14, 0, 0).Children(func() {
-				ui.Column(c).Gap(14).FillWidth().Padding(0, 0, 28).Children(func() {
-					ui.Row(c).Gap(14).AlignItems(ui.Start).FillWidth().Children(func() {
-						ui.Column(c).Grow(1).Basis(0).MinWidth(0).Children(func() { a.homeTasks(c, now) })
-						ui.Column(c).Grow(1).Basis(0).MinWidth(0).Children(func() { a.homeWaiting(c) })
+			ui.Scroll(c.Key("home-scroll")).Grow(1).Basis(0).Margin(16, 0, 0).Children(func() {
+				ui.Row(c).Gap(16).AlignItems(ui.Start).FillWidth().Padding(0, 0, 28).Children(func() {
+					ui.Column(c).Grow(5).Basis(0).MinWidth(0).Gap(20).Children(func() {
+						a.homeTasks(c, now)
+						a.homeMaps(c, now)
 					})
-					a.homeMaps(c, now)
+					ui.Column(c).Grow(6).Basis(0).MinWidth(0).Children(func() { a.homeWaiting(c) })
 				})
 			})
 		})
@@ -69,86 +64,97 @@ func dateLabel(d time.Time) string {
 }
 
 // homeLine is the line to write in, the first thing on the desk: a white
-// card on a tray. What is written says what it is, a task when it says a
-// day, else a note, and the line says which as it is written; while it
-// is written in the tray comes out from under the card and says how.
+// card, the one thing outlined in the accent while written in. What is
+// written says what it is, a task when it says a day, else a note, and
+// the card says which as it is written; the key at its end keeps it.
 func (a *app) homeLine(c *ui.Context) {
 	t := c.Theme()
-	focused := false
-	ui.Column(c.Key("home-capture")).Radius(16).Background(t.Surface).FillWidth().Shrink(0).Children(func() {
-		box := raise(ui.Row(c.Key("home-line")).Height(54).Padding(0, 10, 0, 18).Gap(12).Radius(16).AlignItems(ui.Center).FillWidth(), t)
-		box.Children(func() {
-			mark, turn := t.TextMuted.Alpha(0.7), float32(0)
-			if a.homeFocus {
-				mark, turn = t.Accent, 90
+	box := ui.Column(c.Key("home-line")).Radius(12).Padding(12, 14, 10, 16).Gap(4).FillWidth().Shrink(0).
+		Background(cardColor(t)).Border(1.5, t.Border).Transition(easeLook)
+	box.Children(func() {
+		in := ui.TextAreaBase(c.Key("home-line-input"), &a.homeDraft).Lines(2, 5).
+			Placeholder("现在的想法是…  以「周五」这样的日子开头就是任务").FontSize(textTitle).LineHeight(1.5).FillWidth().Label("记一条灵感或任务")
+		captureFocus(c, box, in)
+		in.HandleInput(func(ev ui.InputEvent) bool {
+			if ev.Kind == ui.InputKeyDown && ev.Key == ui.KeyEnter && ev.Mods&ui.Shift == 0 {
+				a.later(a.saveHomeLine)
+				return true
 			}
-			glyph(c, iconPlus, 16, mark).AnimatePose(ui.Pose{Rotate: turn}, ui.Animation{Duration: 300 * time.Millisecond, Ease: easeDetent})
-			in := ui.TextInputBase(c.Key("home-line-input"), &a.homeDraft).Placeholder("记点什么：一个想法，或「周五 给客户发报价单」这样的任务").
-				FontSize(textTitle).Grow(1).Label("记一条灵感或任务")
-			focused = in.Focused()
-			captureFocus(c, box, in)
-			in.HandleInput(func(ev ui.InputEvent) bool {
-				if ev.Kind == ui.InputKeyDown && ev.Key == ui.KeyEnter {
-					a.later(a.saveHomeLine)
-					return true
-				}
-				return false
-			})
-			text := strings.TrimSpace(a.homeDraft)
+			return false
+		})
+		text := strings.TrimSpace(a.homeDraft)
+		ui.Row(c.Key("tools")).Gap(6).AlignItems(ui.Center).FillWidth().Children(func() {
+			tool := ui.Box(c.Key("tag")).Size(32, 30).Radius(7).Center().Cursor(ui.CursorPointer).Label("加标签").Tooltip("加一个 #标签").
+				Background(t.Text.Alpha(0)).Transition(easeLook)
+			ink := t.TextMuted
+			if tool.Hovered() {
+				tool.Background(t.Text.Alpha(0.05))
+				ink = t.Text
+			}
+			if tool.Clicked() {
+				a.homeDraft = strings.TrimRight(a.homeDraft, " ") + " #"
+			}
+			tool.Children(func() { ui.Text(c, "#").FontSize(17).TextColor(ink).PassThrough() })
 			if text != "" {
 				if _, due, _ := parseTaskLine(text, a.now()); taskLike(text, a.now()) {
 					label := "任务"
 					if due != nil {
 						label += " · " + dayLabel(*due, a.now())
 					}
-					readPill(c, label, t.Accent.Alpha(0.14), t.Accent)
+					softTag(c, label)
 				} else {
-					readPill(c, "灵感", t.Surface, t.Text.MixOklab(t.TextMuted, 0.7))
+					softTag(c, "灵感")
 				}
 				for _, tag := range memoTags(text) {
-					readPill(c, "#"+tag, t.Surface, t.Text.MixOklab(t.TextMuted, 0.7))
+					softTag(c, "#"+tag)
 				}
-				if inkButton(c, "记下 ↩", true).Tooltip("记下（回车）").Transition(ui.ElementTransition{Enter: &ui.Motion{X: 6}}).Clicked() {
+			}
+			ui.Spacer(c)
+			send := ui.Box(c.Key("send")).Size(52, 32).Radius(8).Center().Label("记下 ↩").Tooltip("记下（回车；Shift+回车换行）").
+				Background(t.Text.Alpha(0.16)).Transition(easeLook)
+			if text != "" {
+				send.Background(t.Accent).Cursor(ui.CursorPointer)
+				if send.Hovered() {
+					send.Background(t.AccentHover)
+				}
+				if send.Clicked() {
 					a.later(a.saveHomeLine)
 				}
+				press(send, 0.94)
 			}
-		})
-		// The tray under the card: what a line becomes.
-		// It opens with the first letter, not with the focus: a click elsewhere
-		// must find things where they were.
-		open := b2f(strings.TrimSpace(a.homeDraft) != "")
-		hint := ui.Row(c.Key("home-hint")).Padding(0, 18).Gap(14).AlignItems(ui.Center).FillWidth().Clip()
-		hint.Height(32 * hint.AnimateTo("open", open, ui.Animation{Duration: 260 * time.Millisecond, Ease: easeDetent}))
-		hint.Children(func() {
-			say := func(key, text string) {
-				ui.Row(c.Key(text)).Gap(5).AlignItems(ui.Center).Shrink(0).Children(func() {
-					if key != "" {
-						ui.Box(c).Padding(1, 5).Radius(5).Background(cardColor(t)).Border(1, cardEdge(t)).Children(func() {
-							ui.Text(c, key).FontSize(textCaption).TextColor(t.Text.MixOklab(t.TextMuted, 0.7))
-						})
-					}
-					ui.Text(c, text).FontSize(textSmall).TextColor(t.TextMuted).NoWrap()
-				})
-			}
-			say("↩", "记下")
-			say("", "以「今天 / 明天 / 周五」开头，会成为那天的任务")
-			say("#", "开头的词是标签")
+			send.Children(func() { glyph(c, iconSend, 16, ui.Hex("#FFFFFF")) })
 		})
 	})
-	if focused != a.homeFocus {
-		a.homeFocus = focused
-		c.Invalidate()
-	}
 }
 
-// readPill is what the line reads of what is written in it: a pill that
+// softTag is a word on a pale wash of the accent, as a tag in a note: it
 // pops in.
-func readPill(c *ui.Context, text string, bg, ink ui.Color) {
-	ui.Box(c.Key("read:"+text)).Height(22).Padding(0, 9).Radius(999).Center().Background(bg).Shrink(0).
-		Transition(ui.ElementTransition{Duration: 260 * time.Millisecond, Ease: easeDetent, Enter: &ui.Motion{Scale: 0.8}}).Children(func() {
-		ui.Text(c, text).FontSize(textSmall).FontWeight(500).TextColor(ink).NoWrap()
+func softTag(c *ui.Context, text string) ui.Element {
+	t := c.Theme()
+	bg, ink := t.Accent.Alpha(0.1), t.Accent.MixOklab(t.Text, 0.25)
+	return ui.Box(c.Key("tag:"+text)).Height(24).Padding(0, 8).Radius(6).Center().Background(bg).Shrink(0).
+		Transition(ui.ElementTransition{Duration: 240 * time.Millisecond, Ease: easeDetent, Enter: &ui.Motion{Scale: 0.85}}).Children(func() {
+		ui.Text(c, text).FontSize(textSmall).TextColor(ink).NoWrap()
 	})
 }
+
+// titleAndSite takes a link out of a title: the words, and the link's
+// site to show small beside them, so that a list reads as words.
+func titleAndSite(title string) (string, string) {
+	m := linkInTitle.FindString(title)
+	if m == "" {
+		return title, ""
+	}
+	site := strings.TrimPrefix(strings.TrimPrefix(m, "https://"), "http://")
+	site, _, _ = strings.Cut(site, "/")
+	words := strings.TrimSpace(strings.Replace(title, m, "", 1))
+	if words == "" {
+		words = site
+	}
+	return words, site
+}
+
+var linkInTitle = regexp.MustCompile(`https?://\S+`)
 
 // saveHomeLine keeps what was typed in the desk's line.
 func (a *app) saveHomeLine() {
@@ -194,19 +200,9 @@ func (a *app) doneToday(now time.Time) []taskItem {
 	return done
 }
 
-// mapChip names a map on a wash of its color, its dot before its name.
-func (a *app) mapChip(c *ui.Context, path, text string) ui.Element {
-	t := c.Theme()
-	col := a.mapColor(path)
-	return ui.Row(c).Height(20).Padding(0, 8, 0, 7).Gap(5).Radius(999).AlignItems(ui.Center).Background(col.Alpha(0.13)).Shrink(1).MinWidth(0).PassThrough().Children(func() {
-		mapDot(c, col, 6)
-		ui.Text(c, text).FontSize(11.5).TextColor(t.Text.MixOklab(t.TextMuted, 0.7)).SingleLine()
-	})
-}
-
 // homeTasks are the tasks of today, first on the desk: how far the day
-// is, as a count and a line that fills; then each with its map, and under
-// them those done today, which go there as they are ticked.
+// is, then a row each, with the map it is of; under them those done
+// today, where a task goes as it is ticked.
 func (a *app) homeTasks(c *ui.Context, now time.Time) {
 	t := c.Theme()
 	due, done := a.dueToday(now), a.doneToday(now)
@@ -221,16 +217,6 @@ func (a *app) homeTasks(c *ui.Context, now time.Time) {
 				a.later(a.openTasks)
 			}
 		})
-		if all > 0 {
-			ui.Box(c.Key("meter")).Height(3).Radius(2).Margin(0, 10, 8).Background(t.Text.Alpha(0.07)).Children(func() {
-				ui.Box(c.Key("fill")).Height(3).Radius(2).WidthPercent(float32(len(done)) / float32(all) * 100).Background(t.Text).
-					Transition(ui.ElementTransition{Duration: 500 * time.Millisecond, Ease: easeDetent, Width: true})
-			})
-		}
-		if all == 0 {
-			emptyNote(c, "今天没有要做的事。")
-			return
-		}
 		day := today(now)
 		row := func(it taskItem) {
 			row := listCardRow(c, "home-task:"+it.key()).Cursor(ui.CursorPointer).Label("任务 " + it.node.Title)
@@ -241,18 +227,25 @@ func (a *app) homeTasks(c *ui.Context, now time.Time) {
 				})
 			}
 			row.Children(func() {
-				a.taskCircle(c, it, 18)
-				title := ui.Text(c, it.node.Title).FontSize(textBody).Grow(1).Shrink(1).MinWidth(0).SingleLine().PassThrough()
-				if it.done() {
-					title.TextColor(t.TextMuted.Alpha(0.75)).Strikethrough()
-				} else if d := it.date(); d != nil && d.Before(day) {
+				a.taskCircle(c, it, 20)
+				words, site := titleAndSite(it.node.Title)
+				ui.Row(c).Gap(8).AlignItems(ui.Center).Grow(1).Shrink(1).MinWidth(0).PassThrough().Children(func() {
+					title := ui.Text(c, words).FontSize(15).Shrink(1).MinWidth(0).SingleLine()
+					if it.done() {
+						title.TextColor(t.TextMuted).Strikethrough()
+					}
+					if site != "" {
+						siteChip(c, site)
+					}
+				})
+				if d := it.date(); !it.done() && d != nil && d.Before(day) {
 					n := int(day.Sub(today(*d)).Hours()/24 + 0.5)
 					ui.Text(c, fmt.Sprintf("过期 %d 天", n)).FontSize(textSmall).TextColor(t.Danger).Shrink(0).PassThrough()
 				}
-				chip := a.mapChip(c, it.path, it.mapName).MaxWidth(130)
-				if it.done() {
-					chip.Opacity(0.45)
-				}
+				ui.Row(c).Gap(7).AlignItems(ui.Center).Shrink(0).MaxWidth(120).PassThrough().Children(func() {
+					mapDot(c, a.mapColor(it.path), 8)
+					ui.Text(c, it.mapName).FontSize(textSmall).TextColor(t.TextMuted).SingleLine()
+				})
 			})
 		}
 		listCard(c, "home-task-list").Children(func() {
@@ -263,10 +256,14 @@ func (a *app) homeTasks(c *ui.Context, now time.Time) {
 				row(it)
 			}
 			if len(due) == 0 {
-				ui.Text(c.Key("all-done"), "今天的都做完了。").FontSize(textSmall).TextColor(t.TextMuted).Margin(10, 10, 8)
+				msg := "今天没有要做的事。"
+				if len(done) > 0 {
+					msg = "今天的都做完了。"
+				}
+				ui.Text(c.Key("all-done"), msg).FontSize(textBody).TextColor(t.TextMuted).Margin(12, 12)
 			}
 			if more := len(due) - homeTaskCount; more > 0 {
-				l := ui.Box(c.Key("home-more-tasks")).Padding(6, 10).Cursor(ui.CursorPointer).Label("还有任务")
+				l := ui.Box(c.Key("home-more-tasks")).Padding(6, 12).Cursor(ui.CursorPointer).Label("还有任务")
 				if l.Clicked() {
 					a.later(a.openTasks)
 				}
@@ -275,8 +272,8 @@ func (a *app) homeTasks(c *ui.Context, now time.Time) {
 				})
 			}
 			if len(done) > 0 {
-				ui.Box(c.Key("done-rule")).Height(1).Margin(4, 10).Background(hairline(t))
-				ui.Text(c.Key("done-head"), "做完的").FontSize(11.5).TextColor(t.TextMuted).Margin(6, 10, 2)
+				ui.Box(c.Key("done-rule")).Height(1).Margin(6, 12).Background(hairline(t))
+				ui.Text(c.Key("done-head"), "做完的").FontSize(textCaption).TextColor(t.TextMuted).Margin(6, 12, 2)
 				for i, it := range done {
 					if i == homeTaskCount {
 						break
@@ -288,42 +285,39 @@ func (a *app) homeTasks(c *ui.Context, now time.Time) {
 	})
 }
 
-// homeMaps are the maps opened last, each a card: the map drawn small in
-// its color, its name, its tasks and how far they are; and a card to make
-// a new one.
+// siteChip is the site of a link taken out of a title, small beside it.
+func siteChip(c *ui.Context, site string) {
+	t := c.Theme()
+	ui.Row(c).Height(22).Padding(0, 7).Gap(5).Radius(6).AlignItems(ui.Center).Background(t.Text.Alpha(0.06)).Shrink(0).MaxWidth(170).Children(func() {
+		ui.Box(c).Size(6, 6).Radius(2).Background(t.TextMuted).Shrink(0)
+		ui.Text(c, site).FontSize(12.5).TextColor(t.Text.MixOklab(t.TextMuted, 0.5)).SingleLine()
+	})
+}
+
+// homeMaps are the maps opened last, a row each, as plain as the tasks:
+// the map's dot and name, its tasks and how far they are.
 func (a *app) homeMaps(c *ui.Context, now time.Time) {
 	t := c.Theme()
 	var files []model.FileInfo
 	for _, fi := range a.recentFiles() {
-		if fi.Path != a.inboxPath() && len(files) < 3 {
+		if fi.Path != a.inboxPath() && len(files) < 4 {
 			files = append(files, fi)
 		}
 	}
 	tray(c, "home-maps").Children(func() {
-		trayHead(c, "head:我的导图", "我的导图", "最近打开的", func() {
-			if textLink(c, "全部导图", "全部导图 我的导图").Clicked() {
-				a.later(func() {
-					a.libOpen = false
-					a.cfg.ShowTree = true
-				})
+		trayHead(c, "head:我的导图", "我的导图", "", func() {
+			if textLink(c, "＋ 新建", "＋ 新建 我的导图").Clicked() {
+				a.later(a.newMap)
 			}
 		})
-		ui.Grid(c).Columns(4).Gap(6).FillWidth().Children(func() {
+		listCard(c, "home-map-list").Children(func() {
+			if len(files) == 0 {
+				ui.Text(c, "还没有导图。").FontSize(textBody).TextColor(t.TextMuted).Margin(12, 12)
+			}
 			for _, fi := range files {
 				col := a.mapColor(fi.Path)
-				card := raise(ui.Column(c.Key("home-map:"+fi.Path)).Padding(12, 14).Gap(8).Radius(10).Cursor(ui.CursorPointer).
-					Label("导图 "+mapName(fi.Path)), t)
-				// Under the pointer it lifts a little, its shadow longer.
-				lift := ui.Pose{}
-				if card.Hovered() {
-					card.Shadow(0, 12, 22, -10, ui.RGBA(40, 32, 16, 0.16))
-					lift.Y = -2
-				}
-				if card.Pressed() {
-					lift = ui.Pose{Scale: 0.985}
-				}
-				card.AnimatePose(lift, ui.Animation{Duration: 300 * time.Millisecond, Ease: easeDetent})
-				if card.Clicked() {
+				row := listCardRow(c, "home-map:"+fi.Path).Cursor(ui.CursorPointer).Label("导图 " + mapName(fi.Path))
+				if row.Clicked() {
 					a.later(func() { _ = a.open(fi.Path) })
 				}
 				total, done := 0, 0
@@ -331,7 +325,6 @@ func (a *app) homeMaps(c *ui.Context, now time.Time) {
 				if fi.Path != a.path {
 					f = a.indexed(fi.Path)
 				}
-				var shape []int // the main topics, and how many each has below
 				if f != nil {
 					for _, tn := range f.Tasks() {
 						total++
@@ -339,88 +332,25 @@ func (a *app) homeMaps(c *ui.Context, now time.Time) {
 							done++
 						}
 					}
-					if len(f.Sheets) > 0 && f.Sheets[0].Root != nil {
-						for i, n := range f.Sheets[0].Root.Children {
-							if i == 4 {
-								break
-							}
-							shape = append(shape, min(len(n.Children), 3))
-						}
-					}
 				}
-				card.Children(func() {
-					ui.Box(c).Height(44).FillWidth().PassThrough().Draw(func(p *ui.Painter, r ui.Rect) { drawMapGlyph(p, r, shape, col) })
-					ui.Row(c).Gap(7).AlignItems(ui.Center).PassThrough().Children(func() {
-						mapDot(c, col, 8)
-						ui.Text(c, mapName(fi.Path)).FontSize(textBody).FontWeight(600).SingleLine().Grow(1).Shrink(1).MinWidth(0)
-					})
+				row.Children(func() {
+					ui.Box(c).Size(20, 20).Center().Shrink(0).PassThrough().Children(func() { mapDot(c, col, 8) })
+					ui.Text(c, mapName(fi.Path)).FontSize(15).SingleLine().Grow(1).Shrink(1).MinWidth(0).PassThrough()
 					sub := "没有任务"
 					if total > 0 {
-						sub = fmt.Sprintf("%d / %d 个任务", done, total)
+						sub = fmt.Sprintf("%d / %d", done, total)
 					}
-					ui.Text(c, sub+" · "+relTime(now, modTime(fi.Path))).FontSize(textSmall).TextColor(t.TextMuted).SingleLine().PassThrough()
-					ui.Box(c).Height(3).FillWidth().Radius(2).Background(t.Text.Alpha(0.07)).PassThrough().Children(func() {
-						if total > 0 {
-							ui.Box(c.Key("done")).Height(3).WidthPercent(float32(done) / float32(total) * 100).Radius(2).Background(col).
+					ui.Text(c, sub).FontSize(textSmall).TextColor(t.TextMuted).Shrink(0).PassThrough().Tooltip(relTime(now, modTime(fi.Path)) + "打开过")
+					if total > 0 {
+						ui.Box(c).Width(56).Height(4).Radius(2).Background(t.Text.Alpha(0.07)).Shrink(0).PassThrough().Children(func() {
+							ui.Box(c.Key("done")).Height(4).WidthPercent(float32(done) / float32(total) * 100).Radius(2).Background(col).
 								Transition(ui.ElementTransition{Duration: 500 * time.Millisecond, Ease: easeDetent, Width: true})
-						}
-					})
+						})
+					}
 				})
 			}
-			add := ui.Box(c.Key("home-map-new")).MinHeight(118).Radius(10).Center().Border(1, t.Text.Alpha(0.14)).Cursor(ui.CursorPointer).
-				Label("新建导图").Background(t.Text.Alpha(0)).Transition(easeLook)
-			ink := t.TextMuted
-			if add.Hovered() {
-				add.Background(cardColor(t))
-				ink = t.Text
-			}
-			if add.Clicked() {
-				a.later(a.newMap)
-			}
-			add.Children(func() { ui.Text(c, "＋ 新建导图").FontSize(textBody).TextColor(ink).PassThrough() })
 		})
 	})
-}
-
-// drawMapGlyph draws a map small, at the left of r: its center, its main
-// topics on both sides, and those below them faintly, in the map's color.
-func drawMapGlyph(p *ui.Painter, r ui.Rect, shape []int, col ui.Color) {
-	const w, h = 120, 44
-	k := r.H / h
-	at := func(x, y float32) (float32, float32) { return r.X + x*k, r.Y + y*k }
-	dot := func(x, y, rad float32, c ui.Color) {
-		cx, cy := at(x, y)
-		p.Fill(ui.Rect{X: cx - rad*k, Y: cy - rad*k, W: 2 * rad * k, H: 2 * rad * k}, c, rad*k)
-	}
-	link := func(x0, y0, x1, y1, bend float32, c ui.Color) {
-		ax, ay := at(x0, y0)
-		bx, by := at(x1, y1)
-		c1x, _ := at(x0+bend, y0)
-		c2x, _ := at(x1-bend, y1)
-		p.StrokePath(new(ui.Path).MoveTo(ax, ay).CubeTo(c1x, ay, c2x, by, bx, by), 1.4, c)
-	}
-	line, faint := col.Alpha(0.55), col.Alpha(0.3)
-	per := (len(shape) + 1) / 2
-	for i, kids := range shape {
-		dir, side := float32(1), i/2
-		if i%2 == 1 {
-			dir = -1
-		}
-		n := per
-		if dir < 0 {
-			n = len(shape) / 2
-		}
-		y := 22 + (float32(side)-float32(n-1)/2)*20
-		x := 60 + 32*dir
-		link(60, 22, x, y, 14*dir, line)
-		for j := range kids {
-			yy, xx := y+(float32(j)-float32(kids-1)/2)*8, x+26*dir
-			link(x, y, xx, yy, 10*dir, faint)
-			dot(xx, yy, 1.6, faint)
-		}
-		dot(x, y, 2.6, col)
-	}
-	dot(60, 22, 4, col)
 }
 
 // waitingItem is something written down lately: a task of the inbox, or
@@ -516,7 +446,7 @@ func (a *app) homeWaiting(c *ui.Context) {
 			emptyNote(c, "这几天记下的会出现在这里。")
 			return
 		}
-		listCard(c, "home-lately").Children(func() {
+		ui.Column(c.Key("home-lately")).Gap(10).FillWidth().Children(func() {
 			for i, w := range items {
 				if i == homeWaitingCount {
 					break
@@ -556,19 +486,64 @@ func (a *app) waitingCard(c *ui.Context, w waitingItem, i int) {
 		}
 		place, has = a.clipPlaces[cl.ID]
 	}
-	card := ui.Column(c.Key("waiting:"+key)).Padding(6, 6, 6, 10).Gap(8).Radius(7).FillWidth().MinHeight(40).Center().Label("记下的 " + text).
-		Background(t.Text.Alpha(0)).Transition(rowMotion)
-	// A row says what it is and when; what can be done with it shows under
-	// the pointer, so that a list of them reads as a list.
+	_ = ic
+	// A card each, as a note is: when over the words, what can be done
+	// with it under the pointer, where the AI would put it under the words.
+	card := raise(ui.Column(c.Key("waiting:"+key)).Padding(14, 20, 16).Gap(4).Radius(12).FillWidth().Label("记下的 "+text), t).
+		Transition(rowMotion)
 	hover := card.Hovered()
-	if hover {
-		card.Background(t.Text.Alpha(0.045))
-	}
 	card.Children(func() {
-		actions := func() {
-			if has {
-				b := ui.Box(c.Key("take")).Height(24).Padding(0, 10).Radius(7).Center().Background(t.Text).Cursor(ui.CursorPointer).Label("放过去 " + text)
+		ui.Row(c).Height(26).Gap(8).AlignItems(ui.Center).FillWidth().Children(func() {
+			if w.task != nil {
+				a.taskCircle(c, *w.task, 16)
+			}
+			ui.Text(c, kind).FontSize(textSmall).TextColor(t.TextMuted)
+			ui.Spacer(c)
+			if !has {
+				label, name := "放到导图…", "放到导图 "+text
+				if w.task != nil {
+					label, name = "选一个主题…", "选一个主题… "+text
+				}
+				b := textKey(c, label, name, "放到某张导图的某个主题下；不放也行")
+				if !hover {
+					b.Opacity(0)
+				}
 				if b.Clicked() {
+					a.later(func() { a.placeWaiting(w) })
+				}
+			}
+		})
+		words, site := titleAndSite(text)
+		if site != "" || w.clip != nil && len(w.clip.Tags) > 0 {
+			ui.Row(c).Gap(6).Wrap().GapY(4).AlignItems(ui.Center).FillWidth().Children(func() {
+				if w.clip != nil {
+					for i, tag := range w.clip.Tags {
+						if i == 3 {
+							break
+						}
+						softTag(c, "#"+tag)
+					}
+				}
+				if site != "" {
+					siteChip(c, site)
+				}
+			})
+		}
+		ui.Text(c, words).FontSize(15.5).LineHeight(1.65).MaxLines(4).FillWidth()
+		if has {
+			ui.Row(c.Key("sugg")).Gap(8).AlignItems(ui.Center).FillWidth().Padding(8, 0, 0).
+				Transition(ui.ElementTransition{Duration: 300 * time.Millisecond, Ease: easeDetent, Enter: &ui.Motion{Y: -6}}).Children(func() {
+				softTag(c, "→ "+shortPlace(place)).Tooltip(place.label)
+				ui.Spacer(c)
+				if textKey(c, "换一个", "换一个 "+text, "自己选放到哪").Clicked() {
+					a.later(func() { a.placeWaiting(w) })
+				}
+				go_ := ui.Box(c.Key("take")).Height(26).Padding(0, 10).Radius(6).Center().Background(t.Accent).Cursor(ui.CursorPointer).
+					Label("放过去 " + text).Transition(easeLook)
+				if go_.Hovered() {
+					go_.Background(t.AccentHover)
+				}
+				if go_.Clicked() {
 					a.later(func() {
 						if w.task != nil {
 							a.takePlace(*w.task)
@@ -577,61 +552,36 @@ func (a *app) waitingCard(c *ui.Context, w waitingItem, i int) {
 						}
 					})
 				}
-				b.Children(func() {
-					ui.Text(c, "放过去").FontSize(textSmall).FontWeight(600).TextColor(t.Background).PassThrough()
+				press(go_, 0.96)
+				go_.Children(func() {
+					ui.Text(c, "放过去").FontSize(textSmall).FontWeight(600).TextColor(t.AccentText).PassThrough()
 				})
-			}
-			if w.task != nil {
-				label := "选一个主题…"
-				if has {
-					label = "换一个"
-				}
-				b := softButton(c, label, "自己选放到哪张导图的哪个主题下").Height(24).Radius(7).Label(label + " " + text)
-				if !hover && !has {
-					b.Width(0).Padding(0).Opacity(0)
-				}
-				if b.Clicked() {
-					it := *w.task
-					a.later(func() { a.moveTaskTo(it) })
-				}
-			} else {
-				b := softButton(c, "放到导图…", "放到某张导图的某个主题下；不放也行，它在收集里").Height(24).Radius(7).Label("放到导图 " + text)
-				if !hover && !has {
-					b.Width(0).Padding(0).Opacity(0)
-				}
-				if b.Clicked() {
-					ref := clipScheme + w.clip.ID
-					a.later(func() {
-						a.attachRef = ref
-						a.openPalette(paletteAttach)
-					})
-				}
-			}
-		}
-		ui.Row(c).Gap(10).AlignItems(ui.Center).FillWidth().Children(func() {
-			ui.Box(c).Shrink(0).Children(func() {
-				if w.task != nil {
-					a.taskCircle(c, *w.task, 16)
-				} else {
-					glyph(c, ic, 16, t.TextMuted)
-				}
-			})
-			ui.Text(c, text).FontSize(textBody).LineHeight(1.5).Grow(1).Shrink(1).MinWidth(0).MaxLines(2)
-			if !hover || has {
-				ui.Text(c, kind).FontSize(textSmall).TextColor(t.TextMuted).Shrink(0).Margin(0, 4, 0, 0)
-			}
-			if !has {
-				actions()
-			}
-		})
-		if has {
-			ui.Row(c.Key("sugg")).Gap(8).AlignItems(ui.Center).FillWidth().Padding(0, 0, 2, 26).
-				Transition(ui.ElementTransition{Duration: 300 * time.Millisecond, Ease: easeDetent, Enter: &ui.Motion{Y: -6}}).Children(func() {
-				glyph(c, iconSparkle, 13, t.Accent)
-				a.mapChip(c, place.path, shortPlace(place)).Tooltip(place.label)
-				ui.Spacer(c)
-				actions()
 			})
 		}
 	})
+}
+
+// placeWaiting asks where something written down goes: a topic of a map.
+func (a *app) placeWaiting(w waitingItem) {
+	if w.task != nil {
+		a.moveTaskTo(*w.task)
+		return
+	}
+	a.attachRef = clipScheme + w.clip.ID
+	a.openPalette(paletteAttach)
+}
+
+// textKey is a few words that act, with a shade under the pointer and
+// no more.
+func textKey(c *ui.Context, text, label, tip string) ui.Element {
+	t := c.Theme()
+	b := ui.Box(c.Key("textkey:"+label)).Height(26).Padding(0, 10).Radius(6).Center().Cursor(ui.CursorPointer).Label(label).Tooltip(tip).
+		Shrink(0).Background(t.Text.Alpha(0)).Transition(easeLook)
+	if b.Hovered() {
+		b.Background(t.Text.Alpha(0.06))
+	}
+	b.Children(func() {
+		ui.Text(c, text).FontSize(textSmall).TextColor(t.Text.MixOklab(t.TextMuted, 0.5)).NoWrap().PassThrough()
+	})
+	return press(b, 0.96)
 }

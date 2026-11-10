@@ -16,91 +16,145 @@ const railWidth = 76
 func (a *app) rail(c *ui.Context) {
 	t := c.Theme()
 	bar := c.TitleBar()
-	// As wide as the window's controls and a little more, so that they sit
-	// over the rail and what is beside it keeps clear of them.
-	a.railNow = max(railWidth, bar.Left+12)
-	col := ui.Column(c.Key("rail")).Width(a.railNow).Shrink(0).FillHeight().AlignItems(ui.Center).Padding(0, 0, 10).Gap(4)
+	a.railNow = a.sideWidth()
+	col := ui.Column(c.Key("rail")).Width(a.railNow).Shrink(0).FillHeight().Padding(0, 12, 12)
 	col.Background(ground(t)) // the ground chosen, not the system's glass
-	railInk, railMuted, railOn, railHover := railInks(t)
 	page := a.libOpen
+	now := a.now()
+	muted := t.TextMuted
+	// A row of the sidebar: an icon, a word, a count at its end; the part
+	// shown is on the accent, whole.
 	item := func(key string, kind int, label, count, tip string, on bool, click func()) {
-		b := ui.Column(c.Key("rail:"+key)).Width(62).Padding(9, 0, 7).Gap(4).Radius(12).AlignItems(ui.Center).
-			Cursor(ui.CursorPointer).Label(label).Tooltip(tip)
-		// Quiet lines in the muted ink; the part shown in the ink, on a
-		// shade of the rail.
-		ink, text := railMuted, railMuted
-		b.Background(railOn.Alpha(0)).Transition(easeLook)
+		b := ui.Row(c.Key("rail:"+key)).Height(36).Padding(0, 12).Gap(12).Radius(9).AlignItems(ui.Center).FillWidth().
+			Cursor(ui.CursorPointer).Label(label).Tooltip(tip).Background(t.Accent.Alpha(0)).Transition(easeLook)
+		ink, num := t.Text, muted
 		switch {
 		case on:
-			b.Background(railOn)
-			ink, text = railInk, railInk
+			b.Background(t.Accent)
+			ink, num = t.AccentText, t.AccentText.Alpha(0.8)
 		case b.Hovered():
-			b.Background(railHover)
+			b.Background(t.Text.Alpha(0.045))
 		}
 		if b.Clicked() {
 			a.later(click)
 		}
+		press(b, 0.985)
 		b.Children(func() {
-			ui.Box(c).Size(24, 22).PassThrough().Children(func() {
-				ui.Box(c).Absolute().Left(0).Top(-1).Size(24, 24).PassThrough().
-					Draw(func(p *ui.Painter, r ui.Rect) { drawRailIcon(p, r, 23, kind, ink) })
-				if count != "" {
-					ui.Box(c).Absolute().Left(14).Top(-4).MinWidth(15).Height(15).Padding(0, 4).Radius(8).Center().Background(t.Accent).Children(func() {
-						ui.Text(c, count).FontSize(10).FontWeight(600).TextColor(ui.Hex("#FFFFFF")).PassThrough()
-					})
-				}
-			})
-			txt := ui.Text(c, label).FontSize(textCaption).TextColor(text).PassThrough()
+			ui.Box(c).Size(18, 18).Shrink(0).PassThrough().Draw(func(p *ui.Painter, r ui.Rect) { drawRailIcon(p, r, 19, kind, ink) })
+			txt := ui.Text(c, label).FontSize(15).TextColor(ink).Grow(1).PassThrough()
 			if on {
 				txt.FontWeight(600)
+			}
+			if count != "" {
+				ui.Text(c, count).FontSize(textSmall).TextColor(num).PassThrough()
 			}
 		})
 	}
 	col.Children(func() {
-		ui.Box(c).Height(max(bar.Height, 38)).FillWidth().DragWindow()
-		item("home", railDesk, "工作台", "", "记下来、归位、今天要做的", page && a.libHome && !a.tasks.open, func() {
-			a.showLibrary()
-			a.libHome = true
+		ui.Box(c).Height(max(bar.Height, 40)).FillWidth().Shrink(0).DragWindow()
+		// The day in numbers, and the week: a square a day, deeper the more
+		// was done on it.
+		due, done := a.dueToday(now), a.doneToday(now)
+		ui.Row(c.Key("rail-stats")).Gap(22).Padding(4, 10, 14).Shrink(0).DragWindow().Children(func() {
+			stat := func(n int, name string) {
+				ui.Column(c.Key(name)).Gap(1).Children(func() {
+					ui.Text(c, fmt.Sprint(n)).FontSize(24).LineHeight(1.2).FontWeight(600).TextColor(t.Text.MixOklab(muted, 0.45))
+					ui.Text(c, name).FontSize(textCaption).TextColor(muted).NoWrap()
+				})
+			}
+			stat(len(due), "要做")
+			stat(len(done), "做完")
+			stat(len(a.lib.Clips), "已收集")
 		})
-		item("map", railMap, "导图", "", "打开的导图；再点一下，显示或收起导图列表", !page, func() {
-			if a.libOpen {
-				a.commitEditIfAny()
-				a.libOpen = false
-				return
+		start := weekStart(today(now))
+		per := make([]int, 7)
+		for _, it := range a.taskItems() {
+			if d := it.node.Task.DoneAt; it.done() && d != nil {
+				if i := int(today(*d).Sub(start).Hours() / 24); i >= 0 && i < 7 {
+					per[i]++
+				}
 			}
-			a.cfg.ShowTree = !a.cfg.ShowTree
-			a.cfg.save()
+		}
+		ui.Row(c.Key("rail-week")).Gap(6).Padding(0, 10, 16).Shrink(0).Children(func() {
+			for i, n := range per {
+				ui.Column(c.Key(fmt.Sprint(i))).Grow(1).Basis(0).Gap(5).AlignItems(ui.Center).Children(func() {
+					sq := ui.Box(c).Height(20).FillWidth().Radius(5).Background(t.Text.Alpha(0.06)).
+						Tooltip(fmt.Sprintf("%s 做完 %d 件", weekdays[(i+1)%7], n))
+					switch {
+					case n >= 3:
+						sq.Background(t.Accent.Alpha(0.6))
+					case n > 0:
+						sq.Background(t.Accent.Alpha(0.28))
+					}
+					if sameDay(start.AddDate(0, 0, i), now) {
+						sq.Border(1.5, muted)
+					}
+					ui.Text(c, string([]rune(weekdays[(i+1)%7])[1:])).FontSize(11).TextColor(muted)
+				})
+			}
 		})
-		due := ""
-		if n := a.tasksDue(); n > 0 {
-			due = fmt.Sprint(n)
-		}
-		item("tasks", railTasks, "任务", due, "所有导图里的任务", page && a.tasks.open, a.openTasks)
-		item("library", railCollect, "收集", "", "灵感、链接、文档和图片", page && !a.libHome && !a.tasks.open, func() { a.openList(kindAll, "") })
-		ui.Spacer(c)
-		foot := func(kind int, label, tip string, click func()) {
-			b := ui.Box(c.Key("rail-foot:"+label)).Size(40, 40).Radius(12).Cursor(ui.CursorPointer).Label(label).Tooltip(tip)
-			if b.Hovered() {
-				b.Background(railHover)
+		ui.Column(c.Key("rail-nav")).Gap(2).Shrink(0).Children(func() {
+			item("home", railDesk, "工作台", "", "记下来、归位、今天要做的", page && a.libHome && !a.tasks.open, func() {
+				a.showLibrary()
+				a.libHome = true
+			})
+			item("map", railMap, "导图", "", "打开的导图；再点一下，显示或收起导图列表", !page, func() {
+				if a.libOpen {
+					a.commitEditIfAny()
+					a.libOpen = false
+					return
+				}
+				a.cfg.ShowTree = !a.cfg.ShowTree
+				a.cfg.save()
+			})
+			n := ""
+			if len(due) > 0 {
+				n = fmt.Sprint(len(due))
 			}
-			if b.Clicked() {
-				a.later(click)
-			}
-			b.Draw(func(p *ui.Painter, r ui.Rect) { drawRailIcon(p, r, 21, kind, railMuted) })
+			item("tasks", railTasks, "任务", n, "所有导图里的任务", page && a.tasks.open, a.openTasks)
+			item("library", railCollect, "收集", fmt.Sprint(len(a.lib.Clips)), "灵感、链接、文档和图片", page && !a.libHome && !a.tasks.open, func() { a.openList(kindAll, "") })
+		})
+		if a.treeShown() {
+			// On the maps' page the maps and their folders are here.
+			ui.Column(c.Key("rail-tree")).Grow(1).Basis(0).MinHeight(0).Margin(8, -12, 0).Children(func() { a.sidebar(c) })
+		} else {
+			ui.Text(c, "最近的导图").FontSize(textCaption).TextColor(muted).Margin(20, 12, 6).Shrink(0)
+			ui.Column(c.Key("rail-maps")).Gap(2).Grow(1).Basis(0).MinHeight(0).Clip().Children(func() {
+				shown := 0
+				for _, fi := range a.recentFiles() {
+					if fi.Path == a.inboxPath() || shown == 5 {
+						continue
+					}
+					shown++
+					b := ui.Row(c.Key(fi.Path)).Height(34).Padding(0, 12).Gap(12).Radius(9).AlignItems(ui.Center).FillWidth().
+						Cursor(ui.CursorPointer).Label("最近 " + mapName(fi.Path)).Background(t.Text.Alpha(0)).Transition(easeLook)
+					if b.Hovered() {
+						b.Background(t.Text.Alpha(0.045))
+					}
+					if b.Clicked() {
+						a.later(func() { _ = a.open(fi.Path) })
+					}
+					b.Children(func() {
+						ui.Box(c).Size(18, 18).Center().Shrink(0).PassThrough().Children(func() { mapDot(c, a.mapColor(fi.Path), 8) })
+						ui.Text(c, mapName(fi.Path)).FontSize(textBody).SingleLine().Grow(1).Shrink(1).MinWidth(0).PassThrough()
+					})
+				}
+			})
 		}
-		foot(railSearch, "搜索全部", "搜索导图、主题、灵感和资料，#标签 按标签找（⌘K）", func() { a.openPalette(paletteAll) })
-		foot(railGear, "设置", "设置（⌘,）", a.openSettings)
+		ui.Column(c.Key("rail-foot")).Gap(2).Shrink(0).Padding(6, 0, 0).Children(func() {
+			item("search", railSearch, "搜索全部", "⌘K", "搜索导图、主题、灵感和资料，#标签 按标签找（⌘K）", false, func() { a.openPalette(paletteAll) })
+			item("settings", railGear, "设置", "", "设置（⌘,）", false, a.openSettings)
+		})
 	})
 }
 
 // sideWidth is the room the rail and, when shown, the maps' list take.
 func (a *app) sideWidth() float32 {
-	rail := max(a.railNow, railWidth)
-	if a.treeShown() {
-		return rail + a.sidebarWidth
-	}
-	return rail
+	return max(a.sidebarWidth+railWidth, sideMin)
 }
+
+// sideMin is the least the sidebar is wide.
+const sideMin = 220
 
 // treeShown tells whether the maps' list is beside the rail: when asked
 // for, and on the maps' page only. The desk, the tasks and 收集 are pages

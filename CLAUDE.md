@@ -26,24 +26,25 @@ by AI, and an AI assistant.
 - The UI's look is in `design.go` (sizes, helpers, the theme of
   `quietTheme`) and `icons.go` (icons drawn, not glyphs, so that they sit
   centered; the rail's and the lists' are one family of thin lines,
-  `drawRailIcon`). It is laid out as Detent's components are
-  (detentui.com, whose tokens `design.go` follows): the window is a quiet
-  ground (`ground`: white as the page unless another of `grounds` is
-  chosen in the settings, `config.Ground`) the rail and the maps' list
-  stand on; what is read and
-  worked on is a leaf on it (`view.go`), near white, its corners round; a
-  part of a page is a tray (`tray`, `trayHead`), a shade darker than the
-  leaf, with its heading on it and what it holds in a white card
-  (`listCard`, `raise`), as the board's columns; cards are told by a thin
-  ring rather than a shadow, the one chosen by the accent's ring and a
-  halo (`chosenCard`); the key that acts is in the ink (`inkButton`,
-  `accentButton`), the others white with a ring (`key`: `softButton`,
-  `dropButton`, `iconTextButton`); the accent, a violet-blue, is kept for
+  `drawRailIcon`). The look is plain and restrained, as flomo's (the
+  user's reference): two levels only, a pale ground (`ground`, one of
+  `grounds` chosen in the settings, `config.Ground`) and flat white cards
+  on it (`raise`, `listCard`), with no ring and no shadow; text large
+  (14 to 16) with room around it; few controls in sight, what can be done
+  with a row showing under the pointer; one color, the violet-blue
+  accent, used whole where it is used: the part shown in the sidebar, the
+  keys that act (`inkButton`, `accentButton`), the outline of the line
+  written in, tags on a pale wash of it (`softTag`); other keys are a
+  shade of the ground (`key`, `textKey`). A part of a page is a small
+  heading (`trayHead`) over a card. The sidebar (`rail.go`) is of words:
+  the day in numbers and the week, the app's parts, then, on the maps'
+  page, the maps and their folders (`sidebar.go`), elsewhere the maps
+  opened last. A map is on white, the pages of lists on the ground. The
+  accent is kept for
   what is chosen, for links and for the AI's spark. Color is kept for
   small things that mean something: each map has its own (`mapcolor.go`),
   shown as a dot by its tasks and what was put on it, or as a pastel with
-  a deep ink (`tinted`); a kind of clip has its own. A narrow rail has the
-  app's parts (`rail.go`), the maps' folders beside it when asked; the
+  a deep ink (`tinted`); a kind of clip has its own. The
   desk (`today.go`) is the first page: write it down, today's tasks, what
   was written lately (only the inbox's tasks wait for a map: a note's
   place is 收集). The desk, the tasks and 收集 are laid out the same: a

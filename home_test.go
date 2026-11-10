@@ -55,7 +55,7 @@ func TestHome(t *testing.T) {
 	if n := len(a.waiting()); n != 6 || tt.HasText("留在收集") || tt.HasText("待归位") {
 		t.Fatalf("lately %d: %q", n, tt.Texts())
 	}
-	if !tt.HasText(weekdays[testNow.Weekday()]) || !tt.HasText("件事") {
+	if !tt.HasText(weekdays[testNow.Weekday()] + " · 10月10日") {
 		t.Fatalf("the day's line: %q", tt.Texts())
 	}
 	a.lib.Clips[0].Created = testNow.AddDate(0, 0, -8)
@@ -232,7 +232,7 @@ func TestHomeTicksAndReads(t *testing.T) {
 	}
 	tt.Type("周五 给客户发报价单 #报价")
 	tt.Frame()
-	for _, want := range []string{"#报价", "记下 ↩", "开头的词是标签"} {
+	for _, want := range []string{"#报价", "记下 ↩", "任务 · 周五"} {
 		if !tt.HasText(want) {
 			t.Fatalf("the line does not say %q: %q", want, tt.Texts())
 		}
@@ -247,23 +247,20 @@ func TestGroundChosen(t *testing.T) {
 	a.showLibrary()
 	a.libHome = true
 	tt.Frame()
-	if groundNow().key != "" || ground(a.theme()) != ui.Hex("#FDFDFC") {
+	if groundNow().key != "" || ground(a.theme()) != ui.Hex("#F6F6F5") {
 		t.Fatalf("the ground is %q", groundNow().name)
 	}
-	snapshot(t, tt, "ground-white")
+	snapshot(t, tt, "ground-gray")
 	a.openSettings()
 	tt.Frame()
-	if err := tt.Click("底色 墨色侧栏"); err != nil {
+	if err := tt.Click("底色 淡紫"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if a.cfg.Ground != "ink" || loadConfig().Ground != "ink" {
+	if a.cfg.Ground != "violet" || loadConfig().Ground != "violet" {
 		t.Fatalf("ground %q", a.cfg.Ground)
 	}
 	a.settingsOpen = false
-	tt.Frame()
-	snapshot(t, tt, "ground-ink")
-	a.cfg.Ground = "violet"
 	tt.Frame()
 	snapshot(t, tt, "ground-violet")
 }

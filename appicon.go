@@ -145,7 +145,7 @@ func (a *app) groundSettings(c *ui.Context) {
 					})
 				}
 			})
-			ui.Text(c, "左边导航栏的颜色，区块的底色跟着变。只在浅色外观下生效。").FontSize(12).TextColor(t.TextMuted).Wrap()
+			ui.Text(c, "页面和侧栏的底色，卡片始终是白的。只在浅色外观下生效。").FontSize(12).TextColor(t.TextMuted).Wrap()
 		})
 	})
 }

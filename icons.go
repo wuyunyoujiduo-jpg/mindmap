@@ -34,6 +34,7 @@ const (
 	iconInbox
 	iconMap
 	iconSearch
+	iconSend     // a paper plane
 	iconText     // a clip of text: lines on a page
 	iconLink     // two links of a chain
 	iconImage    // a picture: a frame, a hill and the sun
@@ -256,6 +257,9 @@ func drawIcon(p *ui.Painter, r ui.Rect, s float32, ic icon, col ui.Color) {
 			p.StrokePath(new(ui.Path).MoveTo(x+c[2]*k, y).LineTo(x, y).LineTo(x, y+c[3]*k), w, col)
 		}
 		p.FillPath(new(ui.Path).Circle(cx, cy, h*0.18), col)
+	case iconSend:
+		p.FillPath(new(ui.Path).MoveTo(cx-h*0.8, cy-h*0.7).LineTo(cx+h*0.85, cy).LineTo(cx-h*0.8, cy+h*0.7).
+			LineTo(cx-h*0.5, cy+h*0.08).LineTo(cx+h*0.15, cy).LineTo(cx-h*0.5, cy-h*0.08).Close(), col)
 	case iconSearch:
 		p.StrokePath(new(ui.Path).Circle(cx-h*0.15, cy-h*0.15, h*0.55), w, col)
 		p.StrokePath(new(ui.Path).MoveTo(cx+h*0.25, cy+h*0.25).LineTo(cx+h*0.8, cy+h*0.8), w*1.1, col)
@@ -434,8 +438,8 @@ func iconTextButton(c *ui.Context, ic icon, text, label, tip string, active bool
 		mark = t.Accent // the AI's spark is the accent's wherever it is
 	}
 	if active {
-		b.Background(t.Text)
-		col, mark = t.Background, t.Background
+		b.Background(t.Accent)
+		col, mark = t.AccentText, t.AccentText
 	} else {
 		key(b, t)
 	}
