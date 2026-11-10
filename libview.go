@@ -763,10 +763,12 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 			}
 			return
 		}
-		if clip.Summary != "" {
+		// A short note has no summary: one written before this was so is
+		// kept, and not shown.
+		if clip.Summary != "" && !briefClip(clip) {
 			ui.Text(c, clip.Summary).FontSize(textBody).LineHeight(1.55).Wrap().Selectable()
 		}
-		if clip.Analysis != "" {
+		if clip.Analysis != "" && !briefClip(clip) {
 			markdownView(c.Key("clip-analysis"), clip.Analysis, textBody)
 		}
 		if a.libSynFor != clip.ID || !a.libSynEditing {

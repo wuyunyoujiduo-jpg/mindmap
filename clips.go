@@ -349,6 +349,9 @@ func applyOrganized(c *library.Clip, o *clipOrganized, now time.Time) {
 	if c.Title == "" || c.Kind == library.KindText && c.Organized == nil {
 		c.Title = strings.TrimSpace(o.Title)
 	}
+	if briefClip(c) {
+		o.Summary, o.Desc, o.Analysis = "", "", "" // it says itself what it is
+	}
 	if s := strings.TrimSpace(o.Summary); s != "" {
 		c.Summary = s
 	}
@@ -416,6 +419,15 @@ func (a *app) organizePrompt() string {
 // clipPromptBody marks where the clip goes in the prompt.
 const clipPromptBody = "<资料/>"
 
+// briefLen is how long a note may be and still say itself what it is.
+const briefLen = 200
+
+// briefClip tells whether a clip is a note short enough to need no
+// summary: what the AI wrote of it would be longer than the note.
+func briefClip(c *library.Clip) bool {
+	return c.Kind == library.KindText && len([]rune(strings.TrimSpace(c.Text))) <= briefLen
+}
+
 // organizePromptFor puts a clip into a prompt.
 func organizePromptFor(c *library.Clip, prompt string) string {
 	var b strings.Builder
@@ -441,6 +453,11 @@ func organizePromptFor(c *library.Clip, prompt string) string {
 	}
 	if c.Kind == library.KindImage {
 		b.WriteString("（图片见附件）\n")
+	}
+	if briefClip(c) {
+		b.WriteString("\n这条内容很短，它自己就说清了自己：desc、summary、analysis 都填空字符串，不要复述或展开原文；只起标题、分类、打标签、给关键词和同义词。\n")
+	} else {
+		b.WriteString("\n摘要和分析是为了比读原文更快：两者加起来不要超过原文长度的一半，原文没说的不要补。\n")
 	}
 	return strings.Replace(prompt, clipPromptBody, b.String(), 1)
 }

@@ -74,8 +74,13 @@ func TestLibraryKeepsAndOrganizes(t *testing.T) {
 	if len(a.lib.Clips) != 2 || a.lib.Clips[0].Title != "周会改到周四" || a.lib.Clips[0].Category != "工作" {
 		t.Fatalf("text clip %+v", a.lib.Clips[0])
 	}
-	if a.lib.Clips[0].Desc != "团队周会时间调整。" { // none given: the summary's first sentence
-		t.Fatalf("fallback desc %q", a.lib.Clips[0].Desc)
+	// A short note says itself what it is: what the AI wrote of it, which
+	// would be longer than the note, is not kept, and it is told so.
+	if c := a.lib.Clips[0]; c.Desc != "" || c.Summary != "" || c.Analysis != "" {
+		t.Fatalf("a short note was summed up: %+v", c)
+	}
+	if req, _ := json.Marshal(fake.requests[1].Messages); !strings.Contains(string(req), "这条内容很短") {
+		t.Fatalf("prompt: %s", req)
 	}
 	req, _ = json.Marshal(fake.requests[1].Messages)
 	if !strings.Contains(string(req), "已有分类：技术") {
