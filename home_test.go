@@ -265,6 +265,27 @@ func TestHomeTicksAndReads(t *testing.T) {
 	if a.homeDraft != "要点\n- \n1. " {
 		t.Fatalf("lists %q", a.homeDraft)
 	}
+
+	// An @ offers the notes kept last; the one chosen is kept as a
+	// reference, and shows under the note's words, going to it.
+	a.homeDraft = "接着上次的想法 @"
+	tt.Frame()
+	old := a.clipsNamed("", 1)[0]
+	if err := tt.Click("引用 " + refName(old)); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	a.homeDraft += "**要紧**"
+	a.saveHomeLine()
+	tt.Frame()
+	kept := a.clipsNamed("接着上次", 1)
+	if len(kept) != 1 || !strings.Contains(kept[0].Text, "<clip:"+old.ID+">") {
+		t.Fatalf("reference not kept: %+v", kept)
+	}
+	if !tt.HasText("前往引用 "+refName(old)) || tt.HasText("<clip:") {
+		t.Fatalf("reference not shown: %q", tt.Texts())
+	}
+	snapshot(t, tt, "home-refs")
 }
 
 // TestGroundChosen: the window's ground is white until another is chosen

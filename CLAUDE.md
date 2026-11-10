@@ -34,7 +34,10 @@ by AI, and an AI assistant.
   with a row showing under the pointer; one color, the violet-blue
   accent, used whole where it is used: the part shown in the sidebar, the
   keys that act (`inkButton`, `accentButton`), the outline of the line
-  written in, tags on a pale wash of it (`softTag`); other keys are a
+  written in, tags on a pale wash of it (`softTag`). The desk and 收集 write in
+  the same card (`write.go`, `writeCard`: a tag and a reference offered
+  as they are written, a picture, bold, lists; a reference is kept in
+  the note's text as `<clip:id>` and shown under its words, `noteText`); other keys are a
   shade of the ground (`key`, `textKey`). A part of a page is a small
   heading (`trayHead`) over a card. The sidebar (`rail.go`) is of words:
   the day in numbers and the week, the app's parts, then, on the maps'

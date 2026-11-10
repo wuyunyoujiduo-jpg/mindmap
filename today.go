@@ -63,79 +63,16 @@ func dateLabel(d time.Time) string {
 	return fmt.Sprintf("%d月%d日 %s", d.Month(), d.Day(), weekdays[d.Weekday()])
 }
 
-// homeLine is the line to write in, the first thing on the desk: a white
-// card, the one thing outlined in the accent while written in. What is
-// written says what it is, a task when it says a day, else a note, and
-// the card says which as it is written; the key at its end keeps it.
+// homeLine is the line to write in, the first thing on the desk. What
+// is written says what it is, a task when it says a day, else a note,
+// and the card says which as it is written.
 func (a *app) homeLine(c *ui.Context) {
-	t := c.Theme()
-	box := ui.Column(c.Key("home-line")).Radius(12).Padding(12, 14, 10, 16).Gap(4).FillWidth().Shrink(0).
-		Background(cardColor(t)).Border(1.5, t.Border).Transition(easeLook)
-	box.Children(func() {
-		in := ui.TextAreaBase(c.Key("home-line-input"), &a.homeDraft).Lines(2, 5).
-			Placeholder("现在的想法是…  以「周五」这样的日子开头就是任务").FontSize(textTitle).LineHeight(1.5).FillWidth().Label("记一条灵感或任务")
-		if a.homeRefocus {
-			a.homeRefocus = false
-			in.Focus()
-		}
-		captureFocus(c, box, in)
-		in.HandleInput(func(ev ui.InputEvent) bool {
-			if ev.Kind == ui.InputKeyDown && ev.Key == ui.KeyEnter && ev.Mods&ui.Shift == 0 {
-				a.later(a.saveHomeLine)
-				return true
-			}
-			return false
-		})
-		text := strings.TrimSpace(a.homeDraft)
-		ui.Row(c.Key("tools")).Gap(6).AlignItems(ui.Center).FillWidth().Children(func() {
-			// What the line can take, as a note in flomo: a tag, a picture,
-			// a list with points or with numbers.
-			tool := func(key, mark string, ic icon, tip string, click func()) {
-				b := ui.Box(c.Key(key)).Size(32, 30).Radius(7).Center().Cursor(ui.CursorPointer).Label(key).Tooltip(tip).
-					Background(t.Text.Alpha(0)).Transition(easeLook)
-				ink := t.TextMuted
-				if b.Hovered() {
-					b.Background(t.Text.Alpha(0.05))
-					ink = t.Text
-				}
-				if b.Clicked() {
-					click()
-					a.homeRefocus = true // writing goes on
-				}
-				b.Children(func() {
-					if mark != "" {
-						ui.Text(c, mark).FontSize(17).TextColor(ink).PassThrough()
-					} else {
-						glyph(c, ic, 17, ink)
-					}
-				})
-			}
-			line := func(lead string) { // a new line beginning so, or the first
-				d := a.homeDraft
-				if d != "" && !strings.HasSuffix(d, "\n") {
-					d += "\n"
-				}
-				a.homeDraft = d + lead
-			}
-			tool("加标签", "#", 0, "加一个 #标签", func() { a.homeDraft = strings.TrimRight(a.homeDraft, " ") + " #" })
-			tool("加图片", "", iconImage, "收一张图片（也可以直接粘贴或拖进来）", func() {
-				a.plat.OpenFile("选择图片", nil, func(path string) {
-					if path != "" {
-						a.dropClips([]string{path})
-					}
-				})
-			})
-			ui.Box(c).Width(1).Height(16).Margin(0, 4).Background(hairline(t))
-			tool("列表", "", iconLevels, "列表：每行一个点", func() { line("- ") })
-			tool("编号列表", "1.", 0, "编号列表：1. 2. 3.", func() {
-				n := 1
-				for _, l := range strings.Split(a.homeDraft, "\n") {
-					if len(l) > 1 && l[0] >= '1' && l[0] <= '9' && strings.Contains(l[:min(len(l), 4)], ". ") {
-						n++
-					}
-				}
-				line(fmt.Sprintf("%d. ", n))
-			})
+	a.writeCard(c, writeCard{
+		key: "home-line", label: "记一条灵感或任务", draft: &a.homeDraft, enterSaves: true,
+		placeholder: "现在的想法是…  以「周五」这样的日子开头就是任务",
+		sendLabel:   "记下 ↩", fileLabel: "加图片", save: a.saveHomeLine,
+		reads: func() {
+			text := strings.TrimSpace(a.homeDraft)
 			if _, due, _ := parseTaskLine(text, a.now()); text != "" && taskLike(text, a.now()) {
 				label := "任务"
 				if due != nil {
@@ -143,58 +80,8 @@ func (a *app) homeLine(c *ui.Context) {
 				}
 				softTag(c, label)
 			}
-			// While a tag is being written, the tags used last that begin so:
-			// a click writes one.
-			if part, ok := tagBeingWritten(a.homeDraft); ok {
-				for _, tag := range a.recentTags(part, 6) {
-					chip := softTag(c, "#"+tag).Cursor(ui.CursorPointer).Label("用标签 " + tag).Tooltip("用这个标签")
-					if chip.Clicked() {
-						a.homeDraft = a.homeDraft[:len(a.homeDraft)-len(part)] + tag + " "
-					}
-				}
-			}
-			ui.Spacer(c)
-			send := ui.Box(c.Key("send")).Size(52, 32).Radius(8).Center().Label("记下 ↩").Tooltip("记下（回车；Shift+回车换行）").
-				Background(t.Text.Alpha(0.16)).Transition(easeLook)
-			if text != "" {
-				send.Background(t.Accent).Cursor(ui.CursorPointer)
-				if send.Hovered() {
-					send.Background(t.AccentHover)
-				}
-				if send.Clicked() {
-					a.later(a.saveHomeLine)
-				}
-				press(send, 0.94)
-			}
-			send.Children(func() { glyph(c, iconSend, 16, ui.Hex("#FFFFFF")) })
-		})
+		},
 	})
-}
-
-// tagBeingWritten tells whether a draft ends in a tag not yet finished,
-// a # and what follows it with no space, and gives what follows.
-func tagBeingWritten(draft string) (string, bool) {
-	i := strings.LastIndex(draft, "#")
-	if i < 0 || strings.ContainsAny(draft[i:], " \n\t　") {
-		return "", false
-	}
-	return draft[i+1:], true
-}
-
-// recentTags are the tags of the notes and clips, those used last first,
-// that begin with part: n at most.
-func (a *app) recentTags(part string, n int) []string {
-	clips := slices.Clone(a.lib.Clips)
-	slices.SortStableFunc(clips, func(x, y *library.Clip) int { return y.Created.Compare(x.Created) })
-	var out []string
-	for _, cl := range clips {
-		for _, tag := range cl.Tags {
-			if len(out) < n && strings.HasPrefix(tag, part) && tag != part && !slices.Contains(out, tag) {
-				out = append(out, tag)
-			}
-		}
-	}
-	return out
 }
 
 // softTag is a word on a pale wash of the accent, as a tag in a note: it
@@ -232,6 +119,7 @@ func (a *app) saveHomeLine() {
 	if text == "" {
 		return
 	}
+	text = a.resolveRefs(text)
 	if taskLike(text, a.now()) {
 		a.addTask(text, nil)
 	} else {
@@ -557,6 +445,8 @@ func (a *app) waitingCard(c *ui.Context, w waitingItem, i int) {
 		place, has = a.clipPlaces[cl.ID]
 	}
 	_ = ic
+	full := text // with what it refers to, which shows under its words
+	text = strings.TrimSpace(clipRef.ReplaceAllString(text, ""))
 	// A card each, as a note is: when over the words, what can be done
 	// with it under the pointer, where the AI would put it under the words.
 	card := raise(ui.Column(c.Key("waiting:"+key)).Padding(14, 20, 16).Gap(4).Radius(12).FillWidth().Label("记下的 "+text), t).
@@ -583,7 +473,7 @@ func (a *app) waitingCard(c *ui.Context, w waitingItem, i int) {
 				}
 			}
 		})
-		words, site := titleAndSite(text)
+		words, site := titleAndSite(full)
 		if site != "" || w.clip != nil && len(w.clip.Tags) > 0 {
 			ui.Row(c).Gap(6).Wrap().GapY(4).AlignItems(ui.Center).FillWidth().Children(func() {
 				if w.clip != nil {
@@ -599,7 +489,7 @@ func (a *app) waitingCard(c *ui.Context, w waitingItem, i int) {
 				}
 			})
 		}
-		ui.Text(c, words).FontSize(15.5).LineHeight(1.65).MaxLines(4).FillWidth()
+		a.noteText(c, words, 15.5, 4)
 		if has {
 			ui.Row(c.Key("sugg")).Gap(8).AlignItems(ui.Center).FillWidth().Padding(8, 0, 0).
 				Transition(ui.ElementTransition{Duration: 300 * time.Millisecond, Ease: easeDetent, Enter: &ui.Motion{Y: -6}}).Children(func() {

@@ -218,17 +218,15 @@ func (a *app) searchClips() []library.Hit {
 	return hits
 }
 
-// clipComposer is the field to keep text or a link, and the buttons to
-// keep the clipboard or a file.
+// clipComposer is the card to keep a note or a link in, as the desk's:
+// ⌘Enter keeps it, for a note here may be of several lines.
 func (a *app) clipComposer(c *ui.Context) {
-	t := c.Theme()
-	empty := strings.TrimSpace(a.libDraft) == ""
-	box := captureBox(c, "lib-compose").Margin(0, 0, 14)
-	box.Children(func() {
-		glyph(c, iconPlus, 15, t.Accent)
-		in := ui.TextAreaBase(c.Key("lib-draft"), &a.libDraft).Lines(1, 5).
-			Placeholder("记点什么，#标签 归类；也可以粘贴链接、图片或文件…").Label("新资料").
-			OnPaste(func(text string) bool { // a picture or files copied: kept at once
+	ui.Box(c.Key("lib-compose-room")).Padding(0, 0, 14).FillWidth().Shrink(0).Children(func() {
+		a.writeCard(c, writeCard{
+			key: "lib-compose", label: "新资料", draft: &a.libDraft,
+			placeholder: "记点什么，#标签 归类；也可以粘贴链接、图片或文件…",
+			sendLabel:   "收藏", fileLabel: "文件…",
+			paste: func(text string) bool { // a picture or files copied: kept at once
 				if text != "" {
 					return false
 				}
@@ -238,30 +236,15 @@ func (a *app) clipComposer(c *ui.Context) {
 				}
 				a.libSel = clips[0].ID
 				return true
-			}).
-			Padding(5, 0).FontSize(textBody + 1).Grow(1)
-		captureFocus(c, box, in)
-		keep := in.Shortcut(ui.Cmd, ui.KeyEnter)
-		if !empty { // the button when there is something to keep
-			ui.Text(c, "⌘↩").FontSize(textCaption).TextColor(t.TextMuted)
-			if accentButton(c, "收藏", "存到收集（⌘↩）").Clicked() {
-				keep = true
-			}
-		}
-		if keep && !empty {
-			if clip, err := a.addClipText(a.libDraft, "手动"); err != nil {
-				a.libErr = err.Error()
-			} else {
-				a.libDraft, a.libSel = "", clip.ID
-			}
-		}
-		if iconButton(c, iconClip, "文件…", "收藏图片或文件（也可以直接拖进来）", 28, true).Clicked() {
-			a.plat.OpenFile("选择要收藏的文件", nil, func(path string) {
-				if path != "" {
-					a.dropClips([]string{path})
+			},
+			save: func() {
+				if clip, err := a.addClipText(a.resolveRefs(a.libDraft), "手动"); err != nil {
+					a.libErr = err.Error()
+				} else {
+					a.libDraft, a.libSel = "", clip.ID
 				}
-			})
-		}
+			},
+		})
 	})
 }
 
@@ -444,7 +427,9 @@ func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 			if r := []rune(text); len(r) > 600 {
 				text = string(r[:600]) + "…"
 			}
-			ui.Text(c, library.Excerpt(text, a.libQuery, 400)).FontSize(14).LineHeight(1.65).Wrap().MaxLines(7).PassThrough()
+			ui.Column(c).Gap(6).FillWidth().PassThrough().Children(func() {
+				a.noteText(c, library.Excerpt(text, a.libQuery, 400), 15, 7)
+			})
 		} else {
 			ui.Row(c).Gap(10).AlignItems(ui.Center).PassThrough().Children(func() {
 				glyph(c, kindTile(clip.Kind), 16, t.TextMuted)

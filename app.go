@@ -270,20 +270,21 @@ type app struct {
 	libOpen       bool   // the main area shows the library
 	libSel        string // the clip shown
 	libQuery      string
-	libKind       int       // kindAll, kindMaps, kindDocs or kindLinks
-	libHome       bool      // 今天 is shown, not the list
-	homeFocus     bool      // the desk's line has the focus
-	homeRefocus   bool      // the desk's line takes the focus back, after a tool of its was clicked
-	noMotion      bool      // nothing animates: the tests look at where things end
-	homeDraft     string    // what is typed in 今天's line: a note of 灵感, or a task
-	libDay        time.Time // the day the list shows, from 概览's dots; zero for any
-	panelOff      bool      // the right panel is hidden
-	sideItems     []string  // the list's maps, in order
-	sideDrawn     []string  // as the frame before drew them
-	sideFocus     string    // "side" while the sidebar has the keys
-	libCat        string    // the category shown, "" all
-	libTag        string    // the tag shown, "" all
-	libDraft      string    // what is typed to keep
+	libKind       int               // kindAll, kindMaps, kindDocs or kindLinks
+	libHome       bool              // 今天 is shown, not the list
+	homeFocus     bool              // the desk's line has the focus
+	writeRefocus  string            // the card to write in that takes the focus back, after a tool of its was clicked
+	writeRefs     map[string]string // the notes referred to in a draft: the @name written, the clip's ID
+	noMotion      bool              // nothing animates: the tests look at where things end
+	homeDraft     string            // what is typed in 今天's line: a note of 灵感, or a task
+	libDay        time.Time         // the day the list shows, from 概览's dots; zero for any
+	panelOff      bool              // the right panel is hidden
+	sideItems     []string          // the list's maps, in order
+	sideDrawn     []string          // as the frame before drew them
+	sideFocus     string            // "side" while the sidebar has the keys
+	libCat        string            // the category shown, "" all
+	libTag        string            // the tag shown, "" all
+	libDraft      string            // what is typed to keep
 	libQueue      []clipJob
 	libWorking    string            // the clip being read or sorted out
 	libStatus     map[string]string // what is happening to clips, or went wrong
