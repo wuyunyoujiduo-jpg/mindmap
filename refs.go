@@ -165,25 +165,22 @@ func (a *app) attachTo(path, nodeID, link, what string) error {
 }
 
 // canvasDrop is what a node takes dropped on it: a node, moved under it,
-// or a document or a map from the sidebar, linked to it.
+// or a map from the list, linked to it.
 type canvasDrop interface{ droppedOnNode() }
 
 func (nodeDrag) droppedOnNode() {}
 func (fileDrag) droppedOnNode() {}
 
-// dropMaterial links a document or a map dropped on a node of the open map.
+// dropMaterial links a map dropped on a node of the open map.
 func (a *app) dropMaterial(id string, d fileDrag) {
-	link, what := clipScheme+d.Clip, "资料"
-	if d.Clip == "" {
-		if d.Path == a.path {
-			return // the map itself
-		}
-		link, what = a.mapLink(d.Path), "导图"
+	if d.Path == a.path {
+		return // the map itself
 	}
+	link := a.mapLink(d.Path)
 	if link == "" {
 		return
 	}
-	if err := a.attachTo(a.path, id, link, what); err != nil {
+	if err := a.attachTo(a.path, id, link, "导图"); err != nil {
 		a.saveErr = err.Error()
 	}
 }
@@ -196,21 +193,18 @@ func linksMark(n *model.Node) string {
 	return "↗"
 }
 
-// dropOnMap links a clip, or a map, dropped on a map of the sidebar to the
-// map's center.
+// dropOnMap links a map dropped on a map of the list to that map's
+// center.
 func (a *app) dropOnMap(path string, d fileDrag) {
 	f := a.mapFile(path)
 	if f == nil || len(f.Sheets) == 0 {
 		return
 	}
-	link, what := clipScheme+d.Clip, "资料"
-	if d.Clip == "" {
-		link, what = a.mapLink(d.Path), "导图"
-	}
+	link := a.mapLink(d.Path)
 	if link == "" {
 		return
 	}
-	if err := a.attachTo(path, f.Sheets[0].Root.ID, link, what); err != nil {
+	if err := a.attachTo(path, f.Sheets[0].Root.ID, link, "导图"); err != nil {
 		a.libErr = err.Error()
 	}
 }

@@ -1,7 +1,10 @@
 package main
 
 import (
+	"slices"
+
 	"github.com/egoist/mygo/ui"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
 
 // Each map has a color of its own, which marks what is its: its card on
@@ -51,12 +54,17 @@ func mapDot(c *ui.Context, col ui.Color, size float32) ui.Element {
 // mapSwitchMenu is the menu of the map's name: the maps opened last, to
 // go to; the maps' list beside the rail; a new map; the search of all.
 func (a *app) mapSwitchMenu(m *ui.Menu) {
-	for i, f := range a.recentFiles() {
-		if i == 10 {
+	files := a.recentFiles() // those starred first, then the last opened
+	slices.SortStableFunc(files, func(x, y model.FileInfo) int { return b2i(a.starred(y.Path)) - b2i(a.starred(x.Path)) })
+	for i, f := range files {
+		if i == 12 {
 			break
 		}
-		path := f.Path
-		if m.Item(mapName(path)).Checked(path == a.path).Chosen() && path != a.path {
+		path, name := f.Path, mapName(f.Path)
+		if a.starred(path) {
+			name = "★ " + name
+		}
+		if m.Item(name).Checked(path == a.path).Chosen() && path != a.path {
 			a.later(func() { _ = a.open(path) })
 		}
 	}

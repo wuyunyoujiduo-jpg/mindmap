@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -36,8 +35,10 @@ func TestAIMaterialToMap(t *testing.T) {
 		t.Fatalf("texts %q", tt.Texts())
 	}
 	snapshot(t, tt, "material-bar")
-	tt.Click("AI 整理资料") // its menu
-	if err := tt.ChooseMenuItem("整理成新导图（3 条）"); err != nil {
+	tt.Click("AI 助手") // what the AI makes of the list is asked in its panel
+	tt.Frame()
+	snapshot(t, tt, "collect-ai")
+	if err := tt.Click("把列出的 3 条整理成新导图"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
@@ -92,8 +93,9 @@ func TestAIMergeMaterial(t *testing.T) {
 	a.showLibrary()
 	a.libKind = kindMemos
 	tt.Frame()
-	tt.Click("AI 整理资料")
-	if err := tt.ChooseMenuItem("并入「使用指南」"); err != nil {
+	tt.Click("AI 助手")
+	tt.Frame()
+	if err := tt.Click("把列出的并入「使用指南」"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
@@ -215,65 +217,40 @@ func TestNodeRelated(t *testing.T) {
 	}
 }
 
-// A clip of the library dropped on a map in the sidebar goes under its
-// center.
-func TestDropClipOnMap(t *testing.T) {
+// A map starred comes first in its folder, with its star; no section of
+// its own, nor a second row.
+func TestStarredFirst(t *testing.T) {
 	a, tt := newTestApp(t)
-	clip, _ := a.addClipText("季度复盘模板", "手动")
-	a.showLibrary()
-	a.libKind = kindMemos
+	guide := a.path
+	a.newMap()
+	a.flush()
+	other := a.path // "新导图": after 使用指南 by its name
+	if err := a.open(guide); err != nil {
+		t.Fatal(err)
+	}
 	tt.Frame()
-	src, ok1 := tt.Find("资料 " + clip.Label())
-	dst, ok2 := tt.Find("使用指南")
-	if !ok1 || !ok2 {
-		t.Fatal("rows not found")
+	if tt.HasText("快捷访问") {
+		t.Fatalf("快捷访问 is still there: %q", tt.Texts())
 	}
-	tt.Press(src.X+40, src.Y+src.H/2)
-	for i := 1; i <= 10; i++ {
-		tt.Move(src.X+40+(dst.X+20-src.X-40)*float32(i)/10, src.Y+src.H/2+(dst.Y+dst.H/2-src.Y-src.H/2)*float32(i)/10)
+	first, _ := tt.Find(mapName(guide))
+	second, _ := tt.Find(mapName(other))
+	if second.Y < first.Y { // by their names: star the one below
+		guide, other = other, guide
 	}
-	tt.Release(dst.X+20, dst.Y+dst.H/2)
+	if err := tt.RightClick(mapName(other)); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.ChooseMenuItem("加星标（排在前面）"); err != nil {
+		t.Fatal(err)
+	}
 	tt.Frame()
-	root := a.file.Sheets[0].Root
-	if len(root.Links) != 1 || root.Links[0] != clipScheme+clip.ID {
-		t.Fatalf("root links %v", root.Links)
+	if !a.starred(other) {
+		t.Fatal("not starred")
 	}
-}
-
-// 快捷访问 takes maps and documents dragged in, leaving them where they are.
-func TestQuickAccess(t *testing.T) {
-	a, tt := newTestApp(t)
-	clip, _ := a.addClipText("周会纪要模板", "手动")
-	a.favoritesOpen = true
-	tt.Frame()
-	if !tt.HasText("快捷访问") { // its hint is its tooltip
-		t.Fatalf("texts %q", tt.Texts())
+	first, _ = tt.Find(mapName(guide))
+	second, _ = tt.Find(mapName(other))
+	if !(second.Y < first.Y) || !tt.HasText("★") {
+		t.Fatalf("the starred map is not first: %v %v", second, first)
 	}
-	drag := func(from string) {
-		t.Helper()
-		src, ok1 := tt.Find(from)
-		dst, ok2 := tt.Find("快捷访问")
-		if !ok1 || !ok2 {
-			t.Fatalf("no %q", from)
-		}
-		tt.Press(src.X+30, src.Y+src.H/2)
-		for i := 1; i <= 10; i++ {
-			tt.Move(src.X+30, src.Y+src.H/2+(dst.Y+dst.H/2-src.Y-src.H/2)*float32(i)/10)
-		}
-		tt.Release(src.X+30, dst.Y+dst.H/2)
-		tt.Frame()
-	}
-	a.addQuick(fileDrag{Clip: clip.ID}) // a card of 收集 dropped there
-	tt.Frame()
-	if _, ok := tt.Find("文档 " + clip.Label()); !ok {
-		t.Fatalf("the document is not at hand: %q", tt.Texts())
-	}
-	drag("使用指南")
-	if len(a.cfg.Favorites) != 2 || a.cfg.Favorites[0] != clipScheme+clip.ID || a.cfg.Favorites[1] != a.path {
-		t.Fatalf("quick %v", a.cfg.Favorites)
-	}
-	if clip.Folder != "" || filepath.Dir(a.path) != a.dir {
-		t.Fatal("moved")
-	}
-	snapshot(t, tt, "quick-access")
+	snapshot(t, tt, "starred-first")
 }

@@ -97,7 +97,7 @@ const (
 	viewAgenda // no more a view: kept for the maps left on it
 	viewTimeline
 	viewOverview
-	viewTable
+	viewTable // no more a view either: it was the measures' sheet
 )
 
 // autosaveDelay is how long after the last change the map is saved.
@@ -274,17 +274,17 @@ type app struct {
 	libOpen       bool   // the main area shows the library
 	libSel        string // the clip shown
 	libQuery      string
-	libKind       int        // kindAll, kindMaps, kindDocs or kindLinks
-	libHome       bool       // 今天 is shown, not the list
-	homeDraft     string     // what is typed in 今天's line: a note of 灵感, or a task
-	libDay        time.Time  // the day the list shows, from 概览's dots; zero for any
-	panelOff      bool       // the right panel is hidden
-	sideItems     []sideItem // the sidebar's maps and documents, in order
-	sideDrawn     []sideItem // as the frame before drew them
-	sideFocus     string     // "side" while the sidebar has the keys
-	libCat        string     // the category shown, "" all
-	libTag        string     // the tag shown, "" all
-	libDraft      string     // what is typed to keep
+	libKind       int       // kindAll, kindMaps, kindDocs or kindLinks
+	libHome       bool      // 今天 is shown, not the list
+	homeDraft     string    // what is typed in 今天's line: a note of 灵感, or a task
+	libDay        time.Time // the day the list shows, from 概览's dots; zero for any
+	panelOff      bool      // the right panel is hidden
+	sideItems     []string  // the list's maps, in order
+	sideDrawn     []string  // as the frame before drew them
+	sideFocus     string    // "side" while the sidebar has the keys
+	libCat        string    // the category shown, "" all
+	libTag        string    // the tag shown, "" all
+	libDraft      string    // what is typed to keep
 	libQueue      []clipJob
 	libWorking    string            // the clip being read or sorted out
 	libStatus     map[string]string // what is happening to clips, or went wrong
@@ -324,11 +324,7 @@ type app struct {
 	shotKeyDraft  string
 	nameTitle     string // the central topic the open map's name was given after
 	dirID         fileID
-	// The measures being edited (measures.go).
-	cellKey, cellDraft            string
-	renamingMeasure, measureDraft string
-	newMeasure                    string // the maps folder's identity, to follow it when renamed
-	recordingKey                  string // the shortcut being recorded, by its label
+	recordingKey  string // the shortcut being recorded, by its label
 	// What kept a screenshot from being taken, said in the app's window,
 	// which comes to the front for it.
 	shotAlert                    bool
@@ -361,8 +357,12 @@ type app struct {
 	async        asyncRunner
 	post         func(fn func()) // runs fn on the main thread, from any
 
-	tasks tasksState // the tasks of all the maps (taskspage.go)
-	memos memosState // 灵感, the notes written as they come (memos.go)
+	tasks        tasksState // the tasks of all the maps (taskspage.go)
+	libReview    int        // the way 收集 looks back, or reviewOff (memos.go)
+	libWalk      int        // how many times 随机漫步 went on
+	clipTagsFor  int        // the library's version clipTagsList is of
+	clipTagsOf   *library.Library
+	clipTagsList []tagCount
 	// lastTheme is the theme the window was last drawn in, for what is
 	// worked out outside a frame's build.
 	lastTheme *ui.Theme
@@ -384,8 +384,6 @@ type app struct {
 	sidebarWidth  float32
 	panelWidth    float32
 	resizingPanel bool
-	filesOpen     bool
-	favoritesOpen bool
 	// Folders of the sidebar are shown closed but for those opened, which
 	// the config keeps.
 	renaming      string // the map or folder renamed in the sidebar
@@ -419,8 +417,6 @@ func newApp(plat platform, cfg config) *app {
 		cams:          map[string]*camera{},
 		sidebarWidth:  220,
 		panelWidth:    300,
-		filesOpen:     true,
-		favoritesOpen: true,
 		captureWhere:  captureAuto, // a note, or a task when it says a day
 		bitmaps:       map[string]*ui.Bitmap{},
 		sendAI:        sendToClaude,

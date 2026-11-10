@@ -377,7 +377,7 @@ func (a *app) homeWaiting(c *ui.Context) {
 					})
 				}
 			case len(items) > 0:
-				if iconTextButton(c, iconSparkle, "AI 建议", "AI 建议去处", "让 AI 建议每条该放到哪张导图的哪个主题下，你确认后才放", false).Clicked() {
+				if iconTextButton(c, iconSparkle, "AI 归位", "AI 归位", "让 AI 建议每条该放到哪张导图的哪个主题下，你确认后才放", false).Clicked() {
 					a.later(func() {
 						a.suggestPlaces()
 						var clips []*library.Clip
@@ -425,7 +425,9 @@ func (a *app) waitingCard(c *ui.Context, w waitingItem) {
 		cl := w.clip
 		key, text, kind = "c:"+cl.ID, cl.Label(), library.KindLabel(cl.Kind)
 		if isMemo(cl) {
-			text, _, _ = strings.Cut(strings.TrimSpace(cl.Text), "\n")
+			if first, _, _ := strings.Cut(strings.TrimSpace(cl.Text), "\n"); first != "" {
+				text = first // else its title or its note, as its label has it
+			}
 			kind = "灵感"
 		} else {
 			ic = kindIcon(cl.Kind)

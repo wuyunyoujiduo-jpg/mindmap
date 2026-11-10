@@ -96,13 +96,16 @@ func TestLibraryKeepsAndOrganizes(t *testing.T) {
 	}
 	a.libQuery = ""
 	tt.Frame()
-	if err := tt.Click("工作 1"); err != nil {
+	if tt.HasText("全部分类") || tt.HasText("工作 1") { // the AI's categories filter nothing: the tags do
+		t.Fatalf("categories: %q", tt.Texts())
+	}
+	if err := tt.Click("#会议 1"); err != nil {
 		t.Fatal(err)
 	}
 	if tt.HasText("资料 缓存设计的五个原则") {
-		t.Fatal("category filter")
+		t.Fatal("tag filter")
 	}
-	tt.Click("全部分类")
+	tt.Click("#会议 1")
 	if err := tt.Click("资料 缓存设计的五个原则"); err != nil {
 		t.Fatal(err)
 	}

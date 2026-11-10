@@ -129,52 +129,56 @@ func (a *app) keepMaterial(f *model.File, given []string) {
 	}
 }
 
-// materialBar is the line over the library's list: how much it lists, and
-// the AI's ways of stringing it into maps.
+// materialBar ends the filters' row: how much is listed, and the AI's
+// one way here, saying where each belongs on the maps. What else it makes
+// of the list is asked in its panel (collectActions).
 func (a *app) materialBar(c *ui.Context) {
 	t := c.Theme()
 	n := len(a.libHits())
 	if n == 0 {
 		return
 	}
-	noKey := providerKey(a.cfg) == ""
-	// On the filters' row: how many, and a menu of what the AI makes of
-	// them.
 	ui.Text(c, fmt.Sprintf("%d 条", n)).FontSize(12).TextColor(t.TextMuted).NoWrap()
-	tip := "AI 读这些资料，整理成导图，或并入打开的导图"
-	if noKey {
-		tip = "先在 AI 助手的设置里填写 API Key"
+	tip := "让 AI 建议列出的每条该放到哪张导图的哪个主题下，你确认后才放"
+	if providerKey(a.cfg) == "" {
+		tip = "先在「问 AI」的设置里填写 API Key"
 	}
-	iconTextButton(c, iconSparkle, "AI", "AI 整理资料", tip, false).Menu(func(m *ui.Menu) {
-		if k := len(a.lib.Unorganized()); k > 0 {
-			if m.Item(fmt.Sprintf("整理 %d 条还没整理的资料", k)).Disabled(noKey || a.libWorking != "").Chosen() {
-				a.later(a.organizeAll)
-			}
-			m.Separator()
-		}
-		label := fmt.Sprintf("整理成新导图（%d 条）", n)
-		if n > maxMaterial {
-			label = fmt.Sprintf("整理成新导图（一次最多 %d 条，先筛选）", maxMaterial)
-		}
-		if m.Item(label).Disabled(noKey || n > maxMaterial || n < 2).Chosen() {
+	if iconTextButton(c, iconSparkle, "AI 归位", "AI 归位", tip, false).Clicked() {
+		clips := a.listedMaterial()
+		a.later(func() { a.suggestClipPlaces(clips) })
+	}
+}
+
+// aiAction is something the AI does, a row of its panel before a
+// conversation starts.
+type aiAction struct {
+	icon  icon
+	label string
+	run   func()
+}
+
+// collectActions are what the AI makes of what is collected: the rows of
+// its panel on 收集.
+func (a *app) collectActions() []aiAction {
+	var out []aiAction
+	if k := len(a.lib.Unorganized()); k > 0 && a.libWorking == "" {
+		out = append(out, aiAction{iconSparkle, fmt.Sprintf("整理 %d 条还没整理的资料", k), a.organizeAll})
+	}
+	n := len(a.libHits())
+	if n >= 2 && n <= maxMaterial {
+		out = append(out, aiAction{iconMap, fmt.Sprintf("把列出的 %d 条整理成新导图", n), func() {
 			name := "资料整理 " + a.now().Format("2006-01-02")
-			if a.libCat != "" && a.libCat != "-" && a.libCat != "★" {
-				name = "资料 · " + a.libCat
-			} else if a.libTag != "" {
+			if a.libTag != "" {
 				name = "资料 · " + a.libTag
 			}
-			clips := a.listedMaterial()
-			a.later(func() { a.aiMaterialToMap(name, clips) })
-		}
-		if a.doc != nil && a.path != "" && m.Item("并入「"+mapName(a.path)+"」").Disabled(noKey || n > maxMaterial).Chosen() {
-			clips := a.listedMaterial()
-			a.later(func() { a.aiMergeMaterial(clips) })
-		}
-		if m.Item("AI 归位：建议放到哪个主题下").Disabled(noKey).Chosen() {
-			clips := a.listedMaterial()
-			a.later(func() { a.suggestClipPlaces(clips) })
-		}
-		m.Separator()
-		a.reviewMenu(m)
-	})
+			a.aiMaterialToMap(name, a.listedMaterial())
+		}})
+	}
+	if n >= 1 && n <= maxMaterial && a.doc != nil && a.path != "" {
+		out = append(out, aiAction{iconMap, "把列出的并入「" + mapName(a.path) + "」", func() { a.aiMergeMaterial(a.listedMaterial()) }})
+	}
+	out = append(out,
+		aiAction{iconPencil, "回顾最近 7 天收集的", func() { a.aiReview(7) }},
+		aiAction{iconPencil, "回顾最近 30 天收集的", func() { a.aiReview(30) }})
+	return out
 }

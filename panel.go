@@ -149,7 +149,6 @@ func (a *app) nodePanel(c *ui.Context) {
 			image := shown("image", n.Image != nil)
 			files := shown("files", len(n.Files) > 0)
 			plan := n.Task != nil && shown("plan", n.Task.Estimate > 0 || n.Task.Iteration != "" || len(n.Task.After) > 0)
-			measures := a.file != nil && len(a.file.Measures) > 0
 
 			if n.Task != nil || tags {
 				ui.Column(c.Key("props")).Gap(2).FillWidth().Children(func() {
@@ -201,12 +200,9 @@ func (a *app) nodePanel(c *ui.Context) {
 				})
 			}
 
-			if plan || measures {
-				sectionCard(c, iconLevels, tileBlue, "度量与迭代", nil, func() {
-					a.measuresSection(c, n)
-					if plan {
-						a.planEditor(c, n)
-					}
+			if plan {
+				sectionCard(c, iconLevels, tileBlue, "排期", nil, func() {
+					a.planEditor(c, n)
 				})
 			}
 

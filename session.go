@@ -109,8 +109,11 @@ func (a *app) restoreView(f *model.File) {
 		if v.Mode >= viewMap && v.Mode <= viewTable {
 			a.mode = v.Mode
 		}
-		if a.mode == viewAgenda { // a view the maps have no more: the tasks' page has the days
+		switch a.mode { // views the maps have no more
+		case viewAgenda: // the tasks' page has the days
 			a.mode = viewBoard
+		case viewTable:
+			a.mode = viewMap
 		}
 	}
 	a.doc = nil

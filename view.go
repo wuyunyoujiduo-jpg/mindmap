@@ -30,7 +30,7 @@ func (a *app) view(c *ui.Context) {
 	root.Children(func() {
 		a.rail(c)
 		main := func(fn func()) { ui.Row(c).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Stretch).Children(fn) }
-		if a.cfg.ShowTree {
+		if a.treeShown() {
 			main = func(fn func()) {
 				ui.Row(c).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Stretch).Children(func() {
 					ui.Split(c, &a.sidebarWidth, func() { a.sidebar(c) }, fn).Fill()
@@ -42,10 +42,6 @@ func (a *app) view(c *ui.Context) {
 				if a.libOpen {
 					if a.tasks.open {
 						a.tasksView(c)
-						return
-					}
-					if a.memos.open {
-						a.memosView(c)
 						return
 					}
 					if a.libHome {
@@ -80,8 +76,6 @@ func (a *app) view(c *ui.Context) {
 						a.timelineView(c)
 					case a.mode == viewOverview:
 						a.overviewView(c)
-					case a.mode == viewTable:
-						a.tableView(c)
 					default:
 						a.canvasView(c)
 					}
@@ -270,7 +264,7 @@ var (
 	mainViews = []struct {
 		mode int
 		name string
-	}{{viewMap, "导图"}, {viewOutline, "大纲"}, {viewBoard, "看板"}, {viewTable, "表格"}}
+	}{{viewMap, "导图"}, {viewOutline, "大纲"}, {viewBoard, "看板"}}
 	moreViews = []struct {
 		mode int
 		name string

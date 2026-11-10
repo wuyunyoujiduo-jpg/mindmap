@@ -58,7 +58,7 @@ func (a *app) rail(c *ui.Context) {
 	}
 	col.Children(func() {
 		ui.Box(c).Height(max(bar.Height, 38)).FillWidth().DragWindow()
-		item("home", railDesk, "工作台", "", "记下来、归位、今天要做的", page && a.libHome && !a.tasks.open && !a.memos.open, func() {
+		item("home", railDesk, "工作台", "", "记下来、归位、今天要做的", page && a.libHome && !a.tasks.open, func() {
 			a.showLibrary()
 			a.libHome = true
 		})
@@ -96,8 +96,13 @@ func (a *app) rail(c *ui.Context) {
 // sideWidth is the room the rail and, when shown, the maps' list take.
 func (a *app) sideWidth() float32 {
 	rail := max(a.railNow, railWidth)
-	if a.cfg.ShowTree {
+	if a.treeShown() {
 		return rail + a.sidebarWidth
 	}
 	return rail
 }
+
+// treeShown tells whether the maps' list is beside the rail: when asked
+// for, and on the maps' page only. The desk, the tasks and 收集 are pages
+// of their own, with the whole width.
+func (a *app) treeShown() bool { return a.cfg.ShowTree && !a.libOpen }

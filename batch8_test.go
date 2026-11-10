@@ -151,17 +151,6 @@ func TestNodeLinksToClips(t *testing.T) {
 	if !strings.Contains(strings.Join(other.Links, " "), clipScheme+clip.ID) {
 		t.Fatalf("links %v", other.Links)
 	}
-
-	// Clips become a map, a branch a category, linked back.
-	clip.Category = "技术"
-	a.clipsToMap("资料回顾", a.lib.Clips)
-	if mapName(a.path) != "资料回顾" || a.doc.Root.Children[0].Title != "技术" {
-		t.Fatalf("map %s %v", a.path, a.doc.Root.Children)
-	}
-	n := a.doc.Root.Children[0].Children[0]
-	if n.Title != "性能优化清单" || n.Links[0] != clipScheme+clip.ID {
-		t.Fatalf("node %+v", n)
-	}
 }
 
 func TestStreamingAndSavedChats(t *testing.T) {

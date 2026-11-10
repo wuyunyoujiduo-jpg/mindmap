@@ -105,6 +105,8 @@ func (a *app) addClipText(text, source string) (*library.Clip, error) {
 	c := &library.Clip{Kind: library.KindText, Text: text, Source: source}
 	if library.IsURL(text) {
 		c.Kind, c.Text, c.URL = library.KindLink, "", text
+	} else {
+		c.Tags = memoTags(text) // a note's #tags are its tags
 	}
 	return a.kept(c, a.lib.Add(c, a.now()))
 }

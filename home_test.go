@@ -82,8 +82,7 @@ func TestHome(t *testing.T) {
 	}
 }
 
-// The sidebar's keys go through its maps and documents; dark, the pages
-// read as well.
+// The list's keys go through its maps; dark, the pages read as well.
 func TestHomeDaysKeysAndDark(t *testing.T) {
 	a, tt := newTestApp(t)
 	for i := range 3 {
@@ -93,25 +92,32 @@ func TestHomeDaysKeysAndDark(t *testing.T) {
 		}
 		clip.Created = testNow.Add(-time.Duration(i) * 24 * time.Hour)
 	}
-	// The sidebar's keys: up from the map to the document kept at hand.
-	a.addQuick(fileDrag{Clip: a.lib.Clips[0].ID})
+	// The list's keys: down from the map to the next, Delete asks.
+	guide := a.path
+	a.newMap()
+	a.flush()
+	other := a.path
+	if err := a.open(guide); err != nil {
+		t.Fatal(err)
+	}
 	a.libOpen = false
 	tt.Frame()
 	if err := tt.Click("使用指南"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	tt.Key(0, ui.KeyUp)
+	tt.Key(0, ui.KeyUp) // 新导图 is above, by its name
 	tt.Frame()
-	if !a.libOpen || a.libSel == "" {
-		t.Fatalf("up from the map: open %v, %q", a.libOpen, a.libSel)
+	if a.path != other {
+		t.Fatalf("up from the map: %q", a.path)
 	}
+	tt.Frame()
 	tt.Key(0, ui.KeyBackspace)
 	tt.Frame()
-	if !a.libConfirm {
-		t.Fatal("Delete did not ask to delete the document")
+	if !a.confirmDelete || a.deletePath != other {
+		t.Fatal("Delete did not ask to move the map to the trash")
 	}
-	a.libConfirm = false
+	a.confirmDelete = false
 
 	tt.SetDark(true)
 	a.libOpen, a.libHome = true, true

@@ -81,21 +81,10 @@ func TestMoveKeepsIDsAndDropMaterial(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a.addQuick(fileDrag{Clip: clip.ID}) // at hand in 快捷访问, to drag from
 	target := find(t, a, "后端")
-	tt.Frame()
-	src, ok := tt.Find("文档 " + clip.Label())
-	if !ok {
-		t.Fatal("no document row")
+	if err := a.attachTo(a.path, target.ID, clipScheme+clip.ID, "资料"); err != nil {
+		t.Fatal(err)
 	}
-	b := a.boxes.Boxes[target.ID]
-	cam := a.cam()
-	x, y := a.vp.X+cam.X+(b.X+b.W/2)*cam.Zoom, a.vp.Y+cam.Y+(b.Y+b.H/2)*cam.Zoom
-	tt.Press(src.X+20, src.Y+src.H/2)
-	for i := 1; i <= 10; i++ {
-		tt.Move(src.X+20+(x-src.X-20)*float32(i)/10, src.Y+src.H/2+(y-src.Y-src.H/2)*float32(i)/10)
-	}
-	tt.Release(x, y)
 	tt.Frame()
 	if len(target.Links) != 1 || target.Links[0] != clipScheme+clip.ID {
 		t.Fatalf("links %v", target.Links)

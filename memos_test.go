@@ -19,31 +19,21 @@ func TestMemoTags(t *testing.T) {
 	}
 }
 
-// 灵感: written in its box, kept as a text of the library with its #tags,
-// filtered by a tag, edited and found again; quick capture writes there.
+// 灵感 are cards of 收集: written in its box, kept as texts of the library
+// with their #tags, filtered by a tag; quick capture writes them too, and
+// 回顾 looks back at the old ones.
 func TestMemos(t *testing.T) {
 	a, tt := newTestApp(t)
-	// 收集 has the notes with the clips; 回顾 is their page, with the days
-	// written on and the ways to look back.
 	if err := tt.Click("收集"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if err := tt.Click("回顾"); err != nil {
-		t.Fatal(err)
+	for _, text := range []string{"产品要做减法 #产品", "周报模板改成三段式 #工作"} {
+		tt.Click("新资料")
+		tt.Type(text)
+		tt.Key(ui.Cmd, ui.KeyEnter)
+		tt.Frame()
 	}
-	tt.Frame()
-	if !a.memos.open || !tt.HasText("还没有灵感。在上面写下现在的想法，#标签 归类。") {
-		t.Fatalf("page: %q", tt.Texts())
-	}
-	tt.Click("写下灵感")
-	tt.Type("产品要做减法 #产品")
-	tt.Key(ui.Cmd, ui.KeyEnter)
-	tt.Frame()
-	tt.Click("写下灵感")
-	tt.Type("周报模板改成三段式 #工作")
-	tt.Click("记录")
-	tt.Frame()
 	var memos []string
 	for _, c := range a.lib.Clips {
 		if isMemo(c) {
@@ -53,24 +43,72 @@ func TestMemos(t *testing.T) {
 	if len(memos) != 2 || !slices.Contains(memos, "产品要做减法 #产品|产品") {
 		t.Fatalf("memos %q", memos)
 	}
-	if !tt.HasText("#产品 1") || !tt.HasText("#工作 1") {
+	a.libSel = ""
+	tt.Frame()
+	if !tt.HasText("#产品 1") || !tt.HasText("#工作 1") || tt.HasText("全部分类") {
 		t.Fatalf("tags: %q", tt.Texts())
 	}
 	snapshot(t, tt, "memos")
-	// A tag shows its notes only.
+	// A tag shows its notes only; again, all of them.
 	tt.Click("#工作 1")
 	tt.Frame()
-	if list := a.memoList(); len(list) != 1 || !strings.HasPrefix(list[0].Text, "周报模板") {
-		t.Fatalf("filtered %d", len(list))
+	if hits := a.libHits(); len(hits) != 1 || !strings.HasPrefix(hits[0].Clip.Text, "周报模板") {
+		t.Fatalf("filtered %d", len(hits))
 	}
-	a.memos.tag = ""
+	tt.Click("#工作 1")
+	tt.Frame()
+	if a.libTag != "" || len(a.libHits()) != 2 {
+		t.Fatalf("tag %q, %d", a.libTag, len(a.libHits()))
+	}
+	// A note's text changed, its tags follow.
+	m := a.lib.Clips[0]
+	for _, c := range a.lib.Clips {
+		if strings.HasPrefix(c.Text, "产品") {
+			m = c
+		}
+	}
+	m.Tags = append(m.Tags, "AI给的")
+	a.setMemoText(m, "产品要做减法 #取舍")
+	if !slices.Equal(m.Tags, []string{"AI给的", "取舍"}) {
+		t.Fatalf("tags after the edit: %q", m.Tags)
+	}
 	// Quick capture writes 灵感 by default.
 	ct := ui.NewTester(a.captureView, 560, 170)
 	a.plat.(*fakePlatform).capture = true
 	ct.Type("随手一记 #想法")
 	ct.Key(0, ui.KeyEnter)
-	if list := a.memoList(); len(list) != 3 || list[0].Text != "随手一记 #想法" {
-		t.Fatalf("captured: %d %q", len(list), list[0].Text)
+	if hits := a.libHits(); len(hits) != 3 {
+		t.Fatalf("captured: %d", len(hits))
+	}
+
+	// 回顾: nothing older than a week yet; then one of the old ones.
+	a.libReview = reviewDaily
+	tt.Frame()
+	if len(a.libHits()) != 0 || !tt.HasText("一周以前的灵感会在这里，每天换几条。") {
+		t.Fatalf("回顾 with nothing old: %d, %q", len(a.libHits()), tt.Texts())
+	}
+	m.Created = testNow.AddDate(0, 0, -30)
+	a.lib.Version++
+	a.libReview = reviewOff
+	tt.Frame()
+	r, _ := tt.Find("回顾 ⌄")
+	tt.Press(r.X+r.W/2, r.Y+r.H/2)
+	tt.Release(r.X+r.W/2, r.Y+r.H/2)
+	if err := tt.ChooseMenuItem("随机漫步：一次看一条"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if hits := a.libHits(); a.libReview != reviewWalk || len(hits) != 1 || hits[0].Clip != m {
+		t.Fatalf("随机漫步: %d", len(hits))
+	}
+	if !tt.HasText("随机漫步 ✕") || !tt.HasText("换一条") {
+		t.Fatalf("回顾's chip: %q", tt.Texts())
+	}
+	snapshot(t, tt, "collect-review")
+	tt.Click("随机漫步 ✕")
+	tt.Frame()
+	if a.libReview != reviewOff || len(a.libHits()) != 3 {
+		t.Fatal("still looking back")
 	}
 }
 
@@ -83,7 +121,7 @@ func TestMemoPlaces(t *testing.T) {
 		t.Fatal(err)
 	}
 	a.addMemo("周末去爬山", "灵感")
-	a.openMemos()
+	a.openList(kindAll, "")
 	tt.Frame()
 	fake := &fakeClaude{}
 	a.sendAI = func(ctx context.Context, cfg config, p anthropic.BetaMessageNewParams, on func(string)) (*anthropic.BetaMessage, error) {

@@ -31,35 +31,6 @@ func tile(c *ui.Context, ic icon, col ui.Color, size float32) {
 		Draw(func(p *ui.Painter, r ui.Rect) { drawIcon(p, r, size*0.72, ic, ink) })
 }
 
-// navRow is a row of the sidebar: a tile, a label and a count. The
-// current one is filled with the accent.
-func navRow(c *ui.Context, ic icon, _ ui.Color, label, count string, current bool) ui.Element {
-	t := c.Theme()
-	r := ui.Row(c).Height(30).Padding(0, 10).Gap(10).Radius(8).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(label).FillWidth()
-	// Selected as the other rows of the sidebar are: a light accent.
-	switch {
-	case current:
-		r.Background(chosen(t))
-	case r.Hovered():
-		r.Background(t.Text.Alpha(0.06))
-	}
-	r.Children(func() {
-		ink, hole := t.Text.MixOklab(t.TextMuted, 0.55), t.Surface // solid, a dark gray; the text's on the row shown
-		if current {
-			ink, hole = t.Text, t.Surface.MixOklab(t.Text, 0.075)
-		}
-		solidGlyph(c, ic, 15, ink, hole)
-		text := ui.Text(c, label).FontSize(13).Grow(1).Shrink(1).MinWidth(0).SingleLine()
-		if current {
-			text.Bold()
-		}
-		if count != "" {
-			ui.Text(c, count).FontSize(12).TextColor(t.TextMuted).Shrink(0)
-		}
-	})
-	return r
-}
-
 // relTime says how long ago a time was.
 func relTime(now, at time.Time) string {
 	d := now.Sub(at)

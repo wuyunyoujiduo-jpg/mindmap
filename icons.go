@@ -446,49 +446,6 @@ func iconTextButton(c *ui.Context, ic icon, text, label, tip string, active bool
 	return b
 }
 
-// solidGlyph is an icon of the sidebar's rows, filled, as flomo's: more
-// weight than lines at a small size, in a dark gray. Those it has no solid
-// form of are drawn as lines.
-func solidGlyph(c *ui.Context, ic icon, size float32, col, hole ui.Color) ui.Element {
-	return ui.Box(c).Size(size, size).Shrink(0).PassThrough().
-		Draw(func(p *ui.Painter, r ui.Rect) { drawSolidIcon(p, r, size, ic, col, hole) })
-}
-
-// drawSolidIcon draws an icon filled in the square of side s centered in
-// r; hole is the color of what is cut out of it, the background's.
-func drawSolidIcon(p *ui.Painter, r ui.Rect, s float32, ic icon, col, hole ui.Color) {
-	cx, cy := r.X+r.W/2, r.Y+r.H/2
-	h := s / 2
-	w := max(s/9, 1.3)
-	switch ic {
-	case iconCategory: // four squares
-		k := h * 0.78
-		for _, d := range [][2]float32{{-1, -1}, {1, -1}, {-1, 1}, {1, 1}} {
-			x, y := cx+d[0]*h*0.46, cy+d[1]*h*0.46
-			p.FillPath(roundedRect(x-k/2, y-k/2, k, k, k*0.28), col)
-		}
-	case iconCheck: // a disc, ticked
-		p.FillPath(new(ui.Path).Circle(cx, cy, h*0.92), col)
-		check := new(ui.Path).MoveTo(cx-h*0.42, cy+h*0.02).LineTo(cx-h*0.1, cy+h*0.34).LineTo(cx+h*0.46, cy-h*0.3)
-		p.StrokePath(check, w*1.15, hole)
-	case iconPencil: // a note with a corner turned
-		p.FillPath(roundedRect(cx-h*0.8, cy-h*0.85, h*1.6, h*1.7, h*0.3), col)
-		for _, y := range []float32{-0.35, 0.05} {
-			p.Line(cx-h*0.42, cy+y*h, cx+h*0.42, cy+y*h, w*0.9, hole)
-		}
-		p.Line(cx-h*0.42, cy+h*0.45, cx+h*0.1, cy+h*0.45, w*0.9, hole)
-	case iconLibrary: // books on a shelf
-		p.FillPath(roundedRect(cx-h*0.85, cy-h*0.75, h*0.48, h*1.5, h*0.12), col)
-		p.FillPath(roundedRect(cx-h*0.28, cy-h*0.75, h*0.48, h*1.5, h*0.12), col)
-		p.FillPath(new(ui.Path).MoveTo(cx+h*0.33, cy-h*0.58).LineTo(cx+h*0.72, cy-h*0.72).LineTo(cx+h*1.0, cy+h*0.64).LineTo(cx+h*0.62, cy+h*0.78).Close(), col)
-	case iconTarget: // a ring and its middle
-		p.StrokePath(new(ui.Path).Circle(cx, cy, h*0.7), w*1.4, col)
-		p.FillPath(new(ui.Path).Circle(cx, cy, h*0.28), col)
-	default:
-		drawIcon(p, r, s, ic, col)
-	}
-}
-
 // The rail's icons: one set drawn alike, in lines of one weight with
 // round ends on a 24 grid, each with one part filled, so that they read
 // as a family and stand at a small size.

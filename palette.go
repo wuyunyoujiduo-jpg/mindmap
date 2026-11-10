@@ -54,9 +54,8 @@ func (a *app) commands() []command {
 		{"切换到思维导图", "⌘1", view(viewMap), hasDoc},
 		{"切换到大纲", "⌘2", view(viewOutline), hasDoc},
 		{"切换到看板", "⌘3", view(viewBoard), hasDoc},
-		{"切换到表格", "⌘4", view(viewTable), hasDoc},
-		{"切换到时间线", "⌘5", view(viewTimeline), hasDoc},
-		{"切换到总览", "⌘6", view(viewOverview), hasDoc},
+		{"切换到时间线", "⌘4", view(viewTimeline), hasDoc},
+		{"切换到总览", "⌘5", view(viewOverview), hasDoc},
 		{"开始演说", "⌘↩", func() { a.startPresenting("") }, hasDoc},
 		{"搜索所有导图", "⌘⇧F", func() { a.openPalette(paletteSearch) }, nil},
 		{"快速切换导图", "⌘P", func() { a.openPalette(paletteMaps) }, nil},
@@ -543,7 +542,7 @@ var shortcuts = []struct {
 }{
 	{"全局", [][2]string{
 		{"⌘K", "命令面板"}, {"⌘P", "快速切换导图"}, {"⌘⇧F", "搜索所有导图"}, {"⌘N", "新建导图"},
-		{"⌘T", "新建画布"}, {"⌘1–6", "导图 / 大纲 / 看板 / 表格 / 时间线 / 总览"}, {"⌘↩", "开始演说"}, {"⌘?", "快捷键速查"},
+		{"⌘T", "新建画布"}, {"⌘1–5", "导图 / 大纲 / 看板 / 时间线 / 总览"}, {"⌘↩", "开始演说"}, {"⌘?", "快捷键速查"},
 	}},
 	{"编辑节点", [][2]string{
 		{"Tab", "添加子节点"}, {"↩ / ⇧↩", "在下方 / 上方添加同级节点"}, {"Space / F2", "编辑标题"}, {"Delete", "删除"},

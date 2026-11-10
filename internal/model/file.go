@@ -25,8 +25,8 @@ type File struct {
 	Baseline *Baseline `json:"baseline,omitempty"`
 	// Iterations are the periods tasks are planned in, as sprints.
 	Iterations []Iteration `json:"iterations,omitempty"`
-	// Measures are the numbers nodes are measured by, as hours or cost,
-	// in the order they show (Node.Values).
+	// Measures were the numbers nodes were measured by, as hours or cost
+	// (Node.Values), which the app showed before 0.55: kept as written.
 	Measures []string `json:"measures,omitempty"`
 }
 

@@ -53,9 +53,6 @@ func (a *app) libraryColumn(c *ui.Context) {
 			DragWindow().Children(func() {
 			ui.Text(c, "收集").FontSize(textHeadline).FontWeight(700).NoWrap()
 			ui.Text(c, fmt.Sprintf("%d 条灵感和资料", len(l.Clips))).FontSize(textSmall).TextColor(t.TextMuted).NoWrap()
-			if ghostButton(c, "回顾", "灵感的热力图、每日回顾和随机漫步").Clicked() {
-				a.later(a.openMemos)
-			}
 			if a.libWorking != "" {
 				ui.Spinner(c)
 				ui.Text(c, fmt.Sprintf("整理中，还有 %d 条", len(a.libQueue)+1)).FontSize(12).TextColor(t.TextMuted).NoWrap()
@@ -105,6 +102,9 @@ func (a *app) libraryColumn(c *ui.Context) {
 					msg := "还没有资料。在上面记点什么、粘贴链接，或把图片和文件拖进来。\n在任何应用里复制内容后按 " + keyLabel(a.clipKey()) + "，也能直接存到收集。"
 					if len(l.Clips) > 0 || a.libKind == kindMaps {
 						msg = "没有符合条件的资料。"
+					}
+					if a.libReview != reviewOff {
+						msg = "一周以前的灵感会在这里，每天换几条。"
 					}
 					ui.Text(c, msg).FontSize(13).TextColor(t.TextMuted).Wrap().Padding(20, 10)
 				})
@@ -160,7 +160,8 @@ func (a *app) libHits() []library.Hit {
 	e := a.embedder()
 	q := strings.TrimSpace(a.libQuery)
 	a.mapClips()
-	k := libHitsKey{a.libQuery, a.libKind, a.libCat, a.libTag, a.lib, a.lib.Version, e.Name(), a.qvecs[q] != nil, a.mapClipsSig, a.libDay}
+	k := libHitsKey{a.libQuery, a.libKind, a.libCat, a.libTag, a.lib, a.lib.Version, e.Name(), a.qvecs[q] != nil, a.mapClipsSig, a.libDay,
+		a.libReview, a.libWalk, today(a.now())}
 	if a.libHitsFor == k {
 		return a.libHitsList
 	}
@@ -179,9 +180,19 @@ type libHitsKey struct {
 	vector   bool
 	maps     string // the maps' state (mapClips)
 	day      time.Time
+	review   int // the way of looking back, its turn and its day
+	walk     int
+	today    time.Time
 }
 
 func (a *app) searchClips() []library.Hit {
+	if a.libReview != reviewOff { // looking back: a few old notes, whatever is filtered
+		var hits []library.Hit
+		for _, c := range a.reviewClips() {
+			hits = append(hits, library.Hit{Clip: c})
+		}
+		return hits
+	}
 	keep := func(c *library.Clip) bool {
 		switch {
 		case !ofKind(c, a.libKind):
@@ -224,7 +235,7 @@ func (a *app) clipComposer(c *ui.Context) {
 	box.Children(func() {
 		glyph(c, iconPlus, 14, t.TextMuted)
 		in := ui.TextAreaBase(c.Key("lib-draft"), &a.libDraft).Lines(1, 5).
-			Placeholder("记点什么、粘贴链接、图片或文件…").Label("新资料").
+			Placeholder("记点什么，#标签 归类；也可以粘贴链接、图片或文件…").Label("新资料").
 			OnPaste(func(text string) bool { // a picture or files copied: kept at once
 				if text != "" {
 					return false
@@ -276,7 +287,8 @@ func (a *app) dropClips(files []string) {
 	}
 }
 
-// clipFilters are the kinds, categories and the tag shown.
+// clipFilters are what the wall is narrowed by: the kinds, with the ways
+// to look back beside them; then the tags, the most used first.
 func (a *app) clipFilters(c *ui.Context) {
 	t := c.Theme()
 	l := a.lib
@@ -293,7 +305,7 @@ func (a *app) clipFilters(c *ui.Context) {
 					n++
 				}
 			}
-			on := a.libKind == k.kind
+			on := a.libKind == k.kind && a.libReview == reviewOff
 			b := ui.Row(c.Key("kind:"+k.name)).Height(32).Padding(0, 14).Gap(6).Radius(10).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(k.name)
 			bg, ink := tinted(t, k.col)
 			switch {
@@ -306,19 +318,28 @@ func (a *app) clipFilters(c *ui.Context) {
 			}
 			b.Background(bg)
 			if b.Clicked() {
-				a.libKind = k.kind
+				a.libKind, a.libReview = k.kind, reviewOff
 			}
 			b.Children(func() {
 				ui.Text(c, k.name).FontSize(textBody).FontWeight(600).TextColor(ink).PassThrough()
 				ui.Text(c, fmt.Sprint(n)).FontSize(textSmall).TextColor(ink.Alpha(0.75)).PassThrough()
 			})
 		}
+		ui.Spacer(c)
+		// Looking back at the old notes, as flomo does.
+		ghostButton(c, "回顾 ⌄", "回头看以前记下的灵感").Menu(func(m *ui.Menu) {
+			if m.Item("每日回顾：几条以前的灵感，每天换").Checked(a.libReview == reviewDaily).Chosen() {
+				a.libReview, a.libSel = reviewDaily, ""
+			}
+			if m.Item("随机漫步：一次看一条").Checked(a.libReview == reviewWalk).Chosen() {
+				a.libReview, a.libSel = reviewWalk, ""
+			}
+		})
 	})
-	ui.Row(c).Padding(0, 12, 8).Gap(6).Wrap().GapY(6).AlignItems(ui.Center).Children(func() {
-
+	ui.Row(c.Key("lib-tags")).Padding(0, 12, 8).Gap(6).Wrap().GapY(6).AlignItems(ui.Center).Children(func() {
 		chip := func(key, label string, active bool) bool {
 			b := ui.Box(c.Key("cat:"+key)).Padding(4, 10).Radius(999).Cursor(ui.CursorPointer).Label(label)
-			switch { // quiet pills, the one chosen dark, as 灵感's
+			switch { // quiet pills, the one chosen dark
 			case active:
 				b.Background(t.Text.Alpha(0.85))
 			case b.Hovered():
@@ -333,25 +354,72 @@ func (a *app) clipFilters(c *ui.Context) {
 			b.Children(func() { ui.Text(c, label).FontSize(12).TextColor(col).NoWrap() })
 			return b.Clicked()
 		}
-		if chip("", "全部分类", a.libCat == "") {
-			a.libCat = ""
+		if a.libReview != reviewOff {
+			name := map[int]string{reviewDaily: "每日回顾", reviewWalk: "随机漫步"}[a.libReview]
+			if chip("review", name+" ✕", true) {
+				a.libReview = reviewOff
+			}
+			if a.libReview == reviewWalk && softButton(c, "换一条", "再随机看一条").Clicked() {
+				a.libWalk++
+			}
+			return
 		}
-		for _, k := range a.allCategories() {
-			if chip(k.Name, fmt.Sprintf("%s %d", k.Name, k.N), a.libCat == k.Name) {
-				a.libCat = k.Name
+		toggle := func(key, label, cat string) {
+			if chip(key, label, a.libCat == cat) {
+				if a.libCat == cat {
+					a.libCat = ""
+				} else {
+					a.libCat = cat
+				}
 			}
 		}
-		if slices.ContainsFunc(l.Clips, func(c *library.Clip) bool { return c.Starred }) && chip("★", "★ 星标", a.libCat == "★") {
-			a.libCat = "★"
+		if slices.ContainsFunc(l.Clips, func(c *library.Clip) bool { return c.Starred }) {
+			toggle("★", "★ 星标", "★")
 		}
-		if k := len(l.Unorganized()); k > 0 && chip("-", fmt.Sprintf("未整理 %d", k), a.libCat == "-") {
-			a.libCat = "-"
+		if k := len(l.Unorganized()); k > 0 {
+			toggle("-", fmt.Sprintf("未整理 %d", k), "-")
 		}
-		if !a.libDay.IsZero() && tagChip(c.Key("lib-day"), "day", a.libDay.Format("1月2日")+" ✕", true, 12).Tooltip("不再只看这一天").Clicked() {
-			a.libDay = time.Time{}
+		// The tags: the few most used, the rest in a menu.
+		tags := a.clipTags()
+		const shown = 6
+		pick := func(tag string) {
+			if a.libTag == tag {
+				a.libTag = ""
+			} else {
+				a.libTag = tag
+			}
 		}
-		if a.libTag != "" && tagChip(c.Key("lib-tag"), a.libTag, "#"+a.libTag+" ✕", true, 12).Tooltip("不再按这个标签筛选").Clicked() {
+		chosen := a.libTag // as the frame began: a click changes it
+		listed := false
+		for i, tc := range tags {
+			if i == shown {
+				break
+			}
+			listed = listed || tc.name == chosen
+			if chip("tag:"+tc.name, fmt.Sprintf("#%s %d", tc.name, tc.n), chosen == tc.name) {
+				pick(tc.name)
+			}
+		}
+		if chosen != "" && !listed && chip("tag-chosen", "#"+chosen+" ✕", true) {
 			a.libTag = ""
+		}
+		if len(tags) > shown {
+			ghostButton(c, "更多标签 ⌄", fmt.Sprintf("全部 %d 个标签", len(tags))).Menu(func(m *ui.Menu) {
+				for i, tc := range tags {
+					if i < shown {
+						continue
+					}
+					if i == shown+40 {
+						break
+					}
+					if m.Item(fmt.Sprintf("#%s  %d", tc.name, tc.n)).Checked(a.libTag == tc.name).Chosen() {
+						pick(tc.name)
+					}
+				}
+			})
+		}
+		if !a.libDay.IsZero() && chip("day", a.libDay.Format("1月2日")+" ✕", true) {
+			a.libDay = time.Time{}
 		}
 		ui.Spacer(c)
 		a.materialBar(c)
@@ -376,7 +444,7 @@ func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 	memo := isMemo(clip)
 	kcol := clipColor(clip.Kind)
 	row := ui.Column(c).Grow(1).Basis(0).MinWidth(0).Padding(14, 16).Gap(9).Radius(14).Cursor(ui.CursorPointer).
-		Label("资料 " + clip.Label()).Drag(fileDrag{Clip: clip.ID}) // onto a map of the list, or 快捷访问
+		Label("资料 " + clip.Label())
 	// A note is a slip of its color; the others white cards, each kind's
 	// icon in its own.
 	if memo {
@@ -447,9 +515,6 @@ func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 			}
 			ui.Text(c, kind).FontSize(textCaption).FontWeight(600).TextColor(ink).NoWrap()
 			ui.Text(c, clip.Created.Format("1/2 15:04")).FontSize(textCaption).TextColor(t.TextMuted).NoWrap()
-			if clip.Category != "" {
-				ui.Text(c, clip.Category).FontSize(textCaption).TextColor(t.TextMuted).NoWrap()
-			}
 			for i, tag := range clip.Tags {
 				if i == 3 {
 					break
@@ -510,10 +575,6 @@ func (a *app) fileBitmap(path string) *ui.Bitmap {
 
 // clipMenu is the menu of a clip.
 func (a *app) clipMenu(m *ui.Menu, clip *library.Clip) {
-	quick := slices.Contains(a.cfg.Favorites, clipScheme+clip.ID)
-	if m.Item(map[bool]string{true: "从快捷访问移除", false: "加入快捷访问"}[quick]).Chosen() {
-		a.toggleFavorite(clipScheme + clip.ID)
-	}
 	if clip.URL != "" && m.Item("打开链接").Chosen() {
 		a.plat.OpenURL(clip.URL)
 	}
@@ -769,8 +830,7 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 		sectionCard(c, iconText, tileOrange, "内容", nil, func() {
 			text := clip.Text
 			if inlineArea(c.Key("clip-text"), &text, textBody+1, 3, 30, "", "资料内容").Margin(0, -8).Changed() {
-				clip.Text = text
-				a.saveClip(clip)
+				a.setMemoText(clip, text)
 			}
 		})
 	case clip.Kind == library.KindLink:
@@ -815,14 +875,10 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 	a.relatedSection(c, clip)
 }
 
-// allCategories are the categories of the clips and the maps.
-func (a *app) allCategories() []library.Count {
-	return library.CategoriesOf(slices.Concat(a.lib.Clips, a.mapClips()))
-}
-
 // showLibrary opens the library in the main area.
 func (a *app) showLibrary() {
 	a.commitEditIfAny()
 	a.lightbox, a.presenting = "", false
-	a.libOpen, a.libHome, a.tasks.open, a.memos.open = true, false, false, false
+	a.libOpen, a.libHome, a.tasks.open = true, false, false
+	a.libReview = reviewOff
 }

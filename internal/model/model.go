@@ -146,8 +146,8 @@ type Node struct {
 	// Boundary a frame around the node and all below it.
 	Summary  *Mark `json:"summary,omitempty"`
 	Boundary *Mark `json:"boundary,omitempty"`
-	// Values are the node's own measures (File.Measures), by name; a
-	// node's total adds those of the nodes below it (Total).
+	// Values were the node's own measures (File.Measures), by name: kept
+	// as written, and shown nowhere.
 	Values map[string]float64 `json:"values,omitempty"`
 	// Pos is where a floating topic is (Document.Floating).
 	Pos      *Point  `json:"pos,omitempty"`

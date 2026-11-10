@@ -264,29 +264,6 @@ func (a *app) mapFromFolders(dir string) {
 	a.tell(fmt.Sprintf("已按目录添加 %d 个模块", len(nodes)))
 }
 
-// aiMenu lists the actions, for the panel's menu and the node's.
-func (a *app) aiMenu(m *ui.Menu) {
-	if m.Item("生成周报").Chosen() {
-		a.later(func() { a.aiReport(7) })
-	}
-	if m.Item("生成日报").Chosen() {
-		a.later(func() { a.aiReport(1) })
-	}
-	if m.Item("风险扫描").Chosen() {
-		a.later(a.aiRiskScan)
-	}
-	if m.Item("拆解所选任务").Disabled(a.selected == "").Chosen() {
-		a.later(a.aiBreakDown)
-	}
-	m.Separator()
-	if m.Item("从文本生成导图…").Chosen() {
-		a.fromTextOpen = true
-	}
-	if m.Item("从代码仓库生成架构…").Chosen() {
-		a.later(a.askRepo)
-	}
-}
-
 // askRepo asks for a repository's folder and maps it.
 func (a *app) askRepo() {
 	a.plat.PickFolder(func(dir string) {

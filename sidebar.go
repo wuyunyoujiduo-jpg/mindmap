@@ -12,16 +12,14 @@ import (
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
 
-// fileDrag is the value a map's row, or a clip's, carries while dragged
-// onto a folder: one type for both, as an element takes values of one
-// type only (ui.Drop).
+// fileDrag is the value a map's row carries while dragged: onto a folder,
+// another map, or a topic of the canvas.
 type fileDrag struct {
-	Path string // a map's
-	Clip string // or a clip's ID
+	Path string // the map's
 }
 
-// sidebar is the left side: the starred maps, the maps of the folder and
-// its folders, and the tags of the open map.
+// sidebar is the maps' list, beside the rail on the maps' page: the maps
+// of the folder and its folders, those starred first.
 func (a *app) sidebar(c *ui.Context) {
 	t := c.Theme()
 	side := ui.Column(c).Fill()
@@ -82,10 +80,7 @@ func (a *app) sidebar(c *ui.Context) {
 			list := ui.Column(c.Key("side-list")).Padding(0, 6, 12).Gap(2).FillWidth().Label("侧栏").FocusBind(&a.sideFocus, "side")
 			a.sideKeys(list)
 			list.Children(func() {
-				a.favorites(c)
-				a.section(c, "导图", &a.filesOpen, a.dir, func() {
-					a.folderContents(c, a.tree, 0)
-				})
+				a.folderContents(c, a.tree, 0)
 			})
 		})
 		ui.Row(c.Key("side-foot")).Padding(6, 8).Gap(2).AlignItems(ui.Center).BorderWidth(1, 0, 0, 0).BorderColor(hairline(t)).Children(func() {
@@ -123,86 +118,6 @@ func (a *app) pickWorkspace() {
 	})
 }
 
-// section is a heading that shows and hides what fn builds; maps dropped on
-// it move into dropDir, when it is not "".
-func (a *app) section(c *ui.Context, title string, open *bool, dropDir string, fn func()) {
-	t := c.Theme()
-	head := ui.Row(c.Key("section:"+title)).Padding(14, 10, 4).Gap(4).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(title)
-	if dropDir != "" {
-		if draggedOver(head) {
-			head.Background(t.Accent.Alpha(0.15)).Radius(6)
-		}
-		a.dropOnFolder(head, dropDir)
-	}
-	if head.Clicked() {
-		*open = !*open
-	}
-	hovered := head.Hovered()
-	head.Children(func() {
-		ui.Text(c, title).FontSize(11).Bold().TextColor(t.TextMuted.Alpha(0.85)).Grow(1)
-		if hovered || !*open { // as Finder's: the arrow shows when it is wanted
-			arrow := "⌄"
-			if !*open {
-				arrow = "›"
-			}
-			ui.Text(c, arrow).FontSize(12).TextColor(t.TextMuted)
-		}
-	})
-	if *open {
-		fn()
-	}
-}
-
-// favorites is 快捷访问: maps and documents put there to be at hand, by
-// dragging them in or from their menus; where they are stays as it was.
-func (a *app) favorites(c *ui.Context) {
-	t := c.Theme()
-	box := ui.Column(c.Key("quick")).Gap(2).Radius(6)
-	_, over := ui.DragOver[fileDrag](box)
-	if over {
-		box.Background(t.Accent.Alpha(0.12))
-	}
-	box.Tooltip("把导图或文档拖到这里，方便随时切换")
-	if d, ok := ui.Drop[fileDrag](box); ok {
-		a.later(func() { a.addQuick(d) })
-	}
-	box.Children(func() {
-		a.section(c, "快捷访问", &a.favoritesOpen, "", func() {
-			n := 0
-			for _, p := range a.cfg.Favorites {
-				if id, ok := strings.CutPrefix(p, clipScheme); ok {
-					if clip := a.lib.Find(id); clip != nil {
-						a.docRow(c.Key("quick:"+id), clip, 0)
-						n++
-					}
-					continue
-				}
-				if i := slices.IndexFunc(a.files, func(f model.FileInfo) bool { return f.Path == p }); i >= 0 {
-					a.fileRow(c.Key("fav:"+p), a.files[i], 0, true)
-					n++
-				}
-			}
-			if n == 0 && over { // said only while something is dragged over
-				ui.Text(c, "松开，放进快捷访问").FontSize(12).TextColor(t.TextMuted).Margin(2, 12, 4)
-			}
-		})
-	})
-}
-
-// addQuick puts a map or a document dropped in 快捷访问 there.
-func (a *app) addQuick(d fileDrag) {
-	key := d.Path
-	if d.Clip != "" {
-		key = clipScheme + d.Clip
-	}
-	if key == "" || slices.Contains(a.cfg.Favorites, key) {
-		return
-	}
-	a.cfg.Favorites = append(a.cfg.Favorites, key)
-	a.favoritesOpen = true
-	a.cfg.save()
-}
-
 // folderContents shows a folder's folders, then its maps, indented by
 // depth. What was collected is not here: it is 收集's, and on the topics
 // of the maps it was put on.
@@ -210,8 +125,10 @@ func (a *app) folderContents(c *ui.Context, f model.Folder, depth int) {
 	for _, sub := range f.Folders {
 		a.folderRow(c.Key("folder:"+sub.Path), sub, depth)
 	}
-	for _, file := range f.Files {
-		a.fileRow(c.Key("file:"+file.Path), file, depth, false)
+	files := slices.Clone(f.Files) // those starred first, each in its folder
+	slices.SortStableFunc(files, func(x, y model.FileInfo) int { return b2i(a.starred(y.Path)) - b2i(a.starred(x.Path)) })
+	for _, file := range files {
+		a.fileRow(c.Key("file:"+file.Path), file, depth)
 	}
 	if depth == 0 && len(f.Files) == 0 && len(f.Folders) == 0 {
 		ui.Text(c, "还没有导图").FontSize(12).TextColor(c.Theme().TextMuted).Margin(4, 12)
@@ -331,24 +248,18 @@ func (a *app) deleteFolder(dir string) {
 	a.tell("已把文件夹「" + filepath.Base(dir) + "」移到废纸篓")
 }
 
-func (a *app) fileRow(c *ui.Context, f model.FileInfo, depth int, inFavorites bool) {
+func (a *app) fileRow(c *ui.Context, f model.FileInfo, depth int) {
 	t := c.Theme()
 	current := f.Path == a.path && !a.libOpen
-	fav := slices.Contains(a.cfg.Favorites, f.Path)
-	if !inFavorites {
-		a.sideItems = append(a.sideItems, sideItem{path: f.Path})
-	}
+	fav := a.starred(f.Path)
+	a.sideItems = append(a.sideItems, f.Path)
 	row := ui.Row(c).Padding(3, 4, 3, 22+float32(depth)*14).Gap(6).Radius(6).AlignItems(ui.Center).MinHeight(30).
 		Cursor(ui.CursorPointer).Label(f.Name).Drag(fileDrag{Path: f.Path})
-	// A clip, or another map, dropped on a map goes under its center;
-	// in 快捷访问, it joins it instead.
-	over := false
-	if !inFavorites {
-		_, over = ui.DragOver[fileDrag](row)
-		if d, ok := ui.Drop[fileDrag](row); ok && d.Path != f.Path {
-			path := f.Path
-			a.later(func() { a.dropOnMap(path, d) })
-		}
+	// Another map dropped on a map goes under its center.
+	_, over := ui.DragOver[fileDrag](row)
+	if d, ok := ui.Drop[fileDrag](row); ok && d.Path != f.Path {
+		path := f.Path
+		a.later(func() { a.dropOnMap(path, d) })
 	}
 	switch {
 	case over:
@@ -371,7 +282,7 @@ func (a *app) fileRow(c *ui.Context, f model.FileInfo, depth int, inFavorites bo
 	hover := row.Hovered()
 	row.ContextMenu(func(m *ui.Menu) { a.mapMenu(m, path) })
 	row.Children(func() {
-		if a.renaming == path && !inFavorites {
+		if a.renaming == path {
 			a.renameInput(c)
 			return
 		}
@@ -380,7 +291,7 @@ func (a *app) fileRow(c *ui.Context, f model.FileInfo, depth int, inFavorites bo
 		if current {
 			text.Bold()
 		}
-		if fav && !inFavorites && !hover {
+		if fav && !hover {
 			ui.Text(c, "★").FontSize(11).TextColor(ui.Hex("#D4A836")).Margin(0, 6, 0, 0)
 		}
 		a.rowMore(c, hover, "导图菜单", func(m *ui.Menu) { a.mapMenu(m, path) })
@@ -389,9 +300,9 @@ func (a *app) fileRow(c *ui.Context, f model.FileInfo, depth int, inFavorites bo
 
 // mapMenu is what can be done with a map of the list.
 func (a *app) mapMenu(m *ui.Menu, path string) {
-	label := "加入快捷访问"
-	if slices.Contains(a.cfg.Favorites, path) {
-		label = "从快捷访问移除"
+	label := "加星标（排在前面）"
+	if a.starred(path) {
+		label = "取消星标"
 	}
 	if m.Item(label).Chosen() {
 		a.toggleFavorite(path)
@@ -525,20 +436,30 @@ func (a *app) newFolder(dir string) {
 		return
 	}
 	a.setFolderOpen(dir, true)
-	a.filesOpen = true
 	a.refreshFiles()
 	a.renaming, a.renameText = path, name
 	a.tell("已新建文件夹「" + name + "」，输入名字后回车")
 }
 
+// toggleFavorite stars a map, or takes its star off: those starred come
+// first, in their folder and where maps are switched.
 func (a *app) toggleFavorite(path string) {
 	if i := slices.Index(a.cfg.Favorites, path); i >= 0 {
 		a.cfg.Favorites = slices.Delete(a.cfg.Favorites, i, i+1)
 	} else {
 		a.cfg.Favorites = append(a.cfg.Favorites, path)
-		a.favoritesOpen = true
 	}
 	a.cfg.save()
+}
+
+// starred tells whether a map is starred.
+func (a *app) starred(path string) bool { return slices.Contains(a.cfg.Favorites, path) }
+
+func b2i(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // tagList is the section of the tags, shared by all maps: a row each with

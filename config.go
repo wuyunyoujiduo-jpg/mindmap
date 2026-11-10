@@ -13,8 +13,8 @@ type config struct {
 	File string `json:"file"` // the map open last
 	// ShowTree shows the maps' folders beside the rail (rail.go).
 	ShowTree bool `json:"showTree,omitempty"`
-	// Favorites are 快捷访问, first in the sidebar, in the order put there:
-	// maps by their paths, documents as "clip:<id>".
+	// Favorites are the maps starred, by their paths: first in their
+	// folder and where maps are switched.
 	Favorites []string `json:"favorites,omitempty"`
 	// OpenFolders are the folders of the sidebar shown open, by their
 	// paths; the others show closed.
@@ -41,8 +41,6 @@ type config struct {
 	CaptureKey string `json:"captureKey,omitempty"`
 	// NoTray hides the menu bar icon.
 	NoTray bool `json:"noTray,omitempty"`
-	// HideMeasures keeps the measures' totals off the map.
-	HideMeasures bool `json:"hideMeasures,omitempty"`
 	// GitHubToken reads the issues of private repositories; GitHubAPI is
 	// the API's address, for GitHub Enterprise ("" is github.com's).
 	GitHubToken string `json:"githubToken,omitempty"`

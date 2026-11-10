@@ -961,11 +961,7 @@ func (a *app) aiPanel(c *ui.Context) {
 			if len(ai.msgs) > 0 && iconButton(c, iconPlus, "新对话", "新对话", 28, !ai.busy).Clicked() && !ai.busy {
 				a.newChat()
 			}
-			iconButton(c, iconMore, "AI 菜单", "周报、风险扫描、拆解任务、从文本或代码仓库生成，以及设置", 28, !ai.busy).Menu(func(m *ui.Menu) {
-				if !a.libOpen {
-					a.aiMenu(m)
-					m.Separator()
-				}
+			iconButton(c, iconMore, "AI 菜单", "以前的对话、AI 设置", 28, !ai.busy).Menu(func(m *ui.Menu) {
 				a.chatsMenu(m)
 				m.Separator()
 				if m.Item("AI 设置").Chosen() {
@@ -989,21 +985,27 @@ func (a *app) aiPanel(c *ui.Context) {
 				if clip := a.lib.Find(a.libSel); clip != nil {
 					asks = append([]string{"总结选中的这条资料，并找找收集里相关的内容"}, asks...)
 				}
-				for _, s := range asks {
-					if ui.Button(c.Key(s), s).FillWidth().Clicked() {
-						ai.draft = s
-						a.aiSend()
+				ui.Column(c).Gap(2).Margin(4, -6, 0).Children(func() {
+					sectionHeader(c, "常用").Margin(0, 10, 4)
+					for _, act := range a.collectActions() {
+						if listRow(c.Key(act.label), act.icon, act.label).Clicked() {
+							a.later(act.run)
+						}
 					}
-				}
+					sectionHeader(c, "试着问").Margin(10, 10, 4)
+					for _, s := range asks {
+						if listRow(c.Key(s), iconSparkle, s).Clicked() {
+							ai.draft = s
+							a.aiSend()
+						}
+					}
+				})
 			} else if len(ai.msgs) == 0 {
 				ui.Text(c, "问问导图里的内容，或让 AI 帮你整理、拆分任务、补充备注。AI 提出的修改要你确认后才会应用。").
 					FontSize(12).TextColor(t.TextMuted).Wrap()
-				actions := []struct {
-					icon  icon
-					label string
-					run   func()
-				}{
+				actions := []aiAction{
 					{iconPencil, "生成本周周报", func() { a.aiReport(7) }},
+					{iconPencil, "生成今天的日报", func() { a.aiReport(1) }},
 					{iconTarget, "风险扫描", a.aiRiskScan},
 					{iconCheck, "把选中的节点拆解成任务", a.aiBreakDown},
 					{iconMap, "从文本生成导图…", func() { a.fromTextOpen = true }},
