@@ -412,7 +412,7 @@ func (a *app) settingsView(c *ui.Context) {
 		// The parts on the left, as a list; the one chosen on the right.
 		ui.Row(c).Gap(22).Width(min(820, w-80)).AlignItems(ui.Start).Children(func() {
 			ui.Column(c.Key("settings-tabs")).Width(160).Shrink(0).Gap(2).Children(func() {
-				ui.Text(c, "设置").FontSize(textPage).FontWeight(700).Margin(2, 12, 16)
+				ui.Text(c, "设置").FontSize(textPage).FontWeight(700).LetterSpacing(titleTrack).Margin(2, 12, 16)
 				for i, name := range tabs {
 					on := i == a.settingsTab
 					row := ui.Row(c.Key("settings-tab:"+name)).Height(38).Padding(0, 14).Radius(radiusRow).AlignItems(ui.Center).

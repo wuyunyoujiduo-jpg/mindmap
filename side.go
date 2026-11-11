@@ -51,9 +51,11 @@ func sideRow(c *ui.Context, key, name, count string, on bool, lead func()) ui.El
 		txt := ui.Text(c, name).FontSize(textBody + 0.5).SingleLine().Grow(1).Shrink(1).MinWidth(0).PassThrough()
 		if on {
 			txt.FontWeight(600)
+		} else if !row.Hovered() {
+			txt.TextColor(ink2(t)) // read second, until it is chosen or pointed at
 		}
 		if count != "" && count != "0" {
-			ui.Text(c, count).FontSize(textCaption).TextColor(t.TextMuted).PassThrough()
+			ui.Text(c, count).FontSize(textCaption).TextColor(faint(t)).FontFeatures("tnum").PassThrough()
 		}
 	})
 	return row
@@ -61,7 +63,7 @@ func sideRow(c *ui.Context, key, name, count string, on bool, lead func()) ui.El
 
 // sideHead is the small name of a part of the left column.
 func sideHead(c *ui.Context, text string) {
-	ui.Text(c, text).FontSize(textCaption).FontWeight(500).TextColor(c.Theme().TextMuted).Margin(14, 10, 6)
+	ui.Text(c, text).FontSize(textCaption).FontWeight(600).LetterSpacing(0.4).TextColor(faint(c.Theme())).Margin(14, 10, 6)
 }
 
 // sideLine is the thin line between two parts of the left column.

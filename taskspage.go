@@ -426,7 +426,7 @@ func (a *app) tasksHead(c *ui.Context, all []taskItem) {
 				name = mapName(a.tasks.onMap)
 			}
 			ui.Row(c).Gap(10).AlignItems(ui.End).Children(func() {
-				ui.Text(c, name).FontSize(textPage + 2).FontWeight(700).LineHeight(1.2).NoWrap()
+				ui.Text(c, name).FontSize(textPage + 2).FontWeight(700).LetterSpacing(titleTrack).LineHeight(1.2).NoWrap()
 				ui.Text(c, fmt.Sprintf("%d月%d日 %s", now.Month(), now.Day(), weekdays[now.Weekday()])).FontSize(textSmall).TextColor(th.TextMuted).Margin(0, 0, 3).NoWrap()
 			})
 			ui.Text(c, fmt.Sprintf("%d 件要做，做完 %d 件，%d 条等着归位", len(a.dueToday(now)), len(a.doneToday(now)), len(a.waiting()))).
@@ -975,7 +975,8 @@ func (a *app) taskRow(c *ui.Context, it taskItem, overdue bool) {
 		a.later(func() { a.showTask(it) })
 	}
 	if a.tasks.sel == it.key() {
-		row.Background(chosen(t))
+		// Chosen, it is a round block; its line goes, keeping its room.
+		row.Background(chosen(t)).Radius(radiusRow).BorderColor(t.Text.Alpha(0))
 	}
 	row.ContextMenu(func(m *ui.Menu) { a.taskMenu(m, it) })
 	row.Children(func() {
