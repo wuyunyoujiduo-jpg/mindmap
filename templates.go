@@ -190,7 +190,7 @@ func (a *app) templatesView(c *ui.Context) {
 		ui.Column(c).Gap(14).Width(min(720, w-80)).Children(func() {
 			ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
 				ui.Text(c, "从模板新建").FontSize(17).Bold().Grow(1)
-				if a.file != nil && ui.Button(c, "把当前导图存为模板").Clicked() {
+				if a.file != nil && button(c, "把当前导图存为模板").Clicked() {
 					a.saveAsTemplate()
 				}
 				if iconButton(c, iconClose, "关闭", "关闭（Esc）", 28, true).Clicked() {

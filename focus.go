@@ -102,7 +102,7 @@ func (a *app) focusBar(c *ui.Context) {
 				}
 				ui.Text(c, "›").FontSize(12).TextColor(t.TextMuted)
 			}
-			if ui.Button(c, "退出").Tooltip("显示整张导图 Esc").FontSize(12).Clicked() {
+			if button(c, "退出").Tooltip("显示整张导图 Esc").FontSize(12).Clicked() {
 				a.later(func() { a.focusOn("") })
 			}
 		})
@@ -242,7 +242,7 @@ func (a *app) multiPanel(c *ui.Context) {
 		ui.Field(c, "任务状态", func() {
 			ui.Row(c).Wrap().Gap(6).Children(func() {
 				for _, s := range model.Statuses {
-					if ui.Button(c.Key("status:"+string(s)), s.Label()).Clicked() {
+					if button(c.Key("status:"+string(s)), s.Label()).Clicked() {
 						a.setStatusAll(s)
 					}
 				}
@@ -262,13 +262,13 @@ func (a *app) multiPanel(c *ui.Context) {
 			})
 		})
 		ui.Row(c).Gap(8).Wrap().Children(func() {
-			if ui.Button(c, "复制 ⌘C").Clicked() {
+			if button(c, "复制 ⌘C").Clicked() {
 				a.copyNodes(false)
 			}
-			if ui.Button(c, "剪切 ⌘X").Clicked() {
+			if button(c, "剪切 ⌘X").Clicked() {
 				a.copyNodes(true)
 			}
-			if ui.Button(c, "删除").TextColor(t.Danger).Clicked() {
+			if button(c, "删除").TextColor(t.Danger).Clicked() {
 				a.later(a.deleteSelection)
 			}
 		})

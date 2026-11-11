@@ -86,7 +86,7 @@ func (a *app) mcpView(c *ui.Context) {
 					ui.Box(c).Padding(8, 10).Radius(6).Background(t.Surface).Border(1, t.Border).FillWidth().Children(func() {
 						ui.Text(c, body).Font("monospace").FontSize(12).Wrap().Selectable()
 					})
-					if ui.Button(c, copyLabel).Clicked() {
+					if button(c, copyLabel).Clicked() {
 						a.plat.CopyText(body)
 						a.tell("已复制")
 					}

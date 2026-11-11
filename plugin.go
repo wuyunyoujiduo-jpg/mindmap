@@ -223,10 +223,10 @@ func (a *app) pluginSettings(c *ui.Context) {
 					label += fmt.Sprintf("（版本 %d）", m.Version)
 				}
 				ui.Text(c, label).FontSize(12).TextColor(t.Success).Grow(1)
-				if ui.Button(c, "检查更新").FontSize(12).Clicked() {
+				if button(c, "检查更新").FontSize(12).Clicked() {
 					a.checkPluginUpdate()
 				}
-				if ui.Button(c, "删除").FontSize(12).Tooltip("删除后收集只按关键词搜索，可以随时再下载").Clicked() {
+				if button(c, "删除").FontSize(12).Tooltip("删除后收集只按关键词搜索，可以随时再下载").Clicked() {
 					a.removePlugin()
 				}
 			})
@@ -313,7 +313,7 @@ func (a *app) pluginBanner(c *ui.Context) {
 		if inkButton(c, "下载", true).Clicked() {
 			a.downloadPlugin()
 		}
-		if ui.Button(c, "不用了").Tooltip("以后可以在设置 → 资料整理里下载").Clicked() {
+		if button(c, "不用了").Tooltip("以后可以在设置 → 资料整理里下载").Clicked() {
 			a.cfg.PluginDeclined = true
 			a.cfg.save()
 		}

@@ -766,6 +766,9 @@ func emptyNote(c *ui.Context, text string) {
 func modal(c *ui.Context, key string, open *bool, fn func()) ui.Element {
 	t := c.Theme()
 	m := ui.Modal(c.Key(key), open, fn).Radius(20)
+	if key == "settings" {
+		m.Background(ground(t)) // a page of white cards (field)
+	}
 	if t.Dark {
 		return m.Shadow(0, 0, 0, 1, ui.RGBA(255, 255, 255, 0.08)).Shadow(0, 30, 70, -20, ui.RGBA(0, 0, 0, 0.7))
 	}
@@ -782,4 +785,19 @@ func sheet(c *ui.Context, key string, width float32, body func()) {
 		Background(cardColor(t)), t).
 		Transition(ui.ElementTransition{Duration: 360 * time.Millisecond, Ease: easeDetent, Enter: &ui.Motion{X: 56},
 			Exit: &ui.Motion{X: 56}, ExitDuration: 200 * time.Millisecond}).Children(body)
+}
+
+// field is a part of the settings: its name, small, over a white card
+// that holds what body builds.
+func field(c *ui.Context, title string, body func()) ui.Element {
+	t := c.Theme()
+	return ui.Column(c.Key("field:" + title)).Gap(8).FillWidth().Children(func() {
+		ui.Text(c, title).FontSize(textSmall).FontWeight(600).TextColor(t.Text.MixOklab(t.TextMuted, 0.45)).Margin(0, 6)
+		raise(ui.Column(c.Key("card")).Padding(16, 18).Gap(12).Radius(radiusCard).FillWidth(), t).Children(body)
+	})
+}
+
+// button is the system's button in the app's look: a pill.
+func button(c *ui.Context, text string) ui.Element {
+	return ui.Button(c, text).Radius(radiusPill).Padding(0, 14).MinHeight(30)
 }

@@ -401,6 +401,7 @@ func (a *app) openSettings() {
 // menu bar icon, reminders and the editor of code links.
 func (a *app) settingsView(c *ui.Context) {
 	t := c.Theme()
+	// On the ground, as a page: its parts are white cards.
 	modal(c, "settings", &a.settingsOpen, func() {
 		w, h := c.Size()
 		tabs := []string{"通用", "资料整理", "备份", "同步", "连接"}
@@ -409,25 +410,30 @@ func (a *app) settingsView(c *ui.Context) {
 		}
 		a.settingsTab = min(a.settingsTab, len(tabs)-1)
 		// The parts on the left, as a list; the one chosen on the right.
-		ui.Row(c).Gap(24).Width(min(780, w-80)).AlignItems(ui.Start).Children(func() {
-			ui.Column(c.Key("settings-tabs")).Width(150).Shrink(0).Gap(1).Children(func() {
-				ui.Text(c, "设置").FontSize(textHeadline).FontWeight(600).Margin(0, 10, 14)
+		ui.Row(c).Gap(22).Width(min(820, w-80)).AlignItems(ui.Start).Children(func() {
+			ui.Column(c.Key("settings-tabs")).Width(160).Shrink(0).Gap(2).Children(func() {
+				ui.Text(c, "设置").FontSize(textPage).FontWeight(700).Margin(2, 12, 16)
 				for i, name := range tabs {
-					row := ui.Row(c.Key("settings-tab:"+name)).Height(34).Padding(0, 12).Radius(radiusRow).AlignItems(ui.Center).
+					on := i == a.settingsTab
+					row := ui.Row(c.Key("settings-tab:"+name)).Height(38).Padding(0, 14).Radius(radiusRow).AlignItems(ui.Center).
 						FillWidth().Cursor(ui.CursorPointer).Label(name).Background(t.Text.Alpha(0)).Transition(easeLook)
-					switch {
-					case i == a.settingsTab:
-						row.Background(chosen(t))
-					case row.Hovered():
+					if !on && row.Hovered() {
 						row.Background(t.Text.Alpha(0.05))
 					}
 					if row.Clicked() {
 						a.settingsTab = i
 					}
+					press(row, 0.975)
 					row.Children(func() {
-						txt := ui.Text(c, name).FontSize(textBody).PassThrough()
-						if i == a.settingsTab {
+						if on {
+							slidePill(c, "settings-tabs", radiusRow)
+							row.ZIndex(-1) // under the others, which the pill slides behind
+						}
+						txt := ui.Text(c, name).FontSize(15).PassThrough()
+						if on {
 							txt.FontWeight(600)
+						} else {
+							txt.TextColor(t.Text.MixOklab(t.TextMuted, 0.3))
 						}
 					})
 				}
@@ -441,35 +447,37 @@ func (a *app) settingsView(c *ui.Context) {
 				})
 				// The same height for every tab, so that the window does not
 				// jump when switching; a long tab scrolls.
-				ui.Scroll(c.Key(fmt.Sprint("settings", a.settingsTab))).Gap(16).Height(max(min(560, h-200), 200)).Padding(0, 10, 0, 0).Label("设置内容").Children(func() {
+				ui.Scroll(c.Key(fmt.Sprint("settings", a.settingsTab))).Gap(20).Height(max(min(580, h-190), 200)).Padding(2, 12, 24, 2).Margin(0, -2).Label("设置内容").Children(func() {
 					switch tabs[a.settingsTab] {
 					case "通用":
 						a.generalSettings(c)
 					case "资料整理":
-						auto := !a.cfg.LibraryManual
-						switchRow(c, &auto, "自动整理资料", "新收藏的资料由 AI 自动起标题、加说明、写摘要、分类、打标签，并生成同义词和分析（用 AI 助手的 API Key，按用量计费）", func() {
-							a.cfg.LibraryManual = !auto
-							a.cfg.save()
+						field(c, "AI 整理", func() {
+							auto := !a.cfg.LibraryManual
+							switchRow(c, &auto, "自动整理资料", "新收藏的资料由 AI 自动起标题、加说明、写摘要、分类、打标签，并生成同义词和分析（用 AI 助手的 API Key，按用量计费）", func() {
+								a.cfg.LibraryManual = !auto
+								a.cfg.save()
+							})
 						})
-						a.embedSettings(c)
+						field(c, "检索", func() { a.embedSettings(c) })
 					case "备份":
 						a.backupSettings(c)
 					case "同步":
 						a.syncSettings(c)
 					case "连接":
-						ui.Field(c, "AI 助手", func() {
+						field(c, "AI 助手", func() {
 							ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 								ui.Text(c, "服务商、API Key 和模型在 AI 助手面板的「⋯ → AI 设置」里。当前："+providerModelName(a.cfg)).FontSize(12).TextColor(t.TextMuted).Wrap().Grow(1)
-								if ui.Button(c, "打开 AI 设置").Clicked() {
+								if button(c, "打开 AI 设置").Clicked() {
 									a.settingsOpen, a.aiOpen, a.ai.settings = false, true, true
 									a.loadKeyDrafts()
 								}
 							})
 						})
-						ui.Field(c, "AI 编程工具（MCP）", func() {
+						field(c, "AI 编程工具（MCP）", func() {
 							ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 								ui.Text(c, "让 Claude Code、Cursor 等读写导图、检索收集的资料").FontSize(12).TextColor(t.TextMuted).Grow(1)
-								if ui.Button(c, "连接说明…").Clicked() {
+								if button(c, "连接说明…").Clicked() {
 									a.settingsOpen, a.mcpOpen = false, true
 								}
 							})
@@ -490,8 +498,8 @@ func switchRow(c *ui.Context, on *bool, label, text string, changed func()) {
 			changed()
 		}
 		ui.Column(c).Gap(2).Grow(1).Children(func() {
-			ui.Text(c, label).FontSize(13).Bold()
-			ui.Text(c, text).FontSize(12).TextColor(c.Theme().TextMuted).Wrap()
+			ui.Text(c, label).FontSize(textBody).FontWeight(600)
+			ui.Text(c, text).FontSize(textSmall).TextColor(c.Theme().TextMuted).Wrap()
 		})
 	})
 }
@@ -499,11 +507,7 @@ func switchRow(c *ui.Context, on *bool, label, text string, changed func()) {
 // generalSettings are the shortcuts, the menu bar icon and the reminders.
 func (a *app) generalSettings(c *ui.Context) {
 	t := c.Theme()
-	a.iconSettings(c)
-	a.groundSettings(c)
-	a.updateSettings(c)
-	a.shotSettings(c)
-	ui.Field(c, "全局快捷键", func() {
+	field(c, "全局快捷键", func() {
 		ui.Column(c).Gap(10).Children(func() {
 			rows := []struct {
 				name, what, value, def string
@@ -531,18 +535,24 @@ func (a *app) generalSettings(c *ui.Context) {
 			ui.Text(c, "在任何应用里都能用。点快捷键框，再按下新的组合键；Esc 取消。").FontSize(12).TextColor(t.TextMuted).Wrap()
 		})
 	})
-	tray := !a.cfg.NoTray
-	switchRow(c, &tray, "菜单栏图标", "显示今天到期和已逾期的任务数，点开列出任务、快速记录、收藏剪贴板", func() {
-		a.cfg.NoTray = !tray
-		a.cfg.save()
-		a.plat.SetTray(tray)
+	field(c, "菜单栏和提醒", func() {
+		tray := !a.cfg.NoTray
+		switchRow(c, &tray, "菜单栏图标", "显示今天到期和已逾期的任务数，点开列出任务、快速记录、收藏剪贴板", func() {
+			a.cfg.NoTray = !tray
+			a.cfg.save()
+			a.plat.SetTray(tray)
+		})
+		on := !a.cfg.NoReminders
+		switchRow(c, &on, "到期提醒", "任务今天到期或已逾期时，每天发一次系统通知", func() {
+			a.cfg.NoReminders = !on
+			a.cfg.save()
+		})
+		if ui.Link(c, "重新查看新手引导", "").FontSize(12).Clicked() {
+			a.settingsOpen, a.tourStep = false, 1
+		}
 	})
-	on := !a.cfg.NoReminders
-	switchRow(c, &on, "到期提醒", "任务今天到期或已逾期时，每天发一次系统通知", func() {
-		a.cfg.NoReminders = !on
-		a.cfg.save()
-	})
-	if ui.Link(c, "重新查看新手引导", "").FontSize(12).Clicked() {
-		a.settingsOpen, a.tourStep = false, 1
-	}
+	a.shotSettings(c)
+	a.updateSettings(c)
+	a.groundSettings(c)
+	a.iconSettings(c)
 }

@@ -343,14 +343,14 @@ func (a *app) projectSection(c *ui.Context) {
 			}
 			ui.Text(c, dir).FontSize(12).TextColor(t.TextMuted).Wrap()
 			ui.Row(c).Gap(6).Children(func() {
-				if ui.Button(c, "选择…").FontSize(12).Clicked() {
+				if button(c, "选择…").FontSize(12).Clicked() {
 					a.plat.PickFolder(func(dir string) {
 						if dir != "" && a.file != nil {
 							a.mutate("", func() { a.file.Project = dir })
 						}
 					})
 				}
-				if a.file.Project != "" && ui.Button(c, "清除").FontSize(12).Clicked() {
+				if a.file.Project != "" && button(c, "清除").FontSize(12).Clicked() {
 					a.mutate("", func() { a.file.Project = "" })
 				}
 			})
@@ -364,7 +364,7 @@ func (a *app) projectSection(c *ui.Context) {
 		}
 		ui.Row(c).Gap(6).Wrap().Children(func() {
 			for _, e := range editors {
-				b := ui.Button(c.Key("editor:"+e.id), e.name).FontSize(12)
+				b := button(c.Key("editor:"+e.id), e.name).FontSize(12)
 				if e.id == cur {
 					b.Background(t.Accent).TextColor(t.AccentText)
 				}

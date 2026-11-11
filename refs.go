@@ -308,7 +308,7 @@ func (a *app) mapMaterialSection(c *ui.Context) {
 			if len(gone) > 0 {
 				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 					ui.Text(c, fmt.Sprintf("%d 个链接指向已不存在的资料或节点", len(gone))).FontSize(12).TextColor(t.Danger).Grow(1).Wrap()
-					if ui.Button(c, "清理").FontSize(11).Tooltip("从节点上去掉这些失效的链接（可撤销）").Clicked() {
+					if button(c, "清理").FontSize(11).Tooltip("从节点上去掉这些失效的链接（可撤销）").Clicked() {
 						dead := map[string]bool{}
 						for _, l := range gone {
 							dead[l] = true

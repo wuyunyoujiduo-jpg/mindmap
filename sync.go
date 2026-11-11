@@ -150,7 +150,7 @@ func (a *app) syncSettings(c *ui.Context) {
 		a.cfg.save()
 		a.syncErr, a.syncCheck, a.syncTried = "", "", time.Time{}
 	}
-	ui.Field(c, "GitHub 仓库", func() {
+	field(c, "GitHub 仓库", func() {
 		ui.Column(c).Gap(6).Children(func() {
 			in := ui.TextInput(c.Key("sync-repo"), &a.syncDrafts[0]).Placeholder("用户名/仓库名，如 yourname/mymind-data").Label("同步仓库")
 			if in.Submitted() || in.PressedOutside() {
@@ -164,7 +164,7 @@ func (a *app) syncSettings(c *ui.Context) {
 			})
 		})
 	})
-	ui.Field(c, "授权令牌", func() {
+	field(c, "授权令牌", func() {
 		ui.Column(c).Gap(6).Children(func() {
 			in := ui.TextInput(c.Key("sync-token"), &a.syncDrafts[1]).Password().Placeholder("github_pat_…").Label("同步令牌")
 			if in.Submitted() || in.PressedOutside() {
@@ -180,7 +180,7 @@ func (a *app) syncSettings(c *ui.Context) {
 		})
 	})
 	ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-		if ui.Button(c, "检查连接").Disabled(a.syncDrafts[0] == "" || a.syncDrafts[1] == "").Clicked() {
+		if button(c, "检查连接").Disabled(a.syncDrafts[0] == "" || a.syncDrafts[1] == "").Clicked() {
 			saveDrafts()
 			a.syncCheck = "正在检查…"
 			cfg, check := a.syncConfig(), a.syncCheckRepo

@@ -69,12 +69,12 @@ func (a *app) tourView(c *ui.Context) {
 					a.endTour()
 				}
 				ui.Spacer(c)
-				if ui.Button(c, card.action).Clicked() {
+				if button(c, card.action).Clicked() {
 					run := card.run
 					a.endTour()
 					a.later(func() { run(a) })
 				}
-				if a.tourStep > 1 && ui.Button(c, "上一步").Clicked() {
+				if a.tourStep > 1 && button(c, "上一步").Clicked() {
 					a.tourStep--
 				}
 				next := "下一步"

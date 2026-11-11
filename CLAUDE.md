@@ -46,7 +46,9 @@ by AI, and an AI assistant.
   as they are written, a picture, bold, lists; a reference is kept in
   the note's text as `<clip:id>` and shown under its words, `noteText`); other keys are a
   shade of the ground (`key`, `textKey`). A part of a page is a small
-  heading (`trayHead`) over a card. There is no sidebar: the app has three
+  heading (`trayHead`) over a card; the settings are so too, on the ground
+  (`field`, in a `modal`), and the system's buttons are pills (`button`).
+  There is no sidebar: the app has three
   places, 今天, 项目 and 收集 (`places.go`), a switch of them at the top of
   the pages of lists (`placesBar`, with the search of everything and the
   settings); 项目 is the maps as cards, by folder (`projectsView`), and a

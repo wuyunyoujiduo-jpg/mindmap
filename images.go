@@ -275,7 +275,7 @@ func (a *app) imageSection(c *ui.Context, n *model.Node) {
 						}
 					})
 				}
-				if n.Image != nil && ui.Button(c, "删除图片").TextColor(t.Danger).Clicked() {
+				if n.Image != nil && button(c, "删除图片").TextColor(t.Danger).Clicked() {
 					a.removeImage(n)
 				}
 			})

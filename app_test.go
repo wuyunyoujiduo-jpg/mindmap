@@ -2530,8 +2530,6 @@ func TestTrayAndSettings(t *testing.T) {
 	// Settings: the capture shortcut.
 	a.settingsOpen = true
 	tt.Frame()
-	tt.Scroll(720, 400, 0, 160) // the shortcuts are under the icon and the ground
-	tt.Frame()
 	if err := tt.Click("快速记录快捷键"); err != nil {
 		t.Fatal(err)
 	}
@@ -2926,6 +2924,8 @@ func TestChooseAppIcon(t *testing.T) {
 	fp := a.plat.(*fakePlatform)
 	a.openSettings()
 	tt.Frame()
+	tt.Scroll(720, 400, 0, 2000) // the icons are the last part
+	tt.Frame()
 	snapshot(t, tt, "settings-icon")
 	if err := tt.Click("图标 知识星图"); err != nil {
 		t.Fatal(err)
@@ -2953,6 +2953,8 @@ func TestUpdateSettings(t *testing.T) {
 	a, tt := newTestApp(t)
 	fp := a.plat.(*fakePlatform)
 	a.openSettings()
+	tt.Frame()
+	tt.Scroll(720, 400, 0, 420) // the version is under the shortcuts and the screenshots
 	tt.Frame()
 	if !tt.HasText(appName + " " + version) {
 		t.Fatalf("no version: %q", tt.Texts())

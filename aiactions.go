@@ -286,10 +286,10 @@ func (a *app) fromTextView(c *ui.Context) {
 			ui.TextArea(c.Key("text"), &a.fromText).Lines(10, int(max(10, (h-320)/18))).Placeholder("粘贴文本…").AutoFocus().FillWidth()
 			ui.Row(c).Gap(8).Children(func() {
 				ui.Spacer(c)
-				if ui.Button(c, "取消").Clicked() {
+				if button(c, "取消").Clicked() {
 					a.fromTextOpen = false
 				}
-				if ui.Button(c, "按缩进直接转换").Disabled(strings.TrimSpace(a.fromText) == "").Clicked() {
+				if button(c, "按缩进直接转换").Disabled(strings.TrimSpace(a.fromText) == "").Clicked() {
 					text := a.fromText
 					a.fromTextOpen, a.fromText = false, ""
 					a.later(func() {

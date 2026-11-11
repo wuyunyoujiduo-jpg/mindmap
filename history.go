@@ -61,10 +61,10 @@ func (a *app) conflictBar(c *ui.Context) {
 	ui.Row(c.Key("conflict")).Padding(8, 12).Gap(10).AlignItems(ui.Center).Background(t.Warning.Alpha(0.15)).Children(func() {
 		ui.Text(c, "这个导图同时被其他程序（比如 AI）修改了，你也有未保存的修改。选择保留哪一份，另一份会存进历史版本。").
 			FontSize(12).Wrap().Grow(1)
-		if ui.Button(c, "载入外部版本").Clicked() {
+		if button(c, "载入外部版本").Clicked() {
 			a.resolveConflict(false)
 		}
-		if ui.Button(c, "保留我的版本").Clicked() {
+		if button(c, "保留我的版本").Clicked() {
 			a.resolveConflict(true)
 		}
 	})
@@ -81,13 +81,13 @@ func (a *app) brokenBar(c *ui.Context) {
 	ui.Row(c.Key("broken")).Padding(8, 12).Gap(10).AlignItems(ui.Center).Background(t.Danger.Alpha(0.12)).Children(func() {
 		ui.Text(c, "「"+mapName(path)+"」无法打开（"+a.brokenErr+"）。可以从最近一个能打开的历史版本恢复，损坏的文件会另存一份。").
 			FontSize(12).Wrap().Grow(1)
-		if ui.Button(c, "从历史版本恢复").Clicked() {
+		if button(c, "从历史版本恢复").Clicked() {
 			a.later(func() { a.restoreBroken(path) })
 		}
-		if ui.Button(c, "在 Finder 中显示").Clicked() {
+		if button(c, "在 Finder 中显示").Clicked() {
 			a.plat.ShowInFolder(path)
 		}
-		if ui.Button(c, "忽略").Clicked() {
+		if button(c, "忽略").Clicked() {
 			a.broken = ""
 		}
 	})
@@ -269,7 +269,7 @@ func (a *app) historyView(c *ui.Context) {
 				})
 				ui.Row(c).Gap(8).Children(func() {
 					f := a.historyFile
-					if ui.Button(c, "恢复到这个版本").Clicked() {
+					if button(c, "恢复到这个版本").Clicked() {
 						a.later(func() { a.restoreVersion(f) })
 					}
 					ui.Text(c, "恢复后可以撤销；恢复前的内容也会存为一个版本。").FontSize(11).TextColor(t.TextMuted).Wrap().Grow(1)

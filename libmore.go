@@ -180,7 +180,7 @@ func (a *app) nodeRelatedSection(c *ui.Context, n *model.Node) {
 			}
 		})
 	}
-	ui.Field(c, "可能相关", func() {
+	field(c, "可能相关", func() {
 		ui.Column(c).Gap(4).Children(func() {
 			for _, h := range clips {
 				clip := h.Clip
@@ -274,7 +274,7 @@ func (a *app) clipPlacesSection(c *ui.Context, clip *library.Clip) {
 			for i, p := range places {
 				ui.Row(c.Key(fmt.Sprint("place", i))).Gap(6).AlignItems(ui.Center).Children(func() {
 					ui.Text(c, "建议："+p.title).FontSize(12).Grow(1).Shrink(1).MinWidth(0).MaxLines(2)
-					if ui.Button(c.Key("attach"), "挂上").FontSize(11).Tooltip("把这条资料挂到「" + p.title + "」").Clicked() {
+					if button(c.Key("attach"), "挂上").FontSize(11).Tooltip("把这条资料挂到「" + p.title + "」").Clicked() {
 						p := p
 						a.later(func() {
 							if err := a.attachTo(p.path, p.id, ref, "资料"); err != nil {
@@ -364,7 +364,7 @@ func (a *app) embedSettings(c *ui.Context) {
 			case a.cfg.EmbedURL != "":
 				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 					ui.Text(c, "正在使用外部向量模型 "+a.cfg.EmbedModel).FontSize(12).TextColor(t.TextMuted).Grow(1)
-					if ui.Button(c, "改用离线插件").FontSize(12).Clicked() {
+					if button(c, "改用离线插件").FontSize(12).Clicked() {
 						a.cfg.EmbedURL, a.cfg.EmbedKey, a.cfg.EmbedModel = "", "", ""
 						a.embedDrafts = [3]string{}
 						a.cfg.save()
@@ -377,7 +377,7 @@ func (a *app) embedSettings(c *ui.Context) {
 				FontSize(12).TextColor(t.TextMuted).Wrap()
 			ui.Row(c).Gap(6).Wrap().GapY(6).Children(func() {
 				for _, p := range embedPresets {
-					if ui.Button(c.Key(p.name), p.name).FontSize(12).Tooltip(p.note).Clicked() {
+					if button(c.Key(p.name), p.name).FontSize(12).Tooltip(p.note).Clicked() {
 						d[0], d[2] = p.url, p.model
 					}
 				}
@@ -422,19 +422,19 @@ func (a *app) embedSettings(c *ui.Context) {
 // backupSettings is the settings' part on backups.
 func (a *app) backupSettings(c *ui.Context) {
 	t := c.Theme()
-	ui.Field(c, "备份", func() {
+	field(c, "备份", func() {
 		ui.Column(c).Gap(8).Children(func() {
 			ui.Text(c, "把导图文件夹（含收集的资料、图片和附件）打包成 zip。建议把导图文件夹放在 iCloud 云盘里同步，再定期备份到另一个地方。").
 				FontSize(12).TextColor(t.TextMuted).Wrap()
 			ui.Row(c).Gap(8).Wrap().GapY(6).AlignItems(ui.Center).Children(func() {
-				if ui.Button(c, "立即备份…").Disabled(a.backupBusy).Clicked() {
+				if button(c, "立即备份…").Disabled(a.backupBusy).Clicked() {
 					a.backupNow()
 				}
 				label := "每天自动备份到…"
 				if a.cfg.BackupDir != "" {
 					label = "更换自动备份文件夹…"
 				}
-				if ui.Button(c, label).Clicked() {
+				if button(c, label).Clicked() {
 					a.plat.PickFolder(func(dir string) {
 						if dir != "" {
 							a.cfg.BackupDir, a.cfg.BackupLast = dir, time.Time{}
@@ -443,7 +443,7 @@ func (a *app) backupSettings(c *ui.Context) {
 						}
 					})
 				}
-				if a.cfg.BackupDir != "" && ui.Button(c, "关闭自动备份").Clicked() {
+				if a.cfg.BackupDir != "" && button(c, "关闭自动备份").Clicked() {
 					a.cfg.BackupDir = ""
 					a.cfg.save()
 				}

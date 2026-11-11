@@ -249,7 +249,7 @@ func (a *app) mapAnalysisSection(c *ui.Context) {
 			if an != nil {
 				label = "重新分析"
 			}
-			if ui.Button(c, label).FontSize(12).Padding(2, 10).Disabled(a.mapWorking != "").
+			if button(c, label).FontSize(12).Padding(2, 10).Disabled(a.mapWorking != "").
 				Tooltip("让 AI 读这张导图，写一句话说明、摘要、分类、标签和检索用的关键词、同义词，方便以后搜索").Clicked() {
 				a.analyzeMap(a.path)
 			}

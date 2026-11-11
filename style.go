@@ -333,7 +333,7 @@ func (a *app) nodeStylePanel(c *ui.Context) {
 					hex := hexOf(col)
 					a.setNodeStyle(n, key, func(s *model.NodeStyle) { set(s, hex) })
 				}
-				auto := ui.Button(c, "自动").Disabled(value == "")
+				auto := button(c, "自动").Disabled(value == "")
 				if auto.Clicked() {
 					a.setNodeStyle(n, key, func(s *model.NodeStyle) { set(s, "") })
 				}
@@ -358,7 +358,7 @@ func (a *app) nodeStylePanel(c *ui.Context) {
 			ui.Text(c, "宽度").Grow(1)
 			if st.Width == 0 {
 				ui.Text(c, "适应文字").FontSize(12).TextColor(t.TextMuted)
-				if ui.Button(c, "固定宽度").Clicked() {
+				if button(c, "固定宽度").Clicked() {
 					w, _ := a.titleBox(c, n, len(a.doc.Path(n.ID))-1)
 					a.setNodeStyle(n, "width", func(s *model.NodeStyle) { s.Width = w })
 				}
@@ -367,7 +367,7 @@ func (a *app) nodeStylePanel(c *ui.Context) {
 			if ui.NumberInput(c.Key(n.ID), &width, 40, 600, 10).Label("宽度").Width(120).Changed() {
 				a.setNodeStyle(n, "width", func(s *model.NodeStyle) { s.Width = float32(width) })
 			}
-			if ui.Button(c, "适应").Clicked() {
+			if button(c, "适应").Clicked() {
 				a.setNodeStyle(n, "width", func(s *model.NodeStyle) { s.Width = 0 })
 			}
 		})
@@ -410,7 +410,7 @@ func (a *app) nodeStylePanel(c *ui.Context) {
 		colorField("文字颜色", "color", st.Color, func(s *model.NodeStyle, hex string) { s.Color = hex })
 
 		ui.Divider(c)
-		if ui.Button(c, "清除样式").Disabled(n.Style == nil).Clicked() {
+		if button(c, "清除样式").Disabled(n.Style == nil).Clicked() {
 			a.mutate("", func() { n.Style = nil })
 		}
 	})

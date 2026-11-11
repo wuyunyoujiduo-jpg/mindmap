@@ -76,16 +76,16 @@ func (a *app) keepShot(png []byte, act screenshot.Action, fromApp bool) {
 // is a menu item away (帮助 → 在访达中显示截图记录), not shown.
 func (a *app) shotSettings(c *ui.Context) {
 	t := c.Theme()
-	ui.Field(c, "截图", func() {
+	field(c, "截图", func() {
 		ui.Column(c).Gap(8).Children(func() {
 			ui.Text(c, "屏幕定格后直接框选，可拖动、拉边调整；框选后加框线、箭头、画笔、文字，可选颜色。✓、回车或双击复制到剪贴板，书签按钮或 ⇧↩ 存到收集，⌘S 保存，Esc 取消。").
 				FontSize(12).TextColor(t.TextMuted).Wrap()
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				if ui.Button(c, "试一下").Clicked() {
+				if button(c, "试一下").Clicked() {
 					a.settingsOpen = false
 					a.later(a.screenshot)
 				}
-				if ui.Button(c, "延时 3 秒截图").Tooltip("倒数时打开要截的菜单").Clicked() {
+				if button(c, "延时 3 秒截图").Tooltip("倒数时打开要截的菜单").Clicked() {
 					a.settingsOpen = false
 					a.later(func() { a.plat.DelayedScreenshot(3) })
 				}
@@ -95,7 +95,7 @@ func (a *app) shotSettings(c *ui.Context) {
 					ui.Text(c, "✓ 菜单展开时也能用快捷键截图").FontSize(12).TextColor(t.Success)
 					return
 				}
-				if ui.Button(c, "让菜单展开时也能截图…").Tooltip("需要「输入监控」权限：只用来在菜单展开时认出截图快捷键").Clicked() {
+				if button(c, "让菜单展开时也能截图…").Tooltip("需要「输入监控」权限：只用来在菜单展开时认出截图快捷键").Clicked() {
 					screenshot.RequestKeys()
 					a.later(func() { a.plat.SetShotKey(a.shotKey()) })
 				}

@@ -83,7 +83,7 @@ func (a *app) iconBitmap(key string) *ui.Bitmap {
 // iconSettings lets the app's icon be chosen.
 func (a *app) iconSettings(c *ui.Context) {
 	t := c.Theme()
-	ui.Field(c, "应用图标", func() {
+	field(c, "应用图标", func() {
 		ui.Column(c).Gap(6).Children(func() {
 			ui.Row(c).Gap(10).Wrap().GapY(8).Children(func() {
 				for _, ic := range appIcons {
@@ -124,7 +124,7 @@ func (a *app) iconSettings(c *ui.Context) {
 // rail's, and with it the shade of the trays.
 func (a *app) groundSettings(c *ui.Context) {
 	t := c.Theme()
-	ui.Field(c, "底色", func() {
+	field(c, "底色", func() {
 		ui.Column(c).Gap(6).Children(func() {
 			ui.Row(c).Gap(8).Wrap().GapY(8).Children(func() {
 				for _, g := range grounds {
@@ -152,11 +152,11 @@ func (a *app) groundSettings(c *ui.Context) {
 
 // updateSettings shows the version, and checks for a newer one.
 func (a *app) updateSettings(c *ui.Context) {
-	ui.Field(c, "版本", func() {
+	field(c, "版本", func() {
 		ui.Column(c).Gap(6).Children(func() {
 			ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, appName+" "+version).FontSize(textBody).Grow(1)
-				if ui.Button(c, "检查更新…").Clicked() {
+				if button(c, "检查更新…").Clicked() {
 					a.plat.CheckUpdates()
 				}
 			})

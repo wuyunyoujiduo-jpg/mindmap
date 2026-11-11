@@ -1124,7 +1124,7 @@ func (a *app) chatBubble(c *ui.Context, i int) {
 			if m.text != "" {
 				markdownView(c, m.text, 13)
 				text := m.text
-				if ui.Button(c, "复制").FontSize(11).Padding(1, 8).Tooltip("复制这段回复（Markdown）").AlignSelf(ui.Start).Clicked() {
+				if button(c, "复制").FontSize(11).Padding(1, 8).Tooltip("复制这段回复（Markdown）").AlignSelf(ui.Start).Clicked() {
 					a.plat.CopyText(text)
 					a.tell("已复制")
 				}
@@ -1166,7 +1166,7 @@ func (a *app) proposalCard(c *ui.Context, i int) {
 				if inkButton(c, "应用", true).Clicked() {
 					a.answerProposal(i, true)
 				}
-				if ui.Button(c, "放弃").Clicked() {
+				if button(c, "放弃").Clicked() {
 					a.answerProposal(i, false)
 				}
 			})
@@ -1263,7 +1263,7 @@ func (a *app) aiSettings(c *ui.Context) {
 				a.cfg.save()
 				ai.settings = false
 			}
-			if providerKey(a.cfg) != "" && ui.Button(c, "取消").Clicked() {
+			if providerKey(a.cfg) != "" && button(c, "取消").Clicked() {
 				ai.settings = false
 			}
 		})

@@ -788,10 +788,10 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 		if iconTextButton(c, iconSparkle, "问 AI", "问 AI", "打开 AI 助手，就这条资料提问", false).Clicked() {
 			a.aiOpen = true
 		}
-		if a.doc != nil && ui.Button(c, "加到导图").Tooltip("加到「"+mapName(a.path)+"」的选中节点下").Clicked() {
+		if a.doc != nil && button(c, "加到导图").Tooltip("加到「"+mapName(a.path)+"」的选中节点下").Clicked() {
 			a.later(func() { a.clipIntoMap(clip) })
 		}
-		if ui.Button(c, "复制").Clicked() {
+		if button(c, "复制").Clicked() {
 			a.plat.CopyText(clipCopyText(clip))
 			a.tell("已复制")
 		}

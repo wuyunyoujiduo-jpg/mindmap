@@ -76,7 +76,7 @@ func (a *app) codeStatusOf(dir string) codeStatus {
 // since, and the button that has the AI bring the map up to date.
 func (a *app) codeSyncField(c *ui.Context) {
 	t := c.Theme()
-	ui.Field(c, "代码基线", func() {
+	field(c, "代码基线", func() {
 		ui.Column(c).Gap(6).Children(func() {
 			dir := a.projectDir()
 			repo := gitbase.IsRepo(dir)
@@ -109,7 +109,7 @@ func (a *app) codeSyncField(c *ui.Context) {
 				}
 				ui.Text(c.Key(i), l).FontSize(12).TextColor(col).Wrap()
 			}
-			if ui.Button(c.Key("code-sync"), label).FontSize(12).AlignSelf(ui.Start).Disabled(!ready).
+			if button(c.Key("code-sync"), label).FontSize(12).AlignSelf(ui.Start).Disabled(!ready).
 				Tooltip("AI 读基线之后的代码改动，提出对导图的修改；你应用后才更新代码基线").Clicked() {
 				a.later(a.syncWithCode)
 			}
