@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 	"strings"
 	"testing"
@@ -228,13 +229,15 @@ func TestStarredFirst(t *testing.T) {
 	if err := a.open(guide); err != nil {
 		t.Fatal(err)
 	}
+	a.showProjects()
 	tt.Frame()
 	if tt.HasText("快捷访问") {
 		t.Fatalf("快捷访问 is still there: %q", tt.Texts())
 	}
 	first, _ := tt.Find(mapName(guide))
 	second, _ := tt.Find(mapName(other))
-	if second.Y < first.Y { // by their names: star the one below
+	before := func(x, y ui.Rect) bool { return x.Y < y.Y-8 || x.Y < y.Y+8 && x.X < y.X } // as the cards read
+	if before(second, first) {                                                           // by their names: star the one after
 		guide, other = other, guide
 	}
 	if err := tt.RightClick(mapName(other)); err != nil {
@@ -249,7 +252,7 @@ func TestStarredFirst(t *testing.T) {
 	}
 	first, _ = tt.Find(mapName(guide))
 	second, _ = tt.Find(mapName(other))
-	if !(second.Y < first.Y) || !tt.HasText("★") {
+	if !before(second, first) || !tt.HasText("★") {
 		t.Fatalf("the starred map is not first: %v %v", second, first)
 	}
 	snapshot(t, tt, "starred-first")

@@ -60,6 +60,7 @@ func TestSyncWithGitHub(t *testing.T) {
 		t.Fatal("the map that came down is not in the sidebar")
 	}
 	a.settingsOpen = false
+	a.showProjects()
 	tt.Frame()
 	if !tt.HasText("已同步 " + clock.Format("15:04")) {
 		t.Fatalf("no status: %q", tt.Texts())

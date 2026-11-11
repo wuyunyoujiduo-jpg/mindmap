@@ -206,7 +206,7 @@ func (a *app) tagPicker(c *ui.Context, n *model.Node) {
 				}
 			}
 		})
-		in := ui.TextInput(c.Key("new-tag"), &a.tagDraft).Placeholder("新标签，回车添加").Label("新标签").FontSize(12)
+		in := ui.TextInput(c.Key("new-tag"), &a.tagDraft).Placeholder("新标签").Label("新标签").FontSize(12)
 		if in.Submitted() {
 			if tag := a.addTag(a.tagDraft); tag != "" && !slices.Contains(n.Tags, tag) {
 				a.toggleTag(n, tag)
@@ -214,7 +214,7 @@ func (a *app) tagPicker(c *ui.Context, n *model.Node) {
 			a.tagDraft = ""
 		}
 		if len(a.allTags()) == 0 {
-			ui.Text(c, "还没有标签，输入名称后回车创建。").FontSize(12).TextColor(t.TextMuted)
+			ui.Text(c, "还没有标签，输入名称来创建。").FontSize(12).TextColor(t.TextMuted)
 		}
 	})
 }

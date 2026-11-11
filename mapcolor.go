@@ -69,13 +69,8 @@ func (a *app) mapSwitchMenu(m *ui.Menu) {
 		}
 	}
 	m.Separator()
-	list := "显示导图列表"
-	if a.cfg.ShowTree {
-		list = "收起导图列表"
-	}
-	if m.Item(list).Chosen() {
-		a.cfg.ShowTree = !a.cfg.ShowTree
-		a.cfg.save()
+	if m.Item("所有项目").Chosen() {
+		a.later(a.showProjects)
 	}
 	if m.Item("搜索导图…").Shortcut(ui.Cmd, ui.KeyP).Chosen() {
 		a.later(func() { a.openPalette(paletteMaps) })

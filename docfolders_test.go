@@ -24,6 +24,7 @@ func TestListHasMapsOnly(t *testing.T) {
 	clip.Folder = "项目资料" // as an earlier version kept it
 	a.refreshFiles()
 	a.setFolderOpen(dir, true)
+	a.showProjects()
 	tt.Frame()
 	if _, ok := tt.Find("文档 " + clip.Label()); ok || tt.HasText("未归档") {
 		t.Fatalf("a document in the maps' list: %q", tt.Texts())
@@ -46,6 +47,7 @@ func TestDragIntoFolder(t *testing.T) {
 		t.Fatal(err)
 	}
 	a.refreshFiles()
+	a.showProjects()
 	tt.Frame()
 	src, ok1 := tt.Find("使用指南")
 	dst, ok2 := tt.Find("team")
@@ -81,6 +83,7 @@ func TestFolderRenameAndDelete(t *testing.T) {
 	}
 	a.moveMap(a.path, dir)
 	a.toggleFavorite(a.path)
+	a.showProjects()
 	tt.Frame()
 
 	// Renamed from the menu: the open map and 快捷访问 follow.

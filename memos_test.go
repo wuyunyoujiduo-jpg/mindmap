@@ -24,6 +24,8 @@ func TestMemoTags(t *testing.T) {
 // 回顾 looks back at the old ones.
 func TestMemos(t *testing.T) {
 	a, tt := newTestApp(t)
+	a.showProjects()
+	tt.Frame()
 	if err := tt.Click("收集"); err != nil {
 		t.Fatal(err)
 	}

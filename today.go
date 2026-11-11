@@ -22,22 +22,9 @@ import (
 // today's tasks and the maps beside the stream of what was written lately.
 func (a *app) homeView(c *ui.Context) {
 	now := a.now()
-	t := c.Theme()
-	ui.Column(c.Key("home")).Grow(1).Label("工作台").Children(func() {
+	ui.Column(c.Key("home")).Grow(1).Label("今天的页面").Children(func() {
 		pageColumn(c, "home-column", true).Children(func() {
-			pageHeader(c, "home-head", "工作台", fmt.Sprintf("%s · %d月%d日", weekdays[now.Weekday()], now.Month(), now.Day()), func() {
-				find := ui.Row(c.Key("home-find")).Width(240).Height(34).Padding(0, 14).Gap(8).Radius(radiusPill).AlignItems(ui.Center).
-					Background(t.Text.Alpha(0.05)).Cursor(ui.CursorPointer).Label("搜索").Transition(easeLook)
-				if find.Hovered() {
-					find.Background(t.Text.Alpha(0.08))
-				}
-				if find.Clicked() {
-					a.later(func() { a.openPalette(paletteAll) })
-				}
-				find.Children(func() {
-					glyph(c, iconSearch, 14, t.TextMuted)
-					ui.Text(c, "⌘K 搜索").FontSize(textBody).TextColor(t.TextMuted).PassThrough()
-				})
+			pageHeader(c, "home-head", fmt.Sprintf("%d月%d日", now.Month(), now.Day()), weekdays[now.Weekday()], func() {
 				if iconTextButton(c, iconSparkle, "问 AI", "AI 助手", "问问导图和资料里的内容", a.aiOpen).Height(34).Clicked() {
 					a.aiOpen = !a.aiOpen
 				}
@@ -70,7 +57,7 @@ func (a *app) homeLine(c *ui.Context) {
 	a.writeCard(c, writeCard{
 		key: "home-line", label: "记一条灵感或任务", draft: &a.homeDraft, enterSaves: true,
 		placeholder: "现在的想法是…  以「周五」这样的日子开头就是任务",
-		sendLabel:   "记下 ↩", fileLabel: "加图片", save: a.saveHomeLine,
+		sendLabel:   "记下", fileLabel: "加图片", save: a.saveHomeLine,
 		reads: func() {
 			text := strings.TrimSpace(a.homeDraft)
 			if _, due, _ := parseTaskLine(text, a.now()); text != "" && taskLike(text, a.now()) {

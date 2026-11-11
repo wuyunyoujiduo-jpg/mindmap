@@ -272,6 +272,7 @@ type app struct {
 	libQuery      string
 	libKind       int               // kindAll, kindMaps, kindDocs or kindLinks
 	libHome       bool              // 今天 is shown, not the list
+	projOpen      bool              // 项目, the maps by folder, is the page shown (places.go)
 	homeFocus     bool              // the desk's line has the focus
 	writeRefocus  string            // the card to write in that takes the focus back, after a tool of its was clicked
 	writeRefs     map[string]string // the notes referred to in a draft: the @name written, the clip's ID

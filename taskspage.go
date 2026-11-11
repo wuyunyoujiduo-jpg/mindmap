@@ -404,9 +404,9 @@ func (a *app) tasksAdd(c *ui.Context, now time.Time) {
 	box := captureBox(c, "tasks-add")
 	box.Children(func() {
 		glyph(c, iconPlus, 15, t.Accent)
-		ph := "添加任务，如「明天 写周报 !高」，回车放进收件箱"
+		ph := "添加任务，如「明天 写周报 !高」"
 		if a.tasks.view == tasksDay || a.tasks.view == tasksWeek || a.tasks.view == tasksMonth {
-			ph = "添加任务，不写日期就记在" + dayLabel(a.tasks.day, now) + "，回车保存"
+			ph = "添加任务，不写日期就记在" + dayLabel(a.tasks.day, now)
 		}
 		in := ui.TextInputBase(c.Key("task-add"), &a.tasks.add).Placeholder(ph).FontSize(textBody + 1).Grow(1).Label("添加任务")
 		captureFocus(c, box, in)
@@ -613,7 +613,7 @@ func (a *app) subtasks(c *ui.Context, it taskItem) {
 				}
 			})
 		}
-		in := ui.TextInputBase(c.Key("sub-add"), &a.tasks.subtask).Placeholder("+ 添加子任务，回车").FontSize(textBody).
+		in := ui.TextInputBase(c.Key("sub-add"), &a.tasks.subtask).Placeholder("+ 添加子任务").FontSize(textBody).
 			FillWidth().Label("添加子任务")
 		if in.Submitted() && strings.TrimSpace(a.tasks.subtask) != "" {
 			title := strings.TrimSpace(a.tasks.subtask)

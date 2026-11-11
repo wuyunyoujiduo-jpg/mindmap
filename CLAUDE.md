@@ -46,10 +46,13 @@ by AI, and an AI assistant.
   as they are written, a picture, bold, lists; a reference is kept in
   the note's text as `<clip:id>` and shown under its words, `noteText`); other keys are a
   shade of the ground (`key`, `textKey`). A part of a page is a small
-  heading (`trayHead`) over a card. The sidebar (`rail.go`) is of words:
-  the day in numbers and the week, the app's parts, then, on the maps'
-  page, the maps and their folders (`sidebar.go`), elsewhere the maps
-  opened last. A map is on white, the pages of lists on the ground. The
+  heading (`trayHead`) over a card. There is no sidebar: the app has three
+  places, 今天, 项目 and 收集 (`places.go`), a switch of them at the top of
+  the pages of lists (`placesBar`, with the search of everything and the
+  settings); 项目 is the maps as cards, by folder (`projectsView`), and a
+  map opened takes the page, its bar going back to 项目. The words of the
+  UI are of no one device (记下, never 回车记下): a phone is to come.
+  A map is on white, the pages of lists on the ground. The
   accent is kept for
   what is chosen, for links and for the AI's spark. Color is kept for
   small things that mean something: each map has its own (`mapcolor.go`),
@@ -61,14 +64,18 @@ by AI, and an AI assistant.
   `pageColumn` in the middle, its `pageHeader`, a `captureBox` to write
   in, `pillTab`s to narrow by, then trays; what is chosen shows its
   details in a pane on the right, as the topic's panel on the maps' page,
-  which is put away until asked for. A task's state, priority and day are
+  which is put away until asked for. The whole is being rebuilt to the draft
+  https://claude.ai/artifact/J4Ngp4MFp9B7KnLVJhiavb, step by step: the places
+  and 项目 are done; to come, 今天 with the tasks in it (list, week, month,
+  tasks that repeat), one bar at the window's foot that writes, searches
+  and asks the AI, and what is chosen in a sheet from the right. A task's state, priority and day are
   set the same way in both (`segmented`, `dateProp`). On the canvas the
   main topics are on a pastel of their branch's color, those below on a
   faint tint (the scheme 明亮 of `style.go`). Notes and clips are one
   page, 收集 (`libview.go`: a wall of cards, narrowed by kind and by tag;
-  its 回顾 shows a few old notes in place, `memos.go`). The maps' list is
-  beside the rail on the maps' page only, with maps and their folders,
-  those starred first, the folder they are in at its foot: what is
+  its 回顾 shows a few old notes in place, `memos.go`). 项目 has the maps
+  and their folders, those starred first, the folder they are all in at
+  its foot: what is
   collected is 收集's (the word of the UI, never 资料库), and is on a map
   by a topic's link. The AI has two entries, 问 AI (whose panel lists
   what else it does, before a conversation) and AI 归位.

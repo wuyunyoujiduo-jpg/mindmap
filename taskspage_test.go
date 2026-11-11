@@ -66,9 +66,7 @@ func TestTasksPage(t *testing.T) {
 	}
 	a.refreshFiles()
 
-	if err := tt.Click("任务"); err != nil {
-		t.Fatal(err)
-	}
+	a.openTasks()
 	tt.Frame()
 	if !a.tasks.open || !tt.HasText("已逾期") || !tt.HasText("登录") || !tt.HasText("搜索") || tt.HasText("准备发布说明") {
 		t.Fatalf("today: %q", tt.Texts())

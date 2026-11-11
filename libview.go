@@ -836,6 +836,6 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 func (a *app) showLibrary() {
 	a.commitEditIfAny()
 	a.lightbox, a.presenting = "", false
-	a.libOpen, a.libHome, a.tasks.open = true, false, false
+	a.libOpen, a.libHome, a.tasks.open, a.projOpen = true, false, false, false
 	a.libReview = reviewOff
 }

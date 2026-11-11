@@ -1,8 +1,6 @@
 package main
 
 import (
-	"slices"
-
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
 )
@@ -45,34 +43,4 @@ func ofKind(c *library.Clip, kind int) bool {
 		return c.Kind == library.KindLink
 	}
 	return true
-}
-
-// sideKeys are the list's keys, as Finder's, while it has the focus (a
-// click in it gives it): the arrows go to the map above or below, Return
-// renames it, Delete moves it to the trash. They act on the list as drawn
-// the frame before.
-func (a *app) sideKeys(list ui.Element) {
-	items := a.sideDrawn
-	at := slices.Index(items, a.path)
-	open := func(i int) {
-		if i < 0 || i >= len(items) {
-			return
-		}
-		path := items[i]
-		a.later(func() { _ = a.open(path) })
-	}
-	switch {
-	case list.Shortcut(0, ui.KeyDown):
-		open(at + 1)
-	case list.Shortcut(0, ui.KeyUp):
-		if at < 0 {
-			at = len(items)
-		}
-		open(at - 1)
-	case at < 0:
-	case list.Shortcut(0, ui.KeyEnter):
-		a.renaming, a.renameText = items[at], mapName(items[at])
-	case list.Shortcut(0, ui.KeyBackspace), list.Shortcut(ui.Cmd, ui.KeyBackspace), list.Shortcut(0, ui.KeyDelete):
-		a.deletePath, a.confirmDelete = items[at], true
-	}
 }

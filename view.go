@@ -27,20 +27,25 @@ func (a *app) view(c *ui.Context) {
 	}
 	// Selected text shows in the accent color, strong enough on the
 	// panels' gray: the system's highlight (a pale orange, say) hardly did.
-	root := ui.Row(c).Fill().AlignItems(ui.Stretch).SelectionColor(t.Accent.Alpha(0.32))
+	root := ui.Column(c).Fill().AlignItems(ui.Stretch).SelectionColor(t.Accent.Alpha(0.32))
 	root.Background(ground(t))
 	root.Children(func() {
-		a.rail(c)
+		if a.libOpen {
+			a.placesBar(c) // the three places; a map opened has its own bar
+		}
 		func() {
-			// The pages of lists lie on the ground, as the sidebar; a map is on
-			// white, a thin line between it and the sidebar.
-			page := ui.Row(c.Key("page")).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Stretch)
+			// The pages of lists lie on the ground; a map is on white.
+			page := ui.Row(c.Key("page")).Grow(1).Basis(0).MinWidth(0).MinHeight(0).AlignItems(ui.Stretch)
 			if !a.libOpen {
-				page.Background(t.Background).BorderWidth(0, 0, 0, 1).BorderColor(hairline(t))
+				page.Background(t.Background)
 			}
 			func() {
 				page.Children(func() {
 					if a.libOpen {
+						if a.projOpen {
+							a.projectsView(c)
+							return
+						}
 						if a.tasks.open {
 							a.tasksView(c)
 							return
@@ -91,6 +96,7 @@ func (a *app) view(c *ui.Context) {
 		if a.lightbox != "" && a.doc != nil {
 			a.lightboxView(c)
 		}
+		a.deleteConfirm(c)
 		a.paletteView(c)
 		a.cheatSheet(c)
 		a.historyView(c)
@@ -191,16 +197,14 @@ func (a *app) toolbar(c *ui.Context) {
 	if room < 820 { // the seven views take what room there is
 		gap = 4
 	}
-	ui.Row(c.Key("toolbar")).Height(toolbarHeight).Padding(0, 10, 0, 14).Gap(gap).AlignItems(ui.Center).DragWindow().Children(func() {
+	ui.Row(c.Key("toolbar")).Height(toolbarHeight).Padding(0, max(10, c.TitleBar().Right), 0, max(14, c.TitleBar().Left+12)).Gap(gap).AlignItems(ui.Center).DragWindow().Children(func() {
 		if a.doc == nil {
 			ui.Spacer(c)
 			return
 		}
-		if !a.cfg.ShowTree { // the maps' list, put away, comes back from here
-			if iconButton(c, iconSidebar, "显示导图列表", "显示导图列表", 30, true).Clicked() {
-				a.cfg.ShowTree = true
-				a.cfg.save()
-			}
+		// Back to 项目, the maps by folder.
+		if textKey(c, "‹ 项目", "回到项目", "回到项目：所有导图").Clicked() {
+			a.later(a.showProjects)
 		}
 		ui.Column(c).Gap(1).Shrink(1).MinWidth(40).Children(func() {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {

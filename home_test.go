@@ -18,14 +18,16 @@ func TestHome(t *testing.T) {
 		}
 		clip.Created = testNow.Add(-time.Duration(i) * time.Hour)
 	}
-	if err := tt.Click("工作台"); err != nil {
+	a.showProjects()
+	tt.Frame()
+	if err := tt.Click("今天"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
 	if !a.libOpen || !a.libHome {
-		t.Fatal("工作台 not shown")
+		t.Fatal("今天 not shown")
 	}
-	for _, want := range []string{"工作台", "今天要做", "刚记下的", "我的导图", "导图 使用指南", "放到导图 资料 0"} {
+	for _, want := range []string{"今天", "今天要做", "刚记下的", "我的导图", "导图 使用指南", "放到导图 资料 0"} {
 		if !tt.HasText(want) {
 			t.Fatalf("no %q: %q", want, tt.Texts())
 		}
@@ -55,7 +57,7 @@ func TestHome(t *testing.T) {
 	if n := len(a.waiting()); n != 6 || tt.HasText("留在收集") || tt.HasText("待归位") {
 		t.Fatalf("lately %d: %q", n, tt.Texts())
 	}
-	if !tt.HasText(weekdays[testNow.Weekday()] + " · 10月10日") {
+	if !tt.HasText("10月10日") || !tt.HasText(weekdays[testNow.Weekday()]) {
 		t.Fatalf("the day's line: %q", tt.Texts())
 	}
 	a.lib.Clips[0].Created = testNow.AddDate(0, 0, -8)
@@ -107,33 +109,6 @@ func TestHomeDaysKeysAndDark(t *testing.T) {
 		}
 		clip.Created = testNow.Add(-time.Duration(i) * 24 * time.Hour)
 	}
-	// The list's keys: down from the map to the next, Delete asks.
-	guide := a.path
-	a.newMap()
-	a.flush()
-	other := a.path
-	if err := a.open(guide); err != nil {
-		t.Fatal(err)
-	}
-	a.libOpen = false
-	tt.Frame()
-	if err := tt.Click("使用指南"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Frame()
-	tt.Key(0, ui.KeyUp) // 新导图 is above, by its name
-	tt.Frame()
-	if a.path != other {
-		t.Fatalf("up from the map: %q", a.path)
-	}
-	tt.Frame()
-	tt.Key(0, ui.KeyBackspace)
-	tt.Frame()
-	if !a.confirmDelete || a.deletePath != other {
-		t.Fatal("Delete did not ask to move the map to the trash")
-	}
-	a.confirmDelete = false
-
 	tt.SetDark(true)
 	a.libOpen, a.libHome = true, true
 	tt.Frame()
@@ -168,10 +143,9 @@ func TestPaletteTag(t *testing.T) {
 	}
 }
 
-// The window's controls sit over the rail: what is beside it keeps clear.
+// The window's controls sit over the map's bar: what is in it keeps clear.
 func TestRailClearsWindowControls(t *testing.T) {
-	a, tt := newTestApp(t)
-	a.cfg.ShowTree = false
+	_, tt := newTestApp(t)
 	tt.SetTitleBar(ui.TitleBar{Height: 38, Left: 80})
 	tt.Frame()
 	tt.Frame()
@@ -232,7 +206,7 @@ func TestHomeTicksAndReads(t *testing.T) {
 	}
 	tt.Type("周五 给客户发报价单 #报价")
 	tt.Frame()
-	for _, want := range []string{"记下 ↩", "任务 · 周五", "加图片", "编号列表"} {
+	for _, want := range []string{"记下", "任务 · 周五", "加图片", "编号列表"} {
 		if !tt.HasText(want) {
 			t.Fatalf("the line does not say %q: %q", want, tt.Texts())
 		}

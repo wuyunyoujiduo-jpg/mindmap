@@ -34,6 +34,8 @@ func TestLibraryKeepsAndOrganizes(t *testing.T) {
 	a.sendAI = fake.send
 	a.cfg.AIKey = "sk-ant-test"
 
+	a.showProjects()
+	tt.Frame()
 	if err := tt.Click("收集"); err != nil {
 		t.Fatal(err)
 	}

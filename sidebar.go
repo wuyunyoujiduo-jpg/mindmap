@@ -18,94 +18,6 @@ type fileDrag struct {
 	Path string // the map's
 }
 
-// sidebar is the maps' list, beside the rail on the maps' page: the maps
-// of the folder and its folders, those starred first.
-func (a *app) sidebar(c *ui.Context) {
-	t := c.Theme()
-	side := ui.Column(c).Fill()
-	side.Background(sideGround(t))
-	side.Children(func() {
-		// One row, as high as the toolbar beside it: what the list is, the
-		// button that puts it away, and what is new. The folder the maps are
-		// in is at the list's foot, where its name has room.
-		ui.Row(c.Key("side-head")).Height(toolbarHeight).Padding(0, 8, 0, 16).Gap(2).AlignItems(ui.Center).Shrink(0).DragWindow().Children(func() {
-			ui.Text(c, "导图").FontSize(textBody).FontWeight(600).TextColor(t.TextMuted).Grow(1).PassThrough()
-			if iconButton(c, iconSidebar, "收起导图列表", "收起导图列表（点左边的「导图」可以再打开）", 28, true).Clicked() {
-				a.cfg.ShowTree = false
-				a.cfg.save()
-			}
-			iconButton(c, iconPlus, "新建", "新建导图、文件夹，或导入", 28, true).Menu(func(m *ui.Menu) {
-				if m.Item("新建导图").Shortcut(ui.Cmd, ui.KeyN).Chosen() {
-					a.later(a.newMap)
-				}
-				if m.Item("从模板新建…").Chosen() {
-					a.templatesOpen = true
-				}
-				if m.Item("新建文件夹").Chosen() {
-					a.later(func() { a.newFolder(a.currentFolder()) })
-				}
-				m.Separator()
-				if m.Item("导入 XMind…").Chosen() {
-					a.askImportXMind()
-				}
-				if m.Item("导入 Markdown / OPML…").Chosen() {
-					a.askImportOutline()
-				}
-			})
-		})
-		a.sideDrawn, a.sideItems = a.sideItems, nil // the keys go by the list drawn
-		ui.Scroll(c.Key("sidebar")).Grow(1).Children(func() {
-			// The keys on a column in the scroll, which takes the arrows first.
-			list := ui.Column(c.Key("side-list")).Padding(0, 6, 12).Gap(2).FillWidth().Label("侧栏").FocusBind(&a.sideFocus, "side")
-			a.sideKeys(list)
-			list.Children(func() {
-				a.folderContents(c, a.tree, 0)
-			})
-		})
-		ui.Column(c.Key("side-foot")).Padding(6, 6).Gap(2).Shrink(0).BorderWidth(1, 0, 0, 0).BorderColor(hairline(t)).Children(func() {
-			name := filepath.Base(a.dir)
-			folder := ui.Row(c.Key("folder-switch")).Height(30).Padding(0, 8).Gap(8).Radius(8).AlignItems(ui.Center).FillWidth().
-				Cursor(ui.CursorPointer).Label("切换文件夹").Tooltip("导图所在的文件夹：" + a.dir)
-			if folder.Hovered() {
-				folder.Background(t.Text.Alpha(0.06))
-			}
-			folder.Menu(func(m *ui.Menu) {
-				if m.Item("打开其他文件夹…").Shortcut(ui.Cmd, ui.KeyO).Chosen() {
-					a.pickWorkspace()
-				}
-				if m.Item("在 Finder 中显示").Chosen() {
-					a.plat.ShowInFolder(a.dir)
-				}
-			})
-			folder.Children(func() {
-				glyph(c, iconFolder, 15, t.TextMuted)
-				ui.Text(c, name).FontSize(textSmall).TextColor(t.TextMuted).Grow(1).Shrink(1).MinWidth(0).SingleLine().PassThrough()
-				ui.Box(c).Size(10, 10).Shrink(0).PassThrough().Draw(func(p *ui.Painter, r ui.Rect) {
-					cx, cy := r.X+r.W/2, r.Y+r.H/2
-					p.StrokePath(new(ui.Path).MoveTo(cx-3, cy+1.5).LineTo(cx, cy-1.5).LineTo(cx+3, cy+1.5), 1.2, t.TextMuted)
-				})
-			})
-			a.syncFoot(c)
-		})
-	})
-	title, says := "把「"+mapName(a.deletePath)+"」移到废纸篓？", "可以在废纸篓中找回。"
-	folder := a.deletePath != "" && !strings.HasSuffix(a.deletePath, model.Ext)
-	if folder {
-		title = "把文件夹「" + filepath.Base(a.deletePath) + "」移到废纸篓？"
-		if n := len(a.mapsIn(a.deletePath)); n > 0 {
-			says = fmt.Sprintf("里面的 %d 张导图会一起移走，可以在废纸篓中找回。", n)
-		}
-	}
-	switch ui.AlertDialog(c, &a.confirmDelete, title, says, "取消", "移到废纸篓") {
-	case 1:
-		if folder {
-			a.deleteFolder(a.deletePath)
-		} else {
-			a.deleteMap(a.deletePath)
-		}
-	}
-}
-
 func (a *app) pickWorkspace() {
 	a.plat.PickFolder(func(dir string) {
 		if dir != "" {
@@ -117,66 +29,6 @@ func (a *app) pickWorkspace() {
 			}
 		}
 	})
-}
-
-// folderContents shows a folder's folders, then its maps, indented by
-// depth. What was collected is not here: it is 收集's, and on the topics
-// of the maps it was put on.
-func (a *app) folderContents(c *ui.Context, f model.Folder, depth int) {
-	for _, sub := range f.Folders {
-		a.folderRow(c.Key("folder:"+sub.Path), sub, depth)
-	}
-	files := slices.Clone(f.Files) // those starred first, each in its folder
-	slices.SortStableFunc(files, func(x, y model.FileInfo) int { return b2i(a.starred(y.Path)) - b2i(a.starred(x.Path)) })
-	for _, file := range files {
-		a.fileRow(c.Key("file:"+file.Path), file, depth)
-	}
-	if depth == 0 && len(f.Files) == 0 && len(f.Folders) == 0 {
-		ui.Text(c, "还没有导图").FontSize(12).TextColor(c.Theme().TextMuted).Margin(4, 12)
-	}
-}
-
-func (a *app) folderRow(c *ui.Context, f model.Folder, depth int) {
-	t := c.Theme()
-	open := a.folderOpen(f.Path)
-	row := ui.Row(c).Padding(3, 4, 3, 8+float32(depth)*14).Gap(6).Radius(radiusSmall).AlignItems(ui.Center).MinHeight(30).
-		Cursor(ui.CursorPointer).Label(f.Name)
-	hover := row.Hovered()
-	if hover {
-		row.Background(t.Text.Alpha(0.06))
-	}
-	if draggedOver(row) {
-		row.Background(t.Accent.Alpha(0.15))
-	}
-	a.dropOnFolder(row, f.Path)
-	path := f.Path
-	if row.Clicked() && a.renaming != path {
-		a.setFolderOpen(f.Path, !open)
-	}
-	if a.renaming == f.Path {
-		row.ScrollIntoView() // a folder just made shows, wherever it sorts
-	}
-	row.ContextMenu(func(m *ui.Menu) { a.folderMenu(m, path) })
-	row.Children(func() {
-		arrow := "▾"
-		if !open {
-			arrow = "▸"
-		}
-		ui.Text(c, arrow).FontSize(10).TextColor(t.TextMuted).Width(10)
-		sideTile(c, iconFolder, t.TextMuted)
-		if a.renaming == path {
-			a.renameInput(c)
-			return
-		}
-		ui.Text(c, f.Name).FontSize(13).Grow(1).Shrink(1).MinWidth(0).SingleLine()
-		if n := len(f.AllFiles()); n > 0 && !hover {
-			ui.Text(c, fmt.Sprint(n)).FontSize(11).TextColor(t.TextMuted).Margin(0, 6, 0, 0)
-		}
-		a.rowMore(c, hover, "文件夹菜单", func(m *ui.Menu) { a.folderMenu(m, path) })
-	})
-	if open {
-		a.folderContents(c, f, depth+1)
-	}
 }
 
 // rowMore is the "···" of a row of the list, shown while the pointer is on
@@ -247,56 +99,6 @@ func (a *app) deleteFolder(dir string) {
 		}
 	}
 	a.tell("已把文件夹「" + filepath.Base(dir) + "」移到废纸篓")
-}
-
-func (a *app) fileRow(c *ui.Context, f model.FileInfo, depth int) {
-	t := c.Theme()
-	current := f.Path == a.path && !a.libOpen
-	fav := a.starred(f.Path)
-	a.sideItems = append(a.sideItems, f.Path)
-	row := ui.Row(c).Padding(3, 4, 3, 22+float32(depth)*14).Gap(6).Radius(radiusSmall).AlignItems(ui.Center).MinHeight(30).
-		Cursor(ui.CursorPointer).Label(f.Name).Drag(fileDrag{Path: f.Path})
-	// Another map dropped on a map goes under its center.
-	_, over := ui.DragOver[fileDrag](row)
-	if d, ok := ui.Drop[fileDrag](row); ok && d.Path != f.Path {
-		path := f.Path
-		a.later(func() { a.dropOnMap(path, d) })
-	}
-	switch {
-	case over:
-		row.Background(t.Accent.Alpha(0.15))
-	case current:
-		row.Background(chosen(t))
-	case row.Hovered():
-		row.Background(t.Text.Alpha(0.06))
-	}
-	if row.Clicked() && a.renaming != f.Path { // not on a press, which may start dragging it
-		path := f.Path
-		a.later(func() {
-			if !current {
-				_ = a.open(path)
-			}
-			a.sideFocus = "side" // its keys go to the sidebar
-		})
-	}
-	path := f.Path
-	hover := row.Hovered()
-	row.ContextMenu(func(m *ui.Menu) { a.mapMenu(m, path) })
-	row.Children(func() {
-		if a.renaming == path {
-			a.renameInput(c)
-			return
-		}
-		sideTile(c, iconMap, a.mapColor(f.Path))
-		text := ui.Text(c, midEllipsis(f.Name, a.sidebarWidth-90-float32(depth)*14)).FontSize(13).Grow(1).Shrink(1).MinWidth(0).SingleLine()
-		if current {
-			text.Bold()
-		}
-		if fav && !hover {
-			ui.Text(c, "★").FontSize(11).TextColor(ui.Hex("#D4A836")).Margin(0, 6, 0, 0)
-		}
-		a.rowMore(c, hover, "导图菜单", func(m *ui.Menu) { a.mapMenu(m, path) })
-	})
 }
 
 // mapMenu is what can be done with a map of the list.
@@ -439,7 +241,7 @@ func (a *app) newFolder(dir string) {
 	a.setFolderOpen(dir, true)
 	a.refreshFiles()
 	a.renaming, a.renameText = path, name
-	a.tell("已新建文件夹「" + name + "」，输入名字后回车")
+	a.tell("已新建文件夹「" + name + "」，给它起个名字")
 }
 
 // toggleFavorite stars a map, or takes its star off: those starred come
@@ -493,7 +295,7 @@ func (a *app) tagList(c *ui.Context) {
 			a.tagRow(c.Key("tag:"+tag), tag, counts[tag])
 		}
 		if a.tagAdding {
-			in := ui.TextInput(c.Key("tag-new"), &a.tagNew).Placeholder("标签名，回车创建").AutoFocus().Margin(2, 6, 4)
+			in := ui.TextInput(c.Key("tag-new"), &a.tagNew).Placeholder("标签名").AutoFocus().Margin(2, 6, 4)
 			switch {
 			case in.Shortcut(0, ui.KeyEscape):
 				a.tagAdding, a.tagNew = false, ""

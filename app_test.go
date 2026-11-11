@@ -99,9 +99,8 @@ func newTestApp(t *testing.T) (*app, *ui.Tester) {
 	dir := t.TempDir()
 	clock = func() time.Time { return testNow }
 	a := newApp(&fakePlatform{}, config{Dir: dir, ShowTree: true, PanelOpen: true})
-	a.noLocalModel = true       // the built-in model only where a test asks for it
-	a.noMotion = true           // what is looked at is where things end, not their way there
-	a.sidebarWidth -= railWidth // the rail and the maps' list in the room the tests' places count on
+	a.noLocalModel = true // the built-in model only where a test asks for it
+	a.noMotion = true     // what is looked at is where things end, not their way there
 	if a.doc == nil {
 		t.Fatal("no map opened")
 	}
@@ -431,6 +430,8 @@ func TestCollapse(t *testing.T) {
 
 func TestNewMapAndDelete(t *testing.T) {
 	a, tt := newTestApp(t)
+	a.showProjects()
+	tt.Frame()
 	tt.Click("新建")
 	if err := tt.ChooseMenuItem("新建导图"); err != nil {
 		t.Fatal(err)
@@ -939,6 +940,8 @@ func TestSidebarFoldersAndFavorites(t *testing.T) {
 	a, tt := newTestApp(t)
 	guide := a.path
 	// A folder, renamed as it is made.
+	a.showProjects()
+	tt.Frame()
 	tt.Click("新建")
 	if err := tt.ChooseMenuItem("新建文件夹"); err != nil {
 		t.Fatal(err)
@@ -2473,6 +2476,8 @@ func TestQuickCaptureAndInbox(t *testing.T) {
 		t.Fatal("not undone")
 	}
 	// Sorting out the inbox: its node moves to a node of the guide.
+	a.showProjects()
+	tt.Frame()
 	if err := tt.Click("收件箱"); err != nil {
 		t.Fatal(err)
 	}
@@ -3307,8 +3312,8 @@ func TestPinchZooms(t *testing.T) {
 	if got := a.cam().Zoom; got <= z*1.2 {
 		t.Fatalf("zoom %v, was %v", got, z)
 	}
-	// Elsewhere, as over the sidebar, a pinch does nothing.
-	tt.Move(40, 300)
+	// Elsewhere, as over the toolbar, a pinch does nothing.
+	tt.Move(300, 20)
 	tt.Frame()
 	z = a.cam().Zoom
 	a.pinch(0.25)
