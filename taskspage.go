@@ -1204,7 +1204,7 @@ func (a *app) taskChip(c *ui.Context, it taskItem) {
 	case a.tasks.sel == it.key():
 		chosenCard(chip, t)
 	case chip.Hovered():
-		chip.Shadow(0, 3, 10, 0, ui.RGBA(40, 32, 16, 0.1))
+		liftHover(chip, t)
 	}
 	switch {
 	case chip.DoubleClicked():

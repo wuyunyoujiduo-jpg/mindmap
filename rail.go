@@ -25,28 +25,30 @@ func (a *app) rail(c *ui.Context) {
 	// A row of the sidebar: an icon, a word, a count at its end; the part
 	// shown is on the accent, whole.
 	item := func(key string, kind int, label, count, tip string, on bool, click func()) {
-		b := ui.Row(c.Key("rail:"+key)).Height(36).Padding(0, 12).Gap(12).Radius(9).AlignItems(ui.Center).FillWidth().
-			Cursor(ui.CursorPointer).Label(label).Tooltip(tip).Background(t.Accent.Alpha(0)).Transition(easeLook)
-		ink, num := t.Text, muted
+		b := ui.Row(c.Key("rail:"+key)).Height(32).Padding(0, 10).Gap(10).Radius(radiusKey).AlignItems(ui.Center).FillWidth().
+			Cursor(ui.CursorPointer).Label(label).Tooltip(tip).Background(t.Text.Alpha(0)).Transition(easeLook)
+		ink, num := ink2(t), faint(t)
 		switch {
 		case on:
-			b.Background(t.Accent)
-			ink, num = t.AccentText, t.AccentText.Alpha(0.8)
+			// A shade, not the accent: the accent is the key's that acts.
+			b.Background(chosen(t))
+			ink = t.Text
 		case b.Hovered():
 			b.Background(t.Text.Alpha(0.045))
+			ink = t.Text
 		}
 		if b.Clicked() {
 			a.later(click)
 		}
 		press(b, 0.985)
 		b.Children(func() {
-			ui.Box(c).Size(18, 18).Shrink(0).PassThrough().Draw(func(p *ui.Painter, r ui.Rect) { drawRailIcon(p, r, 19, kind, ink) })
-			txt := ui.Text(c, label).FontSize(15).TextColor(ink).Grow(1).PassThrough()
+			ui.Box(c).Size(18, 18).Shrink(0).PassThrough().Draw(func(p *ui.Painter, r ui.Rect) { drawRailIcon(p, r, 18, kind, ink) })
+			txt := ui.Text(c, label).FontSize(textBody).TextColor(ink).Grow(1).PassThrough()
 			if on {
 				txt.FontWeight(600)
 			}
 			if count != "" {
-				ui.Text(c, count).FontSize(textSmall).TextColor(num).PassThrough()
+				ui.Text(c, count).FontSize(textCaption).TextColor(num).PassThrough()
 			}
 		})
 	}
@@ -58,7 +60,7 @@ func (a *app) rail(c *ui.Context) {
 		ui.Row(c.Key("rail-stats")).Gap(22).Padding(4, 10, 14).Shrink(0).DragWindow().Children(func() {
 			stat := func(n int, name string) {
 				ui.Column(c.Key(name)).Gap(1).Children(func() {
-					ui.Text(c, fmt.Sprint(n)).FontSize(24).LineHeight(1.2).FontWeight(600).TextColor(t.Text.MixOklab(muted, 0.45))
+					ui.Text(c, fmt.Sprint(n)).FontSize(22).LineHeight(1.2).FontWeight(600).LetterSpacing(-0.5).FontFeatures("tnum")
 					ui.Text(c, name).FontSize(textCaption).TextColor(muted).NoWrap()
 				})
 			}
@@ -75,21 +77,23 @@ func (a *app) rail(c *ui.Context) {
 				}
 			}
 		}
-		ui.Row(c.Key("rail-week")).Gap(6).Padding(0, 10, 16).Shrink(0).Children(func() {
+		// The week is a line of seven strokes, in the accent where something
+		// was done; today's letter is in the ink.
+		ui.Row(c.Key("rail-week")).Gap(5).Padding(0, 10, 18).Shrink(0).Children(func() {
 			for i, n := range per {
-				ui.Column(c.Key(fmt.Sprint(i))).Grow(1).Basis(0).Gap(5).AlignItems(ui.Center).Children(func() {
-					sq := ui.Box(c).Height(20).FillWidth().Radius(5).Background(t.Text.Alpha(0.06)).
-						Tooltip(fmt.Sprintf("%s 做完 %d 件", weekdays[(i+1)%7], n))
+				ui.Column(c.Key(fmt.Sprint(i))).Grow(1).Basis(0).Gap(6).AlignItems(ui.Center).
+					Tooltip(fmt.Sprintf("%s 做完 %d 件", weekdays[(i+1)%7], n)).Children(func() {
+					sq := ui.Box(c).Height(4).FillWidth().Radius(2).Background(t.Text.Alpha(0.09))
 					switch {
 					case n >= 3:
-						sq.Background(t.Accent.Alpha(0.6))
+						sq.Background(t.Accent)
 					case n > 0:
-						sq.Background(t.Accent.Alpha(0.28))
+						sq.Background(t.Accent.Alpha(0.45))
 					}
+					day := ui.Text(c, string([]rune(weekdays[(i+1)%7])[1:])).FontSize(11).TextColor(faint(t))
 					if sameDay(start.AddDate(0, 0, i), now) {
-						sq.Border(1.5, muted)
+						day.TextColor(t.Text).FontWeight(600)
 					}
-					ui.Text(c, string([]rune(weekdays[(i+1)%7])[1:])).FontSize(11).TextColor(muted)
 				})
 			}
 		})
@@ -118,7 +122,7 @@ func (a *app) rail(c *ui.Context) {
 			// On the maps' page the maps and their folders are here.
 			ui.Column(c.Key("rail-tree")).Grow(1).Basis(0).MinHeight(0).Margin(8, -12, 0).Children(func() { a.sidebar(c) })
 		} else {
-			ui.Text(c, "最近的导图").FontSize(textCaption).TextColor(muted).Margin(20, 12, 6).Shrink(0)
+			ui.Text(c, "最近的导图").FontSize(textCaption).FontWeight(600).LetterSpacing(0.3).TextColor(faint(t)).Margin(22, 10, 6).Shrink(0)
 			ui.Column(c.Key("rail-maps")).Gap(2).Grow(1).Basis(0).MinHeight(0).Clip().Children(func() {
 				shown := 0
 				for _, fi := range a.recentFiles() {
@@ -126,7 +130,7 @@ func (a *app) rail(c *ui.Context) {
 						continue
 					}
 					shown++
-					b := ui.Row(c.Key(fi.Path)).Height(34).Padding(0, 12).Gap(12).Radius(9).AlignItems(ui.Center).FillWidth().
+					b := ui.Row(c.Key(fi.Path)).Height(30).Padding(0, 10).Gap(10).Radius(radiusKey).AlignItems(ui.Center).FillWidth().
 						Cursor(ui.CursorPointer).Label("最近 " + mapName(fi.Path)).Background(t.Text.Alpha(0)).Transition(easeLook)
 					if b.Hovered() {
 						b.Background(t.Text.Alpha(0.045))
@@ -136,7 +140,7 @@ func (a *app) rail(c *ui.Context) {
 					}
 					b.Children(func() {
 						ui.Box(c).Size(18, 18).Center().Shrink(0).PassThrough().Children(func() { mapDot(c, a.mapColor(fi.Path), 8) })
-						ui.Text(c, mapName(fi.Path)).FontSize(textBody).SingleLine().Grow(1).Shrink(1).MinWidth(0).PassThrough()
+						ui.Text(c, mapName(fi.Path)).FontSize(textBody).TextColor(ink2(t)).SingleLine().Grow(1).Shrink(1).MinWidth(0).PassThrough()
 					})
 				}
 			})

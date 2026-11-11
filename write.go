@@ -29,8 +29,8 @@ type writeCard struct {
 
 func (a *app) writeCard(c *ui.Context, w writeCard) {
 	t := c.Theme()
-	box := ui.Column(c.Key(w.key)).Radius(12).Padding(12, 14, 10, 16).Gap(4).FillWidth().Shrink(0).
-		Background(cardColor(t)).Border(1.5, t.Border).Transition(easeLook)
+	box := lift(ring(ui.Column(c.Key(w.key)).Radius(radiusCard).Padding(14, 16, 12, 18).Gap(4).FillWidth().Shrink(0).
+		Background(cardColor(t)), t), t).Transition(easeLook)
 	box.Children(func() {
 		in := ui.TextAreaBase(c.Key(w.key+"-input"), w.draft).Lines(2, 6).
 			Placeholder(w.placeholder).FontSize(textTitle).LineHeight(1.5).FillWidth().Label(w.label)
@@ -140,8 +140,8 @@ func (a *app) writeCard(c *ui.Context, w writeCard) {
 			if w.enterSaves {
 				tip = "记下（回车；Shift+回车换行）"
 			}
-			send := ui.Box(c.Key("send")).Size(52, 32).Radius(8).Center().Label(w.sendLabel).Tooltip(tip).
-				Background(t.Text.Alpha(0.16)).Transition(easeLook)
+			send := ui.Box(c.Key("send")).Size(44, 30).Radius(radiusKey).Center().Label(w.sendLabel).Tooltip(tip).
+				Background(t.Accent.Alpha(0.3)).Transition(easeLook)
 			if text != "" {
 				send.Background(t.Accent).Cursor(ui.CursorPointer)
 				if send.Hovered() {

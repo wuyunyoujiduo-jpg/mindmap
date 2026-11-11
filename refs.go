@@ -136,6 +136,8 @@ func (a *app) editMapAt(path, note string, fn func(f *model.File) error) error {
 	}
 	_, _ = a.versions.Save(path, f, versions.Auto, note, now.Add(1))
 	delete(a.hists, path)
+	// What was read of it is of before: its time on disk may be the same.
+	delete(a.index, path)
 	a.syncChange()
 	a.refreshFiles()
 	return nil

@@ -26,19 +26,26 @@ by AI, and an AI assistant.
 - The UI's look is in `design.go` (sizes, helpers, the theme of
   `quietTheme`) and `icons.go` (icons drawn, not glyphs, so that they sit
   centered; the rail's and the lists' are one family of thin lines,
-  `drawRailIcon`). The look is plain and restrained, as flomo's (the
-  user's reference): two levels only, a pale ground (`ground`, one of
-  `grounds` chosen in the settings, `config.Ground`) and flat white cards
-  on it (`raise`, `listCard`), with no ring and no shadow; text large
-  (14 to 16) with room around it; few controls in sight, what can be done
-  with a row showing under the pointer; one color, the violet-blue
-  accent, used whole where it is used: the part shown in the sidebar, the
-  keys that act (`inkButton`, `accentButton`), the outline of the line
-  written in, tags on a pale wash of it (`softTag`). The desk and 收集 write in
+  `drawRailIcon`). `DESIGN.md` says the look token by token (colors, the
+  four inks, type, corners, elevation, what to do and not), in the form
+  of awesome-design-md's files, its rules those Notion's, Linear's and
+  Cal.com's share: read it before changing how anything looks, and
+  change it with `design.go`. The look is plain and restrained, as
+  flomo's (the user's reference): a warm pale ground (`ground`, one of
+  `grounds` chosen in the settings, `config.Ground`) and white cards on
+  it (`raise`, `listCard`) told by a hairline ring inside their edge and
+  a breath of shadow (`ring`, `lift`: they take no room, where `Border`
+  does); four inks (the theme's `Text`, `ink2`, `TextMuted`, `faint`);
+  headings heavy and a little tight; few controls in sight, what can be
+  done with a row showing under the pointer; one color, the violet-blue
+  accent, kept for the keys that act (`inkButton`, `accentButton`), the
+  ring of the field written in (`focusRing`), links and tags on a pale
+  wash of it (`softTag`): what is chosen, as the part shown in the
+  sidebar, is on a shade of gray in a heavier weight. The desk and 收集 write in
   the same card (`write.go`, `writeCard`: a tag and a reference offered
   as they are written, a picture, bold, lists; a reference is kept in
-  the note's text as `<clip:id>` and shown under its words, `noteText`); other keys are a
-  shade of the ground (`key`, `textKey`). A part of a page is a small
+  the note's text as `<clip:id>` and shown under its words, `noteText`); other keys are
+  white with the ring (`key`), or words alone (`textKey`). A part of a page is a small
   heading (`trayHead`) over a card. The sidebar (`rail.go`) is of words:
   the day in numbers and the week, the app's parts, then, on the maps'
   page, the maps and their folders (`sidebar.go`), elsewhere the maps

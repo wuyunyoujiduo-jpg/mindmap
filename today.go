@@ -26,19 +26,17 @@ func (a *app) homeView(c *ui.Context) {
 	ui.Column(c.Key("home")).Grow(1).Label("工作台").Children(func() {
 		pageColumn(c, "home-column", true).Children(func() {
 			pageHeader(c, "home-head", "工作台", fmt.Sprintf("%s · %d月%d日", weekdays[now.Weekday()], now.Month(), now.Day()), func() {
-				find := ui.Row(c.Key("home-find")).Width(240).Height(34).Padding(0, 12).Gap(8).Radius(9).AlignItems(ui.Center).
-					Background(t.Text.Alpha(0.05)).Cursor(ui.CursorPointer).Label("搜索").Transition(easeLook)
-				if find.Hovered() {
-					find.Background(t.Text.Alpha(0.08))
-				}
+				find := key(ui.Row(c.Key("home-find")).Width(240).Height(30).Padding(0, 10).Gap(8).Radius(radiusKey).AlignItems(ui.Center).
+					Cursor(ui.CursorPointer).Label("搜索"), t)
 				if find.Clicked() {
 					a.later(func() { a.openPalette(paletteAll) })
 				}
 				find.Children(func() {
-					glyph(c, iconSearch, 14, t.TextMuted)
-					ui.Text(c, "⌘K 搜索").FontSize(textBody).TextColor(t.TextMuted).PassThrough()
+					glyph(c, iconSearch, 13, faint(t))
+					ui.Text(c, "搜索").FontSize(textSmall).TextColor(faint(t)).Grow(1).PassThrough()
+					ui.Text(c, "⌘K").FontSize(textCaption).TextColor(faint(t)).PassThrough()
 				})
-				if iconTextButton(c, iconSparkle, "问 AI", "AI 助手", "问问导图和资料里的内容", a.aiOpen).Height(34).Clicked() {
+				if iconTextButton(c, iconSparkle, "问 AI", "AI 助手", "问问导图和资料里的内容", a.aiOpen).Clicked() {
 					a.aiOpen = !a.aiOpen
 				}
 			})
@@ -89,7 +87,7 @@ func (a *app) homeLine(c *ui.Context) {
 func softTag(c *ui.Context, text string) ui.Element {
 	t := c.Theme()
 	bg, ink := t.Accent.Alpha(0.1), t.Accent.MixOklab(t.Text, 0.25)
-	return ui.Box(c.Key("tag:"+text)).Height(24).Padding(0, 8).Radius(6).Center().Background(bg).Shrink(0).
+	return ui.Box(c.Key("tag:"+text)).Height(22).Padding(0, 7).Radius(radiusChip).Center().Background(bg).Shrink(0).
 		Transition(ui.ElementTransition{Duration: 240 * time.Millisecond, Ease: easeDetent, Enter: &ui.Motion{Scale: 0.85}}).Children(func() {
 		ui.Text(c, text).FontSize(textSmall).TextColor(ink).NoWrap()
 	})

@@ -411,7 +411,7 @@ func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 	case a.libSel == clip.ID:
 		chosenCard(row, t)
 	case row.Hovered():
-		row.Shadow(0, 4, 12, 0, ui.RGBA(40, 32, 16, 0.1))
+		liftHover(row, t)
 	}
 	if row.Clicked() {
 		if a.libSel == clip.ID {
