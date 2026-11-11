@@ -30,14 +30,17 @@ by AI, and an AI assistant.
   (the user's reference is https://library.aimran.es/, after flomo): two
   levels only, a cool pale ground (`ground`, one of `grounds` chosen in
   the settings, `config.Ground`) and white cards on it with large round
-  corners (`radiusCard`), told by a shadow so soft it is hardly seen
-  (`soft`, in `raise` and `listCard`; `lifted` for what is over the page:
+  corners (`radiusCard`), which are a material, not stickers (the user
+  found the flat look wanting in 质感): a hairline at their edge, a shadow
+  close under them and a wide faint one (`soft`, in `raise` and `listCard`; `lifted` for what is over the page:
   a card under the pointer, `hoverLift`, the canvas's bars, popups,
   `modal`), with no ring; keys, tabs and the fields of search are pills
   (`radiusPill`), icon buttons round; text large (14 to 16) with room
   around it; few controls in sight, what can be done with a row showing
   under the pointer; one color, the violet-blue accent: the keys that act
-  (`inkButton`, `accentButton`), the outline and halo of the line written
+  (`inkButton`, `accentButton`: a `jewel`, lighter at its top, light on
+  its edge, a glow of its color under it), tracks hollowed in the page
+  (`well`) which the white pill chosen stands out of, the outline and halo of the line written
   in (`focusHalo`; a box of several lines is `area`, and the notes' rich
   editor looks the same), tags on a pale wash of it (`softTag`). What is chosen
   among a few (the sidebar's part, a `pillTab`, a `segmented`, the views'
@@ -54,7 +57,8 @@ by AI, and an AI assistant.
   There is no sidebar of the app's parts: the app has three
   places, 今天, 项目 and 收集 (`places.go`), a switch of them at the top of
   the pages of lists (`placesBar`, with the AI's key, the search of everything and the
-  settings); 项目 is the maps as cards, its folders a row of pills to choose from, as a
+  settings); 项目 is the maps as cards, each with the map drawn small as its face
+  (`drawMapFace`) and a ring for its tasks, its folders a row of pills to choose from, as a
   wall's kinds (`projectsView`, `projFolder`), and a
   map opened takes the page, its bar going back to 项目. 项目 alone has a
   directory at its left, which the user asked back (`tree.go`, `mapTree`,

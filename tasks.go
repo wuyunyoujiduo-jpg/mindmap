@@ -94,7 +94,9 @@ func (a *app) boardColumns(c *ui.Context, tasks []model.TaskNode) {
 					col = append(col, tn)
 				}
 			}
-			column := ui.Column(c.Key(string(s))).Grow(1).Basis(0).Radius(radiusCard).Background(t.Text.Alpha(0.04)).Padding(0, 6)
+			// A hollow in the page, faintly of its state's color.
+			column := well(ui.Column(c.Key(string(s))).Grow(1).Basis(0).Radius(radiusCard).Padding(0, 6), t).
+				Background(statusColor(s).MixOklab(t.Text, 0.5).Alpha(0.055))
 			if _, over := ui.DragOver[nodeDrag](column); over {
 				column.Background(statusColor(s).Alpha(0.08))
 			}

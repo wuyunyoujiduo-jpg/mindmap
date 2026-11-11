@@ -335,11 +335,9 @@ func (a *app) waitingCard(c *ui.Context, w waitingItem, i int) {
 				if textKey(c, "换一个", "换一个 "+text, "自己选放到哪").Clicked() {
 					a.later(func() { a.placeWaiting(w) })
 				}
-				go_ := ui.Box(c.Key("take")).Height(28).Padding(0, 12).Radius(radiusPill).Center().Background(t.Accent).Cursor(ui.CursorPointer).
+				go_ := ui.Box(c.Key("take")).Height(28).Padding(0, 12).Radius(radiusPill).Center().Cursor(ui.CursorPointer).
 					Label("放过去 " + text).Transition(easeLook)
-				if go_.Hovered() {
-					go_.Background(t.AccentHover)
-				}
+				jewel(go_, t, true)
 				if go_.Clicked() {
 					a.later(func() {
 						if near { // taken as the AI's would be

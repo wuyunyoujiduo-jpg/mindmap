@@ -161,10 +161,7 @@ func (a *app) writeCard(c *ui.Context, w writeCard) {
 				Background(t.Text.Alpha(0.12)).Transition(easeLook)
 			press(send, 0.94)
 			if text != "" {
-				send.Background(t.Accent).Cursor(ui.CursorPointer)
-				if send.Hovered() {
-					send.Background(t.AccentHover)
-				}
+				jewel(send, t, true).Cursor(ui.CursorPointer)
 				if send.Clicked() {
 					keep = true
 				}

@@ -337,7 +337,7 @@ func (a *app) viewTabs(c *ui.Context, room float32) {
 		}).Label("视图").Shrink(0)
 		return
 	}
-	ui.Row(c.Key("view-tabs")).Padding(2).Gap(2).Radius(radiusPill).Background(t.Text.Alpha(0.05)).Shrink(0).Children(func() {
+	well(ui.Row(c.Key("view-tabs")).Padding(2).Gap(2).Radius(radiusPill).Shrink(0), t).Children(func() {
 		tab := func(key, name string, on bool) ui.Element {
 			b := ui.Box(c.Key("view:"+key)).Height(28).Padding(0, 14).Radius(radiusPill).Center().Cursor(ui.CursorPointer).Label(name).
 				Background(t.Text.Alpha(0)).Transition(easeLook)

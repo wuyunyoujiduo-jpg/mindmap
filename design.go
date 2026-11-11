@@ -101,19 +101,25 @@ func focusHalo(el ui.Element, t *ui.Theme) ui.Element {
 // soft is the shadow a card rests on: one close under it, one wide and
 // faint. It is hardly seen, and tells the card from the ground.
 func soft(el ui.Element, t *ui.Theme) ui.Element {
+	// A material, not a sticker: a hairline that draws its edge, a shadow
+	// close under it and a wide faint one, and light on its top edge.
 	if t.Dark {
-		return el.Shadow(0, 0, 0, 1, ui.RGBA(255, 255, 255, 0.06))
+		return el.Shadow(0, 0, 0, 1, ui.RGBA(255, 255, 255, 0.07)).Shadow(0, 8, 24, -6, ui.RGBA(0, 0, 0, 0.5)).
+			InsetShadow(0, 1, 0, 0, ui.RGBA(255, 255, 255, 0.05))
 	}
-	return el.Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.03)).Shadow(0, 6, 24, 0, ui.RGBA(0, 0, 0, 0.035))
+	return el.Shadow(0, 0, 0, 0.5, ui.RGBA(0, 0, 0, 0.07)).Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.05)).
+		Shadow(0, 8, 24, -6, ui.RGBA(0, 0, 0, 0.08))
 }
 
 // lifted is the shadow of what is over the page: a card under the pointer,
 // a bar on the canvas, a popup.
 func lifted(el ui.Element, t *ui.Theme) ui.Element {
 	if t.Dark {
-		return el.Shadow(0, 0, 0, 1, ui.RGBA(255, 255, 255, 0.08)).Shadow(0, 12, 32, -8, ui.RGBA(0, 0, 0, 0.6))
+		return el.Shadow(0, 0, 0, 1, ui.RGBA(255, 255, 255, 0.1)).Shadow(0, 16, 40, -8, ui.RGBA(0, 0, 0, 0.7)).
+			InsetShadow(0, 1, 0, 0, ui.RGBA(255, 255, 255, 0.06))
 	}
-	return el.Shadow(0, 4, 12, 0, ui.RGBA(0, 0, 0, 0.04)).Shadow(0, 24, 60, 0, ui.RGBA(0, 0, 0, 0.1))
+	return el.Shadow(0, 0, 0, 0.5, ui.RGBA(0, 0, 0, 0.09)).Shadow(0, 2, 6, 0, ui.RGBA(0, 0, 0, 0.06)).
+		Shadow(0, 18, 44, -10, ui.RGBA(0, 0, 0, 0.18))
 }
 
 // hoverLift has a card that opens rise a little under the pointer, its
@@ -143,9 +149,9 @@ func slidePill(c *ui.Context, group string, radius float32) {
 		Background(pillColor(t)).
 		Transition(ui.ElementTransition{Duration: 320 * time.Millisecond, Ease: easeDetent, Match: pillMatch{group}})
 	if t.Dark {
-		pill.Shadow(0, 0, 0, 1, ui.RGBA(255, 255, 255, 0.06))
+		pill.Shadow(0, 0, 0, 1, ui.RGBA(255, 255, 255, 0.08)).InsetShadow(0, 1, 0, 0, ui.RGBA(255, 255, 255, 0.08))
 	} else {
-		pill.Shadow(0, 1, 3, 0, ui.RGBA(0, 0, 0, 0.1)).Shadow(0, 0, 0, 0.5, ui.RGBA(0, 0, 0, 0.05))
+		pill.Shadow(0, 0, 0, 0.5, ui.RGBA(0, 0, 0, 0.1)).Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.1)).Shadow(0, 3, 8, -2, ui.RGBA(0, 0, 0, 0.12))
 	}
 }
 
@@ -406,7 +412,7 @@ func propRow(c *ui.Context, name string, fn func()) {
 func segmented(c *ui.Context, key, label string, names []string, chosenPart int) int {
 	t := c.Theme()
 	out := chosenPart
-	ui.Row(c.Key(key)).Padding(2).Gap(2).Radius(radiusRow).Background(t.Text.Alpha(0.05)).Grow(1).Basis(0).MinWidth(0).Children(func() {
+	well(ui.Row(c.Key(key)).Padding(2).Gap(2).Radius(radiusRow).Grow(1).Basis(0).MinWidth(0), t).Children(func() {
 		for i, name := range names {
 			on := i == chosenPart
 			b := ui.Box(c.Key("part:" + name)).Height(28).Radius(radiusSmall).Center().Grow(1).Basis(0).MinWidth(0).Cursor(ui.CursorPointer).
@@ -579,13 +585,8 @@ func section(c *ui.Context, ic icon, title string, right func(), body func()) {
 func accentButton(c *ui.Context, text, tip string) ui.Element {
 	t := c.Theme()
 	b := ui.Box(c.Key("accent:"+text)).Height(keyHeight).Padding(0, 16).Radius(radiusPill).Center().
-		Cursor(ui.CursorPointer).Label(text).Tooltip(tip).Shrink(0).Background(t.Accent)
-	switch {
-	case b.Pressed():
-		b.Background(t.AccentPressed)
-	case b.Hovered():
-		b.Background(t.AccentHover)
-	}
+		Cursor(ui.CursorPointer).Label(text).Tooltip(tip).Shrink(0)
+	jewel(b, t, true)
 	b.Children(func() {
 		ui.Text(c, text).FontSize(textSmall).FontWeight(600).TextColor(t.AccentText).NoWrap().PassThrough()
 	})
@@ -598,15 +599,9 @@ func accentButton(c *ui.Context, text, tip string) ui.Element {
 func inkButton(c *ui.Context, text string, enabled bool) ui.Element {
 	t := c.Theme()
 	b := ui.ButtonBase(c.Key("ink:"+text)).Height(keyHeight).Padding(0, 16).Radius(radiusPill).Label(text).Shrink(0).Disabled(!enabled)
-	switch {
-	case !enabled:
-		b.Background(t.Text.Alpha(0.18))
-	case b.Pressed():
-		b.Background(t.AccentPressed)
-	case b.Hovered():
-		b.Background(t.AccentHover).Cursor(ui.CursorPointer)
-	default:
-		b.Background(t.Accent).Cursor(ui.CursorPointer)
+	jewel(b, t, enabled)
+	if enabled {
+		b.Cursor(ui.CursorPointer)
 	}
 	b.Children(func() {
 		ui.Text(c, text).FontSize(textSmall).FontWeight(600).TextColor(t.AccentText).NoWrap().PassThrough()
@@ -681,7 +676,7 @@ func tinted(t *ui.Theme, col ui.Color) (bg, ink ui.Color) {
 func tabGroup(c *ui.Context, key string, names []string, chosenTab int) int {
 	t := c.Theme()
 	out := chosenTab
-	ui.Row(c.Key(key)).Padding(2).Gap(2).Radius(radiusPill).Background(t.Text.Alpha(0.05)).Shrink(0).Children(func() {
+	well(ui.Row(c.Key(key)).Padding(2).Gap(2).Radius(radiusPill).Shrink(0), t).Children(func() {
 		for i, name := range names {
 			on := i == chosenTab
 			b := ui.Box(c.Key("tab:"+name)).Height(28).Padding(0, 14).Radius(radiusPill).Center().Cursor(ui.CursorPointer).Label(name).
@@ -854,4 +849,34 @@ func area(c *ui.Context, value *string) ui.Element {
 		in.Background(t.Text.Alpha(0.06))
 	}
 	return in
+}
+
+// well gives a track (of tabs, of a segmented control, of a field of
+// search) the look of a hollow in the page: a shade, darker at its top
+// edge, which the white pill chosen stands out of.
+func well(el ui.Element, t *ui.Theme) ui.Element {
+	if t.Dark {
+		return el.Background(ui.RGBA(255, 255, 255, 0.06)).InsetShadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.5))
+	}
+	return el.Background(t.Text.Alpha(0.055)).InsetShadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.06)).InsetShadow(0, 0, 0, 0.5, ui.RGBA(0, 0, 0, 0.05))
+}
+
+// jewel gives the key that acts its body: the accent from a lighter top
+// to a deeper foot, light on its top edge, and a glow of its own color
+// under it, stronger under the pointer.
+func jewel(b ui.Element, t *ui.Theme, enabled bool) ui.Element {
+	if !enabled {
+		return b.Background(t.Text.Alpha(0.14))
+	}
+	top, foot := t.Accent.MixOklab(ui.Hex("#FFFFFF"), 0.16), t.Accent.MixOklab(ui.Hex("#000000"), 0.1)
+	glow := float32(0.3)
+	switch {
+	case b.Pressed():
+		top, foot, glow = t.Accent, t.Accent.MixOklab(ui.Hex("#000000"), 0.18), 0.18
+	case b.Hovered():
+		glow = 0.42
+	}
+	return b.Gradient(top, foot, 180).InsetShadow(0, 1, 0, 0, ui.RGBA(255, 255, 255, 0.28)).
+		Shadow(0, 0, 0, 0.5, t.Accent.MixOklab(ui.Hex("#000000"), 0.3)).Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.14)).
+		Shadow(0, 6, 14, -4, t.Accent.Alpha(glow))
 }

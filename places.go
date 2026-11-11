@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
@@ -56,7 +55,7 @@ func (a *app) placesBar(c *ui.Context) {
 	ui.Row(c.Key("places-bar")).Height(toolbarHeight).Padding(0, max(14, bar.Right), 0, max(14, bar.Left)).AlignItems(ui.Center).
 		Shrink(0).FillWidth().DragWindow().Children(func() {
 		ui.Box(c).Grow(1).Basis(0)
-		ui.Row(c.Key("places")).Padding(3).Gap(2).Radius(radiusPill).Background(t.Text.Alpha(0.05)).Shrink(0).Label("位置").Children(func() {
+		well(ui.Row(c.Key("places")).Padding(3).Gap(2).Radius(radiusPill).Shrink(0).Label("位置"), t).Children(func() {
 			part := func(p int, name, tip string, click func()) {
 				on := p == now
 				b := ui.Box(c.Key("place:"+name)).Height(30).Padding(0, 18).Radius(radiusPill).Center().Cursor(ui.CursorPointer).
@@ -155,11 +154,14 @@ func (a *app) projectsView(c *ui.Context) {
 		}
 	}
 	w, _ := c.Size()
-	cols := max(int((min(w, pageWidth+56)-56+14)/236), 1)
+	if a.treeShown() {
+		w -= treeWidth // the directory's
+	}
+	cols := max(int((min(w, pageWidth+56)-56+16)/256), 1)
 
 	card := func(f model.FileInfo) {
 		path, col := f.Path, a.mapColor(f.Path)
-		el := raise(ui.Column(c.Key("map:"+path)).Padding(14, 14, 14).Gap(12).Radius(radiusCard).MinWidth(0).Cursor(ui.CursorPointer).
+		el := raise(ui.Column(c.Key("map:"+path)).Padding(8, 8, 14).Gap(10).Radius(radiusCard+2).MinWidth(0).Cursor(ui.CursorPointer).
 			Label(f.Name).Drag(fileDrag{Path: path}), t)
 		// Another map dropped on a map goes under its center.
 		if d, ok := ui.Drop[fileDrag](el); ok && d.Path != path {
@@ -176,40 +178,58 @@ func (a *app) projectsView(c *ui.Context) {
 		hover := el.Hovered()
 		el.ContextMenu(func(m *ui.Menu) { a.mapMenu(m, path) })
 		n := counts[path]
+		// The map itself, small: its face, by which it is told from the others.
+		file := a.file
+		if path != a.path {
+			file = a.indexed(path)
+		}
+		var root *model.Node
+		topics := 0
+		if file != nil && len(file.Sheets) > 0 {
+			root = file.Sheets[0].Root
+			topics = countTopics(root) - 1
+		}
 		el.Children(func() {
-			ui.Row(c).Gap(12).AlignItems(ui.Center).FillWidth().Children(func() {
-				bg, ink := tinted(t, col)
-				ui.Box(c).Size(36, 36).Radius(radiusRow).Background(bg).Shrink(0).PassThrough().
-					Draw(func(p *ui.Painter, r ui.Rect) { drawIcon(p, r, 18, iconMap, ink) })
-				ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(1).Children(func() {
+			wash := col.Alpha(0.07)
+			if t.Dark {
+				wash = col.Alpha(0.13)
+			}
+			ui.Box(c.Key("face")).Height(108).FillWidth().Radius(radiusCard - 4).Background(wash).PassThrough().
+				Draw(func(pt *ui.Painter, r ui.Rect) { drawMapFace(pt, r, root, col) })
+			ui.Row(c).Padding(0, 4, 0, 8).Gap(6).AlignItems(ui.Center).FillWidth().Children(func() {
+				ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(2).Children(func() {
 					if a.renaming == path {
 						a.renameInput(c)
 					} else {
 						ui.Text(c, f.Name).FontSize(15).FontWeight(600).SingleLine().FillWidth().PassThrough()
 					}
-					sub := "还没有任务"
+					// A word on it: where it is, when not in the folder shown; how
+					// much it holds; how its tasks stand.
+					var says []string
+					if dir := filepath.Dir(path); dir != at.Path && dir != a.dir {
+						says = append(says, filepath.Base(dir))
+					}
 					if n.total > 0 {
-						sub = fmt.Sprintf("%d / %d 件任务", n.done, n.total)
+						says = append(says, fmt.Sprintf("任务 %d / %d", n.done, n.total))
+					} else {
+						says = append(says, fmt.Sprintf("%d 个主题", max(topics, 0)))
 					}
-					if dir := filepath.Dir(path); dir != at.Path { // where it is, when not in the folder shown
-						if rel, err := filepath.Rel(a.dir, dir); err == nil && rel != "." {
-							sub = strings.ReplaceAll(rel, string(filepath.Separator), " / ") + " · " + sub
-						}
-					}
-					ui.Text(c, sub).FontSize(textCaption).TextColor(t.TextMuted).SingleLine().FillWidth().PassThrough()
+					ui.Text(c, strings.Join(says, " · ")).FontSize(textCaption).TextColor(t.TextMuted).SingleLine().FillWidth().PassThrough()
 				})
 				if a.starred(path) && !hover {
 					ui.Text(c, "★").FontSize(textSmall).TextColor(ui.Hex("#D4A836")).PassThrough()
 				}
-				a.rowMore(c, hover, "导图菜单", func(m *ui.Menu) { a.mapMenu(m, path) })
-			})
-			ui.Box(c).Height(4).FillWidth().Radius(2).Background(t.Text.Alpha(0.07)).PassThrough().Children(func() {
-				pct := float32(0)
-				if n.total > 0 {
-					pct = float32(n.done) / float32(n.total) * 100
+				if n.total > 0 && !hover { // how far its tasks are, as a ring
+					done := float32(n.done) / float32(n.total)
+					ui.Box(c).Size(18, 18).Shrink(0).PassThrough().Draw(func(pt *ui.Painter, r ui.Rect) {
+						cx, cy, rad := r.X+r.W/2, r.Y+r.H/2, float32(7)
+						pt.StrokePath(new(ui.Path).Circle(cx, cy, rad), 2.5, t.Text.Alpha(0.09))
+						if done > 0 {
+							pt.StrokePath(new(ui.Path).Circle(cx, cy, rad).Trim(0, done).Cap(ui.RoundCap), 2.5, col)
+						}
+					})
 				}
-				ui.Box(c.Key("done")).Height(4).WidthPercent(pct).Radius(2).Background(col).
-					Transition(ui.ElementTransition{Duration: 500 * time.Millisecond, Ease: easeDetent, Width: true})
+				a.rowMore(c, hover, "导图菜单", func(m *ui.Menu) { a.mapMenu(m, path) })
 			})
 		})
 	}
@@ -337,7 +357,7 @@ func (a *app) projectsView(c *ui.Context) {
 						}
 						return
 					}
-					ui.Grid(c.Key("maps")).Columns(cols).Gap(14).FillWidth().Children(func() {
+					ui.Grid(c.Key("maps")).Columns(cols).Gap(16).FillWidth().Children(func() {
 						for _, f := range files {
 							card(f)
 						}
@@ -390,4 +410,75 @@ func (a *app) deleteConfirm(c *ui.Context) {
 			a.deleteMap(a.deletePath)
 		}
 	}
+}
+
+// countTopics is how many topics a topic and those under it are.
+func countTopics(n *model.Node) int {
+	if n == nil {
+		return 0
+	}
+	k := 1
+	for _, ch := range n.Children {
+		k += countTopics(ch)
+	}
+	return k
+}
+
+// drawMapFace draws a map small, in r, as the face of its card: its
+// center in the map's color, its main topics around it, each in a color
+// of its own and as long as its name, with those under it as short
+// strokes. It is the map's shape, not its words.
+func drawMapFace(p *ui.Painter, r ui.Rect, root *model.Node, col ui.Color) {
+	s := min(r.W/205, 1.45)
+	cx, cy := r.X+r.W/2, r.Y+r.H/2
+	rw, rh := 52*s, 18*s
+	var kids []*model.Node
+	if root != nil {
+		kids = root.Children
+	}
+	if len(kids) > 6 {
+		kids = kids[:6]
+	}
+	right := (len(kids) + 1) / 2
+	for i, k := range kids {
+		side, j, of := float32(1), i, right
+		if i >= right {
+			side, j, of = -1, i-right, len(kids)-right
+		}
+		gap := min(28*s, (r.H-22*s)/float32(of))
+		by := cy + (float32(j)-float32(of-1)/2)*gap
+		bw := min(max(float32(len([]rune(k.Title)))*5.5+16, 26), 62) * s
+		bh := 12 * s
+		near := cx + side*(rw/2+30*s) // the topic's edge toward the center
+		bx := near
+		if side < 0 {
+			bx = near - bw
+		}
+		bc := ui.Hex(mapPalette[(colorIndex(col)+i+1)%len(mapPalette)])
+		p.StrokePath(new(ui.Path).MoveTo(cx+side*rw/2, cy).CubeTo(cx+side*(rw/2+16*s), cy, near-side*16*s, by, near, by), 1.5*s, bc.Alpha(0.75))
+		p.Fill(ui.Rect{X: bx, Y: by - bh/2, W: bw, H: bh}, bc.Alpha(0.36), bh/2)
+		far := near + side*bw
+		m := min(len(k.Children), 3)
+		for q := range m {
+			sy := by + (float32(q)-float32(m-1)/2)*7*s
+			sw := 14 * s
+			sx := far + side*8*s
+			if side < 0 {
+				sx -= sw
+			}
+			p.Line(far, by, far+side*8*s, sy, 1*s, bc.Alpha(0.45))
+			p.Fill(ui.Rect{X: sx, Y: sy - 2*s, W: sw, H: 4 * s}, bc.Alpha(0.3), 2*s)
+		}
+	}
+	p.Fill(ui.Rect{X: cx - rw/2, Y: cy - rh/2, W: rw, H: rh}, col, rh/2)
+}
+
+// colorIndex is a map's color's place among the maps' colors, or 0.
+func colorIndex(col ui.Color) int {
+	for i, hex := range mapPalette {
+		if ui.Hex(hex) == col {
+			return i
+		}
+	}
+	return 0
 }

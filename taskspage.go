@@ -408,7 +408,7 @@ func (a *app) tasksHead(c *ui.Context, all []taskItem) {
 	th := c.Theme()
 	// The day, large, and under it how it stands; at the end what narrows
 	// the tasks and how they show.
-	ui.Row(c.Key("tasks-head")).MinHeight(72).Padding(6, 0, 10).Gap(10).AlignItems(ui.End).Shrink(0).FillWidth().DragWindow().Children(func() {
+	ui.Row(c.Key("tasks-head")).MinHeight(82).Padding(16, 0, 10).Gap(10).AlignItems(ui.End).Shrink(0).FillWidth().DragWindow().Children(func() {
 		ui.Column(c).Gap(3).Grow(1).Shrink(1).MinWidth(0).Children(func() {
 			ui.Row(c).Gap(10).AlignItems(ui.End).Children(func() {
 				ui.Text(c, fmt.Sprintf("%d月%d日", now.Month(), now.Day())).FontSize(26).FontWeight(700).LineHeight(1.2).NoWrap()

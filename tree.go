@@ -25,7 +25,14 @@ func (a *app) treeShown() bool { return !a.cfg.HideTree && a.place() == placeMap
 func (a *app) mapTree(c *ui.Context) {
 	t := c.Theme()
 	bar := c.TitleBar()
-	side := ui.Column(c.Key("map-tree")).Width(treeWidth).Shrink(0).FillHeight().Background(ground(t))
+	// A shade deeper than the page it stands by, with a line of light at
+	// its edge: a pane of its own, not more of the page.
+	deep := ground(t).MixOklab(t.Text, 0.035)
+	if t.Dark {
+		deep = ground(t).MixOklab(ui.Hex("#000000"), 0.35)
+	}
+	side := ui.Column(c.Key("map-tree")).Width(treeWidth).Shrink(0).FillHeight().Background(deep).
+		InsetShadow(-1, 0, 0, 0, t.Text.Alpha(0.06))
 	side.Children(func() {
 		head := float32(toolbarHeight)
 		if !a.libOpen { // by a map it is under the window's controls
@@ -108,10 +115,11 @@ func (a *app) treeRow(c *ui.Context, depth int, name, count, path string, on boo
 		Cursor(ui.CursorPointer).Label(name).Background(t.Text.Alpha(0)).Transition(easeLook)
 	hover := row.Hovered()
 	switch {
-	case on:
-		row.Background(chosen(t))
+	case on: // a white pill, lifted a little
+		row.Background(pillColor(t)).Shadow(0, 0, 0, 0.5, ui.RGBA(0, 0, 0, 0.08)).Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.08)).
+			Shadow(0, 3, 8, -2, ui.RGBA(0, 0, 0, 0.1))
 	case hover:
-		row.Background(t.Text.Alpha(0.05))
+		row.Background(t.Text.Alpha(0.06))
 	}
 	if row.Clicked() && (path == "" || a.renaming != path) { // not on a press, which may start dragging it
 		a.later(click)
@@ -120,7 +128,11 @@ func (a *app) treeRow(c *ui.Context, depth int, name, count, path string, on boo
 		row.ContextMenu(menu)
 	}
 	row.Children(func() {
-		sideTile(c, ic, col)
+		if ic == iconMap { // a map is told by its color: a dot of it
+			ui.Box(c).Size(16, 16).Center().Shrink(0).PassThrough().Children(func() { mapDot(c, col, 9) })
+		} else {
+			sideTile(c, ic, col)
+		}
 		if path != "" && a.renaming == path {
 			a.renameInput(c)
 			return
