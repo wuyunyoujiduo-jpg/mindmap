@@ -301,13 +301,21 @@ func (a *app) waitingCard(c *ui.Context, w waitingItem, i int) {
 	// A card each, as a note is: when over the words, what can be done
 	// with it under the pointer, where the AI would put it under the words.
 	card := raise(ui.Column(c.Key("waiting:"+key)).Padding(16, 20, 18).Gap(4).Radius(radiusCard).FillWidth().Label("记下的 "+text), t).
-		Transition(rowMotion)
+		Transition(rowMotion).Cursor(ui.CursorPointer)
+	card.ContextMenu(func(m *ui.Menu) { a.waitingMenu(m, w, has) })
+	if card.Clicked() {
+		a.later(func() { a.openWaiting(w) })
+	}
+	hoverLift(card, t)
 	card.Children(func() {
 		ui.Row(c).Height(26).Gap(8).AlignItems(ui.Center).FillWidth().Children(func() {
 			if w.task != nil {
 				a.taskCircle(c, *w.task, 16)
 			}
 			ui.Text(c, kind).FontSize(textSmall).TextColor(t.TextMuted)
+			ui.Spacer(c)
+			// One key for all that can be done, as the pointer's other key.
+			iconButton(c, iconMore, "操作 "+text, "转成任务、放到导图、留在收集…", 26, true).Menu(func(m *ui.Menu) { a.waitingMenu(m, w, has) })
 		})
 		words, site := titleAndSite(full)
 		var tags []string // those its words do not already say
@@ -329,7 +337,6 @@ func (a *app) waitingCard(c *ui.Context, w waitingItem, i int) {
 			})
 		}
 		a.noteText(c, words, 15.5, 4)
-		a.waitingKeys(c, w, text, has)
 		if has {
 			ui.Row(c.Key("sugg")).Gap(8).AlignItems(ui.Center).FillWidth().Padding(8, 0, 0).
 				Transition(ui.ElementTransition{Duration: 300 * time.Millisecond, Ease: easeDetent, Enter: &ui.Motion{Y: -6}}).Children(func() {
@@ -373,49 +380,72 @@ func (a *app) waitingCard(c *ui.Context, w waitingItem, i int) {
 	})
 }
 
-// waitingKeys are what can be done with something written down, at its
-// card's foot, there to see with no pointer over it: a thought made a
-// task, opened, left in 收集; a task given its day, kept as a thought;
-// either put on a map; and the rest in a menu.
-func (a *app) waitingKeys(c *ui.Context, w waitingItem, text string, has bool) {
-	ui.Row(c.Key("keys")).Gap(2).AlignItems(ui.Center).FillWidth().Margin(6, 0, 0, -12).Wrap().Children(func() {
-		act := func(label, tip string, fn func()) {
-			if textKey(c, label, label+" "+text, tip).Clicked() {
-				a.later(fn)
-			}
+// waitingMenu is what can be done with something written down: under
+// the key at its card's corner, and under the pointer's other key. A
+// thought is made a task, put on a map, left in 收集; a task given its
+// day, kept as a thought.
+func (a *app) waitingMenu(m *ui.Menu, w waitingItem, has bool) {
+	if it := w.task; it != nil {
+		if m.Item("看详情").Chosen() {
+			a.later(func() { a.openWaiting(w) })
 		}
-		if it := w.task; it != nil {
-			day := today(a.now())
-			act("今天做", "把日子定在今天", func() { a.setTaskDay(*it, &day) })
-			textKey(c, "定日子", "定日子 "+text, "选一天，或改优先级").Menu(func(m *ui.Menu) { a.taskMenu(m, *it) })
-			if !has {
-				act("放到导图…", "放到某张导图的某个主题下", func() { a.placeWaiting(w) })
-			}
-			if len(a.taskClips(it.node)) == 0 {
-				act("存为灵感", "把它存成收集里的一条灵感，任务留着", func() { a.taskToMemo(*it, true) })
-			} else {
-				act("只留灵感", "把这个任务去掉，灵感留在收集里", func() { a.taskToMemo(*it, false) })
-			}
-			act("详情", "看和改它的备注、子任务、重复", func() { a.tasks.sel, a.tasks.draftOf = it.key(), "" })
-			return
-		}
-		cl := w.clip
-		act("转成任务", "在收件箱生成一个任务，链接着这条；这条留在收集", func() { a.clipToTask(cl) })
-		if !has {
-			act("放到导图…", "挂到某张导图的某个主题上", func() { a.placeWaiting(w) })
-		}
-		act("留在收集", "它不用放到哪里：不再出现在这里（可以撤回）", func() {
+		m.Separator()
+		a.taskMenu(m, *it)
+		return
+	}
+	place := "放到导图…"
+	if has {
+		place = "放到别处…"
+	}
+	cl := w.clip
+	if m.Item("打开").Chosen() {
+		a.later(func() { a.openWaiting(w) })
+	}
+	m.Separator()
+	if m.Item("转成任务").Chosen() {
+		a.later(func() { a.clipToTask(cl) })
+	}
+	if m.Item(place).Chosen() {
+		a.later(func() { a.placeWaiting(w) })
+	}
+	if m.Item("留在收集，不用归位").Chosen() {
+		a.later(func() {
 			cl.Kept = true
 			a.saveClip(cl)
 			a.keptLast = cl.ID
 		})
-		act("打开", "在收集里打开，改它的字、标签", func() {
-			a.openList(kindAll, "")
-			a.libSel = cl.ID
+	}
+	m.Separator()
+	if m.Item("复制内容").Chosen() {
+		a.plat.CopyText(clipCopyText(cl))
+		a.tell("已复制")
+	}
+	star := "加星标"
+	if cl.Starred {
+		star = "取消星标"
+	}
+	if m.Item(star).Chosen() {
+		cl.Starred = !cl.Starred
+		a.saveClip(cl)
+	}
+	m.Separator()
+	if m.Item("删除").Chosen() {
+		a.later(func() {
+			a.openWaiting(w)
+			a.libConfirm = true
 		})
-		ui.Spacer(c)
-		iconButton(c, iconMore, "更多 "+text, "更多", 26, true).Menu(func(m *ui.Menu) { a.clipMenu(m, cl) })
-	})
+	}
+}
+
+// openWaiting opens something written down: a task's details beside the
+// list, a thought in 收集.
+func (a *app) openWaiting(w waitingItem) {
+	if w.task != nil {
+		a.tasks.sel, a.tasks.draftOf = w.task.key(), ""
+		return
+	}
+	a.openList(kindAll, "")
+	a.libSel = w.clip.ID
 }
 
 // unkeep has a clip left in 收集 wait for a place again.

@@ -83,8 +83,10 @@ by AI, and an AI assistant.
     task (`tasksAdd`); with today's list,
     what waits for a place, each card saying one by its words alone, with
     no AI asked (`nearPlace`, which must share a word with it,
-    `sharesWord`); AI 归位 for better; and at each card's foot what can be
-    done with it, there to see with no pointer over it (`waitingKeys`).
+    `sharesWord`); AI 归位 for better; a card is clean, a click opens it, and
+    what can be done with it is one menu, under the key at its corner (a
+    phone has no other) and under the pointer's other key (`waitingMenu`;
+    a row of keys at each card's foot was too much, the user found).
     A thought and a task stay each what it is, a clip and a topic, and
     one is made of the other by a link (`convert.go`: `clipToTask`,
     `taskToMemo`; a task's details read the thoughts it links to,

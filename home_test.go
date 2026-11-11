@@ -29,7 +29,7 @@ func TestHome(t *testing.T) {
 	if !a.libOpen || !a.libHome {
 		t.Fatal("今天 not shown")
 	}
-	for _, want := range []string{"今天", "刚记下的", "放到导图… 资料 0"} {
+	for _, want := range []string{"今天", "刚记下的", "操作 资料 0"} {
 		if !tt.HasText(want) {
 			t.Fatalf("no %q: %q", want, tt.Texts())
 		}
@@ -69,8 +69,11 @@ func TestHome(t *testing.T) {
 	// a map, and the notes, which need nothing; older ones leave by
 	// themselves, as those put on a map.
 	// Left in 收集, it waits no more; and comes back when that is undone.
-	if err := tt.Click("留在收集 资料 0"); err != nil {
+	if err := tt.RightClick("记下的 资料 0"); err != nil {
 		t.Fatal(err)
+	}
+	if err := tt.ChooseMenuItem("留在收集，不用归位"); err != nil {
+		t.Fatalf("%v: %q", err, tt.Menu())
 	}
 	tt.Frame()
 	tt.Frame()
@@ -101,8 +104,11 @@ func TestHome(t *testing.T) {
 	row, _ := tt.Find("记下的 灵感来了")
 	tt.Move(row.X+row.W/2, row.Y+row.H/2)
 	tt.Frame()
-	if err := tt.Click("放到导图… 灵感来了"); err != nil {
+	if err := tt.Click("操作 灵感来了"); err != nil {
 		t.Fatal(err)
+	}
+	if err := tt.ChooseMenuItem("放到导图…"); err != nil {
+		t.Fatalf("%v: %q", err, tt.Menu())
 	}
 	tt.Frame()
 	if !a.paletteOpen || a.paletteMode != paletteAttach {
@@ -391,8 +397,11 @@ func TestThoughtAndTask(t *testing.T) {
 	}
 	a.openTasks()
 	tt.Frame()
-	if err := tt.Click("转成任务 换一家云服务商 #运维"); err != nil {
+	if err := tt.Click("操作 换一家云服务商 #运维"); err != nil {
 		t.Fatalf("%v: %q", err, tt.Texts())
+	}
+	if err := tt.ChooseMenuItem("转成任务"); err != nil {
+		t.Fatalf("%v: %q", err, tt.Menu())
 	}
 	tt.Frame()
 	tt.Frame()
