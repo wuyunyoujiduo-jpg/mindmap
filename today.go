@@ -290,27 +290,12 @@ func (a *app) waitingCard(c *ui.Context, w waitingItem, i int) {
 	// with it under the pointer, where the AI would put it under the words.
 	card := raise(ui.Column(c.Key("waiting:"+key)).Padding(16, 20, 18).Gap(4).Radius(radiusCard).FillWidth().Label("记下的 "+text), t).
 		Transition(rowMotion)
-	hover := card.Hovered()
 	card.Children(func() {
 		ui.Row(c).Height(26).Gap(8).AlignItems(ui.Center).FillWidth().Children(func() {
 			if w.task != nil {
 				a.taskCircle(c, *w.task, 16)
 			}
 			ui.Text(c, kind).FontSize(textSmall).TextColor(t.TextMuted)
-			ui.Spacer(c)
-			if !has {
-				label, name := "放到导图…", "放到导图 "+text
-				if w.task != nil {
-					label, name = "选一个主题…", "选一个主题… "+text
-				}
-				b := textKey(c, label, name, "放到某张导图的某个主题下；不放也行")
-				if !hover {
-					b.Opacity(0)
-				}
-				if b.Clicked() {
-					a.later(func() { a.placeWaiting(w) })
-				}
-			}
 		})
 		words, site := titleAndSite(full)
 		var tags []string // those its words do not already say
@@ -332,6 +317,7 @@ func (a *app) waitingCard(c *ui.Context, w waitingItem, i int) {
 			})
 		}
 		a.noteText(c, words, 15.5, 4)
+		a.waitingKeys(c, w, text, has)
 		if has {
 			ui.Row(c.Key("sugg")).Gap(8).AlignItems(ui.Center).FillWidth().Padding(8, 0, 0).
 				Transition(ui.ElementTransition{Duration: 300 * time.Millisecond, Ease: easeDetent, Enter: &ui.Motion{Y: -6}}).Children(func() {
@@ -372,6 +358,50 @@ func (a *app) waitingCard(c *ui.Context, w waitingItem, i int) {
 				})
 			})
 		}
+	})
+}
+
+// waitingKeys are what can be done with something written down, at its
+// card's foot, there to see with no pointer over it: a thought made a
+// task, opened, left in 收集; a task given its day, kept as a thought;
+// either put on a map; and the rest in a menu.
+func (a *app) waitingKeys(c *ui.Context, w waitingItem, text string, has bool) {
+	ui.Row(c.Key("keys")).Gap(2).AlignItems(ui.Center).FillWidth().Margin(6, 0, 0, -12).Wrap().Children(func() {
+		act := func(label, tip string, fn func()) {
+			if textKey(c, label, label+" "+text, tip).Clicked() {
+				a.later(fn)
+			}
+		}
+		if it := w.task; it != nil {
+			day := today(a.now())
+			act("今天做", "把日子定在今天", func() { a.setTaskDay(*it, &day) })
+			textKey(c, "定日子", "定日子 "+text, "选一天，或改优先级").Menu(func(m *ui.Menu) { a.taskMenu(m, *it) })
+			if !has {
+				act("放到导图…", "放到某张导图的某个主题下", func() { a.placeWaiting(w) })
+			}
+			if len(a.taskClips(it.node)) == 0 {
+				act("存为灵感", "把它存成收集里的一条灵感，任务留着", func() { a.taskToMemo(*it, true) })
+			} else {
+				act("只留灵感", "把这个任务去掉，灵感留在收集里", func() { a.taskToMemo(*it, false) })
+			}
+			act("详情", "看和改它的备注、子任务、重复", func() { a.tasks.sel, a.tasks.draftOf = it.key(), "" })
+			return
+		}
+		cl := w.clip
+		act("转成任务", "在收件箱生成一个任务，链接着这条；这条留在收集", func() { a.clipToTask(cl) })
+		if !has {
+			act("放到导图…", "挂到某张导图的某个主题上", func() { a.placeWaiting(w) })
+		}
+		act("留在收集", "它不用放到哪里：不再出现在这里", func() {
+			cl.Kept = true
+			a.saveClip(cl)
+		})
+		act("打开", "在收集里打开，改它的字、标签", func() {
+			a.openList(kindAll, "")
+			a.libSel = cl.ID
+		})
+		ui.Spacer(c)
+		iconButton(c, iconMore, "更多 "+text, "更多", 26, true).Menu(func(m *ui.Menu) { a.clipMenu(m, cl) })
 	})
 }
 

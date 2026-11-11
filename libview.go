@@ -442,6 +442,9 @@ func (a *app) clipMenu(m *ui.Menu, clip *library.Clip) {
 	if a.doc != nil && m.Item("加到当前导图").Chosen() {
 		a.clipIntoMap(clip)
 	}
+	if m.Item("转成任务").Chosen() {
+		a.later(func() { a.clipToTask(clip) })
+	}
 	m.Separator()
 	if m.Item("删除").Chosen() {
 		a.libSel, a.libConfirm = clip.ID, true

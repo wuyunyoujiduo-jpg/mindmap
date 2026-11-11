@@ -2,11 +2,13 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
 
 func TestHome(t *testing.T) {
@@ -27,7 +29,7 @@ func TestHome(t *testing.T) {
 	if !a.libOpen || !a.libHome {
 		t.Fatal("今天 not shown")
 	}
-	for _, want := range []string{"今天", "刚记下的", "放到导图 资料 0"} {
+	for _, want := range []string{"今天", "刚记下的", "放到导图… 资料 0"} {
 		if !tt.HasText(want) {
 			t.Fatalf("no %q: %q", want, tt.Texts())
 		}
@@ -66,7 +68,7 @@ func TestHome(t *testing.T) {
 	// What was written lately is there: the inbox's task, which waits for
 	// a map, and the notes, which need nothing; older ones leave by
 	// themselves, as those put on a map.
-	if n := len(a.waiting()); n != 6 || tt.HasText("留在收集") || tt.HasText("待归位") {
+	if n := len(a.waiting()); n != 6 || tt.HasText("待归位") {
 		t.Fatalf("lately %d: %q", n, tt.Texts())
 	}
 	if !tt.HasText("10月10日") || !tt.HasText(weekdays[testNow.Weekday()]) {
@@ -81,7 +83,7 @@ func TestHome(t *testing.T) {
 	row, _ := tt.Find("记下的 灵感来了")
 	tt.Move(row.X+row.W/2, row.Y+row.H/2)
 	tt.Frame()
-	if err := tt.Click("放到导图 灵感来了"); err != nil {
+	if err := tt.Click("放到导图… 灵感来了"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
@@ -359,4 +361,69 @@ func TestWaitingSaysItsPlace(t *testing.T) {
 	if len(a.clipBacklinks(clip.ID)) != 1 {
 		t.Fatal("not put there")
 	}
+}
+
+// A thought is made a task by a link, and a task kept as a thought: each
+// stays what it is, in its own place.
+func TestThoughtAndTask(t *testing.T) {
+	a, tt := newTestApp(t)
+	memo, err := a.addMemo("换一家云服务商 #运维\n比较价格和迁移成本", "手动")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.openTasks()
+	tt.Frame()
+	if err := tt.Click("转成任务 换一家云服务商 #运维"); err != nil {
+		t.Fatalf("%v: %q", err, tt.Texts())
+	}
+	tt.Frame()
+	tt.Frame()
+	var made *taskItem
+	for _, it := range a.taskItems() {
+		if it.node.Title == "换一家云服务商" {
+			made = &it
+		}
+	}
+	if made == nil || made.path != a.inboxPath() || !slices.Contains(made.node.Links, clipScheme+memo.ID) {
+		t.Fatalf("no task of the thought: %+v", made)
+	}
+	if a.lib.Find(memo.ID) == nil {
+		t.Fatal("the thought did not stay")
+	}
+	// The task's details read the thought it came of.
+	a.tasks.sel = made.key()
+	tt.Frame()
+	if !tt.HasText("比较价格和迁移成本") {
+		t.Fatalf("the thought is not read in the task: %q", tt.Texts())
+	}
+	snapshot(t, tt, "task-thought")
+
+	// A task kept as a thought links to it; made one, it is a task no more.
+	a.addTask("给车做保养", nil)
+	var car taskItem
+	for _, it := range a.taskItems() {
+		if it.node.Title == "给车做保养" {
+			car = it
+		}
+	}
+	n := len(a.lib.Clips)
+	a.taskToMemo(car, true)
+	if len(a.lib.Clips) != n+1 || len(a.taskClips(find2(a, "给车做保养"))) != 1 {
+		t.Fatalf("not kept as a thought: %d %d %+v", n, len(a.lib.Clips), find2(a, "给车做保养").Links)
+	}
+	a.taskToMemo(car, false)
+	if find2(a, "给车做保养") != nil {
+		t.Fatal("the task stayed")
+	}
+}
+
+// find2 is the task of a title among every map's, or nil.
+func find2(a *app, title string) *model.Node {
+	a.tasks.read = time.Time{}
+	for _, it := range a.taskItems() {
+		if it.node.Title == title {
+			return it.node
+		}
+	}
+	return nil
 }

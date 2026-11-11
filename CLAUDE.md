@@ -83,7 +83,12 @@ by AI, and an AI assistant.
     task (`tasksAdd`); with today's list,
     what waits for a place, each card saying one by its words alone, with
     no AI asked (`nearPlace`, which must share a word with it,
-    `sharesWord`); AI 归位 for better. The week and the month show tasks
+    `sharesWord`); AI 归位 for better; and at each card's foot what can be
+    done with it, there to see with no pointer over it (`waitingKeys`).
+    A thought and a task stay each what it is, a clip and a topic, and
+    one is made of the other by a link (`convert.go`: `clipToTask`,
+    `taskToMemo`; a task's details read the thoughts it links to,
+    `taskThoughts`). The week and the month show tasks
     on their days, and those that repeat (`model.Repeat`, `repeatProp`,
     `parseRepeat`) faint on the days they come again (`taskGhost`). A
     task's state, priority and day are set with `segmented` and `dateProp`.

@@ -600,6 +600,7 @@ func (a *app) taskDetail(c *ui.Context, it taskItem) {
 					}
 				})
 				a.subtasks(c, it)
+				a.taskThoughts(c, it)
 				section(c, iconMap, "位置", nil, func() {
 					where := it.mapName
 					if it.where != "" {
@@ -1101,6 +1102,12 @@ func (a *app) taskMenu(m *ui.Menu, it taskItem) {
 	})
 	if m.Item("移到导图…").Chosen() {
 		a.later(func() { a.moveTaskTo(it) })
+	}
+	if m.Item("存为灵感").Disabled(len(a.taskClips(it.node)) > 0).Chosen() {
+		a.later(func() { a.taskToMemo(it, true) })
+	}
+	if m.Item("改成灵感（去掉任务）").Chosen() {
+		a.later(func() { a.taskToMemo(it, false) })
 	}
 	if m.Item("在导图中打开").Chosen() {
 		a.later(func() { a.libOpen = false; a.goToNode(it.path, it.sheet, it.node.ID) })

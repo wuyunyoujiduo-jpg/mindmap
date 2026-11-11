@@ -139,6 +139,7 @@ func (a *app) editMapAt(path, note string, fn func(f *model.File) error) error {
 	}
 	_, _ = a.versions.Save(path, f, versions.Auto, note, now.Add(1))
 	delete(a.hists, path)
+	delete(a.index, path) // read again, though written twice within the clock's tick
 	a.syncChange()
 	a.refreshFiles()
 	return nil
