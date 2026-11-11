@@ -2,6 +2,9 @@ package main
 
 import (
 	"fmt"
+	"net/url"
+	"regexp"
+	"slices"
 
 	"github.com/egoist/mygo/ui"
 	"path/filepath"
@@ -186,11 +189,48 @@ func (a *app) dropMaterial(id string, d fileDrag) {
 }
 
 // linksMark is the mark of a node's links: how many, when more than one.
-func linksMark(n *model.Node) string {
-	if len(n.Links) > 1 {
-		return fmt.Sprintf("↗%d", len(n.Links))
+func linksMark(links []string) string {
+	if len(links) > 1 {
+		return fmt.Sprintf("↗%d", len(links))
 	}
 	return "↗"
+}
+
+// titleURL finds the web addresses written in a title: they end at a
+// space or at what is not ASCII, as Chinese written right after one.
+var titleURL = regexp.MustCompile(`https?://[!-~]+`)
+
+// titleLinks are where the web addresses written in a title are, as
+// byte ranges, without the punctuation that ends a sentence after one.
+func titleLinks(title string) [][2]int {
+	if !strings.Contains(title, "://") {
+		return nil
+	}
+	var at [][2]int
+	for _, m := range titleURL.FindAllStringIndex(title, -1) {
+		end := m[0] + len(strings.TrimRight(title[m[0]:m[1]], ".,;:!?'\")]}>"))
+		if u, err := url.Parse(title[m[0]:end]); err != nil || u.Host == "" {
+			continue
+		}
+		at = append(at, [2]int{m[0], end})
+	}
+	return at
+}
+
+// nodeLinks are a node's links and, after them, the web addresses
+// written in its title, which open as links do without being added.
+func nodeLinks(n *model.Node) []string {
+	at := titleLinks(n.Title)
+	if len(at) == 0 {
+		return n.Links
+	}
+	links := slices.Clone(n.Links)
+	for _, r := range at {
+		if u := n.Title[r[0]:r[1]]; !slices.Contains(links, u) {
+			links = append(links, u)
+		}
+	}
+	return links
 }
 
 // dropOnMap links a map dropped on a map of the list to that map's

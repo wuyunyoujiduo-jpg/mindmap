@@ -138,8 +138,8 @@ func (a *app) measure(c *ui.Context) layout.Measure {
 		if p.note {
 			w += nodeGap + markSize + 3
 		}
-		if len(n.Links) > 0 {
-			mw, _ := a.measureText(c, 0, ui.Span{Text: linksMark(n), Size: markSize + 1})
+		if links := nodeLinks(n); len(links) > 0 {
+			mw, _ := a.measureText(c, 0, ui.Span{Text: linksMark(links), Size: markSize + 1})
 			w += nodeGap + mw
 		}
 		if m := filesMark(n); m != "" {
@@ -996,7 +996,17 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 			}
 			return
 		}
-		title := ui.Text(c, n.Title).FontSize(size).FontWeight(fontWeight(n, depth)).Width(tw * z).Shrink(0)
+		// The web addresses written in it show as links: the node's mark
+		// opens them.
+		var spans []ui.Span
+		last := 0
+		for _, r := range titleLinks(n.Title) {
+			spans = append(spans, ui.Span{Text: n.Title[last:r[0]]},
+				ui.Span{Text: n.Title[r[0]:r[1]], Color: accentOn(filled, onFill, t.Accent), Underline: true})
+			last = r[1]
+		}
+		spans = append(spans, ui.Span{Text: n.Title[last:]})
+		title := ui.RichText(c, spans...).FontSize(size).FontWeight(fontWeight(n, depth)).Width(tw * z).Shrink(0)
 		if a.titleOneLine(c, n, depth) {
 			title.NoWrap() // as measured, whatever the zoom does to the glyphs
 		}
@@ -1069,29 +1079,28 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 			}
 			clip.Children(func() { ui.Text(c, m).FontSize(markSize * z).TextColor(muted).NoWrap() })
 		}
-		if len(n.Links) > 0 {
+		if links := nodeLinks(n); len(links) > 0 {
 			// One link opens; several are listed. Their names are worked
 			// out under the pointer only, as each looks up a clip or a map.
 			mark := ui.Box(c.Key("links")).Cursor(ui.CursorPointer).Label("打开链接")
 			if mark.Hovered() {
 				var tips []string
-				for _, l := range n.Links {
+				for _, l := range links {
 					_, label := a.linkLabel(l)
 					tips = append(tips, label)
 				}
-				if len(n.Links) == 1 {
+				if len(links) == 1 {
 					mark.Tooltip("点击打开：" + tips[0])
 				} else {
-					mark.Tooltip(fmt.Sprintf("%d 个链接：%s", len(n.Links), strings.Join(tips, "、")))
+					mark.Tooltip(fmt.Sprintf("%d 个链接：%s", len(links), strings.Join(tips, "、")))
 				}
 			}
-			if len(n.Links) == 1 {
+			if len(links) == 1 {
 				if mark.Clicked() {
-					link := n.Links[0]
+					link := links[0]
 					a.later(func() { a.openLink(link) })
 				}
 			} else {
-				links := slices.Clone(n.Links)
 				mark.Menu(func(m *ui.Menu) {
 					for _, l := range links {
 						icon, label := a.linkLabel(l)
@@ -1107,7 +1116,7 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 				})
 			}
 			mark.Children(func() {
-				ui.Text(c, linksMark(n)).FontSize((markSize + 1) * z).TextColor(accentOn(filled, onFill, t.Accent)).NoWrap()
+				ui.Text(c, linksMark(links)).FontSize((markSize + 1) * z).TextColor(accentOn(filled, onFill, t.Accent)).NoWrap()
 			})
 		}
 	})
