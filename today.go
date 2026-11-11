@@ -93,6 +93,9 @@ func (a *app) saveHomeLine() {
 		a.tell("已记到灵感")
 	}
 	a.homeDraft = ""
+	if !a.libOpen {
+		a.barOpen = false // over a map it is put away once it has kept
+	}
 }
 
 // dueToday are the tasks of today and those overdue, not done.

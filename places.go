@@ -38,8 +38,13 @@ func (a *app) showProjects() {
 	a.projOpen = true
 }
 
-// sideWidth is the room a sidebar takes: none, there is no sidebar.
-func (a *app) sideWidth() float32 { return 0 }
+// sideWidth is the room the maps' directory takes beside a map.
+func (a *app) sideWidth() float32 {
+	if a.treeShown() && !a.libOpen {
+		return treeWidth
+	}
+	return 0
+}
 
 // placesBar is the top of the window on the pages of lists: the switch of
 // the three places in its middle, the search of everything and the
@@ -252,7 +257,17 @@ func (a *app) projectsView(c *ui.Context) {
 
 	ui.Column(c.Key("projects")).Grow(1).Label("项目").Children(func() {
 		pageColumn(c, "projects-column", true).Children(func() {
-			pageHeader(c, "projects-head", "项目", fmt.Sprintf("%d 张导图，一张就是一个项目", len(a.files)), func() {
+			title, sub := "项目", fmt.Sprintf("%d 张导图，一张就是一个项目", len(a.files))
+			if a.projFolder != "" && a.treeShown() {
+				title, sub = at.Name, fmt.Sprintf("%d 张导图", len(at.AllFiles()))
+			}
+			pageHeader(c, "projects-head", title, sub, func() {
+				if a.cfg.HideTree {
+					if iconButton(c, iconSidebar, "显示目录", "显示目录：文件夹和导图的列表", 32, true).Clicked() {
+						a.cfg.HideTree = false
+						a.cfg.save()
+					}
+				}
 				if a.projFolder != "" { // the folder shown: rename, move, delete
 					path := a.projFolder
 					iconButton(c, iconMore, "文件夹菜单", "这个文件夹：重命名、移动、删除…", 32, true).Menu(func(m *ui.Menu) { a.folderMenu(m, path) })
@@ -276,8 +291,9 @@ func (a *app) projectsView(c *ui.Context) {
 					}
 				})
 			})
-			// The folders: those of the top, then those of each one chosen.
-			if len(a.tree.Folders) > 0 {
+			// The folders, where the directory is put away: those of the top,
+			// then those of each one chosen.
+			if len(a.tree.Folders) > 0 && !a.treeShown() {
 				ui.Column(c.Key("folders")).Gap(8).Padding(2, 0, 14).FillWidth().Shrink(0).Children(func() {
 					for depth := 0; depth <= len(chain); depth++ {
 						parent := a.tree
@@ -328,6 +344,9 @@ func (a *app) projectsView(c *ui.Context) {
 					})
 				})
 			})
+			if a.treeShown() {
+				return // the directory has them at its foot
+			}
 			// Where the maps are kept, and how the sync goes.
 			ui.Row(c.Key("projects-foot")).Height(36).Gap(8).AlignItems(ui.Center).Shrink(0).FillWidth().Children(func() {
 				where := ui.Row(c.Key("folder-switch")).Height(30).Padding(0, 10).Gap(8).Radius(radiusPill).AlignItems(ui.Center).Shrink(1).MinWidth(0).

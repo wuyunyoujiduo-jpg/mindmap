@@ -57,7 +57,7 @@ func (a *app) barCard(c *ui.Context, text string) {
 				sendLabel:   "记下", fileLabel: "加图片", save: a.saveHomeLine, lines: 1, over: true,
 				focused: func() { a.barOpen = true },
 				esc: func() {
-					if strings.TrimSpace(a.homeDraft) == "" {
+					if strings.TrimSpace(a.homeDraft) == "" || !a.libOpen {
 						a.barOpen = false
 					}
 				},
@@ -157,4 +157,17 @@ func (a *app) barHits(text string, n int) []paletteItem {
 		}
 	}
 	return out
+}
+
+// barOver is the bar over a map, asked for from the map's own bar: the
+// card to write in under the top of the window, put away by a press
+// beside it, by Escape, and once it has kept what was written.
+func (a *app) barOver(c *ui.Context) {
+	w, _ := c.Size()
+	bw := min(640, w-32)
+	open := ui.Column(c.Key("bar-over")).Absolute().Top(toolbarHeight + 6).Left((w - bw) / 2).Width(bw).Gap(8).ZIndex(30)
+	if open.PressedOutside() {
+		a.barOpen = false
+	}
+	open.Children(func() { a.barCard(c, strings.TrimSpace(a.homeDraft)) })
 }

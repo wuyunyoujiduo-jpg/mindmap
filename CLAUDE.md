@@ -50,12 +50,18 @@ by AI, and an AI assistant.
   rows in white cards, a name and a word on it at the left, what sets it
   at the right (`rowsField`, `setRow`, `setLine`, `switchRow`; `field` for
   what is not rows), in a `modal`, and the system's buttons are pills (`button`).
-  There is no sidebar: the app has three
+  There is no sidebar of the app's parts: the app has three
   places, 今天, 项目 and 收集 (`places.go`), a switch of them at the top of
   the pages of lists (`placesBar`, with the AI's key, the search of everything and the
   settings); 项目 is the maps as cards, its folders a row of pills to choose from, as a
   wall's kinds (`projectsView`, `projFolder`), and a
-  map opened takes the page, its bar going back to 项目. The words of the
+  map opened takes the page, its bar going back to 项目. 项目 alone has a
+  directory at its left, which the user asked back (`tree.go`, `mapTree`,
+  `treeShown`: folders that open and close and their maps, beside the
+  cards and beside a map opened, so that going from a map to another is
+  one click; put away by `config.HideTree`, and then the folders are the
+  row of pills). Over a map the one bar is asked for from the map's bar
+  (`barOver`). The words of the
   UI are of no one device (记下, never 回车记下): a phone is to come.
   A map is on white, the pages of lists on the ground. The
   accent is kept for

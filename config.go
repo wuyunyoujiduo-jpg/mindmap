@@ -19,6 +19,9 @@ type config struct {
 	Ground string `json:"ground,omitempty"`
 	// ShowTree shows the maps' folders beside the rail (rail.go).
 	ShowTree bool `json:"showTree,omitempty"`
+	// HideTree puts away the maps' directory of 项目 (tree.go), which
+	// shows unless it is set.
+	HideTree bool `json:"hideTree,omitempty"`
 	// Favorites are the maps starred, by their paths: first in their
 	// folder and where maps are switched.
 	Favorites []string `json:"favorites,omitempty"`

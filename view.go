@@ -42,6 +42,12 @@ func (a *app) view(c *ui.Context) {
 			}
 			func() {
 				page.Children(func() {
+					if a.treeShown() {
+						a.mapTree(c) // the directory, in 项目
+						if !a.libOpen {
+							ui.Box(c).Width(1).FillHeight().Background(hairline(t))
+						}
+					}
 					if a.libOpen {
 						if a.projOpen {
 							a.projectsView(c)
@@ -88,6 +94,9 @@ func (a *app) view(c *ui.Context) {
 				})
 			}()
 		}()
+		if !a.libOpen && a.barOpen && !a.presenting {
+			a.barOver(c)
+		}
 		if a.lightbox != "" && a.doc != nil {
 			a.lightboxView(c)
 		}
@@ -192,12 +201,18 @@ func (a *app) toolbar(c *ui.Context) {
 	if room < 820 { // the seven views take what room there is
 		gap = 4
 	}
-	ui.Row(c.Key("toolbar")).Height(toolbarHeight).Padding(0, max(10, c.TitleBar().Right), 0, max(14, c.TitleBar().Left+12)).Gap(gap).AlignItems(ui.Center).DragWindow().Children(func() {
+	ui.Row(c.Key("toolbar")).Height(toolbarHeight).Padding(0, max(10, c.TitleBar().Right), 0, max(14, b2f(!a.treeShown())*(c.TitleBar().Left+12))).Gap(gap).AlignItems(ui.Center).DragWindow().Children(func() {
 		if a.doc == nil {
 			ui.Spacer(c)
 			return
 		}
-		// Back to 项目, the maps by folder.
+		if a.cfg.HideTree { // the directory, put away, comes back from here
+			if iconButton(c, iconSidebar, "显示目录", "显示目录：文件夹和导图的列表", 30, true).Clicked() {
+				a.cfg.HideTree = false
+				a.cfg.save()
+			}
+		}
+		// Back to 项目, the maps as cards.
 		if textKey(c, "‹ 项目", "回到项目", "回到项目：所有导图").Clicked() {
 			a.later(a.showProjects)
 		}
@@ -258,6 +273,10 @@ func (a *app) toolbar(c *ui.Context) {
 		}
 		if room >= 450 && iconButton(c, iconPlay, "开始演说", "开始演说 ⌘↩", 30, true).Clicked() {
 			a.later(func() { a.startPresenting("") })
+		}
+		// The one bar, over the map: write a thought down, look for, ask.
+		if room >= 740 && iconButton(c, iconPencil, "记一句", "记一句、搜索，或者问 AI", 30, true).Clicked() { // where there is room for it
+			a.barOpen, a.writeRefocus = true, "home-line"
 		}
 		aiText := "问 AI"
 		if room < 760 {

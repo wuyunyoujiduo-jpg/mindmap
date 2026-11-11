@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/egoist/mygo/ui"
 	"os"
 	"path/filepath"
 	"slices"
@@ -136,5 +137,83 @@ func TestFolderRenameAndDelete(t *testing.T) {
 	}
 	if slices.ContainsFunc(a.files, func(f model.FileInfo) bool { return inside(f.Path, to) }) {
 		t.Fatal("the folder's maps are still listed")
+	}
+}
+
+// The maps' directory is beside 项目's cards and beside a map opened: a
+// click on a map goes to it, a folder shows its cards; it can be put away.
+func TestMapTree(t *testing.T) {
+	a, tt := newTestApp(t)
+	guide := a.path
+	dir := filepath.Join(a.dir, "工作")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	a.newMapIn(dir)
+	a.flush()
+	other := a.path
+	a.renaming = ""
+	a.refreshFiles()
+	a.setFolderOpen(dir, true)
+	tt.Frame()
+	if !a.treeShown() || !tt.HasText("目录") || a.sideWidth() != treeWidth {
+		t.Fatalf("no directory beside the map: %q", tt.Texts())
+	}
+	snapshot(t, tt, "tree-map")
+	// One click from a map to another.
+	if err := tt.Click(mapName(guide)); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.path != guide || a.libOpen {
+		t.Fatalf("not at the map clicked: %q", a.path)
+	}
+	// By the cards, a folder shows its own.
+	a.showProjects()
+	tt.Frame()
+	if err := tt.Click("工作"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.projFolder != dir || !tt.HasText("1 张导图") {
+		t.Fatalf("the folder's cards are not shown: %q", a.projFolder)
+	}
+	snapshot(t, tt, "tree-projects")
+	_ = other
+	// Put away, the folders are a row of pills again; 今天 has none.
+	if err := tt.Click("收起目录"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.treeShown() || !a.cfg.HideTree || !tt.HasText("全部") {
+		t.Fatal("the directory is not put away")
+	}
+	a.cfg.HideTree = false
+	a.showLibrary()
+	a.libHome = true
+	tt.Frame()
+	if a.treeShown() {
+		t.Fatal("the directory shows in 今天")
+	}
+}
+
+// The one bar is over a map too, asked for from the map's bar.
+func TestBarOverMap(t *testing.T) {
+	a, tt := newTestApp(t)
+	if err := tt.Click("记一句"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Frame()
+	if !a.barOpen || !tt.HasText("加粗") {
+		t.Fatalf("no bar over the map: %q", tt.Texts())
+	}
+	tt.Type("画布上记的一句")
+	tt.Frame()
+	snapshot(t, tt, "bar-over-map")
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if a.barOpen || len(a.lib.Clips) != 1 || a.lib.Clips[0].Text != "画布上记的一句" {
+		t.Fatalf("not kept and put away: open %v, clips %d", a.barOpen, len(a.lib.Clips))
 	}
 }

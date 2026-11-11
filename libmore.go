@@ -358,7 +358,7 @@ func (a *app) embedSettings(c *ui.Context) {
 	if a.cfg.NoEmbed {
 		return
 	}
-	field(c, "向量模型", func() {
+	field(c, "离线插件", func() {
 		ui.Column(c).Gap(10).FillWidth().Children(func() {
 			switch {
 			case a.cfg.EmbedURL == "":
@@ -375,18 +375,30 @@ func (a *app) embedSettings(c *ui.Context) {
 					}
 				})
 			}
-			ui.Text(c, "或者用外部向量模型（更准）：支持任何 OpenAI 兼容的 /embeddings 接口。").
-				FontSize(12).TextColor(t.TextMuted).Wrap()
-			ui.Row(c).Gap(6).Wrap().GapY(6).Children(func() {
-				for _, p := range embedPresets {
-					if button(c.Key(p.name), p.name).FontSize(12).Tooltip(p.note).Clicked() {
-						d[0], d[2] = p.url, p.model
-					}
+		})
+	})
+	rowsField(c, "外部向量模型", "更准；支持任何 OpenAI 兼容的 /embeddings 接口。填了就用它，不用离线插件。", func() {
+		setRow(c, "常用的", "点一个填上地址和模型", func() {
+			for _, p := range embedPresets {
+				if button(c.Key(p.name), p.name).FontSize(12).Tooltip(p.note).Clicked() {
+					d[0], d[2] = p.url, p.model
 				}
-			})
-			ui.TextInput(c.Key("embed-url"), &d[0]).Placeholder("接口地址，如 http://localhost:11434/v1").Label("向量接口地址")
-			ui.TextInput(c.Key("embed-key"), &d[1]).Password().Placeholder("API Key（Ollama 不需要）").Label("向量 API Key")
-			ui.TextInput(c.Key("embed-model"), &d[2]).Placeholder("模型，如 bge-m3").Label("向量模型")
+			}
+		})
+		setLine(c)
+		setRow(c, "接口地址", "", func() {
+			ui.TextInput(c.Key("embed-url"), &d[0]).Placeholder("如 http://localhost:11434/v1").Label("向量接口地址").Width(280)
+		})
+		setLine(c)
+		setRow(c, "API Key", "Ollama 不需要", func() {
+			ui.TextInput(c.Key("embed-key"), &d[1]).Password().Placeholder("sk-…").Label("向量 API Key").Width(280)
+		})
+		setLine(c)
+		setRow(c, "模型", "", func() {
+			ui.TextInput(c.Key("embed-model"), &d[2]).Placeholder("如 bge-m3").Label("向量模型").Width(280)
+		})
+		setLine(c)
+		ui.Column(c).Padding(12, 0).FillWidth().Children(func() {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				changed := d[0] != a.cfg.EmbedURL || d[1] != a.cfg.EmbedKey || d[2] != a.cfg.EmbedModel
 				if inkButton(c, "保存并测试", changed || a.embedErr != "").Clicked() {
