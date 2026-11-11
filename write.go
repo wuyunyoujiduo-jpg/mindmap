@@ -29,12 +29,16 @@ type writeCard struct {
 	focused                 func()                 // told while it is written in
 	esc                     func()                 // told when Escape is pressed in it
 	over                    bool                   // it lies over the page: lifted
+	inline                  bool                   // one line with its tools at its end, growing down as it is written
 }
 
 func (a *app) writeCard(c *ui.Context, w writeCard) {
 	t := c.Theme()
 	box := ui.Column(c.Key(w.key)).Radius(radiusCard).Padding(10, 10, 8, 14).Gap(2).FillWidth().Shrink(0).
 		Background(cardColor(t)).Border(1.5, t.Text.Alpha(0)).Transition(easeLook)
+	if w.inline {
+		box.Radius(radiusPill).Padding(2.5, 4.5, 2.5, 12.5).Gap(0).MinHeight(36).Justify(ui.Center)
+	}
 	if w.over {
 		lifted(box.NoShadow(), t)
 	}
@@ -43,36 +47,46 @@ func (a *app) writeCard(c *ui.Context, w writeCard) {
 		if w.lines > 0 {
 			lines = w.lines
 		}
-		in := ui.TextAreaBase(c.Key(w.key+"-input"), w.draft).Lines(lines, 6).
-			Placeholder(w.placeholder).FontSize(textTitle).LineHeight(1.5).FillWidth().Label(w.label)
-		if w.paste != nil {
-			in.OnPaste(w.paste)
-		}
-		captureFocus(c, box, in)
-		if w.focused != nil && in.Focused() {
-			w.focused()
-		}
-		if w.esc != nil && in.Shortcut(0, ui.KeyEscape) {
-			w.esc()
-		}
-		if a.writeRefocus == w.key {
-			a.writeRefocus = ""
-			in.Focus()
-		}
-		keep := in.Shortcut(ui.Cmd, ui.KeyEnter)
-		if w.enterSaves {
-			in.HandleInput(func(ev ui.InputEvent) bool {
-				if ev.Kind == ui.InputKeyDown && ev.Key == ui.KeyEnter && ev.Mods&ui.Shift == 0 {
-					a.later(w.save)
-					return true
-				}
-				return false
-			})
+		keep := false
+		input := func() {
+			in := ui.TextAreaBase(c.Key(w.key+"-input"), w.draft).Lines(lines, 6).
+				Placeholder(w.placeholder).FontSize(textTitle).LineHeight(1.5).FillWidth().Label(w.label)
+			if w.inline {
+				in.FontSize(textBody).Grow(1).Basis(0).MinWidth(60).Margin(0, 0, 4.5)
+			}
+			if w.paste != nil {
+				in.OnPaste(w.paste)
+			}
+			captureFocus(c, box, in)
+			if w.focused != nil && in.Focused() {
+				w.focused()
+			}
+			if w.esc != nil && in.Shortcut(0, ui.KeyEscape) {
+				w.esc()
+			}
+			if a.writeRefocus == w.key {
+				a.writeRefocus = ""
+				in.Focus()
+			}
+			keep = in.Shortcut(ui.Cmd, ui.KeyEnter)
+			if w.enterSaves {
+				in.HandleInput(func(ev ui.InputEvent) bool {
+					if ev.Kind == ui.InputKeyDown && ev.Key == ui.KeyEnter && ev.Mods&ui.Shift == 0 {
+						a.later(w.save)
+						return true
+					}
+					return false
+				})
+			}
 		}
 		text := strings.TrimSpace(*w.draft)
-		ui.Row(c.Key("tools")).Gap(6).AlignItems(ui.Center).FillWidth().Wrap().GapY(4).Children(func() {
+		size := float32(32)
+		if w.inline {
+			size = 28
+		}
+		tools := func() {
 			tool := func(key, mark string, ic icon, tip string, click func()) {
-				b := ui.Box(c.Key(key)).Size(32, 32).Radius(radiusPill).Center().Cursor(ui.CursorPointer).Label(key).Tooltip(tip).
+				b := ui.Box(c.Key(key)).Size(size, size).Radius(radiusPill).Center().Cursor(ui.CursorPointer).Label(key).Tooltip(tip).
 					Background(t.Text.Alpha(0)).Transition(easeLook)
 				ink := t.TextMuted
 				if b.Hovered() {
@@ -107,7 +121,9 @@ func (a *app) writeCard(c *ui.Context, w writeCard) {
 					}
 				})
 			})
-			ui.Box(c).Width(1).Height(16).Margin(0, 4).Background(hairline(t))
+			if !w.inline {
+				ui.Box(c).Width(1).Height(16).Margin(0, 4).Background(hairline(t))
+			}
 			tool("加粗", "B", 0, "加粗：点一下开始，写完再点一下结束（**粗体**）", func() { *w.draft += "**" })
 			tool("圆点列表", "", iconLevels, "列表：每行一个点", func() { line("- ") })
 			tool("编号列表", "1.", 0, "编号列表：1. 2. 3.", func() {
@@ -119,11 +135,19 @@ func (a *app) writeCard(c *ui.Context, w writeCard) {
 				}
 				line(fmt.Sprintf("%d. ", n))
 			})
-			ui.Box(c).Width(1).Height(16).Margin(0, 4).Background(hairline(t))
+			if !w.inline {
+				ui.Box(c).Width(1).Height(16).Margin(0, 4).Background(hairline(t))
+			}
 			tool("引用", "@", 0, "引用另一条灵感或资料：会列出最近的", func() { add("@") })
+		}
+		reads := func() {
 			if w.reads != nil {
 				w.reads()
 			}
+		}
+		_, tagging := beingWritten(*w.draft, "#")
+		_, referring := beingWritten(*w.draft, "@")
+		offers := func() {
 			// While a tag or a reference is being written, those used last
 			// that begin so: a click writes one.
 			if part, ok := beingWritten(*w.draft, "#"); ok {
@@ -149,15 +173,13 @@ func (a *app) writeCard(c *ui.Context, w writeCard) {
 					}
 				}
 			}
-			ui.Spacer(c)
-			if !w.enterSaves && text != "" {
-				ui.Text(c, "⌘↩").FontSize(textCaption).TextColor(t.TextMuted)
-			}
+		}
+		sendKey := func() {
 			tip := "记下（⌘回车）"
 			if w.enterSaves {
 				tip = "记下（回车；Shift+回车换行）"
 			}
-			send := ui.Box(c.Key("send")).Size(52, 32).Radius(radiusPill).Center().Label(w.sendLabel).Tooltip(tip).
+			send := ui.Box(c.Key("send")).Size(52-(32-size)*2, size).Shrink(0).Radius(radiusPill).Center().Label(w.sendLabel).Tooltip(tip).
 				Background(t.Text.Alpha(0.12)).Transition(easeLook)
 			press(send, 0.94)
 			if text != "" {
@@ -168,7 +190,33 @@ func (a *app) writeCard(c *ui.Context, w writeCard) {
 				press(send, 0.94)
 			}
 			send.Children(func() { glyph(c, iconSend, 16, ui.Hex("#FFFFFF")) })
-		})
+		}
+		if w.inline {
+			// One row, the tools at the foot of the words as these grow;
+			// what is offered for a tag or a reference comes under it.
+			ui.Row(c.Key("tools")).Gap(2).AlignItems(ui.End).FillWidth().Children(func() {
+				input()
+				ui.Row(c.Key("reads")).Height(size).AlignItems(ui.Center).Shrink(0).Children(reads)
+				tools()
+				ui.Box(c).Width(4)
+				sendKey()
+			})
+			if tagging || referring {
+				ui.Row(c.Key("offers")).Gap(6).GapY(4).Padding(4, 0, 4).AlignItems(ui.Center).FillWidth().Wrap().Children(offers)
+			}
+		} else {
+			input()
+			ui.Row(c.Key("tools")).Gap(6).AlignItems(ui.Center).FillWidth().Wrap().GapY(4).Children(func() {
+				tools()
+				reads()
+				offers()
+				ui.Spacer(c)
+				if !w.enterSaves && text != "" {
+					ui.Text(c, "⌘↩").FontSize(textCaption).TextColor(t.TextMuted)
+				}
+				sendKey()
+			})
+		}
 		if keep && text != "" {
 			a.later(w.save)
 		}

@@ -71,6 +71,10 @@ func TestTasksPage(t *testing.T) {
 	if !a.tasks.open || !tt.HasText("已逾期") || !tt.HasText("登录") || !tt.HasText("搜索") || tt.HasText("准备发布说明") {
 		t.Fatalf("today: %q", tt.Texts())
 	}
+	if err := tt.Click("添加任务"); err != nil {
+		t.Fatalf("today has no line to add a task: %v", err)
+	}
+	tt.Frame()
 	snapshot(t, tt, "tasks-today")
 	// The next 7 days hold the other map's.
 	a.tasks.view = tasksWeekAhead

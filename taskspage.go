@@ -361,8 +361,8 @@ func (a *app) tasksView(c *ui.Context) {
 			}
 			top.Children(func() {
 				a.tasksHead(c, all)
-				if calendar {
-					a.tasksAdd(c, now) // onto the day chosen
+				if a.tasks.view != tasksWaiting {
+					a.tasksAdd(c, now) // onto the day chosen; a list's, onto its own
 				}
 			})
 			if calendar {

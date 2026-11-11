@@ -12,15 +12,16 @@ import (
 // written in it is kept (a thought; a task where it begins with a day, or
 // says how it repeats; a link), looked for as it is written (what there
 // is already shows under the bar), or, begun with a ?, asked of the AI. It
-// is one line until written in, then the card to write in, with its
-// tools (writeCard).
+// is one line, and stays one when written in, its tools coming to the
+// line's end (writeCard, inline): it grows down over the page only as
+// the words do.
 func (a *app) oneBar(c *ui.Context) {
 	t := c.Theme()
 	text := strings.TrimSpace(a.homeDraft)
 	// Its room is one line's in the top row, whatever it shows: open, the
 	// card lies over the page under it, so that nothing moves.
 	ui.Row(c.Key("one-bar")).Grow(1).Basis(0).MinWidth(120).Height(36).Justify(ui.Center).Children(func() {
-		ui.Column(c.Key("bar")).Grow(1).MaxWidth(560).Height(36).Children(func() {
+		ui.Column(c.Key("bar")).Grow(1).MaxWidth(640).Height(36).Children(func() {
 			if !a.barOpen && text == "" {
 				// One line: a click opens the card, and writes in it.
 				field := ui.Row(c.Key("closed")).Height(36).Padding(0, 6, 0, 14).Gap(10).Radius(radiusPill).AlignItems(ui.Center).FillWidth().
@@ -33,7 +34,7 @@ func (a *app) oneBar(c *ui.Context) {
 				})
 				return
 			}
-			open := ui.Column(c.Key("open")).Absolute().Top(-6).Left(0).Right(0).Gap(8).ZIndex(20)
+			open := ui.Column(c.Key("open")).Absolute().Top(0).Left(0).Right(0).Gap(8).ZIndex(20)
 			if open.PressedOutside() && text == "" {
 				a.barOpen = false
 			}
@@ -52,7 +53,7 @@ func (a *app) barCard(c *ui.Context, text string) {
 			a.writeCard(c, writeCard{
 				key: "home-line", label: "记一条灵感或任务", draft: &a.homeDraft, enterSaves: true,
 				placeholder: "记一句、搜索，或者问 AI…",
-				sendLabel:   "记下", fileLabel: "加图片", save: a.saveHomeLine, lines: 1, over: true,
+				sendLabel:   "记下", fileLabel: "加图片", save: a.saveHomeLine, lines: 1, over: true, inline: true,
 				focused: func() { a.barOpen = true },
 				esc: func() {
 					if strings.TrimSpace(a.homeDraft) == "" {

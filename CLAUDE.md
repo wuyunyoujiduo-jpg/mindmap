@@ -44,11 +44,12 @@ by AI, and an AI assistant.
     (`todaySide`); 项目's directory (`tree.go`, `mapTree`: folders that
     open and close and their maps, so that going from a map to another is
     one click); 收集's kinds, ways to look back and every tag (`libSide`).
-  - The one bar (`bar.go`, `oneBar`) is in the top row: one line until
-    written in, then the card to write in with its tools (`write.go`,
-    `writeCard`: a tag and a reference offered as they are written, a
-    picture, bold, lists; a reference is kept as `<clip:id>`, `noteText`),
-    lying over the page so that nothing moves. It keeps a thought, a task
+  - The one bar (`bar.go`, `oneBar`) is in the top row: one line, and
+    one line still when written in, its tools coming to the line's end
+    (`write.go`, `writeCard`, `inline`: a tag and a reference offered as
+    they are written, a picture, bold, lists; a reference is kept as
+    `<clip:id>`, `noteText`); it grows down over the page only as the
+    words do, so that nothing moves and nothing is hidden for nothing. It keeps a thought, a task
     (and how it repeats), a link; shows what there is already as it is
     written; asks the AI after a ?.
   - What is chosen (a task, a clip) is in a column at the leaf's right
@@ -76,7 +77,8 @@ by AI, and an AI assistant.
     `switchRow`; `field` for what is not rows); the system's buttons take
     the app's corners (`button`).
   - 今天 (`taskspage.go`, `tasksView`): as a list it is one column read
-    down (`todayWidth`), headed by the list's name; with today's list,
+    down (`todayWidth`), headed by the list's name and the line to add a
+    task (`tasksAdd`); with today's list,
     what waits for a place, each card saying one by its words alone, with
     no AI asked (`nearPlace`, which must share a word with it,
     `sharesWord`); AI 归位 for better. The week and the month show tasks
