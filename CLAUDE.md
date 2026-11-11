@@ -83,7 +83,9 @@ by AI, and an AI assistant.
     task (`tasksAdd`); with today's list,
     what waits for a place, each card saying one by its words alone, with
     no AI asked (`nearPlace`, which must share a word with it,
-    `sharesWord`); AI 归位 for better; a card is clean, a click opens it, and
+    `sharesWord`); AI 归位 for better; what waits is white cards on one pale ground, as
+    flomo's notes lie (the user held ours beside them: pale blocks on
+    white were ugly); a card is clean, a click opens it, and
     what can be done with it is one menu, under the key at its corner (a
     phone has no other) and under the pointer's other key (`waitingMenu`;
     a row of keys at each card's foot was too much, the user found).

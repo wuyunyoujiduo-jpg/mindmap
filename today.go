@@ -231,7 +231,7 @@ func (a *app) homeWaiting(c *ui.Context) {
 		// What was just left in 收集, and the way back: it stays said until
 		// another is left, or the page is.
 		if cl := a.lib.Find(a.keptLast); cl != nil && cl.Kept {
-			ui.Row(c.Key("kept-last")).MinHeight(36).Margin(0, 0, 8).Padding(4, 8, 4, 16).Gap(8).Radius(radiusRow).AlignItems(ui.Center).FillWidth().
+			ui.Row(c.Key("kept-last")).MinHeight(36).Margin(0, 0, 8).Padding(4, 12, 4, 20).Gap(8).Radius(radiusRow).AlignItems(ui.Center).FillWidth().
 				Background(blockFill(t)).Transition(rowMotion).Children(func() {
 				ui.Text(c, "已留在收集，不再出现在这里：").FontSize(textSmall).TextColor(t.TextMuted).Shrink(0)
 				ui.Text(c, refName(cl)).FontSize(textSmall).SingleLine().Grow(1).Shrink(1).MinWidth(0)
@@ -244,7 +244,8 @@ func (a *app) homeWaiting(c *ui.Context) {
 			emptyNote(c, "这几天记下的会出现在这里。")
 			return
 		}
-		ui.Column(c.Key("home-lately")).Gap(10).FillWidth().Children(func() {
+		// A pale ground, and each thing a white card on it, as notes lie.
+		ui.Column(c.Key("home-lately")).Padding(10).Gap(8).Radius(radiusCard + 4).Background(blockFill(t)).FillWidth().Children(func() {
 			for i, w := range items {
 				if i == homeWaitingCount {
 					break
@@ -300,13 +301,16 @@ func (a *app) waitingCard(c *ui.Context, w waitingItem, i int) {
 	text = strings.TrimSpace(clipRef.ReplaceAllString(text, ""))
 	// A card each, as a note is: when over the words, what can be done
 	// with it under the pointer, where the AI would put it under the words.
-	card := raise(ui.Column(c.Key("waiting:"+key)).Padding(16, 20, 18).Gap(4).Radius(radiusCard).FillWidth().Label("记下的 "+text), t).
-		Transition(rowMotion).Cursor(ui.CursorPointer)
+	card := ui.Column(c.Key("waiting:"+key)).Padding(14, 14, 18, 20).Gap(6).Radius(radiusCard).FillWidth().Label("记下的 "+text).
+		Background(cardColor(t)).Shadow(0, 0, 0, 0.5, t.Text.Alpha(0)).Transition(rowMotion).Cursor(ui.CursorPointer)
 	card.ContextMenu(func(m *ui.Menu) { a.waitingMenu(m, w, has) })
 	if card.Clicked() {
 		a.later(func() { a.openWaiting(w) })
 	}
-	hoverLift(card, t)
+	if card.Hovered() { // a line comes round it: it opens
+		card.Shadow(0, 0, 0, 1, t.Text.Alpha(0.12))
+	}
+	press(card, 0.992)
 	card.Children(func() {
 		ui.Row(c).Height(26).Gap(8).AlignItems(ui.Center).FillWidth().Children(func() {
 			if w.task != nil {
@@ -315,7 +319,15 @@ func (a *app) waitingCard(c *ui.Context, w waitingItem, i int) {
 			ui.Text(c, kind).FontSize(textSmall).TextColor(t.TextMuted)
 			ui.Spacer(c)
 			// One key for all that can be done, as the pointer's other key.
-			iconButton(c, iconMore, "操作 "+text, "转成任务、放到导图、留在收集…", 26, true).Menu(func(m *ui.Menu) { a.waitingMenu(m, w, has) })
+			more := ui.Box(c.Key("more")).Size(28, 28).Radius(radiusPill).Label("操作 " + text).Tooltip("转成任务、放到导图、留在收集…").Shrink(0).
+				Cursor(ui.CursorPointer).Background(t.Text.Alpha(0)).Transition(easeLook)
+			ink := t.TextMuted.Alpha(0.7)
+			if more.Hovered() {
+				more.Background(t.Text.Alpha(0.06))
+				ink = t.Text
+			}
+			more.Draw(func(p *ui.Painter, r ui.Rect) { drawIcon(p, r, 15, iconMore, ink) })
+			more.Menu(func(m *ui.Menu) { a.waitingMenu(m, w, has) })
 		})
 		words, site := titleAndSite(full)
 		var tags []string // those its words do not already say
@@ -336,7 +348,7 @@ func (a *app) waitingCard(c *ui.Context, w waitingItem, i int) {
 				}
 			})
 		}
-		a.noteText(c, words, 15.5, 4)
+		a.noteText(c, words, 15, 4)
 		if has {
 			ui.Row(c.Key("sugg")).Gap(8).AlignItems(ui.Center).FillWidth().Padding(8, 0, 0).
 				Transition(ui.ElementTransition{Duration: 300 * time.Millisecond, Ease: easeDetent, Enter: &ui.Motion{Y: -6}}).Children(func() {
