@@ -68,6 +68,24 @@ func TestHome(t *testing.T) {
 	// What was written lately is there: the inbox's task, which waits for
 	// a map, and the notes, which need nothing; older ones leave by
 	// themselves, as those put on a map.
+	// Left in 收集, it waits no more; and comes back when that is undone.
+	if err := tt.Click("留在收集 资料 0"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Frame()
+	if n := len(a.waiting()); n != 5 || !tt.HasText("撤回") {
+		t.Fatalf("left in 收集 %d: %q", n, tt.Texts())
+	}
+	snapshot(t, tt, "home-kept")
+	if err := tt.Click("撤回"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Frame()
+	if tt.HasText("撤回") {
+		t.Fatal("still said left")
+	}
 	if n := len(a.waiting()); n != 6 || tt.HasText("待归位") {
 		t.Fatalf("lately %d: %q", n, tt.Texts())
 	}

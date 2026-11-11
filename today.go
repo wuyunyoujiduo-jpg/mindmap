@@ -228,6 +228,18 @@ func (a *app) homeWaiting(c *ui.Context) {
 				}
 			}
 		})
+		// What was just left in 收集, and the way back: it stays said until
+		// another is left, or the page is.
+		if cl := a.lib.Find(a.keptLast); cl != nil && cl.Kept {
+			ui.Row(c.Key("kept-last")).MinHeight(36).Margin(0, 0, 8).Padding(4, 8, 4, 16).Gap(8).Radius(radiusRow).AlignItems(ui.Center).FillWidth().
+				Background(blockFill(t)).Transition(rowMotion).Children(func() {
+				ui.Text(c, "已留在收集，不再出现在这里：").FontSize(textSmall).TextColor(t.TextMuted).Shrink(0)
+				ui.Text(c, refName(cl)).FontSize(textSmall).SingleLine().Grow(1).Shrink(1).MinWidth(0)
+				if ghostButton(c, "撤回", "放回「刚记下的」").Clicked() {
+					a.later(func() { a.unkeep(cl) })
+				}
+			})
+		}
 		if len(items) == 0 {
 			emptyNote(c, "这几天记下的会出现在这里。")
 			return
@@ -392,9 +404,10 @@ func (a *app) waitingKeys(c *ui.Context, w waitingItem, text string, has bool) {
 		if !has {
 			act("放到导图…", "挂到某张导图的某个主题上", func() { a.placeWaiting(w) })
 		}
-		act("留在收集", "它不用放到哪里：不再出现在这里", func() {
+		act("留在收集", "它不用放到哪里：不再出现在这里（可以撤回）", func() {
 			cl.Kept = true
 			a.saveClip(cl)
+			a.keptLast = cl.ID
 		})
 		act("打开", "在收集里打开，改它的字、标签", func() {
 			a.openList(kindAll, "")
@@ -403,6 +416,15 @@ func (a *app) waitingKeys(c *ui.Context, w waitingItem, text string, has bool) {
 		ui.Spacer(c)
 		iconButton(c, iconMore, "更多 "+text, "更多", 26, true).Menu(func(m *ui.Menu) { a.clipMenu(m, cl) })
 	})
+}
+
+// unkeep has a clip left in 收集 wait for a place again.
+func (a *app) unkeep(cl *library.Clip) {
+	cl.Kept = false
+	a.saveClip(cl)
+	if a.keptLast == cl.ID {
+		a.keptLast = ""
+	}
 }
 
 // placeWaiting asks where something written down goes: a topic of a map.

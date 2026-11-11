@@ -442,6 +442,9 @@ func (a *app) clipMenu(m *ui.Menu, clip *library.Clip) {
 	if a.doc != nil && m.Item("加到当前导图").Chosen() {
 		a.clipIntoMap(clip)
 	}
+	if clip.Kept && m.Item("放回「刚记下的」").Chosen() {
+		a.later(func() { a.unkeep(clip) })
+	}
 	if m.Item("转成任务").Chosen() {
 		a.later(func() { a.clipToTask(clip) })
 	}
