@@ -276,6 +276,19 @@ func chosenCard(el ui.Element, t *ui.Theme) ui.Element {
 	return el.NoShadow().Shadow(0, 0, 0, 1.5, t.Accent)
 }
 
+// whiteCard is a thing among others of its kind, a note, a clip, what
+// waits: white, on the one pale ground they share (blockFill), with
+// nothing round it until the pointer is over it, when a thin line comes.
+// Many pale blocks on the white leaf were dull, each its own island; one
+// ground and white cards read as a stack of paper.
+func whiteCard(el ui.Element, t *ui.Theme) ui.Element {
+	el.Background(cardColor(t)).Shadow(0, 0, 0, 0.5, t.Text.Alpha(0))
+	if el.Hovered() {
+		el.Shadow(0, 0, 0, 1, t.Text.Alpha(0.12))
+	}
+	return press(el.Transition(easeLook), 0.992)
+}
+
 // tray is a part of a page: a soft ground with its heading on it
 // (trayHead) and what it holds in a white card (listCard), as the columns
 // of the board.

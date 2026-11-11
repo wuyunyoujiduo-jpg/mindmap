@@ -61,8 +61,9 @@ by AI, and an AI assistant.
     whatever page shows and taking no room from it; the user asked whether
     a floating window suited it, and it does, the leaf having three
     columns already.
-  - On the leaf a card is a pale block (`raise`, `blockFill`), a card on a
-    block is white with a hairline (`paper`), a list is rows with a thin
+  - On the leaf a lone card is a pale block (`raise`, `blockFill`),
+    things of a kind are white cards on one pale ground (`whiteCard`), a
+    card on a block is white with a hairline (`paper`), a list is rows with a thin
     line under each (`listCardRow`, the tasks' rows), a field is a pale
     block that turns white in the accent's line when written in
     (`captureBox`, `area`, `focusHalo`). Nothing has a shadow but what
@@ -102,7 +103,8 @@ by AI, and an AI assistant.
     A map opened has its own bar under the top row; on the canvas the
     center is in the ink, the main topics on a pastel of their branch's
     color, those below on a faint tint (the scheme 明亮 of `style.go`).
-  - 收集 (`libview.go`): notes and clips, a wall of cards; its 回顾 shows a
+  - 收集 (`libview.go`): notes and clips, a wall of white cards on
+    a pale ground; its 回顾 shows a
     few old notes in place (`memos.go`). What is collected is 收集's (the
     word of the UI, never 资料库), and is on a map by a topic's link.
   - Color is kept for small things that mean something: each map has its
@@ -122,6 +124,36 @@ by AI, and an AI assistant.
   the curve, `cubic-bezier(.22,1,.36,1)`); nothing may move what
   is under the pointer away from it on a click, as a part opening on
   focus would. The tests run with no motion (`app.noMotion`).
+- What the user's corrections taught, to design by (each cost a version
+  to learn; the user asked that they be kept here):
+  - Things of one kind lie as white cards on one pale ground they share
+    (`whiteCard` on `blockFill`: what waits on 今天, 收集's wall), not
+    each a pale block of its own on the white leaf, which read as dull
+    islands. A lone thing on the leaf (a field, a map's card) may be a
+    pale block.
+  - A card shows what it is, not what can be done with it. A click opens
+    it; all that can be done is one menu, under a faint ⋯ at its corner
+    and under the pointer's other key, the same menu (a phone has no
+    other key, so the ⋯ stays). At most one key stands on a card, and
+    only when it is the next thing to do (放过去 by a place offered).
+    A row of keys on every card was too much.
+  - What comes forward of the page is told by a shadow, not by a line
+    round it: an outline over the page read as something in the way.
+  - When the user says a thing is good but has one fault, mend the fault
+    and leave the thing: the bar open was liked, and was rebuilt as one
+    line for covering the page, and had to be put back.
+  - What a field will do with the words is said on it, and can be
+    changed there (记为 灵感 / 任务): a rule that decides silently is a
+    way in the user cannot find.
+  - Each main thing to do has its way in where it is looked for (the
+    line to add a task on 今天's lists), though another way does it too.
+  - What puts a thing away says so and gives the way back at once
+    (撤回), and a way back later.
+  - Two kinds of thing that the user wants as one stay each in its own
+    store and are joined by a link, made of each other without loss.
+  - Before a page is shipped, hold its snapshot beside the reference and
+    go part by part: the ground, the card, the type's weight, the color
+    of the small keys. The user does, and sees it at once.
 - The app's icon is drawn by `tools/icon/`; `resources/icon.png` is the
   desk (`tools/icon/desk.py`: a white note on the app's violet-blue, three lines
   each led by a dot of a map's color, the last ticked, the AI's spark), and

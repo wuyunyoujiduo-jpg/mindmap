@@ -105,10 +105,14 @@ func (a *app) libraryColumn(c *ui.Context) {
 					cols = 1
 				}
 				rows := (len(hits) + cols - 1) / cols
-				ui.List(c.Key(fmt.Sprint("clips:", cols)), nil, rows).Grow(1).Basis(0).Margin(0, -3).ItemKey(func(i int) any { return hits[i*cols].Clip.ID }).
+				ui.List(c.Key(fmt.Sprint("clips:", cols)), nil, rows).Grow(1).Basis(0).Radius(radiusCard + 4).Background(blockFill(t)).ItemKey(func(i int) any { return hits[i*cols].Clip.ID }).
 					Rows(func(r ui.ListRow) {
-						// Room at the sides for the halo of the card chosen; the wall is as wide as the line above it.
-						ui.Row(r.Context).Padding(5, 3).Gap(10).AlignItems(ui.Stretch).FillWidth().Children(func() {
+						// One pale ground, the cards white on it.
+						top := float32(4)
+						if r.Index == 0 {
+							top = 10
+						}
+						ui.Row(r.Context).Padding(top, 10, 4).Gap(8).AlignItems(ui.Stretch).FillWidth().Children(func() {
 							for k := range cols {
 								i := r.Index*cols + k
 								if i >= len(hits) {
@@ -287,11 +291,9 @@ func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 		Label("资料 " + clip.Label())
 	// A white card, as all are: a note is its text, the others have their
 	// kind's icon by their title.
-	raise(row, t)
+	whiteCard(row, t)
 	if a.libSel == clip.ID {
 		chosenCard(row, t)
-	} else {
-		hoverLift(row, t) // it rises a little under the pointer
 	}
 	if row.Clicked() {
 		if a.libSel == clip.ID {

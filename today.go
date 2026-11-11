@@ -301,16 +301,12 @@ func (a *app) waitingCard(c *ui.Context, w waitingItem, i int) {
 	text = strings.TrimSpace(clipRef.ReplaceAllString(text, ""))
 	// A card each, as a note is: when over the words, what can be done
 	// with it under the pointer, where the AI would put it under the words.
-	card := ui.Column(c.Key("waiting:"+key)).Padding(14, 14, 18, 20).Gap(6).Radius(radiusCard).FillWidth().Label("记下的 "+text).
-		Background(cardColor(t)).Shadow(0, 0, 0, 0.5, t.Text.Alpha(0)).Transition(rowMotion).Cursor(ui.CursorPointer)
+	card := whiteCard(ui.Column(c.Key("waiting:"+key)).Padding(14, 14, 18, 20).Gap(6).Radius(radiusCard).FillWidth().Label("记下的 "+text), t).
+		Transition(rowMotion).Cursor(ui.CursorPointer)
 	card.ContextMenu(func(m *ui.Menu) { a.waitingMenu(m, w, has) })
 	if card.Clicked() {
 		a.later(func() { a.openWaiting(w) })
 	}
-	if card.Hovered() { // a line comes round it: it opens
-		card.Shadow(0, 0, 0, 1, t.Text.Alpha(0.12))
-	}
-	press(card, 0.992)
 	card.Children(func() {
 		ui.Row(c).Height(26).Gap(8).AlignItems(ui.Center).FillWidth().Children(func() {
 			if w.task != nil {
