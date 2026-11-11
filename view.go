@@ -212,8 +212,9 @@ func (a *app) toolbar(c *ui.Context) {
 				a.cfg.save()
 			}
 		}
-		// Back to 项目, the maps as cards.
-		if textKey(c, "‹ 项目", "回到项目", "回到项目：所有导图").Clicked() {
+		// Back to 项目, the maps as cards: from the directory's head where
+		// it shows, which leaves the bar its room.
+		if !a.treeShown() && textKey(c, "‹ 项目", "回到项目", "回到项目：所有导图").Clicked() {
 			a.later(a.showProjects)
 		}
 		ui.Column(c).Gap(1).Shrink(1).MinWidth(40).Children(func() {

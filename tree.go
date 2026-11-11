@@ -32,7 +32,14 @@ func (a *app) mapTree(c *ui.Context) {
 			head = max(toolbarHeight, bar.Height+8)
 		}
 		ui.Row(c.Key("tree-head")).Height(head).Padding(0, 8, 0, max(16, b2f(!a.libOpen)*bar.Left)).Gap(2).AlignItems(ui.Center).Shrink(0).DragWindow().Children(func() {
-			ui.Text(c, "目录").FontSize(textSmall).FontWeight(600).TextColor(t.TextMuted).Grow(1).PassThrough()
+			if a.libOpen {
+				ui.Text(c, "目录").FontSize(textSmall).FontWeight(600).TextColor(t.TextMuted).Grow(1).PassThrough()
+			} else { // by a map: the way back to the cards
+				if textKey(c, "‹ 项目", "回到项目", "回到项目：所有导图的卡片").Margin(0, 0, 0, -8).Clicked() {
+					a.later(a.showProjects)
+				}
+				ui.Spacer(c)
+			}
 			iconButton(c, iconPlus, "目录新建", "新建导图、文件夹", 28, true).Menu(func(m *ui.Menu) {
 				if m.Item("新建导图").Chosen() {
 					a.later(func() { a.newMapIn(a.treeFolder()) })
