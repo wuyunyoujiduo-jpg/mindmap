@@ -53,6 +53,11 @@ by AI, and an AI assistant.
     written; asks the AI after a ?.
   - What is chosen (a task, a clip) is in a column at the leaf's right
     (`sheet`); a map's topic has its panel there.
+  - The AI floats (`aiFloat` in `view.go`): a window at the foot of the
+    window on the right, called from the spark of the top row, over
+    whatever page shows and taking no room from it; the user asked whether
+    a floating window suited it, and it does, the leaf having three
+    columns already.
   - On the leaf a card is a pale block (`raise`, `blockFill`), a card on a
     block is white with a hairline (`paper`), a list is rows with a thin
     line under each (`listCardRow`, the tasks' rows), a field is a pale

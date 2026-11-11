@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
@@ -51,6 +52,9 @@ func (a *app) view(c *ui.Context) {
 				})
 			})
 		})
+		if a.aiOpen && !a.presenting {
+			a.aiFloat(c)
+		}
 		if a.lightbox != "" && a.doc != nil {
 			a.lightboxView(c)
 		}
@@ -86,10 +90,6 @@ func (a *app) pageView(c *ui.Context) {
 				} else {
 					a.libraryView(c)
 				}
-				if a.aiOpen {
-					a.panelResizer(c)
-					a.panel(c)
-				}
 				return
 			}
 			ui.Column(c).Grow(1).Children(func() {
@@ -123,6 +123,20 @@ func (a *app) pageView(c *ui.Context) {
 			}
 		})
 	}()
+}
+
+// aiFloat is the AI's window, floating at the window's foot on the right,
+// over whatever page shows: it is called from the spark of the top row,
+// takes no room from the page, and stays as the places change. It is the
+// one thing on the page with a shadow, for it floats.
+func (a *app) aiFloat(c *ui.Context) {
+	t := c.Theme()
+	w, h := c.Size()
+	lifted(ui.Column(c.Key("ai-float")).Absolute().Right(16).Bottom(16).Width(min(392, w-32)).Height(min(580, (h-toolbarHeight)*0.78)).
+		Radius(16).Clip().ZIndex(25).Background(cardColor(t)).Label("AI 窗口"), t).
+		Transition(ui.ElementTransition{Duration: 280 * time.Millisecond, Ease: easeDetent, Enter: &ui.Motion{Y: 16, Scale: 0.98},
+			Exit: &ui.Motion{Y: 12, Scale: 0.98}, ExitDuration: 160 * time.Millisecond}).
+		Children(func() { a.aiPanel(c) })
 }
 
 // panelResizer is the line left of the panel, which the pointer drags to
@@ -402,17 +416,11 @@ const panelMinCanvas = 420
 const aiBesideCanvas = 640
 
 // aiBeside tells whether the AI shows in a column beside the inspector.
-func (a *app) aiBeside(c *ui.Context) bool {
-	w, _ := c.Size()
-	return a.aiOpen && a.doc != nil && !a.libOpen && w-a.sideWidth()-2*a.panelWidth-1 >= aiBesideCanvas
-}
+func (a *app) aiBeside(c *ui.Context) bool { return false }
 
 // panelShown tells whether the right panel shows: not turned off (⌥⌘I),
 // and with room for the map, unless the AI is asked.
 func (a *app) panelShown(c *ui.Context) bool {
-	if a.aiOpen {
-		return true
-	}
 	w, _ := c.Size()
 	return !a.panelOff && w-a.sideWidth()-a.panelWidth >= panelMinCanvas
 }
