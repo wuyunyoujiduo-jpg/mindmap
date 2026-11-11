@@ -26,7 +26,7 @@ func (a *app) homeView(c *ui.Context) {
 	ui.Column(c.Key("home")).Grow(1).Label("工作台").Children(func() {
 		pageColumn(c, "home-column", true).Children(func() {
 			pageHeader(c, "home-head", "工作台", fmt.Sprintf("%s · %d月%d日", weekdays[now.Weekday()], now.Month(), now.Day()), func() {
-				find := ui.Row(c.Key("home-find")).Width(240).Height(34).Padding(0, 12).Gap(8).Radius(9).AlignItems(ui.Center).
+				find := ui.Row(c.Key("home-find")).Width(240).Height(34).Padding(0, 14).Gap(8).Radius(radiusPill).AlignItems(ui.Center).
 					Background(t.Text.Alpha(0.05)).Cursor(ui.CursorPointer).Label("搜索").Transition(easeLook)
 				if find.Hovered() {
 					find.Background(t.Text.Alpha(0.08))
@@ -449,7 +449,7 @@ func (a *app) waitingCard(c *ui.Context, w waitingItem, i int) {
 	text = strings.TrimSpace(clipRef.ReplaceAllString(text, ""))
 	// A card each, as a note is: when over the words, what can be done
 	// with it under the pointer, where the AI would put it under the words.
-	card := raise(ui.Column(c.Key("waiting:"+key)).Padding(14, 20, 16).Gap(4).Radius(12).FillWidth().Label("记下的 "+text), t).
+	card := raise(ui.Column(c.Key("waiting:"+key)).Padding(16, 20, 18).Gap(4).Radius(radiusCard).FillWidth().Label("记下的 "+text), t).
 		Transition(rowMotion)
 	hover := card.Hovered()
 	card.Children(func() {
@@ -501,7 +501,7 @@ func (a *app) waitingCard(c *ui.Context, w waitingItem, i int) {
 				if textKey(c, "换一个", "换一个 "+text, "自己选放到哪").Clicked() {
 					a.later(func() { a.placeWaiting(w) })
 				}
-				go_ := ui.Box(c.Key("take")).Height(26).Padding(0, 10).Radius(6).Center().Background(t.Accent).Cursor(ui.CursorPointer).
+				go_ := ui.Box(c.Key("take")).Height(28).Padding(0, 12).Radius(radiusPill).Center().Background(t.Accent).Cursor(ui.CursorPointer).
 					Label("放过去 " + text).Transition(easeLook)
 				if go_.Hovered() {
 					go_.Background(t.AccentHover)
@@ -538,7 +538,7 @@ func (a *app) placeWaiting(w waitingItem) {
 // no more.
 func textKey(c *ui.Context, text, label, tip string) ui.Element {
 	t := c.Theme()
-	b := ui.Box(c.Key("textkey:"+label)).Height(26).Padding(0, 10).Radius(6).Center().Cursor(ui.CursorPointer).Label(label).Tooltip(tip).
+	b := ui.Box(c.Key("textkey:"+label)).Height(28).Padding(0, 12).Radius(radiusPill).Center().Cursor(ui.CursorPointer).Label(label).Tooltip(tip).
 		Shrink(0).Background(t.Text.Alpha(0)).Transition(easeLook)
 	if b.Hovered() {
 		b.Background(t.Text.Alpha(0.06))

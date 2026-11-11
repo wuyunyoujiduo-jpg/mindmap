@@ -439,7 +439,7 @@ type indexEntry struct {
 // paletteView shows the palette over the window.
 func (a *app) paletteView(c *ui.Context) {
 	t := c.Theme()
-	ui.Modal(c.Key("palette"), &a.paletteOpen, func() {
+	modal(c, "palette", &a.paletteOpen, func() {
 		items := a.paletteItems()
 		if a.paletteIndex >= len(items) {
 			a.paletteIndex = max(len(items)-1, 0)
@@ -476,7 +476,7 @@ func (a *app) paletteView(c *ui.Context) {
 			ui.Scroll(c.Key("palette-list")).MaxHeight(420).Children(func() {
 				ui.Column(c).Gap(1).Children(func() {
 					for i, it := range items {
-						row := ui.Row(c.Key(fmt.Sprint("item", i))).Padding(6, 10).Gap(10).Radius(6).AlignItems(ui.Center).
+						row := ui.Row(c.Key(fmt.Sprint("item", i))).Padding(8, 12).Gap(10).Radius(radiusRow).AlignItems(ui.Center).
 							Cursor(ui.CursorPointer).Label(it.title)
 						if i == a.paletteIndex {
 							row.Background(t.Accent.Alpha(0.14))
@@ -544,7 +544,7 @@ var shortcuts = []struct {
 // cheatSheet shows every shortcut.
 func (a *app) cheatSheet(c *ui.Context) {
 	t := c.Theme()
-	ui.Modal(c.Key("cheats"), &a.cheatsOpen, func() {
+	modal(c, "cheats", &a.cheatsOpen, func() {
 		ui.Row(c).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, "快捷键").FontSize(18).Bold().Grow(1)
 			if iconButton(c, iconClose, "关闭", "关闭（Esc）", 28, true).Clicked() {

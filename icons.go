@@ -275,7 +275,10 @@ func drawIcon(p *ui.Painter, r ui.Rect, s float32, ic icon, col ui.Color) {
 // button not enabled is dimmed, and its clicks are to be ignored.
 func iconButton(c *ui.Context, ic icon, label, tip string, size float32, enabled bool) ui.Element {
 	t := c.Theme()
-	b := ui.Box(c.Key(label)).Size(size, size).Radius(6).Label(label).Tooltip(tip).Shrink(0)
+	// Round, as the keys of words are pills; it lights up under the
+	// pointer and gives when pressed.
+	b := ui.Box(c.Key(label)).Size(size, size).Radius(radiusPill).Label(label).Tooltip(tip).Shrink(0).
+		Background(t.Text.Alpha(0)).Transition(easeLook)
 	col := t.Text
 	switch {
 	case !enabled:
@@ -283,10 +286,11 @@ func iconButton(c *ui.Context, ic icon, label, tip string, size float32, enabled
 	case b.Pressed():
 		b.Background(t.Text.Alpha(0.12))
 	case b.Hovered():
-		b.Background(t.SurfaceHover)
+		b.Background(t.Text.Alpha(0.07))
 	}
 	if enabled {
 		b.Cursor(ui.CursorPointer)
+		press(b, 0.92)
 	}
 	b.Draw(func(p *ui.Painter, r ui.Rect) { drawIcon(p, r, size*0.5, ic, col) })
 	return b
@@ -385,7 +389,7 @@ func (a *app) noteMark(c *ui.Context, n *model.Node, size float32, col ui.Color)
 	peek := hover && a.noteEditing != n.ID
 	if peek {
 		ui.PopoverBase(c.Key("note-peek"), mark, &peek, func(panel ui.Element) {
-			panel.Padding(12, 14).Radius(10).Background(t.Surface).Border(1, t.Border).Shadow(0, 6, 20, 0, ui.RGBA(0, 0, 0, 0.18)).
+			lifted(panel.Padding(14, 16).Radius(14).Background(cardColor(t)), t).
 				Width(320).PassThrough().Children(func() {
 				ui.Text(c, "备注 · 点击编辑").FontSize(11).TextColor(t.TextMuted)
 				note := notePictureMark.ReplaceAllString(n.Note, "🖼")
@@ -404,7 +408,7 @@ func (a *app) notePopover(c *ui.Context, anchor ui.Element, n *model.Node) {
 	t := c.Theme()
 	open := true
 	ui.PopoverBase(c.Key("note-edit"), anchor, &open, func(panel ui.Element) {
-		panel.Padding(12).Radius(10).Background(t.Surface).Border(1, t.Border).Shadow(0, 8, 28, 0, ui.RGBA(0, 0, 0, 0.22)).
+		lifted(panel.Padding(14).Radius(14).Background(cardColor(t)), t).
 			Width(380).Gap(8).Children(func() {
 			ui.Row(c).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "备注 · "+n.Title).FontSize(12).Bold().SingleLine().Grow(1).Shrink(1).MinWidth(0)
@@ -431,14 +435,14 @@ func (a *app) notePopover(c *ui.Context, anchor ui.Element, n *model.Node) {
 // iconTextButton is a button of an icon and a word, as the AI's.
 func iconTextButton(c *ui.Context, ic icon, text, label, tip string, active bool) ui.Element {
 	t := c.Theme()
-	b := ui.Row(c.Key(label)).Height(30).Padding(0, 11, 0, 9).Gap(5).Radius(8).AlignItems(ui.Center).Cursor(ui.CursorPointer).
+	b := ui.Row(c.Key(label)).Height(keyHeight).Padding(0, 14, 0, 12).Gap(6).Radius(radiusPill).AlignItems(ui.Center).Cursor(ui.CursorPointer).
 		Label(label).Tooltip(tip).Shrink(0)
 	col, mark := t.Text, t.Text
 	if ic == iconSparkle {
 		mark = t.Accent // the AI's spark is the accent's wherever it is
 	}
 	if active {
-		b.Background(t.Accent)
+		press(b.Background(t.Accent).Transition(easeLook), 0.96)
 		col, mark = t.AccentText, t.AccentText
 	} else {
 		key(b, t)

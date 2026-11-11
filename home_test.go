@@ -295,7 +295,7 @@ func TestGroundChosen(t *testing.T) {
 	a.showLibrary()
 	a.libHome = true
 	tt.Frame()
-	if groundNow().key != "" || ground(a.theme()) != ui.Hex("#F6F6F5") {
+	if groundNow().key != "" || ground(a.theme()) != ui.Hex("#F5F5F7") {
 		t.Fatalf("the ground is %q", groundNow().name)
 	}
 	snapshot(t, tt, "ground-gray")

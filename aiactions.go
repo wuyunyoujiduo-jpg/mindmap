@@ -277,7 +277,7 @@ func (a *app) askRepo() {
 // fromTextView is the window to paste text into, to make nodes of.
 func (a *app) fromTextView(c *ui.Context) {
 	t := c.Theme()
-	ui.Modal(c.Key("from-text"), &a.fromTextOpen, func() {
+	modal(c, "from-text", &a.fromTextOpen, func() {
 		w, h := c.Size()
 		ui.Column(c).Gap(12).Width(min(640, w-80)).Children(func() {
 			ui.Text(c, "从文本生成导图").FontSize(17).Bold()

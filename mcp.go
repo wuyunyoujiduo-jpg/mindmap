@@ -59,7 +59,7 @@ func executable() string {
 // what to paste where.
 func (a *app) mcpView(c *ui.Context) {
 	t := c.Theme()
-	ui.Modal(c.Key("mcp"), &a.mcpOpen, func() {
+	modal(c, "mcp", &a.mcpOpen, func() {
 		exe := executable()
 		claude := fmt.Sprintf("claude mcp add mymind --scope user -- %q mcp", exe)
 		json := fmt.Sprintf("{\n  \"mcpServers\": {\n    \"mymind\": {\n      \"command\": %q,\n      \"args\": [\"mcp\"]\n    }\n  }\n}", exe)

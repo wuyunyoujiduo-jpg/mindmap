@@ -29,8 +29,8 @@ type writeCard struct {
 
 func (a *app) writeCard(c *ui.Context, w writeCard) {
 	t := c.Theme()
-	box := ui.Column(c.Key(w.key)).Radius(12).Padding(12, 14, 10, 16).Gap(4).FillWidth().Shrink(0).
-		Background(cardColor(t)).Border(1.5, t.Border).Transition(easeLook)
+	box := soft(ui.Column(c.Key(w.key)).Radius(radiusCard).Padding(14, 14, 12, 18).Gap(4).FillWidth().Shrink(0).
+		Background(cardColor(t)).Border(1.5, t.Text.Alpha(0)), t).Transition(easeLook)
 	box.Children(func() {
 		in := ui.TextAreaBase(c.Key(w.key+"-input"), w.draft).Lines(2, 6).
 			Placeholder(w.placeholder).FontSize(textTitle).LineHeight(1.5).FillWidth().Label(w.label)
@@ -55,7 +55,7 @@ func (a *app) writeCard(c *ui.Context, w writeCard) {
 		text := strings.TrimSpace(*w.draft)
 		ui.Row(c.Key("tools")).Gap(6).AlignItems(ui.Center).FillWidth().Wrap().GapY(4).Children(func() {
 			tool := func(key, mark string, ic icon, tip string, click func()) {
-				b := ui.Box(c.Key(key)).Size(32, 30).Radius(7).Center().Cursor(ui.CursorPointer).Label(key).Tooltip(tip).
+				b := ui.Box(c.Key(key)).Size(32, 32).Radius(radiusPill).Center().Cursor(ui.CursorPointer).Label(key).Tooltip(tip).
 					Background(t.Text.Alpha(0)).Transition(easeLook)
 				ink := t.TextMuted
 				if b.Hovered() {
@@ -140,8 +140,9 @@ func (a *app) writeCard(c *ui.Context, w writeCard) {
 			if w.enterSaves {
 				tip = "记下（回车；Shift+回车换行）"
 			}
-			send := ui.Box(c.Key("send")).Size(52, 32).Radius(8).Center().Label(w.sendLabel).Tooltip(tip).
-				Background(t.Text.Alpha(0.16)).Transition(easeLook)
+			send := ui.Box(c.Key("send")).Size(52, 32).Radius(radiusPill).Center().Label(w.sendLabel).Tooltip(tip).
+				Background(t.Text.Alpha(0.12)).Transition(easeLook)
+			press(send, 0.94)
 			if text != "" {
 				send.Background(t.Accent).Cursor(ui.CursorPointer)
 				if send.Hovered() {

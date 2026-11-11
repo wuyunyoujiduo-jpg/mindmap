@@ -25,22 +25,28 @@ func (a *app) rail(c *ui.Context) {
 	// A row of the sidebar: an icon, a word, a count at its end; the part
 	// shown is on the accent, whole.
 	item := func(key string, kind int, label, count, tip string, on bool, click func()) {
-		b := ui.Row(c.Key("rail:"+key)).Height(36).Padding(0, 12).Gap(12).Radius(9).AlignItems(ui.Center).FillWidth().
-			Cursor(ui.CursorPointer).Label(label).Tooltip(tip).Background(t.Accent.Alpha(0)).Transition(easeLook)
-		ink, num := t.Text, muted
+		b := ui.Row(c.Key("rail:"+key)).Height(38).Padding(0, 12).Gap(12).Radius(radiusRow).AlignItems(ui.Center).FillWidth().
+			Cursor(ui.CursorPointer).Label(label).Tooltip(tip).Background(t.Text.Alpha(0)).Transition(easeLook)
+		ink, mark, num := t.Text.MixOklab(muted, 0.25), t.Text.MixOklab(muted, 0.35), muted
 		switch {
 		case on:
-			b.Background(t.Accent)
-			ink, num = t.AccentText, t.AccentText.Alpha(0.8)
+			ink, mark = t.Text, t.Accent
+		case b.Pressed():
+			b.Background(t.Text.Alpha(0.08))
 		case b.Hovered():
-			b.Background(t.Text.Alpha(0.045))
+			b.Background(t.Text.Alpha(0.05))
 		}
 		if b.Clicked() {
 			a.later(click)
 		}
-		press(b, 0.985)
+		press(b, 0.975)
 		b.Children(func() {
-			ui.Box(c).Size(18, 18).Shrink(0).PassThrough().Draw(func(p *ui.Painter, r ui.Rect) { drawRailIcon(p, r, 19, kind, ink) })
+			if on {
+				// The part shown is on a white pill, which slides to it.
+				slidePill(c, "rail", radiusRow)
+				b.ZIndex(-1) // under the others, which the pill slides behind
+			}
+			ui.Box(c).Size(18, 18).Shrink(0).PassThrough().Draw(func(p *ui.Painter, r ui.Rect) { drawRailIcon(p, r, 19, kind, mark) })
 			txt := ui.Text(c, label).FontSize(15).TextColor(ink).Grow(1).PassThrough()
 			if on {
 				txt.FontWeight(600)
@@ -78,7 +84,7 @@ func (a *app) rail(c *ui.Context) {
 		ui.Row(c.Key("rail-week")).Gap(6).Padding(0, 10, 16).Shrink(0).Children(func() {
 			for i, n := range per {
 				ui.Column(c.Key(fmt.Sprint(i))).Grow(1).Basis(0).Gap(5).AlignItems(ui.Center).Children(func() {
-					sq := ui.Box(c).Height(20).FillWidth().Radius(5).Background(t.Text.Alpha(0.06)).
+					sq := ui.Box(c).Height(20).FillWidth().Radius(6).Background(t.Text.Alpha(0.06)).Transition(easeLook).
 						Tooltip(fmt.Sprintf("%s 做完 %d 件", weekdays[(i+1)%7], n))
 					switch {
 					case n >= 3:
@@ -126,11 +132,12 @@ func (a *app) rail(c *ui.Context) {
 						continue
 					}
 					shown++
-					b := ui.Row(c.Key(fi.Path)).Height(34).Padding(0, 12).Gap(12).Radius(9).AlignItems(ui.Center).FillWidth().
+					b := ui.Row(c.Key(fi.Path)).Height(34).Padding(0, 12).Gap(12).Radius(radiusRow).AlignItems(ui.Center).FillWidth().
 						Cursor(ui.CursorPointer).Label("最近 " + mapName(fi.Path)).Background(t.Text.Alpha(0)).Transition(easeLook)
 					if b.Hovered() {
-						b.Background(t.Text.Alpha(0.045))
+						b.Background(t.Text.Alpha(0.05))
 					}
+					press(b, 0.975)
 					if b.Clicked() {
 						a.later(func() { _ = a.open(fi.Path) })
 					}

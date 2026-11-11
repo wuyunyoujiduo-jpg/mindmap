@@ -26,15 +26,22 @@ by AI, and an AI assistant.
 - The UI's look is in `design.go` (sizes, helpers, the theme of
   `quietTheme`) and `icons.go` (icons drawn, not glyphs, so that they sit
   centered; the rail's and the lists' are one family of thin lines,
-  `drawRailIcon`). The look is plain and restrained, as flomo's (the
-  user's reference): two levels only, a pale ground (`ground`, one of
-  `grounds` chosen in the settings, `config.Ground`) and flat white cards
-  on it (`raise`, `listCard`), with no ring and no shadow; text large
-  (14 to 16) with room around it; few controls in sight, what can be done
-  with a row showing under the pointer; one color, the violet-blue
-  accent, used whole where it is used: the part shown in the sidebar, the
-  keys that act (`inkButton`, `accentButton`), the outline of the line
-  written in, tags on a pale wash of it (`softTag`). The desk and 收集 write in
+  `drawRailIcon`). The look is plain and restrained, as Apple's pages are
+  (the user's reference is https://library.aimran.es/, after flomo): two
+  levels only, a cool pale ground (`ground`, one of `grounds` chosen in
+  the settings, `config.Ground`) and white cards on it with large round
+  corners (`radiusCard`), told by a shadow so soft it is hardly seen
+  (`soft`, in `raise` and `listCard`; `lifted` for what is over the page:
+  a card under the pointer, `hoverLift`, the canvas's bars, popups,
+  `modal`), with no ring; keys, tabs and the fields of search are pills
+  (`radiusPill`), icon buttons round; text large (14 to 16) with room
+  around it; few controls in sight, what can be done with a row showing
+  under the pointer; one color, the violet-blue accent: the keys that act
+  (`inkButton`, `accentButton`), the outline and halo of the line written
+  in (`focusHalo`), tags on a pale wash of it (`softTag`). What is chosen
+  among a few (the sidebar's part, a `pillTab`, a `segmented`, the views'
+  tabs) is on a white pill that slides to it from the one chosen before
+  (`slidePill`, a `Match` transition, behind the others' words). The desk and 收集 write in
   the same card (`write.go`, `writeCard`: a tag and a reference offered
   as they are written, a picture, bold, lists; a reference is kept in
   the note's text as `<clip:id>` and shown under its words, `noteText`); other keys are a
@@ -71,7 +78,8 @@ by AI, and an AI assistant.
   MyGo has (stacked and inset shadows, transitions, poses, the system's
   fonts). Things move as in the drafts (`design.go`: `easeLook` for colors
   and shadows, `rowMotion` for rows that come and go, `press` for what
-  gives under the pointer, `easeDetent` the curve); nothing may move what
+  gives under the pointer, `hoverLift` for cards that open, `easeDetent`
+  the curve, `cubic-bezier(.22,1,.36,1)`); nothing may move what
   is under the pointer away from it on a click, as a part opening on
   focus would. The tests run with no motion (`app.noMotion`).
 - The app's icon is drawn by `tools/icon/`; `resources/icon.png` is the
@@ -98,7 +106,10 @@ by AI, and an AI assistant.
   framed there with handles and marked up in colors, the toolbar by it.
   macOS may keep those windows below the menu bar: the shot is drawn offset
   by where the window really is (`screenShot.off`). No system tool is used.
-  Global shortcuts reach the app with a menu open (`menus_darwin.go`), and
-  the shot closes that menu once taken.
+  Global shortcuts reach the app with a menu open (`menus_darwin.go`; and,
+  as macOS hands them over only once the menu closes, the keyboard's state
+  is watched while a menu of the app is open, `watchKeysUnderMenu`, which
+  needs no permission; the listener of `keytap_darwin.go` needs 输入监控),
+  and the shot closes that menu once taken.
   Each step goes to `screenshot.log`, shown in the settings.
 - The user writes in Chinese; the app's texts are Chinese.

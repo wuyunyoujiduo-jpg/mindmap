@@ -17,6 +17,10 @@ import (
 // 快捷键（Carbon 的 RegisterEventHotKey）交给应用。这里另装一个只监听的键盘
 // 事件监听（CGEventTap），菜单开着也能看到按键：看到截图快捷键，而全局快捷键
 // 没有响应，就由它开始截图。它要「输入监控」权限，没有时什么也不做。
+//
+// 没有这个权限时，本应用自己的菜单展开期间改为查看键盘的状态
+// （CGEventSourceKeyState，不需要权限）：快捷键按下了，就开始截图
+// （watchKeysUnderMenu）。否则快捷键要等菜单收起才送到，收起菜单时才截图。
 
 const (
 	kCGSessionEventTap             = 1
@@ -41,6 +45,8 @@ var (
 	cgEventGetFlags          func(event uintptr) uint64
 	cgPreflightListen        func() bool
 	cgRequestListen          func() bool
+	cgEventSourceKeyState    func(state int32, key uint16) bool
+	cgEventSourceFlagsState  func(state int32) uint64
 	cfMachPortCreateRLSource func(alloc, port uintptr, order int) uintptr
 	cfRunLoopGetMain         func() uintptr
 	cfRunLoopAddSource       func(rl, source, mode uintptr)
@@ -52,6 +58,9 @@ var (
 	tapFlags  uint64
 	tapFire   func()
 	hotKeyAt  time.Time // when the global shortcut last fired
+	seenAt    time.Time // when the shortcut was last seen under a menu
+	menuShot  time.Time // when a shot was last begun under a menu
+	polling   bool      // the keyboard's state is being watched
 	tapLoaded bool
 )
 
@@ -74,6 +83,8 @@ func loadTap() bool {
 	purego.RegisterLibFunc(&cgEventGetFlags, cg, "CGEventGetFlags")
 	purego.RegisterLibFunc(&cgPreflightListen, cg, "CGPreflightListenEventAccess")
 	purego.RegisterLibFunc(&cgRequestListen, cg, "CGRequestListenEventAccess")
+	purego.RegisterLibFunc(&cgEventSourceKeyState, cg, "CGEventSourceKeyState")
+	purego.RegisterLibFunc(&cgEventSourceFlagsState, cg, "CGEventSourceFlagsState")
 	purego.RegisterLibFunc(&cfMachPortCreateRLSource, cf, "CFMachPortCreateRunLoopSource")
 	purego.RegisterLibFunc(&cfRunLoopGetMain, cf, "CFRunLoopGetMain")
 	purego.RegisterLibFunc(&cfRunLoopAddSource, cf, "CFRunLoopAddSource")
@@ -147,22 +158,87 @@ var keyTap = purego.NewCallback(func(proxy uintptr, typ uint32, event, refcon ui
 	fire := tapFire
 	tapMu.Unlock()
 	if match {
-		// The global shortcut, when it works, fires too: the listener
-		// takes the shot only when it did not.
-		pressed := time.Now()
-		go func() {
-			time.Sleep(250 * time.Millisecond)
-			tapMu.Lock()
-			fired := hotKeyAt.After(pressed.Add(-100 * time.Millisecond))
-			tapMu.Unlock()
-			if !fired {
-				Log("全局快捷键没有响应（可能有菜单展开），由键盘监听开始截图")
-				fire()
-			}
-		}()
+		shortcutSeen(fire, "键盘监听")
 	}
 	return event
 })
+
+// shortcutSeen is told that the shortcut was pressed while a menu may
+// keep it from the app. The global shortcut, when it works, fires too:
+// the shot is taken here only when it did not, and once for a press seen
+// in two ways.
+func shortcutSeen(fire func(), by string) {
+	pressed := time.Now()
+	tapMu.Lock()
+	again := pressed.Sub(seenAt) < 600*time.Millisecond
+	seenAt = pressed
+	tapMu.Unlock()
+	if again {
+		return
+	}
+	go func() {
+		time.Sleep(250 * time.Millisecond)
+		tapMu.Lock()
+		fired := hotKeyAt.After(pressed.Add(-100 * time.Millisecond))
+		if !fired {
+			menuShot = time.Now()
+		}
+		tapMu.Unlock()
+		if !fired {
+			Log("全局快捷键没有响应（可能有菜单展开），由%s开始截图", by)
+			fire()
+		}
+	}()
+}
+
+// LateHotKey tells whether the global shortcut firing now is the press a
+// shot was already begun for under a menu: the system hands it over only
+// once the menu closes, which the shot does.
+func LateHotKey() bool {
+	tapMu.Lock()
+	defer tapMu.Unlock()
+	return time.Since(menuShot) < 3*time.Second
+}
+
+// watchKeysUnderMenu looks at the keyboard's state while a menu of the app
+// is open, which needs no permission, and begins the shot when the
+// shortcut goes down. Called as a menu opens; it ends with the last menu.
+func watchKeysUnderMenu() {
+	tapMu.Lock()
+	if polling || !loadTap() {
+		tapMu.Unlock()
+		return
+	}
+	polling = true
+	tapMu.Unlock()
+	go func() {
+		defer func() {
+			tapMu.Lock()
+			polling = false
+			tapMu.Unlock()
+		}()
+		const combinedSession = 0
+		was := true // a key held as the menu opens is not a press
+		for {
+			menusMu.Lock()
+			open := len(menus) > 0
+			menusMu.Unlock()
+			if !open {
+				return
+			}
+			tapMu.Lock()
+			code, flags, fire := tapCode, tapFlags, tapFire
+			tapMu.Unlock()
+			down := fire != nil && code >= 0 && cgEventSourceKeyState(combinedSession, uint16(code)) &&
+				cgEventSourceFlagsState(combinedSession)&flagMods == flags
+			if down && !was {
+				shortcutSeen(fire, "键盘状态")
+			}
+			was = down
+			time.Sleep(25 * time.Millisecond)
+		}
+	}()
+}
 
 // keyCodes are the virtual key codes of the keys a shortcut may end in.
 var keyCodes = map[string]int64{

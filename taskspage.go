@@ -906,7 +906,7 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 func (a *app) taskRow(c *ui.Context, it taskItem, overdue bool) {
 	t := c.Theme()
 	task := it.node.Task
-	row := ui.Row(c.Key("task:"+it.path+"#"+it.node.ID)).MinHeight(46).Padding(6, 12, 6, 10).Gap(10).Radius(7).AlignItems(ui.Center).
+	row := ui.Row(c.Key("task:"+it.path+"#"+it.node.ID)).MinHeight(48).Padding(6, 12, 6, 10).Gap(10).Radius(radiusRow).AlignItems(ui.Center).
 		FillWidth().Cursor(ui.CursorPointer).Label("任务 " + it.node.Title).Drag(taskDrag{it.path, it.node.ID}).
 		Background(t.Text.Alpha(0)).Transition(rowMotion)
 	if row.Hovered() {
@@ -1098,7 +1098,7 @@ func (a *app) weekView(c *ui.Context, items []taskItem) {
 		for i := range 7 {
 			d := start.AddDate(0, 0, i)
 			isToday := sameDay(d, a.now())
-			col := ui.Column(c.Key(fmt.Sprint("week-day:", i))).Grow(1).Basis(0).MinWidth(0).Padding(4, 6, 6).Gap(2).Radius(14).Background(t.Surface)
+			col := ui.Column(c.Key(fmt.Sprint("week-day:", i))).Grow(1).Basis(0).MinWidth(0).Padding(4, 6, 6).Gap(2).Radius(radiusCard).Background(t.Text.Alpha(0.04))
 			a.dropTaskOn(col, d)
 			if col.DoubleClicked() {
 				a.tasks.day, a.tasks.view = d, tasksDay
@@ -1198,13 +1198,13 @@ func (a *app) taskChip(c *ui.Context, it taskItem) {
 	t := c.Theme()
 	// A white card, as the lists' are: its circle says its priority, a dot
 	// its map.
-	chip := raise(ui.Row(c.Key("chip:"+it.path+"#"+it.node.ID)).Padding(4, 7).Gap(6).Radius(7).AlignItems(ui.Center).FillWidth(), t).Cursor(ui.CursorPointer).
+	chip := raise(ui.Row(c.Key("chip:"+it.path+"#"+it.node.ID)).Padding(5, 8).Gap(6).Radius(radiusSmall).AlignItems(ui.Center).FillWidth(), t).Cursor(ui.CursorPointer).
 		Label("任务 " + it.node.Title).Tooltip(it.mapName + " · " + it.node.Title).Drag(taskDrag{it.path, it.node.ID})
 	switch {
 	case a.tasks.sel == it.key():
 		chosenCard(chip, t)
 	case chip.Hovered():
-		chip.Shadow(0, 3, 10, 0, ui.RGBA(40, 32, 16, 0.1))
+		chip.NoShadow().Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.04)).Shadow(0, 6, 16, 0, ui.RGBA(0, 0, 0, 0.1))
 	}
 	switch {
 	case chip.DoubleClicked():
@@ -1311,7 +1311,7 @@ func (a *app) weekDay(c *ui.Context, items []taskItem, d, day time.Time, i int) 
 	}
 	isToday := sameDay(d, day)
 	shown := a.tasks.view == tasksDay && sameDay(a.tasks.day, d)
-	row := ui.Row(c.Key(fmt.Sprint("week-day:", i))).MinHeight(38).Padding(8, 10).Gap(10).Radius(7).AlignItems(ui.Start).FillWidth().
+	row := ui.Row(c.Key(fmt.Sprint("week-day:", i))).MinHeight(38).Padding(8, 10).Gap(10).Radius(radiusRow).AlignItems(ui.Start).FillWidth().
 		Cursor(ui.CursorPointer).Label(fmt.Sprintf("%s %d日", weekdayName(d), d.Day()))
 	_, over := ui.DragOver[taskDrag](row)
 	a.dropTaskOn(row, d)

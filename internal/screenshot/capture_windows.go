@@ -120,4 +120,5 @@ func closeMenus() {}
 func KeysAllowed() bool            { return true }
 func RequestKeys()                 {}
 func HotKeyFired()                 {}
+func LateHotKey() bool             { return false }
 func ListenShotKey(string, func()) {}

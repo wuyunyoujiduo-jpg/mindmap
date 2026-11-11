@@ -318,16 +318,18 @@ func (a *app) viewTabs(c *ui.Context, room float32) {
 		}).Label("视图").Shrink(0)
 		return
 	}
-	ui.Row(c.Key("view-tabs")).Padding(2).Gap(2).Radius(8).Background(t.Text.Alpha(0.05)).Shrink(0).Children(func() {
+	ui.Row(c.Key("view-tabs")).Padding(2).Gap(2).Radius(radiusPill).Background(t.Text.Alpha(0.05)).Shrink(0).Children(func() {
 		tab := func(key, name string, on bool) ui.Element {
-			b := ui.Box(c.Key("view:"+key)).Height(26).Padding(0, 12).Radius(6).Center().Cursor(ui.CursorPointer).Label(name)
-			switch {
-			case on:
-				b.Background(t.Background).Border(1, hairline(t))
-			case b.Hovered():
+			b := ui.Box(c.Key("view:"+key)).Height(28).Padding(0, 14).Radius(radiusPill).Center().Cursor(ui.CursorPointer).Label(name).
+				Background(t.Text.Alpha(0)).Transition(easeLook)
+			if !on && b.Hovered() {
 				b.Background(t.Text.Alpha(0.05))
 			}
 			b.Children(func() {
+				if on {
+					slidePill(c, "view-tabs", radiusPill)
+					b.ZIndex(-1) // under the others, which the pill slides behind
+				}
 				txt := ui.Text(c, name).FontSize(textSmall).PassThrough()
 				if on {
 					txt.FontWeight(600)

@@ -529,8 +529,8 @@ func (a *app) canvasArea(c *ui.Context) {
 			a.nodeBar(c, r, max(len(shown.Path(a.selected))-1, 0))
 		}
 		// Zoom and recenter, over the canvas's corner.
-		ui.Row(c).Absolute().Right(12).Bottom(12).Gap(0).Padding(2).Radius(9).AlignItems(ui.Center).
-			Background(t.Background).Border(1, hairline(t)).Shadow(0, 2, 10, 0, ui.RGBA(0, 0, 0, 0.06)).Children(func() {
+		lifted(ui.Row(c).Absolute().Right(14).Bottom(14).Gap(0).Padding(3, 5).Radius(radiusPill).AlignItems(ui.Center).
+			Background(cardColor(t)), t).Children(func() {
 			if iconButton(c, iconMinus, "缩小", "缩小 ⌘-", 28, true).Clicked() {
 				a.zoomStep(false)
 			}
@@ -643,11 +643,12 @@ func (a *app) sheetName(id string) string {
 func (a *app) sheetTab(c *ui.Context, d *model.Document) {
 	t := c.Theme()
 	active := d == a.doc
-	tab := ui.Row(c).Padding(4, 12).Radius(6).Cursor(ui.CursorPointer).Label(d.Title)
+	tab := ui.Row(c).Padding(5, 14).Radius(radiusPill).Cursor(ui.CursorPointer).Label(d.Title).
+		Background(t.Text.Alpha(0)).Transition(easeLook)
 	if active {
 		tab.Background(chosen(t))
 	} else if tab.Hovered() {
-		tab.Background(t.Text.Alpha(0.04))
+		tab.Background(t.Text.Alpha(0.045))
 	}
 	if a.renamingSheet == d.ID && !a.confirmSheet {
 		tab.Children(func() {

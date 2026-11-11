@@ -139,7 +139,7 @@ func (a *app) folderContents(c *ui.Context, f model.Folder, depth int) {
 func (a *app) folderRow(c *ui.Context, f model.Folder, depth int) {
 	t := c.Theme()
 	open := a.folderOpen(f.Path)
-	row := ui.Row(c).Padding(3, 4, 3, 8+float32(depth)*14).Gap(6).Radius(6).AlignItems(ui.Center).MinHeight(30).
+	row := ui.Row(c).Padding(3, 4, 3, 8+float32(depth)*14).Gap(6).Radius(radiusSmall).AlignItems(ui.Center).MinHeight(30).
 		Cursor(ui.CursorPointer).Label(f.Name)
 	hover := row.Hovered()
 	if hover {
@@ -254,7 +254,7 @@ func (a *app) fileRow(c *ui.Context, f model.FileInfo, depth int) {
 	current := f.Path == a.path && !a.libOpen
 	fav := a.starred(f.Path)
 	a.sideItems = append(a.sideItems, f.Path)
-	row := ui.Row(c).Padding(3, 4, 3, 22+float32(depth)*14).Gap(6).Radius(6).AlignItems(ui.Center).MinHeight(30).
+	row := ui.Row(c).Padding(3, 4, 3, 22+float32(depth)*14).Gap(6).Radius(radiusSmall).AlignItems(ui.Center).MinHeight(30).
 		Cursor(ui.CursorPointer).Label(f.Name).Drag(fileDrag{Path: f.Path})
 	// Another map dropped on a map goes under its center.
 	_, over := ui.DragOver[fileDrag](row)
@@ -529,7 +529,7 @@ func (a *app) tagRow(c *ui.Context, tag string, count int) {
 		return
 	}
 	active := a.tagFilter == tag
-	row := ui.Row(c).Padding(4, 8, 4, 12).Gap(8).Radius(6).AlignItems(ui.Center).
+	row := ui.Row(c).Padding(4, 8, 4, 12).Gap(8).Radius(radiusSmall).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).Label("筛选标签 " + tag).Tooltip("点击筛选，右键重命名、改颜色或删除")
 	switch {
 	case active:

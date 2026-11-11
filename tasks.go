@@ -94,7 +94,7 @@ func (a *app) boardColumns(c *ui.Context, tasks []model.TaskNode) {
 					col = append(col, tn)
 				}
 			}
-			column := ui.Column(c.Key(string(s))).Grow(1).Basis(0).Radius(16).Background(t.Surface).Padding(0, 6)
+			column := ui.Column(c.Key(string(s))).Grow(1).Basis(0).Radius(radiusCard).Background(t.Text.Alpha(0.04)).Padding(0, 6)
 			if _, over := ui.DragOver[nodeDrag](column); over {
 				column.Background(statusColor(s).Alpha(0.08))
 			}
@@ -168,7 +168,7 @@ func (a *app) keyIssueColumn(c *ui.Context) {
 	t := c.Theme()
 	col := a.keyIssues()
 	red := ui.Hex("#D9605B")
-	column := ui.Column(c.Key("key-issues")).Grow(1).Basis(0).Radius(16).Background(t.Surface).Padding(0, 6)
+	column := ui.Column(c.Key("key-issues")).Grow(1).Basis(0).Radius(radiusCard).Background(t.Text.Alpha(0.04)).Padding(0, 6)
 	if _, over := ui.DragOver[nodeDrag](column); over {
 		column.Background(red.Alpha(0.08))
 	}
@@ -205,7 +205,7 @@ func (a *app) taskCard(c *ui.Context, tn model.TaskNode, showStatus bool) {
 	if task == nil { // a 重点问题 that is not a task
 		task = &model.Task{}
 	}
-	card := raise(ui.Column(c).Padding(10, 12).Gap(6).Radius(10), t).
+	card := raise(ui.Column(c).Padding(12, 14).Gap(6).Radius(12), t).
 		Drag(nodeDrag{n.ID}).Cursor(ui.CursorPointer).Label(n.Title)
 	if n.ID == a.selected {
 		chosenCard(card, t)

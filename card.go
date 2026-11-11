@@ -280,7 +280,7 @@ func (a *app) cardWindow(c *ui.Context) {
 	if a.cardShowSource {
 		o.source = a.cardSource
 	}
-	ui.Modal(c.Key("card-window"), &a.cardOpen, func() {
+	modal(c, "card-window", &a.cardOpen, func() {
 		w, h := c.Size()
 		ui.Row(c).Gap(20).AlignItems(ui.Start).Children(func() {
 			ui.Scroll(c.Key("card-preview")).MaxHeight(h - 140).Width(cardWidth + 8).Children(func() {

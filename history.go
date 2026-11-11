@@ -211,7 +211,7 @@ func whenLabel(t, now time.Time) string {
 // since the one chosen on the right.
 func (a *app) historyView(c *ui.Context) {
 	t := c.Theme()
-	ui.Modal(c.Key("history"), &a.historyOpen, func() {
+	modal(c, "history", &a.historyOpen, func() {
 		w, h := c.Size()
 		if a.historyFile == nil && len(a.historyList) > 0 {
 			a.historyPick(a.historySel)

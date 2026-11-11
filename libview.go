@@ -402,16 +402,15 @@ func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 	t := c.Theme()
 	memo := isMemo(clip)
 	kcol := clipColor(clip.Kind)
-	row := ui.Column(c).Grow(1).Basis(0).MinWidth(0).Padding(14, 16).Gap(9).Radius(12).Cursor(ui.CursorPointer).
+	row := ui.Column(c).Grow(1).Basis(0).MinWidth(0).Padding(16, 18).Gap(10).Radius(radiusCard).Cursor(ui.CursorPointer).
 		Label("资料 " + clip.Label())
 	// A white card, as all are: a note is its text, the others have their
 	// kind's icon by their title.
 	raise(row, t)
-	switch {
-	case a.libSel == clip.ID:
+	if a.libSel == clip.ID {
 		chosenCard(row, t)
-	case row.Hovered():
-		row.Shadow(0, 4, 12, 0, ui.RGBA(40, 32, 16, 0.1))
+	} else {
+		hoverLift(row, t) // it rises a little under the pointer
 	}
 	if row.Clicked() {
 		if a.libSel == clip.ID {

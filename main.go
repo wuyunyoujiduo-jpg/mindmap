@@ -106,6 +106,10 @@ func (d *desktop) SetShotKey(key string) error {
 		return nil
 	}
 	if err := mygo.GlobalShortcut.Register(key, func() {
+		if screenshot.LateHotKey() {
+			logShot("截图快捷键 %s 在菜单收起后才送到，已经截过", key)
+			return
+		}
 		screenshot.HotKeyFired()
 		logShot("按下截图快捷键 %s", key)
 		d.Screenshot(false)

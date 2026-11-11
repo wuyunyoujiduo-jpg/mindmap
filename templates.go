@@ -185,7 +185,7 @@ func (a *app) deleteTemplate(tp template) {
 // templatesView is the window of templates to start a map from.
 func (a *app) templatesView(c *ui.Context) {
 	t := c.Theme()
-	ui.Modal(c.Key("templates"), &a.templatesOpen, func() {
+	modal(c, "templates", &a.templatesOpen, func() {
 		w, _ := c.Size()
 		ui.Column(c).Gap(14).Width(min(720, w-80)).Children(func() {
 			ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
@@ -199,11 +199,12 @@ func (a *app) templatesView(c *ui.Context) {
 			})
 			ui.Grid(c).Columns(2).Gap(10).Children(func() {
 				for _, tp := range a.templates() {
-					card := ui.Column(c.Key(tp.name+tp.path)).Padding(12).Gap(6).Radius(10).Border(1, t.Border).
-						Cursor(ui.CursorPointer).Label("模板 " + tp.name)
+					card := ui.Column(c.Key(tp.name+tp.path)).Padding(14, 16).Gap(6).Radius(14).Background(t.Text.Alpha(0.04)).
+						Cursor(ui.CursorPointer).Label("模板 " + tp.name).Transition(easeLook)
 					if card.Hovered() {
-						card.Background(t.SurfaceHover)
+						card.Background(t.Text.Alpha(0.075))
 					}
+					press(card, 0.98)
 					if card.Clicked() {
 						tp := tp
 						a.templatesOpen = false

@@ -24,8 +24,8 @@ func (a *app) nodeBar(c *ui.Context, r layout.Result, depth int) {
 	// At the top of the canvas, in the middle: by the node it would hide
 	// the nodes around it, which are clicked as often.
 	x, y := (a.vp.W-nodeBarWidth)/2, float32(12)
-	bar := ui.Row(c.Key("node-bar")).Absolute().Left(x).Top(y).Height(34).Padding(0, 2).Gap(0).AlignItems(ui.Center).
-		Radius(9).Background(t.Background).Border(1, hairline(t)).Shadow(0, 4, 16, 0, ui.RGBA(0, 0, 0, 0.1)).Label("主题操作")
+	bar := lifted(ui.Row(c.Key("node-bar")).Absolute().Left(x).Top(y).Height(38).Padding(0, 5).Gap(0).AlignItems(ui.Center).
+		Radius(radiusPill).Background(cardColor(t)), t).Label("主题操作")
 	bar.Children(func() {
 		// One button to add: a topic under this one, the usual; a sibling is
 		// Return's, and in the menu at the bar's end.

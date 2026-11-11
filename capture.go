@@ -398,7 +398,7 @@ func (a *app) openSettings() {
 // menu bar icon, reminders and the editor of code links.
 func (a *app) settingsView(c *ui.Context) {
 	t := c.Theme()
-	ui.Modal(c.Key("settings"), &a.settingsOpen, func() {
+	modal(c, "settings", &a.settingsOpen, func() {
 		w, h := c.Size()
 		tabs := []string{"通用", "资料整理", "备份", "同步", "连接"}
 		if a.file != nil {
@@ -410,8 +410,8 @@ func (a *app) settingsView(c *ui.Context) {
 			ui.Column(c.Key("settings-tabs")).Width(150).Shrink(0).Gap(1).Children(func() {
 				ui.Text(c, "设置").FontSize(textHeadline).FontWeight(600).Margin(0, 10, 14)
 				for i, name := range tabs {
-					row := ui.Row(c.Key("settings-tab:"+name)).Height(30).Padding(0, 10).Radius(7).AlignItems(ui.Center).
-						FillWidth().Cursor(ui.CursorPointer).Label(name)
+					row := ui.Row(c.Key("settings-tab:"+name)).Height(34).Padding(0, 12).Radius(radiusRow).AlignItems(ui.Center).
+						FillWidth().Cursor(ui.CursorPointer).Label(name).Background(t.Text.Alpha(0)).Transition(easeLook)
 					switch {
 					case i == a.settingsTab:
 						row.Background(chosen(t))

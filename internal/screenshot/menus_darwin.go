@@ -74,6 +74,7 @@ func WatchMenus() {
 		menusMu.Lock()
 		menus = append(menus, menu)
 		menusMu.Unlock()
+		watchKeysUnderMenu()
 	})
 	observe("NSMenuDidEndTrackingNotification", func(menu objc.ID) {
 		menusMu.Lock()

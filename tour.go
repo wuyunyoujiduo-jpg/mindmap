@@ -45,7 +45,7 @@ func (a *app) tourView(c *ui.Context) {
 	}
 	t := c.Theme()
 	open := true
-	ui.Modal(c.Key("tour"), &open, func() {
+	modal(c, "tour", &open, func() {
 		card := tourCards[a.tourStep-1]
 		w, _ := c.Size()
 		ui.Column(c).Gap(14).Width(min(520, w-80)).Children(func() {
