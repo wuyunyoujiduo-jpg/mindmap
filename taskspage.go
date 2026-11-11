@@ -33,9 +33,9 @@ const (
 
 // The lists of the tasks' page, as its tabs show them.
 var taskLists = []struct {
-	view int
-	name string
-}{{tasksToday, "今天"}, {tasksWeekAhead, "最近 7 天"}, {tasksInbox, "收件箱"}, {tasksAll, "全部"}, {tasksDone, "已完成"}}
+	view       int
+	name, icon string
+}{{tasksToday, "今天", "calendar"}, {tasksWeekAhead, "最近 7 天", "calendar-week"}, {tasksInbox, "收件箱", "inbox"}, {tasksAll, "全部", "list"}, {tasksDone, "已完成", "circle-check"}}
 
 // tasksState is the tasks' page.
 type tasksState struct {
@@ -426,7 +426,7 @@ func (a *app) tasksHead(c *ui.Context, all []taskItem) {
 				name = mapName(a.tasks.onMap)
 			}
 			ui.Row(c).Gap(10).AlignItems(ui.End).Children(func() {
-				ui.Text(c, name).FontSize(textPage + 2).FontWeight(700).LetterSpacing(titleTrack).LineHeight(1.2).NoWrap()
+				ui.Text(c, name).FontSize(textPage + 2).FontWeight(600).LetterSpacing(titleTrack).LineHeight(1.2).NoWrap()
 				ui.Text(c, fmt.Sprintf("%d月%d日 %s", now.Month(), now.Day(), weekdays[now.Weekday()])).FontSize(textSmall).TextColor(th.TextMuted).Margin(0, 0, 3).NoWrap()
 			})
 			ui.Text(c, fmt.Sprintf("%d 件要做，做完 %d 件，%d 条等着归位", len(a.dueToday(now)), len(a.doneToday(now)), len(a.waiting()))).
@@ -882,11 +882,7 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 	ui.Box(c.Key(fmt.Sprint("task-list:", a.tasks.view))).FillWidth().Children(func() {
 		ui.Column(c).Padding(6, 0, 8).Gap(10).FillWidth().Children(func() {
 			if empty && len(done) == 0 {
-				ui.Column(c).Padding(28, 0).Gap(8).AlignItems(ui.Center).FillWidth().Children(func() {
-					glyph(c, iconCheck, 36, t.TextMuted.Alpha(0.6))
-					ui.Text(c, "没有要做的事").FontSize(textTitle).TextColor(t.TextMuted)
-					ui.Text(c, "在上面写一句加任务，或在导图里把节点设为任务、给它一个日期").FontSize(textSmall).TextColor(t.TextMuted)
-				})
+				emptyState(c, "tasks", "circle-check", "没有要做的事", "在上面写一句加任务，或在导图里把节点设为任务、给它一个日期", nil)
 				return
 			}
 			if a.tasks.view == tasksInbox {
@@ -1034,8 +1030,8 @@ func (a *app) taskCircle(c *ui.Context, it taskItem, size float32) {
 	if done {
 		target = 1
 	}
-	fill := box.AnimateTo("done", target, ui.Animation{Duration: 240 * time.Millisecond, Ease: easeDetent, NonMotion: true})
-	hint := box.AnimateTo("hover", b2f(box.Hovered() && !done), ui.Animation{Duration: 140 * time.Millisecond, NonMotion: true})
+	fill := box.AnimateTo("done", target, ui.Animation{Duration: motionFast, Ease: easeDetent, NonMotion: true})
+	hint := box.AnimateTo("hover", b2f(box.Hovered() && !done), ui.Animation{Duration: motionQuick, NonMotion: true})
 	box.Draw(func(p *ui.Painter, r ui.Rect) {
 		rr := ui.Rect{X: r.X + 1, Y: r.Y + 1, W: r.W - 2, H: r.H - 2}
 		if hint > 0 {

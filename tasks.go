@@ -250,7 +250,7 @@ func (a *app) taskCard(c *ui.Context, tn model.TaskNode, showStatus bool) {
 			if showStatus {
 				statusIcon(c, task.Status, 13).Margin(3, 0, 0, 0)
 			}
-			title := ui.Text(c, n.Title).FontSize(textBody).FontWeight(500).LineHeight(1.4).Grow(1).Wrap()
+			title := ui.Text(c, n.Title).FontSize(textBody).FontWeight(600).LineHeight(1.4).Grow(1).Wrap()
 			if task.Status == model.StatusDone {
 				title.Strikethrough().TextColor(t.TextMuted)
 			}

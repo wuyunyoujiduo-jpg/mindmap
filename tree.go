@@ -24,7 +24,7 @@ func (a *app) mapTree(c *ui.Context) {
 	side := ui.Column(c.Key("map-tree")).Width(sideWidthOf).Shrink(0).FillHeight().BorderWidth(0, 1, 0, 0).BorderColor(hairline(t))
 	side.Children(func() {
 		ui.Row(c.Key("tree-head")).Height(44).Padding(6, 8, 0, 18).Gap(2).AlignItems(ui.Center).Shrink(0).Children(func() {
-			ui.Text(c, "目录").FontSize(textCaption).FontWeight(500).TextColor(t.TextMuted).Grow(1).PassThrough()
+			ui.Text(c, "目录").FontSize(textCaption).FontWeight(600).TextColor(t.TextMuted).Grow(1).PassThrough()
 			iconButton(c, iconPlus, "目录新建", "新建导图、文件夹", 28, true).Menu(func(m *ui.Menu) {
 				if m.Item("新建导图").Chosen() {
 					a.later(func() { a.newMapIn(a.treeFolder()) })
@@ -104,7 +104,16 @@ func (a *app) treeRow(c *ui.Context, depth int, name, count, path string, on boo
 		if ic == iconMap { // a map is told by its color: a dot of it
 			ui.Box(c).Size(16, 16).Center().Shrink(0).PassThrough().Children(func() { mapDot(c, col, 9) })
 		} else {
-			sideTile(c, ic, col)
+			switch {
+			case ic == iconFolder && path != "" && a.folderOpen(path):
+				kubaiIcon(c, "folder-open", sideIconSize, on || hover)
+			case ic == iconFolder:
+				kubaiIcon(c, "folder", sideIconSize, on || hover)
+			case ic == iconLevels:
+				kubaiIcon(c, "sitemap", sideIconSize, on || hover)
+			default:
+				sideTile(c, ic, col)
+			}
 		}
 		if path != "" && a.renaming == path {
 			a.renameInput(c)

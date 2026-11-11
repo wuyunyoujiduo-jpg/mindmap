@@ -59,7 +59,7 @@ func (a *app) topBar(c *ui.Context) {
 		if a.cfg.HideTree {
 			side = "显示侧栏"
 		}
-		if iconButton(c, iconSidebar, side, side, 32, true).Clicked() {
+		if kubaiKey(c, "sidebar", side, side, false).Clicked() {
 			a.cfg.HideTree = !a.cfg.HideTree
 			a.cfg.save()
 		}
@@ -97,23 +97,13 @@ func (a *app) topBar(c *ui.Context) {
 		})
 		a.oneBar(c)
 		// The AI's panel, from every page.
-		ai := ui.Box(c.Key("ask-ai")).Size(32, 32).Radius(radiusPill).Center().Cursor(ui.CursorPointer).Label("AI 助手").
-			Tooltip("问 AI：问问导图和资料里的内容").Background(t.Text.Alpha(0)).Transition(easeLook)
-		switch {
-		case a.aiOpen:
-			ai.Background(t.Accent.Alpha(0.14))
-		case ai.Hovered():
-			ai.Background(t.Text.Alpha(0.07))
-		}
-		if ai.Clicked() {
+		if kubaiKey(c, "sparkles", "AI 助手", "问 AI：问问导图和资料里的内容", a.aiOpen).Clicked() {
 			a.aiOpen = !a.aiOpen
 		}
-		press(ai, 0.92)
-		ai.Children(func() { glyph(c, iconSparkle, 16, t.Accent) })
-		if iconButton(c, iconSearch, "搜索全部", "搜索导图、主题、灵感和资料，#标签 按标签找", 32, true).Clicked() {
+		if kubaiKey(c, "search", "搜索全部", "搜索导图、主题、灵感和资料，#标签 按标签找", false).Clicked() {
 			a.later(func() { a.openPalette(paletteAll) })
 		}
-		if iconButton(c, iconGear, "设置", "设置", 32, true).Clicked() {
+		if kubaiKey(c, "settings", "设置", "设置", false).Clicked() {
 			a.later(a.openSettings)
 		}
 	})
@@ -350,8 +340,7 @@ func (a *app) projectsView(c *ui.Context) {
 						if a.projFolder != "" {
 							says = "这个文件夹里还没有导图"
 						}
-						raise(ui.Column(c.Key("none")).Padding(28).Gap(12).Radius(radiusCard).AlignItems(ui.Center).FillWidth(), t).Children(func() {
-							ui.Text(c, says).FontSize(textTitle).TextColor(t.TextMuted)
+						emptyState(c, "maps", "folder-open", says, "一张导图就是一个项目：把要做的事拆开，任务、资料都挂在上面。", func() {
 							if inkButton(c, "新建导图", true).Clicked() {
 								a.later(func() { a.newMapIn(at.Path) })
 							}

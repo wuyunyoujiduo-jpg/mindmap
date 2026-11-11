@@ -87,7 +87,7 @@ const pageHeadHeight = 56
 func pageHeader(c *ui.Context, key, title, sub string, right func()) {
 	t := c.Theme()
 	ui.Row(c.Key(key)).Height(pageHeadHeight).Gap(12).AlignItems(ui.Center).Shrink(0).FillWidth().DragWindow().Children(func() {
-		ui.Text(c, title).FontSize(textPage).FontWeight(700).LetterSpacing(titleTrack).NoWrap()
+		ui.Text(c, title).FontSize(textPage).FontWeight(600).LetterSpacing(titleTrack).NoWrap()
 		if sub != "" {
 			ui.Text(c, sub).FontSize(textBody).TextColor(t.TextMuted).SingleLine().Shrink(1).MinWidth(0)
 		}
@@ -163,7 +163,7 @@ func slidePill(c *ui.Context, group string, radius float32) {
 	t := c.Theme()
 	pill := ui.Box(c.Key("pill")).Absolute().Top(0).Left(0).Right(0).Bottom(0).Radius(radius).PassThrough().ZIndex(-1).
 		Background(pillColor(t)).
-		Transition(ui.ElementTransition{Duration: 320 * time.Millisecond, Ease: easeDetent, Match: pillMatch{group}})
+		Transition(ui.ElementTransition{Duration: motionFast, Ease: easeDetent, Match: pillMatch{group}})
 	if t.Dark {
 		pill.Shadow(0, 0, 0, 1, ui.RGBA(255, 255, 255, 0.08))
 	} else {
@@ -269,7 +269,18 @@ func leaf(c *ui.Context, key string) ui.Element {
 
 // easeLook has an element's colors and shadows change smoothly, and no
 // more: what is under the pointer lights up rather than switches.
-var easeLook = ui.ElementTransition{Duration: 200 * time.Millisecond, Ease: ui.CubicBezier(0.25, 0.1, 0.25, 1), Colors: true, Shadows: true}
+var easeLook = ui.ElementTransition{Duration: motionQuick, Ease: ui.CubicBezier(0, 0, 0.58, 1), Colors: true, Shadows: true}
+
+// How long things take, and no other lengths (DESIGN.md's motion): the
+// scale of transitions.dev (https://transitions.dev), each for what it
+// names there.
+const (
+	motionMicro  = 80 * time.Millisecond  // a delay, a step of a shake
+	motionQuick  = 150 * time.Millisecond // a color under the pointer, a press, what closes or goes
+	motionFast   = 250 * time.Millisecond // what opens from a key, tabs' pill, an icon's swap, a row to its place
+	motionMedium = 350 * time.Millisecond // a panel closing, a toast going
+	motionSlow   = 400 * time.Millisecond // a panel opening, what was loading shown
+)
 
 // easeDetent is the curve things move along: fast at first, settling long.
 var easeDetent = ui.CubicBezier(0.22, 1, 0.36, 1)
@@ -278,8 +289,8 @@ var easeDetent = ui.CubicBezier(0.22, 1, 0.36, 1)
 // in from a little above, the others move to their places, and one gone
 // fades out where it was.
 var rowMotion = ui.ElementTransition{
-	Duration: 320 * time.Millisecond, Ease: easeDetent, Position: true, Colors: true,
-	Enter: &ui.Motion{Y: -8, Scale: 0.98}, Exit: &ui.Motion{Scale: 0.97}, ExitDuration: 180 * time.Millisecond,
+	Duration: motionFast, Ease: easeDetent, Position: true, Colors: true,
+	Enter: &ui.Motion{Y: -8, Scale: 0.98}, Exit: &ui.Motion{Scale: 0.97}, ExitDuration: motionQuick,
 }
 
 // press has an element give a little under the pointer, as a key does.
@@ -288,7 +299,7 @@ func press(el ui.Element, by float32) ui.Element {
 	if el.Pressed() {
 		p.Scale = by
 	}
-	return el.AnimatePose(p, ui.Animation{Duration: 220 * time.Millisecond, Ease: easeDetent})
+	return el.AnimatePose(p, ui.Animation{Duration: motionQuick, Ease: easeDetent})
 }
 
 // chosenCard marks the card chosen: the accent's line around it.
@@ -797,6 +808,48 @@ func addButton(c *ui.Context, text, tip string) ui.Element {
 	return b
 }
 
+// emptyState says that a page or a list has nothing yet: an icon, a line,
+// a word on what to do, and, when act builds one, the key that does it.
+func emptyState(c *ui.Context, key, icon, title, sub string, act func()) {
+	t := c.Theme()
+	ui.Column(c.Key("empty:"+key)).Padding(36, 20).Gap(6).AlignItems(ui.Center).FillWidth().
+		Transition(ui.ElementTransition{Duration: motionSlow, Ease: easeDetent, Enter: &ui.Motion{Y: 12}}).Children(func() {
+		kubaiIcon(c, icon, 64, false).Margin(0, 0, 6)
+		ui.Text(c, title).FontSize(textTitle).FontWeight(600).TextColor(ink2(t))
+		if sub != "" {
+			ui.Text(c, sub).FontSize(textSmall).TextColor(t.TextMuted).LineHeight(1.5).MaxWidth(420).Wrap().TextAlign(ui.Center)
+		}
+		if act != nil {
+			ui.Box(c).Margin(10, 0, 0).Children(act)
+		}
+	})
+}
+
+// motionOff is set while nothing animates (the tests): what pulses is still.
+var motionOff bool
+
+// skeleton stands for lines being read or written by the AI: pale bars
+// of the widths given (a part of the room each), which breathe.
+func skeleton(c *ui.Context, key string, widths ...float32) {
+	t := c.Theme()
+	col := ui.Column(c.Key("skeleton:"+key)).Gap(9).Padding(4, 0).FillWidth().Label("正在载入")
+	lit := float32(1)
+	if !motionOff {
+		const beat = 900 * time.Millisecond
+		now := time.Now()
+		if (now.UnixMilli()/beat.Milliseconds())%2 == 1 {
+			lit = 0.45
+		}
+		c.After(beat - time.Duration(now.UnixNano())%beat)
+		lit = col.AnimateTo("breath", lit, ui.Animation{Duration: beat, NonMotion: true})
+	}
+	col.Children(func() {
+		for i, w := range widths {
+			ui.Box(c.Key(i)).Height(11).WidthPercent(w * 100).Radius(6).Background(t.Text.Alpha(0.08 * lit))
+		}
+	})
+}
+
 // emptyNote says, under a part's heading, that the part has nothing yet.
 func emptyNote(c *ui.Context, text string) {
 	ui.Text(c, text).FontSize(textSmall).TextColor(c.Theme().TextMuted).Margin(2, 10, 10)
@@ -820,7 +873,7 @@ func sheet(c *ui.Context, key string, width float32, body func()) {
 	t := c.Theme()
 	w, _ := c.Size()
 	ui.Column(c.Key(key)).Width(min(width, w*0.4)).Shrink(0).FillHeight().BorderWidth(0, 0, 0, 1).BorderColor(hairline(t)).
-		Transition(ui.ElementTransition{Duration: 240 * time.Millisecond, Ease: easeDetent, Enter: &ui.Motion{X: 24}}).Children(body)
+		Transition(ui.ElementTransition{Duration: motionSlow, Ease: easeDetent, Enter: &ui.Motion{X: 24}}).Children(body)
 }
 
 // field is a part of the settings: its name, small, over a white card
@@ -857,11 +910,21 @@ func rowsField(c *ui.Context, title, note string, body func()) ui.Element {
 // setRow is a row of the settings: what it is, a word on it under its
 // name, and at its end what sets it.
 func setRow(c *ui.Context, title, sub string, control func()) {
+	setRowSays(c, title, sub, "", control)
+}
+
+// setRowSays is setRow with what is wrong with what was written in it,
+// said under its name as it is written (wrong == "" for nothing).
+func setRowSays(c *ui.Context, title, sub, wrong string, control func()) {
 	t := c.Theme()
 	ui.Row(c.Key("row:"+title)).MinHeight(52).Padding(10, 0).Gap(16).AlignItems(ui.Center).FillWidth().Children(func() {
 		ui.Column(c).Gap(2).Grow(1).Shrink(1).Basis(0).MinWidth(0).Children(func() {
-			ui.Text(c, title).FontSize(textBody).FontWeight(500)
-			if sub != "" {
+			ui.Text(c, title).FontSize(textBody).FontWeight(600)
+			switch {
+			case wrong != "":
+				ui.Text(c.Key("wrong"), wrong).FontSize(textSmall).TextColor(t.Danger).LineHeight(1.45).Wrap().
+					Transition(ui.ElementTransition{Duration: motionQuick, Ease: easeDetent, Enter: &ui.Motion{Y: -4}})
+			case sub != "":
 				ui.Text(c, sub).FontSize(textSmall).TextColor(t.TextMuted).LineHeight(1.45).Wrap()
 			}
 		})

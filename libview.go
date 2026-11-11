@@ -88,14 +88,15 @@ func (a *app) libraryColumn(c *ui.Context) {
 		ui.Row(c).Grow(1).AlignItems(ui.Stretch).Children(func() {
 			if len(hits) == 0 {
 				ui.Column(c).Grow(1).Basis(0).Padding(8, 0, 16).Children(func() {
-					msg := "还没有资料。在上面记点什么、粘贴链接，或把图片和文件拖进来。\n在任何应用里复制内容后按 " + keyLabel(a.clipKey()) + "，也能直接存到收集。"
+					icon, title := "lightbulb", "还没有资料"
+					msg := "在上面记点什么、粘贴链接，或把图片和文件拖进来。\n在任何应用里复制内容后按 " + keyLabel(a.clipKey()) + "，也能直接存到收集。"
 					if len(l.Clips) > 0 || a.libKind == kindMaps {
-						msg = "没有符合条件的资料。"
+						icon, title, msg = "search", "没有符合条件的资料", "换一个分类或标签，或者清掉搜索的词。"
 					}
 					if a.libReview != reviewOff {
-						msg = "一周以前的灵感会在这里，每天换几条。"
+						icon, title, msg = "history", "还没有可以回顾的", "一周以前的灵感会在这里，每天换几条。"
 					}
-					ui.Text(c, msg).FontSize(13).TextColor(t.TextMuted).Wrap().Padding(20, 10)
+					emptyState(c, "wall", icon, title, msg, nil)
 				})
 			} else {
 				// A wall of cards, three across, one beside a clip chosen; a
@@ -139,19 +140,42 @@ func (a *app) libraryColumn(c *ui.Context) {
 
 // libraryDialogs are the library's questions.
 func (a *app) libraryDialogs(c *ui.Context) {
-	l := a.lib
 	gone := "删除后无法恢复。"
 	if n := len(a.clipBacklinks(a.libSel)); n > 0 {
 		gone = fmt.Sprintf("它挂在 %d 个节点上，删除后这些链接会失效。删除后无法恢复。", n)
 	}
+	// What nothing links to goes at once, with a way back; what a topic
+	// links to is asked about first, for the links would break.
+	if a.libConfirm && len(a.clipBacklinks(a.libSel)) == 0 {
+		a.libConfirm = false
+		a.deleteClipUndoably(a.libSel)
+		return
+	}
 	switch ui.AlertDialog(c, &a.libConfirm, "删除这条资料？", gone, "取消", "删除") {
 	case 1:
-		if err := l.Delete(a.libSel); err != nil {
-			a.libErr = err.Error()
-		}
-		a.noteLibraryWrite()
+		a.deleteClipUndoably(a.libSel)
+	}
+}
+
+// deleteClipUndoably deletes a clip and says so, with the way to take it
+// back.
+func (a *app) deleteClipUndoably(id string) {
+	restore, err := a.lib.Take(id)
+	if err != nil {
+		a.libErr = err.Error()
+		return
+	}
+	a.noteLibraryWrite()
+	if a.libSel == id {
 		a.libSel = ""
 	}
+	a.tellUndo("已删除", func() {
+		if err := restore(); err != nil {
+			a.libErr = err.Error()
+			return
+		}
+		a.noteLibraryWrite()
+	})
 }
 
 // libHits are the clips the search and the filters find.
@@ -518,7 +542,9 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 	})
 	status, failed := a.libStatus[clip.ID], strings.Contains(a.libStatus[clip.ID], "失败")
 	if status != "" && !failed {
+		// What is being read or written stands as pale lines until it is there.
 		ui.Text(c, status).FontSize(textSmall).TextColor(t.TextMuted).Wrap()
+		skeleton(c, "clip", 0.92, 0.78, 0.5)
 	}
 
 	// The title and the line saying what it is, large, edited in place.

@@ -301,6 +301,43 @@ func (l *Library) Delete(id string) error {
 	return nil
 }
 
+// Take removes a clip as Delete does, and gives the way to put it back
+// as it was, where it was: for a deletion that can be taken back.
+func (l *Library) Take(id string) (restore func() error, err error) {
+	i := slices.IndexFunc(l.Clips, func(c *Clip) bool { return c.ID == id })
+	if i < 0 {
+		return nil, errors.New("找不到这条记录")
+	}
+	c := l.Clips[i]
+	var file []byte
+	p := l.FilePath(c)
+	if p != "" {
+		file, _ = os.ReadFile(p)
+	}
+	if err := l.Delete(id); err != nil {
+		return nil, err
+	}
+	return func() error {
+		if slices.ContainsFunc(l.Clips, func(x *Clip) bool { return x.ID == c.ID }) {
+			return nil
+		}
+		if p != "" && file != nil {
+			if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+				return err
+			}
+			if err := os.WriteFile(p, file, 0o644); err != nil {
+				return err
+			}
+		}
+		if err := l.write(c); err != nil {
+			return err
+		}
+		l.Clips = slices.Insert(l.Clips, min(i, len(l.Clips)), c)
+		l.changed()
+		return nil
+	}, nil
+}
+
 // Categories are the categories in use, the most used first, with counts.
 func (l *Library) Categories() []Count {
 	return counts(l.Clips, func(c *Clip) []string {
