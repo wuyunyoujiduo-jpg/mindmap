@@ -94,7 +94,7 @@ func (a *app) boardColumns(c *ui.Context, tasks []model.TaskNode) {
 					col = append(col, tn)
 				}
 			}
-			column := ui.Column(c.Key(string(s))).Grow(1).Basis(0).Radius(16).Background(t.Surface).Padding(0, 6)
+			column := ui.Column(c.Key(string(s))).Grow(1).Basis(0).Radius(14).Background(trayColor(t)).Padding(0, 6)
 			if _, over := ui.DragOver[nodeDrag](column); over {
 				column.Background(statusColor(s).Alpha(0.08))
 			}
@@ -168,7 +168,7 @@ func (a *app) keyIssueColumn(c *ui.Context) {
 	t := c.Theme()
 	col := a.keyIssues()
 	red := ui.Hex("#D9605B")
-	column := ui.Column(c.Key("key-issues")).Grow(1).Basis(0).Radius(16).Background(t.Surface).Padding(0, 6)
+	column := ui.Column(c.Key("key-issues")).Grow(1).Basis(0).Radius(14).Background(trayColor(t)).Padding(0, 6)
 	if _, over := ui.DragOver[nodeDrag](column); over {
 		column.Background(red.Alpha(0.08))
 	}

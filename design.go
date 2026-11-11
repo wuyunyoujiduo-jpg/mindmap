@@ -596,9 +596,10 @@ func quietTheme(base *ui.Theme) *ui.Theme {
 		t.Danger = ui.Hex("#F0806A")
 	} else {
 		g := groundNow()
-		t.Background, t.Surface = ui.Hex(g.leaf), ui.Hex(g.tray)
-		t.SurfaceHover, t.SurfacePressed = ui.Hex("#EBE9E6"), ui.Hex("#DFDDD9")
-		t.Border = ui.Hex("#E5E3DF")
+		// Fields and the system's buttons are white with a line, as keys are.
+		t.Background, t.Surface = ui.Hex(g.leaf), ui.Hex("#FDFDFC")
+		t.SurfaceHover, t.SurfacePressed = ui.Hex("#F3F2F0"), ui.Hex("#E9E7E4")
+		t.Border = ui.Hex("#DFDCD7")
 		t.Text, t.TextMuted = ui.Hex("#24231F"), ui.Hex("#787671")
 		t.Accent, t.AccentHover, t.AccentPressed = ui.Hex("#5B5BD6"), ui.Hex("#4D4DC4"), ui.Hex("#4040A8")
 		t.Danger = ui.Hex("#D2452D")
@@ -610,6 +611,15 @@ func quietTheme(base *ui.Theme) *ui.Theme {
 	t.Selection = t.Accent.Alpha(0.22)
 	t.Focus = t.Accent.Alpha(0.45)
 	return &t
+}
+
+// trayColor is the shade a column of cards stands on, as a day of the
+// week or a state of the board.
+func trayColor(t *ui.Theme) ui.Color {
+	if t.Dark {
+		return ui.Hex("#2E2E2B")
+	}
+	return ui.Hex(groundNow().tray)
 }
 
 // cardColor is the fill of a card: white, or, dark, lighter than the

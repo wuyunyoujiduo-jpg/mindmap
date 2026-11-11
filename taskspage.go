@@ -1098,7 +1098,7 @@ func (a *app) weekView(c *ui.Context, items []taskItem) {
 		for i := range 7 {
 			d := start.AddDate(0, 0, i)
 			isToday := sameDay(d, a.now())
-			col := ui.Column(c.Key(fmt.Sprint("week-day:", i))).Grow(1).Basis(0).MinWidth(0).Padding(4, 6, 6).Gap(2).Radius(14).Background(t.Surface)
+			col := ui.Column(c.Key(fmt.Sprint("week-day:", i))).Grow(1).Basis(0).MinWidth(0).Padding(4, 6, 6).Gap(2).Radius(14).Background(trayColor(t))
 			a.dropTaskOn(col, d)
 			if col.DoubleClicked() {
 				a.tasks.day, a.tasks.view = d, tasksDay

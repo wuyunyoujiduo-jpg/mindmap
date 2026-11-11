@@ -479,7 +479,7 @@ func (a *app) paletteView(c *ui.Context) {
 						row := ui.Row(c.Key(fmt.Sprint("item", i))).Padding(6, 10).Gap(10).Radius(6).AlignItems(ui.Center).
 							Cursor(ui.CursorPointer).Label(it.title)
 						if i == a.paletteIndex {
-							row.Background(t.Accent.Alpha(0.14))
+							row.Background(chosen(t))
 							if a.paletteShown != i { // moved to by the keys
 								row.ScrollIntoView()
 								a.paletteShown = i

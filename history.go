@@ -233,7 +233,7 @@ func (a *app) historyView(c *ui.Context) {
 						row := ui.Column(c.Key(fmt.Sprint("v", i))).Padding(6, 10).Radius(6).Cursor(ui.CursorPointer).
 							Label(whenLabel(v.Time, a.now()))
 						if i == a.historySel {
-							row.Background(t.Accent.Alpha(0.14))
+							row.Background(chosen(t))
 						} else if row.Hovered() {
 							row.Background(t.SurfaceHover)
 						}

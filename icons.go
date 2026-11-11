@@ -438,8 +438,8 @@ func iconTextButton(c *ui.Context, ic icon, text, label, tip string, active bool
 		mark = t.Accent // the AI's spark is the accent's wherever it is
 	}
 	if active {
-		b.Background(t.Accent)
-		col, mark = t.AccentText, t.AccentText
+		// Open: a shade, as what is chosen; the accent is not a fill.
+		ring(b.Background(cardColor(t).MixOklab(t.Text, 0.09)), t)
 	} else {
 		key(b, t)
 	}

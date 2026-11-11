@@ -102,6 +102,12 @@ circle and small counts. Keys are rectangles, not pills.
   under the pointer its face darkens 4.5%, pressed 9% and it gives 3%.
 - **Primary key** (`inkButton`): the accent whole, label 13/500 white;
   disabled, the accent at 32%.
+- **Field and system button**: white (`Surface`) with a line of
+  `Border`; never a gray fill. A row chosen in a list (the palette, the
+  versions) is on `chosen`, not on a wash of the accent; a key that is
+  open (问 AI) is a shade darker with the ring.
+- **Column of cards** (a day of the week, a state of the board): on
+  `trayColor`, radius 14.
 - **Tabs** (`pillTab`): the one chosen is a small card; the others slate.
   A choice among a few (`segmented`, `tabGroup`) is a gray track with a
   card for the one chosen.
