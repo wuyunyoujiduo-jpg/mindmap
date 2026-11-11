@@ -25,27 +25,6 @@ func dateLabel(d time.Time) string {
 	return fmt.Sprintf("%d月%d日 %s", d.Month(), d.Day(), weekdays[d.Weekday()])
 }
 
-// homeLine is the line to write in, the first thing on the desk. What
-// is written says what it is, a task when it says a day, else a note,
-// and the card says which as it is written.
-func (a *app) homeLine(c *ui.Context) {
-	a.writeCard(c, writeCard{
-		key: "home-line", label: "记一条灵感或任务", draft: &a.homeDraft, enterSaves: true,
-		placeholder: "现在的想法是…  以「周五」这样的日子开头就是任务",
-		sendLabel:   "记下", fileLabel: "加图片", save: a.saveHomeLine,
-		reads: func() {
-			text := strings.TrimSpace(a.homeDraft)
-			if _, due, _ := parseTaskLine(text, a.now()); text != "" && taskLike(text, a.now()) {
-				label := "任务"
-				if due != nil {
-					label += " · " + dayLabel(*due, a.now())
-				}
-				softTag(c, label)
-			}
-		},
-	})
-}
-
 // softTag is a word on a pale wash of the accent, as a tag in a note: it
 // pops in.
 func softTag(c *ui.Context, text string) ui.Element {
@@ -82,9 +61,31 @@ func (a *app) saveHomeLine() {
 		return
 	}
 	text = a.resolveRefs(text)
-	if taskLike(text, a.now()) {
+	switch ask, asking := barQuestion(text); {
+	case asking:
+		if ask == "" {
+			return
+		}
+		// Asked of the AI, in its panel.
+		a.aiOpen, a.ai.draft = true, ask
+		a.homeDraft, a.barOpen = "", false
+		a.later(a.aiSend)
+		return
+	case taskLike(text, a.now()):
 		a.addTask(text, nil)
-	} else {
+	case a.place() == placeCollect || linkInTitle.MatchString(text):
+		// In 收集, and a link anywhere: kept as what it is, and shown there.
+		clip, err := a.addClipText(text, "手动")
+		if err != nil {
+			a.tell("没有记下：" + err.Error())
+			return
+		}
+		if a.place() == placeCollect {
+			a.libSel = clip.ID
+		} else {
+			a.tell("已收藏")
+		}
+	default:
 		if _, err := a.addMemo(text, "工作台"); err != nil {
 			a.tell("没有记下：" + err.Error())
 			return

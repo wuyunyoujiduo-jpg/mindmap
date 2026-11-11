@@ -76,7 +76,6 @@ func (a *app) libraryColumn(c *ui.Context) {
 			}
 		})
 		a.pluginBanner(c)
-		a.clipComposer(c)
 		a.clipFilters(c)
 		if a.libErr != "" {
 			ui.Row(c).Padding(0, 0, 6).Gap(8).AlignItems(ui.Center).Children(func() {
@@ -216,36 +215,6 @@ func (a *app) searchClips() []library.Hit {
 	}
 	// The maps are not material: the sidebar, 今天 and ⌘K have them.
 	return hits
-}
-
-// clipComposer is the card to keep a note or a link in, as the desk's:
-// ⌘Enter keeps it, for a note here may be of several lines.
-func (a *app) clipComposer(c *ui.Context) {
-	ui.Box(c.Key("lib-compose-room")).Padding(0, 0, 14).FillWidth().Shrink(0).Children(func() {
-		a.writeCard(c, writeCard{
-			key: "lib-compose", label: "新资料", draft: &a.libDraft,
-			placeholder: "记点什么，#标签 归类；也可以粘贴链接、图片或文件…",
-			sendLabel:   "收藏", fileLabel: "文件…",
-			paste: func(text string) bool { // a picture or files copied: kept at once
-				if text != "" {
-					return false
-				}
-				clips, err := a.clipClipboard("剪贴板")
-				if err != nil {
-					return false
-				}
-				a.libSel = clips[0].ID
-				return true
-			},
-			save: func() {
-				if clip, err := a.addClipText(a.resolveRefs(a.libDraft), "手动"); err != nil {
-					a.libErr = err.Error()
-				} else {
-					a.libDraft, a.libSel = "", clip.ID
-				}
-			},
-		})
-	})
 }
 
 // dropClips keeps files dropped on the library.

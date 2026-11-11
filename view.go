@@ -44,9 +44,7 @@ func (a *app) view(c *ui.Context) {
 					if a.libOpen {
 						if a.projOpen {
 							a.projectsView(c)
-							return
-						}
-						if a.tasks.open || a.libHome {
+						} else if a.tasks.open || a.libHome {
 							a.tasksView(c) // 今天: what is to do, and what was written down
 						} else {
 							a.libraryView(c)
@@ -89,6 +87,9 @@ func (a *app) view(c *ui.Context) {
 				})
 			}()
 		}()
+		if a.libOpen {
+			a.oneBar(c) // writes, looks for, asks: on every page of lists
+		}
 		if a.lightbox != "" && a.doc != nil {
 			a.lightboxView(c)
 		}

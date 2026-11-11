@@ -272,6 +272,7 @@ type app struct {
 	libQuery      string
 	libKind       int               // kindAll, kindMaps, kindDocs or kindLinks
 	libHome       bool              // 今天 is shown, not the list
+	barOpen       bool              // the one bar is open, a card to write in (bar.go)
 	projOpen      bool              // 项目, the maps by folder, is the page shown (places.go)
 	homeFocus     bool              // the desk's line has the focus
 	writeRefocus  string            // the card to write in that takes the focus back, after a tool of its was clicked
@@ -285,7 +286,6 @@ type app struct {
 	sideFocus     string            // "side" while the sidebar has the keys
 	libCat        string            // the category shown, "" all
 	libTag        string            // the tag shown, "" all
-	libDraft      string            // what is typed to keep
 	libQueue      []clipJob
 	libWorking    string            // the clip being read or sorted out
 	libStatus     map[string]string // what is happening to clips, or went wrong

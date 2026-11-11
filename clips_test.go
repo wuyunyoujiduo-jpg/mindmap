@@ -42,9 +42,9 @@ func TestLibraryKeepsAndOrganizes(t *testing.T) {
 	if !a.libOpen || !tt.HasText("0 条") {
 		t.Fatalf("library not shown: %q", tt.Texts())
 	}
-	a.libDraft = "https://example.com/cache"
+	a.homeDraft = "https://example.com/cache"
 	tt.Frame()
-	if err := tt.Click("收藏"); err != nil {
+	if err := tt.Click("记下"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
@@ -69,9 +69,9 @@ func TestLibraryKeepsAndOrganizes(t *testing.T) {
 
 	// Text typed is a text clip, and the AI names it; it is given the
 	// categories already in use.
-	a.libDraft = "下周起周会改到周四下午三点"
+	a.homeDraft = "下周起周会改到周四下午三点"
 	tt.Frame()
-	tt.Click("收藏")
+	tt.Click("记下")
 	tt.Frame()
 	if len(a.lib.Clips) != 2 || a.lib.Clips[0].Title != "周会改到周四" || a.lib.Clips[0].Category != "工作" {
 		t.Fatalf("text clip %+v", a.lib.Clips[0])

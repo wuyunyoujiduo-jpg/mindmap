@@ -354,8 +354,6 @@ func (a *app) tasksView(c *ui.Context) {
 				a.tasksHead(c, all)
 				if calendar {
 					a.tasksAdd(c, now) // onto the day chosen
-				} else {
-					a.homeLine(c) // a thought, or a task where it begins with a day
 				}
 			})
 			if calendar {

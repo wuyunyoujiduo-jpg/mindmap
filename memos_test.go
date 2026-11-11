@@ -31,7 +31,8 @@ func TestMemos(t *testing.T) {
 	}
 	tt.Frame()
 	for _, text := range []string{"产品要做减法 #产品", "周报模板改成三段式 #工作"} {
-		tt.Click("新资料")
+		tt.Click("记一条灵感或任务")
+		tt.Frame()
 		tt.Type(text)
 		tt.Key(ui.Cmd, ui.KeyEnter)
 		tt.Frame()

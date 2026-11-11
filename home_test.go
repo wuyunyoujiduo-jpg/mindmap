@@ -266,3 +266,54 @@ func TestGroundChosen(t *testing.T) {
 	tt.Frame()
 	snapshot(t, tt, "ground-violet")
 }
+
+// The one bar, at the foot of every page of lists: one line until it is
+// written in; what there is already shows over it; a ? asks the AI.
+func TestOneBar(t *testing.T) {
+	a, tt := newTestApp(t)
+	if _, err := a.addMemo("缓存要加随机过期时间", "手动"); err != nil {
+		t.Fatal(err)
+	}
+	a.showProjects()
+	tt.Frame()
+	if !tt.HasText("记一句、搜索，或者问 AI…") || tt.HasText("加粗") {
+		t.Fatalf("the bar is not one line on 项目: %q", tt.Texts())
+	}
+	snapshot(t, tt, "bar-closed")
+	if err := tt.Click("记一条灵感或任务"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Frame()
+	if !a.barOpen || !tt.HasText("B") {
+		t.Fatal("the bar did not open with its tools")
+	}
+	tt.Type("缓存")
+	tt.Frame()
+	if !tt.HasText("已经有的") {
+		t.Fatalf("what there is already is not shown: %q", tt.Texts())
+	}
+	snapshot(t, tt, "bar-found")
+	a.homeDraft = "每周五 写周报"
+	tt.Frame()
+	if !tt.HasText("任务 · 周五 · 每周五") {
+		t.Fatalf("not read as a task that repeats: %q", tt.Texts())
+	}
+	snapshot(t, tt, "bar-task")
+	a.homeDraft = "https://example.com/a 一篇文章"
+	tt.Frame()
+	if !tt.HasText("收藏链接") {
+		t.Fatal("not read as a link")
+	}
+	// A ? asks the AI, in its panel.
+	a.homeDraft = "? 缓存怎么设计"
+	tt.Frame()
+	if !tt.HasText("问 AI") {
+		t.Fatal("not read as a question")
+	}
+	a.saveHomeLine()
+	tt.Frame()
+	if !a.aiOpen || a.homeDraft != "" {
+		t.Fatalf("the AI was not asked: open %v, draft %q", a.aiOpen, a.homeDraft)
+	}
+}

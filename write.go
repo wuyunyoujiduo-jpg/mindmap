@@ -25,6 +25,9 @@ type writeCard struct {
 	save                    func()
 	paste                   func(text string) bool // what is pasted, when it is not text
 	reads                   func()                 // what the card says of the words, after the tools
+	lines                   int                    // the lines it shows empty: 2 when zero
+	focused                 func()                 // told while it is written in
+	esc                     func()                 // told when Escape is pressed in it
 }
 
 func (a *app) writeCard(c *ui.Context, w writeCard) {
@@ -32,12 +35,22 @@ func (a *app) writeCard(c *ui.Context, w writeCard) {
 	box := soft(ui.Column(c.Key(w.key)).Radius(radiusCard).Padding(14, 14, 12, 18).Gap(4).FillWidth().Shrink(0).
 		Background(cardColor(t)).Border(1.5, t.Text.Alpha(0)), t).Transition(easeLook)
 	box.Children(func() {
-		in := ui.TextAreaBase(c.Key(w.key+"-input"), w.draft).Lines(2, 6).
+		lines := 2
+		if w.lines > 0 {
+			lines = w.lines
+		}
+		in := ui.TextAreaBase(c.Key(w.key+"-input"), w.draft).Lines(lines, 6).
 			Placeholder(w.placeholder).FontSize(textTitle).LineHeight(1.5).FillWidth().Label(w.label)
 		if w.paste != nil {
 			in.OnPaste(w.paste)
 		}
 		captureFocus(c, box, in)
+		if w.focused != nil && in.Focused() {
+			w.focused()
+		}
+		if w.esc != nil && in.Shortcut(0, ui.KeyEscape) {
+			w.esc()
+		}
 		if a.writeRefocus == w.key {
 			a.writeRefocus = ""
 			in.Focus()
