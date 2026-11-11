@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
@@ -91,5 +92,40 @@ func TestMoveKeepsIDsAndDropMaterial(t *testing.T) {
 	}
 	if bl := a.clipBacklinks(clip.ID); len(bl) != 1 || bl[0].id != target.ID {
 		t.Fatalf("backlinks %+v", bl)
+	}
+}
+
+// A web address written in a topic's title is a link: shown as one, and
+// opened by the node's mark, without being added to its links.
+func TestTitleLinks(t *testing.T) {
+	for title, want := range map[string][]string{
+		"访销订单详情页 http://pms.example.com/zentao/bug-view-241795.html": {"http://pms.example.com/zentao/bug-view-241795.html"},
+		"见 https://a.example.com/x?y=1。然后":                           {"https://a.example.com/x?y=1"},
+		"(https://a.example.com/x), 和 http://b.example.com.":         {"https://a.example.com/x", "http://b.example.com"},
+		"没有链接 a://b http://":                                         nil,
+	} {
+		var got []string
+		for _, r := range titleLinks(title) {
+			got = append(got, title[r[0]:r[1]])
+		}
+		if !slices.Equal(got, want) {
+			t.Errorf("%q: %q", title, got)
+		}
+	}
+	a, tt := newTestApp(t)
+	fp := a.plat.(*fakePlatform)
+	n := find(t, a, "前端")
+	u := "http://pms.example.com/zentao/bug-view-241795.html"
+	a.mutate("", func() { n.Title = "访销订单详情页 " + u })
+	a.selected, a.reveal = n.ID, true
+	tt.Frame()
+	tt.Frame()
+	snapshot(t, tt, "title-link")
+	if err := tt.Click("打开链接"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if len(n.Links) != 0 || !slices.Contains(fp.opened, u) {
+		t.Fatalf("links %v opened %v", n.Links, fp.opened)
 	}
 }
