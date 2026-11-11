@@ -273,6 +273,7 @@ type app struct {
 	libKind       int               // kindAll, kindMaps, kindDocs or kindLinks
 	libHome       bool              // 今天 is shown, not the list
 	barOpen       bool              // the one bar is open, a card to write in (bar.go)
+	barKind       int               // what the bar keeps its words as, chosen by hand: barAuto, barATask, barThought
 	projOpen      bool              // 项目, the maps by folder, is the page shown (places.go)
 	projFolder    string            // the folder whose maps 项目 shows: all of them when empty
 	homeFocus     bool              // the desk's line has the focus

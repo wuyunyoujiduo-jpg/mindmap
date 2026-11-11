@@ -44,12 +44,14 @@ by AI, and an AI assistant.
     (`todaySide`); 项目's directory (`tree.go`, `mapTree`: folders that
     open and close and their maps, so that going from a map to another is
     one click); 收集's kinds, ways to look back and every tag (`libSide`).
-  - The one bar (`bar.go`, `oneBar`) is in the top row: one line, and
-    one line still when written in, its tools coming to the line's end
-    (`write.go`, `writeCard`, `inline`: a tag and a reference offered as
-    they are written, a picture, bold, lists; a reference is kept as
-    `<clip:id>`, `noteText`); it grows down over the page only as the
-    words do, so that nothing moves and nothing is hidden for nothing. It keeps a thought, a task
+  - The one bar (`bar.go`, `oneBar`) is in the top row: one line until
+    written in, then the card to write in with its tools (`write.go`,
+    `writeCard`: a tag and a reference offered as they are written, a
+    picture, bold, lists; a reference is kept as `<clip:id>`, `noteText`),
+    floating forward of the page on a deep shadow (`floated`), so that
+    nothing moves. A tag on it says what the words are kept as, a thought
+    or a task, and a click changes it (`barTask`: on 今天 a plain line is
+    a task). It keeps a thought, a task
     (and how it repeats), a link; shows what there is already as it is
     written; asks the AI after a ?.
   - What is chosen (a task, a clip) is in a column at the leaf's right

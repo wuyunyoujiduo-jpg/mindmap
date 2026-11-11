@@ -44,7 +44,19 @@ func TestHome(t *testing.T) {
 	if a.homeDraft != "" || !tt.HasText("任务 写周报") {
 		t.Fatalf("no task: %q %q", a.homeDraft, tt.Texts())
 	}
+	// On 今天 a plain line is a task too, until the bar is told otherwise.
 	tt.Type("灵感来了")
+	tt.Frame()
+	if !tt.HasText("记为 任务 · 今天") {
+		t.Fatalf("not read as a task on 今天: %q", tt.Texts())
+	}
+	if err := tt.Click("记为什么"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !tt.HasText("记为 灵感") {
+		t.Fatalf("not made a thought: %q", tt.Texts())
+	}
 	tt.Key(0, ui.KeyEnter)
 	tt.Frame()
 	if len(a.lib.Clips) != 5 || a.lib.Clips[0].Text != "灵感来了" || !isMemo(a.lib.Clips[0]) {
@@ -278,7 +290,7 @@ func TestOneBar(t *testing.T) {
 	}
 	a.showProjects()
 	tt.Frame()
-	if !tt.HasText("记一句、搜索，或者问 AI…") || tt.HasText("加粗") {
+	if !tt.HasText("记灵感、加任务，或者问 AI…") || tt.HasText("加粗") {
 		t.Fatalf("the bar is not one line on 项目: %q", tt.Texts())
 	}
 	snapshot(t, tt, "bar-closed")

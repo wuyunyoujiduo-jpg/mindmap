@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
@@ -40,7 +41,9 @@ func (a *app) writeCard(c *ui.Context, w writeCard) {
 		box.Radius(radiusPill).Padding(2.5, 4.5, 2.5, 12.5).Gap(0).MinHeight(36).Justify(ui.Center)
 	}
 	if w.over {
-		lifted(box.NoShadow(), t)
+		// It floats: come forward from the line it was, over a deep shadow.
+		floated(box.NoShadow(), t).Transition(ui.ElementTransition{Duration: 220 * time.Millisecond, Ease: easeDetent,
+			Enter: &ui.Motion{Y: -4, Scale: 0.97}})
 	}
 	box.Children(func() {
 		lines := 2
@@ -57,7 +60,9 @@ func (a *app) writeCard(c *ui.Context, w writeCard) {
 			if w.paste != nil {
 				in.OnPaste(w.paste)
 			}
-			captureFocus(c, box, in)
+			if !w.over { // what floats is told by its shadow, not by a line
+				captureFocus(c, box, in)
+			}
 			if w.focused != nil && in.Focused() {
 				w.focused()
 			}

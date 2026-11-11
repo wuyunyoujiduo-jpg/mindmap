@@ -72,8 +72,13 @@ func (a *app) saveHomeLine() {
 		a.homeDraft, a.barOpen = "", false
 		a.later(a.aiSend)
 		return
-	case taskLike(text, a.now()):
-		a.addTask(text, nil)
+	case a.barTask(text):
+		var day *time.Time
+		if a.place() == placeToday { // written on 今天, for today unless it says a day
+			d := today(a.now())
+			day = &d
+		}
+		a.addTask(text, day)
 	case a.place() == placeCollect || linkInTitle.MatchString(text):
 		// In 收集, and a link anywhere: kept as what it is, and shown there.
 		clip, err := a.addClipText(text, "手动")
@@ -93,7 +98,7 @@ func (a *app) saveHomeLine() {
 		}
 		a.tell("已记到灵感")
 	}
-	a.homeDraft = ""
+	a.homeDraft, a.barKind = "", barAuto
 	if !a.libOpen {
 		a.barOpen = false // over a map it is put away once it has kept
 	}

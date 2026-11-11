@@ -114,6 +114,15 @@ func lifted(el ui.Element, t *ui.Theme) ui.Element {
 	return el.Shadow(0, 0, 0, 0.5, ui.RGBA(0, 0, 0, 0.12)).Shadow(0, 8, 28, -6, ui.RGBA(0, 0, 0, 0.16))
 }
 
+// floated is the shadow of what comes forward of the page while it is
+// used, the bar open: deeper than lifted's, as a dialog's.
+func floated(el ui.Element, t *ui.Theme) ui.Element {
+	if t.Dark {
+		return el.Shadow(0, 0, 0, 1, ui.RGBA(255, 255, 255, 0.12)).Shadow(0, 24, 60, -16, ui.RGBA(0, 0, 0, 0.7))
+	}
+	return el.Shadow(0, 0, 0, 0.5, ui.RGBA(0, 0, 0, 0.14)).Shadow(0, 3, 10, 0, ui.RGBA(0, 0, 0, 0.06)).Shadow(0, 22, 56, -12, ui.RGBA(0, 0, 0, 0.24))
+}
+
 // hoverLift has a card that opens answer the pointer: a shade deeper
 // under it, and it gives when pressed. It does not rise: nothing does.
 func hoverLift(el ui.Element, t *ui.Theme) ui.Element {

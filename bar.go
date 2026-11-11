@@ -12,9 +12,8 @@ import (
 // written in it is kept (a thought; a task where it begins with a day, or
 // says how it repeats; a link), looked for as it is written (what there
 // is already shows under the bar), or, begun with a ?, asked of the AI. It
-// is one line, and stays one when written in, its tools coming to the
-// line's end (writeCard, inline): it grows down over the page only as
-// the words do.
+// is one line until written in, then the card to write in, with its
+// tools (writeCard), floating forward of the page.
 func (a *app) oneBar(c *ui.Context) {
 	t := c.Theme()
 	text := strings.TrimSpace(a.homeDraft)
@@ -30,11 +29,11 @@ func (a *app) oneBar(c *ui.Context) {
 					a.barOpen, a.writeRefocus = true, "home-line"
 				}
 				field.Children(func() {
-					ui.Text(c, "记一句、搜索，或者问 AI…").FontSize(textBody).TextColor(t.TextMuted).SingleLine().Grow(1).Shrink(1).MinWidth(0).PassThrough()
+					ui.Text(c, "记灵感、加任务，或者问 AI…").FontSize(textBody).TextColor(t.TextMuted).SingleLine().Grow(1).Shrink(1).MinWidth(0).PassThrough()
 				})
 				return
 			}
-			open := ui.Column(c.Key("open")).Absolute().Top(0).Left(0).Right(0).Gap(8).ZIndex(20)
+			open := ui.Column(c.Key("open")).Absolute().Top(-6).Left(0).Right(0).Gap(8).ZIndex(20)
 			if open.PressedOutside() && text == "" {
 				a.barOpen = false
 			}
@@ -52,8 +51,8 @@ func (a *app) barCard(c *ui.Context, text string) {
 			ask, asking := barQuestion(text)
 			a.writeCard(c, writeCard{
 				key: "home-line", label: "记一条灵感或任务", draft: &a.homeDraft, enterSaves: true,
-				placeholder: "记一句、搜索，或者问 AI…",
-				sendLabel:   "记下", fileLabel: "加图片", save: a.saveHomeLine, lines: 1, over: true, inline: true,
+				placeholder: "记灵感、加任务，或者问 AI…",
+				sendLabel:   "记下", fileLabel: "加图片", save: a.saveHomeLine, lines: 1, over: true,
 				focused: func() { a.barOpen = true },
 				esc: func() {
 					if strings.TrimSpace(a.homeDraft) == "" {
@@ -71,30 +70,43 @@ func (a *app) barCard(c *ui.Context, text string) {
 					a.libSel = clips[0].ID
 					return true
 				},
-				reads: func() { // what the Enter key does with the words
+				reads: func() { // what it is kept as: a click makes a task of a thought, or a thought of a task
 					now := a.now()
+					label, tip := "记为 灵感", "现在会记成灵感（收集里的一条笔记）。点一下改成任务"
 					switch {
-					case text == "":
 					case asking:
 						if ask != "" {
 							softTag(c, "问 AI")
 						}
-					case taskLike(text, now):
+						return
+					case a.barTask(text):
 						rest, rep, first := parseRepeat(text, now)
 						_, due, _ := parseTaskLine(rest, now)
 						if due == nil {
 							due = first
 						}
-						label := "任务"
+						if due == nil && a.place() == placeToday {
+							d := today(now)
+							due = &d
+						}
+						label, tip = "记为 任务", "现在会记成任务（要做的事，能打勾、定日子、重复）。点一下改成灵感"
 						if due != nil {
 							label += " · " + dayLabel(*due, now)
 						}
 						if rep != nil {
 							label += " · " + rep.Label()
 						}
-						softTag(c, label)
 					case linkInTitle.MatchString(text):
-						softTag(c, "收藏链接")
+						label = "收藏链接"
+					}
+					chip := softTag(c, label).Cursor(ui.CursorPointer).Label("记为什么").Tooltip(tip)
+					if chip.Clicked() {
+						if a.barTask(text) {
+							a.barKind = barThought
+						} else {
+							a.barKind = barATask
+						}
+						a.writeRefocus = "home-line"
 					}
 				},
 			})
@@ -126,6 +138,33 @@ func (a *app) barCard(c *ui.Context, text string) {
 			}
 		}()
 	}()
+}
+
+// What the bar keeps its words as, when chosen by hand; else by the words
+// and the place (barTask).
+const (
+	barAuto = iota
+	barATask
+	barThought
+)
+
+// barTask tells whether what is written in the bar is kept as a task: as
+// chosen on the bar; else where it reads as one (a day, a way to repeat),
+// and, on 今天, whatever is one plain line.
+func (a *app) barTask(text string) bool {
+	switch a.barKind {
+	case barATask:
+		return true
+	case barThought:
+		return false
+	}
+	if taskLike(text, a.now()) {
+		return true
+	}
+	// A task is one plain line: what has a link, a tag, a reference, bold
+	// or lines is a note's.
+	note := linkInTitle.MatchString(text) || strings.ContainsAny(text, "\n#") || strings.Contains(text, "**") || len(a.writeRefs) > 0
+	return a.place() == placeToday && !note
 }
 
 // barQuestion tells whether what is written in the bar asks the AI: it
