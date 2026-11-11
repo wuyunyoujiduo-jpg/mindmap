@@ -771,3 +771,15 @@ func modal(c *ui.Context, key string, open *bool, fn func()) ui.Element {
 	}
 	return m.Shadow(0, 4, 12, 0, ui.RGBA(0, 0, 0, 0.05)).Shadow(0, 30, 80, -10, ui.RGBA(0, 0, 0, 0.22))
 }
+
+// sheet is what is chosen, shown over the page from its right: a white
+// leaf with round corners, lifted, which slides in; the page beside it
+// stays as it is, so that another row chosen shows in the same sheet.
+func sheet(c *ui.Context, key string, width float32, body func()) {
+	t := c.Theme()
+	w, _ := c.Size()
+	lifted(ui.Column(c.Key(key)).Absolute().Top(4).Right(10).Bottom(10).Width(min(width, w-20)).Radius(20).Clip().ZIndex(5).
+		Background(cardColor(t)), t).
+		Transition(ui.ElementTransition{Duration: 360 * time.Millisecond, Ease: easeDetent, Enter: &ui.Motion{X: 56},
+			Exit: &ui.Motion{X: 56}, ExitDuration: 200 * time.Millisecond}).Children(body)
+}

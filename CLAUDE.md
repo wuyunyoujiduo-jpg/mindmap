@@ -64,14 +64,15 @@ by AI, and an AI assistant.
   `pageColumn` in the middle, its `pageHeader`, a `captureBox` to write
   in, `pillTab`s to narrow by, then trays; what is chosen shows its
   details in a pane on the right, as the topic's panel on the maps' page,
-  which is put away until asked for. The whole is being rebuilt to the draft
+  which is put away until asked for. The whole was rebuilt to the draft
   https://claude.ai/artifact/J4Ngp4MFp9B7KnLVJhiavb, step by step: the places,
   项目, and 今天 with the tasks in it (`tasksView`: list, week, month; tasks
   that repeat, `model.Repeat`, `repeatProp`, `parseRepeat`) and the one bar at
   the window's foot (`bar.go`, `oneBar`: one line until written in, then
   `writeCard` with its tools; it keeps a thought, a task, a link, shows
-  what there is already as it is written, and asks the AI after a ?) are
-  done; to come, what is chosen in a sheet from the right. A task's state, priority and day are
+  what there is already as it is written, and asks the AI after a ?) and
+  what is chosen (a task, a clip) in a sheet over the page's right
+  (`sheet` in `design.go`) are done. A task's state, priority and day are
   set the same way in both (`segmented`, `dateProp`). On the canvas the
   main topics are on a pastel of their branch's color, those below on a
   faint tint (the scheme 明亮 of `style.go`). Notes and clips are one

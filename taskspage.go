@@ -379,18 +379,17 @@ func (a *app) tasksView(c *ui.Context) {
 						})
 						ui.Column(c).Grow(1).Basis(0).MinHeight(0).FillWidth().Children(func() { a.taskList(c, items) })
 					})
-					if a.tasks.sel == "" {
-						// What was written down and waits for a place, beside what is to do.
-						ui.Scroll(c.Key("today-waiting")).Grow(6).Basis(0).MinWidth(0).Margin(0, -8).Children(func() {
-							ui.Column(c).Padding(0, 8, 28).FillWidth().Children(func() { a.homeWaiting(c) })
-						})
-					}
+					// What was written down and waits for a place, beside what is to do.
+					ui.Scroll(c.Key("today-waiting")).Grow(6).Basis(0).MinWidth(0).Margin(0, -8).Children(func() {
+						ui.Column(c).Padding(0, 8, 28).FillWidth().Children(func() { a.homeWaiting(c) })
+					})
 				})
 			})
 		})
 		for _, it := range all {
 			if it.key() == a.tasks.sel {
-				a.taskDetail(c, it)
+				// The task chosen, in a sheet over the page's right.
+				sheet(c, "task-sheet", 400, func() { a.taskDetail(c, it) })
 			}
 		}
 	})
@@ -527,8 +526,7 @@ func (a *app) taskDetail(c *ui.Context, it taskItem) {
 	if a.tasks.draftOf != it.key() {
 		a.tasks.title, a.tasks.note, a.tasks.draftOf = it.node.Title, it.node.Note, it.key()
 	}
-	ui.Column(c.Key("task-detail")).Width(340).Shrink(0).BorderWidth(0, 0, 0, 1).BorderColor(hairline(t)).
-		Background(t.Background).Children(func() {
+	ui.Column(c.Key("task-detail")).Grow(1).Basis(0).MinHeight(0).FillWidth().Children(func() {
 		// Its name heads the pane, in the title bar's band: the circle that
 		// ticks it off, the name to change, and the way out.
 		ui.Row(c.Key("task-detail-head")).Height(pageHeadHeight).Padding(16, 12, 0, 20).Gap(10).AlignItems(ui.Center).Shrink(0).Children(func() {

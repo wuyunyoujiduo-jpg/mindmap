@@ -14,7 +14,6 @@ import (
 // libraryView is the library in the main area: a field to keep text and
 // links, the filters, the clips found, and the clip chosen.
 func (a *app) libraryView(c *ui.Context) {
-	t := c.Theme()
 	l := a.lib
 	root := ui.Column(c.Key("library")).Grow(1).Label("收集")
 	if files := root.DroppedFiles(); len(files) > 0 {
@@ -29,9 +28,11 @@ func (a *app) libraryView(c *ui.Context) {
 				pageColumn(c, "lib-column", true).Children(func() { a.libraryColumn(c) })
 			})
 			if sel != nil {
-				ui.Box(c).Width(1).FillHeight().Background(hairline(t))
-				ui.Scroll(c.Key("clip-detail:"+sel.ID)).Grow(1).Basis(0).Padding(14, 16, 20).Gap(12).Children(func() {
-					a.clipDetail(c, sel)
+				// The clip chosen, in a sheet over the page's right.
+				sheet(c, "clip-sheet", 480, func() {
+					ui.Scroll(c.Key("clip-detail:"+sel.ID)).Grow(1).Basis(0).Padding(14, 18, 20).Gap(12).Children(func() {
+						a.clipDetail(c, sel)
+					})
 				})
 			}
 		})
