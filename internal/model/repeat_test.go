@@ -43,3 +43,14 @@ func TestRepeatNext(t *testing.T) {
 		t.Fatalf("after done: %+v due %v", task, task.Due)
 	}
 }
+
+func TestRepeatComing(t *testing.T) {
+	day := func(d int) time.Time { return time.Date(2026, 11, d, 0, 0, 0, 0, time.UTC) }
+	got := (&Repeat{Unit: RepeatWeek, Days: []int{5}}).Coming(day(13), day(1), day(30))
+	if len(got) != 2 || !got[0].Equal(day(20)) || !got[1].Equal(day(27)) {
+		t.Fatalf("every Friday after the 13th, in November: %v", got)
+	}
+	if got := (&Repeat{Unit: RepeatDay}).Coming(day(13), day(16), day(18)); len(got) != 3 {
+		t.Fatalf("every day, three days: %v", got)
+	}
+}

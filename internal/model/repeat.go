@@ -129,3 +129,22 @@ func (r *Repeat) Label() string {
 	}
 	return every("天")
 }
+
+// Coming are the days a task that repeats comes again after its day due,
+// from the day from to the day to, both counted: those it will be to do
+// on, once done each time on its day.
+func (r *Repeat) Coming(due, from, to time.Time) []time.Time {
+	var days []time.Time
+	d := dayOf(due)
+	from, to = dayOf(from), dayOf(to)
+	for range 400 { // a day's repeat, a year on
+		d = r.Next(&d, d)
+		if d.After(to) {
+			break
+		}
+		if !d.Before(from) {
+			days = append(days, d)
+		}
+	}
+	return days
+}

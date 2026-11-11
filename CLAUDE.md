@@ -79,7 +79,8 @@ by AI, and an AI assistant.
   column read down, `todayWidth`: the day and how it stands, what is to
   do, then what waits for a place, each card saying one by its words
   alone, with no AI asked, `nearPlace`; week, month; tasks
-  that repeat, `model.Repeat`, `repeatProp`, `parseRepeat`) and the one bar
+  that repeat, `model.Repeat`, `repeatProp`, `parseRepeat`, shown faint in
+  the week and the month on the days they come again, `taskGhost`) and the one bar
   under the places, at the user's wish, not at the window's foot (`bar.go`,
   `oneBar`: its room is one line's, and open it lies over the page, so that
   nothing moves; one line until written in, then

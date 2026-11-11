@@ -1159,6 +1159,11 @@ func (a *app) weekView(c *ui.Context, items []taskItem) {
 								a.taskChip(c, it)
 							}
 						}
+						for _, it := range items { // and those that come again on it
+							if a.comesAgain(it, d, d) {
+								a.taskGhost(c, it, d)
+							}
+						}
 					})
 				})
 			})
@@ -1173,10 +1178,17 @@ func (a *app) monthView(c *ui.Context, items []taskItem) {
 	first := time.Date(a.tasks.day.Year(), a.tasks.day.Month(), 1, 0, 0, 0, 0, a.tasks.day.Location())
 	start := weekStart(first)
 	byDay := map[string][]taskItem{}
+	again := map[string][]taskItem{} // those that come again on a day
 	for _, it := range items {
 		if d := it.date(); d != nil {
 			k := d.Format("2006-01-02")
 			byDay[k] = append(byDay[k], it)
+		}
+		if rp := it.node.Task.Repeat; rp != nil && it.node.Task.Due != nil && !it.done() {
+			for _, d := range rp.Coming(*it.node.Task.Due, start, start.AddDate(0, 0, 41)) {
+				k := d.Format("2006-01-02")
+				again[k] = append(again[k], it)
+			}
 		}
 	}
 	ui.Column(c.Key("month")).Grow(1).Padding(0, 12, 12).Children(func() {
@@ -1226,10 +1238,44 @@ func (a *app) monthView(c *ui.Context, items []taskItem) {
 							}
 							a.taskChip(c, it)
 						}
+						if len(list) < 3 {
+							for j, it := range again[d.Format("2006-01-02")] {
+								if len(list)+j < 3 {
+									a.taskGhost(c, it, d)
+								}
+							}
+						}
 					})
 				}
 			})
 		}
+	})
+}
+
+// comesAgain tells whether a task that repeats comes again on a day from
+// from to to, after its day due.
+func (a *app) comesAgain(it taskItem, from, to time.Time) bool {
+	task := it.node.Task
+	return task.Repeat != nil && task.Due != nil && !it.done() && len(task.Repeat.Coming(*task.Due, from, to)) > 0
+}
+
+// taskGhost is a task that repeats on a day it comes again, in the week
+// and the month: faint, for it is not to do yet; a click shows the task.
+func (a *app) taskGhost(c *ui.Context, it taskItem, d time.Time) {
+	t := c.Theme()
+	chip := ui.Row(c.Key("again:"+it.path+"#"+it.node.ID+d.Format("0102"))).Padding(5, 8).Gap(6).Radius(radiusSmall).AlignItems(ui.Center).FillWidth().
+		Background(t.Text.Alpha(0.035)).Cursor(ui.CursorPointer).Label("到时再做 " + it.node.Title).
+		Tooltip(it.node.Task.Repeat.Label() + "：做完上一次，这一天再出现").Transition(easeLook)
+	if chip.Hovered() {
+		chip.Background(t.Text.Alpha(0.07))
+	}
+	if chip.Clicked() {
+		a.later(func() { a.showTask(it) })
+	}
+	chip.Children(func() {
+		ui.Text(c, "↻").FontSize(textCaption).TextColor(t.TextMuted).PassThrough()
+		ui.Text(c, it.node.Title).FontSize(textSmall).TextColor(t.TextMuted).SingleLine().Grow(1).Shrink(1).MinWidth(0).PassThrough()
+		mapDot(c, a.mapColor(it.path).Alpha(0.5), 6)
 	})
 }
 

@@ -457,6 +457,24 @@ func TestTaskRepeats(t *testing.T) {
 		t.Fatalf("made up: %q", got)
 	}
 	snapshot(t, tt, "task-repeat-custom")
+	// The month shows it on the days it comes again, faint.
+	a.tasks.sel = ""
+	a.tasks.view = tasksMonth
+	tt.Frame()
+	tt.Frame()
+	if _, ok := tt.Find("到时再做 写周报"); !ok {
+		t.Fatalf("the days it comes again are not shown: %q", tt.Texts())
+	}
+	snapshot(t, tt, "task-repeat-month")
+	a.tasks.view = tasksWeek
+	a.tasks.day = a.tasks.day.AddDate(0, 0, 21) // every 2 weeks: the week after next has none
+	tt.Frame()
+	if _, ok := tt.Find("到时再做 写周报"); !ok {
+		t.Fatal("the week three weeks on does not show it")
+	}
+	a.tasks.day = today(testNow)
+	a.tasks.view = tasksAll
+	tt.Frame()
 	// Done once, it is to do again, later.
 	a.setTaskDone(*it, true)
 	tt.Frame()
