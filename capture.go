@@ -63,6 +63,9 @@ func taskLike(text string, now time.Time) bool {
 	if len(lines) > 1 {
 		return false
 	}
+	if rest, rep, _ := parseRepeat(text, now); rep != nil && rest != "" {
+		return true // 每周五 写周报: a task that repeats
+	}
 	words := strings.Fields(text)
 	if len(words) < 2 {
 		return false

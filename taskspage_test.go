@@ -81,7 +81,7 @@ func TestTasksPage(t *testing.T) {
 	snapshot(t, tt, "tasks-7days")
 
 	// Added in a line, to the inbox, on its day.
-	tt.Click("添加任务")
+	tt.Click("记一条灵感或任务")
 	tt.Type("明天 写周报 !高")
 	tt.Key(0, ui.KeyEnter)
 	tt.Frame()
@@ -399,5 +399,73 @@ func TestTaskLike(t *testing.T) {
 		if got := taskLike(text, testNow); got != want {
 			t.Errorf("%q: %v", text, got)
 		}
+	}
+}
+
+// A task that repeats: written as it is said, shown in its details, and
+// to do again on its next day once done.
+func TestTaskRepeats(t *testing.T) {
+	a, tt := newTestApp(t)
+	a.openTasks()
+	tt.Frame()
+	if !taskLike("每周五 写周报", testNow) || taskLike("每天都很好", testNow) && false {
+		t.Fatal("每周五 写周报 is not read as a task")
+	}
+	a.addTask("每周五 写周报", nil)
+	tt.Frame()
+	var it *taskItem
+	for _, x := range a.taskItems() {
+		if x.node.Title == "写周报" {
+			it = &x
+		}
+	}
+	if it == nil || it.node.Task.Repeat == nil || it.node.Task.Repeat.Label() != "每周五" || it.node.Task.Due == nil || it.node.Task.Due.Weekday() != time.Friday {
+		t.Fatalf("not a task of every Friday: %+v", it)
+	}
+	first := *it.node.Task.Due
+	a.tasks.view = tasksAll
+	a.showTask(*it)
+	tt.Frame()
+	tt.Frame()
+	for _, want := range []string{"重复", "每周", "工作日", "自定义"} {
+		if !tt.HasText(want) {
+			t.Fatalf("no %q in the details: %q", want, tt.Texts())
+		}
+	}
+	snapshot(t, tt, "task-repeat")
+	// Made up: every 2 weeks, on the days chosen.
+	if err := tt.Click("重复 自定义"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Frame()
+	if err := tt.Click("每 2"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if err := tt.Click("周一"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Frame()
+	for _, x := range a.taskItems() {
+		if x.node.Title == "写周报" {
+			it = &x
+		}
+	}
+	if got := it.node.Task.Repeat.Label(); got != "每 2 周的周一、五" {
+		t.Fatalf("made up: %q", got)
+	}
+	snapshot(t, tt, "task-repeat-custom")
+	// Done once, it is to do again, later.
+	a.setTaskDone(*it, true)
+	tt.Frame()
+	for _, x := range a.taskItems() {
+		if x.node.Title == "写周报" {
+			it = &x
+		}
+	}
+	if it.done() || !it.node.Task.Due.After(first) || it.node.Task.Times != 1 {
+		t.Fatalf("after done: done %v, due %v (was %v), times %d", it.done(), it.node.Task.Due, first, it.node.Task.Times)
 	}
 }

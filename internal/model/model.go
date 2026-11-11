@@ -101,12 +101,27 @@ type Task struct {
 	Estimate  float64  `json:"estimate,omitempty"`
 	After     []string `json:"after,omitempty"`
 	Iteration string   `json:"iteration,omitempty"`
-	// DoneAt is when it was marked done.
+	// DoneAt is when it was marked done; for a task that repeats, when it
+	// was last done.
 	DoneAt *time.Time `json:"doneAt,omitempty"`
+	// Repeat, if set, has the task come again once done; Times is how
+	// many times it was done.
+	Repeat *Repeat `json:"repeat,omitempty"`
+	Times  int     `json:"times,omitempty"`
 }
 
-// SetStatus changes the status, noting when the task was done.
+// SetStatus changes the status, noting when the task was done. A task
+// that repeats, done, is to do again on its next day.
 func (t *Task) SetStatus(s Status, now time.Time) {
+	if s == StatusDone && t.Repeat != nil {
+		next := t.Repeat.Next(t.Due, now)
+		t.Due, t.Start, t.DoneAt = &next, nil, &now
+		t.Times++
+		if t.Status == StatusDone || t.Status == StatusDoing {
+			t.Status = StatusTodo
+		}
+		return
+	}
 	if s == StatusDone && t.Status != StatusDone {
 		t.DoneAt = &now
 	} else if s != StatusDone {

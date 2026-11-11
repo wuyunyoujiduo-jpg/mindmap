@@ -92,7 +92,7 @@ func (a *app) writeCard(c *ui.Context, w writeCard) {
 			})
 			ui.Box(c).Width(1).Height(16).Margin(0, 4).Background(hairline(t))
 			tool("加粗", "B", 0, "加粗：点一下开始，写完再点一下结束（**粗体**）", func() { *w.draft += "**" })
-			tool("列表", "", iconLevels, "列表：每行一个点", func() { line("- ") })
+			tool("圆点列表", "", iconLevels, "列表：每行一个点", func() { line("- ") })
 			tool("编号列表", "1.", 0, "编号列表：1. 2. 3.", func() {
 				n := 1
 				for _, l := range strings.Split(*w.draft, "\n") {

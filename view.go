@@ -46,12 +46,8 @@ func (a *app) view(c *ui.Context) {
 							a.projectsView(c)
 							return
 						}
-						if a.tasks.open {
-							a.tasksView(c)
-							return
-						}
-						if a.libHome {
-							a.homeView(c)
+						if a.tasks.open || a.libHome {
+							a.tasksView(c) // 今天: what is to do, and what was written down
 						} else {
 							a.libraryView(c)
 						}

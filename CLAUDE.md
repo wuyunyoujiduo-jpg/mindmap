@@ -65,10 +65,11 @@ by AI, and an AI assistant.
   in, `pillTab`s to narrow by, then trays; what is chosen shows its
   details in a pane on the right, as the topic's panel on the maps' page,
   which is put away until asked for. The whole is being rebuilt to the draft
-  https://claude.ai/artifact/J4Ngp4MFp9B7KnLVJhiavb, step by step: the places
-  and 项目 are done; to come, 今天 with the tasks in it (list, week, month,
-  tasks that repeat), one bar at the window's foot that writes, searches
-  and asks the AI, and what is chosen in a sheet from the right. A task's state, priority and day are
+  https://claude.ai/artifact/J4Ngp4MFp9B7KnLVJhiavb, step by step: the places,
+  项目, and 今天 with the tasks in it (`tasksView`: list, week, month; tasks
+  that repeat, `model.Repeat`, `repeatProp`, `parseRepeat`) are done; to
+  come, one bar at the window's foot that writes, searches and asks the
+  AI, and what is chosen in a sheet from the right. A task's state, priority and day are
   set the same way in both (`segmented`, `dateProp`). On the canvas the
   main topics are on a pastel of their branch's color, those below on a
   faint tint (the scheme 明亮 of `style.go`). Notes and clips are one

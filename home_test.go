@@ -27,7 +27,7 @@ func TestHome(t *testing.T) {
 	if !a.libOpen || !a.libHome {
 		t.Fatal("今天 not shown")
 	}
-	for _, want := range []string{"今天", "今天要做", "刚记下的", "我的导图", "导图 使用指南", "放到导图 资料 0"} {
+	for _, want := range []string{"今天", "刚记下的", "放到导图 资料 0"} {
 		if !tt.HasText(want) {
 			t.Fatalf("no %q: %q", want, tt.Texts())
 		}
@@ -78,25 +78,6 @@ func TestHome(t *testing.T) {
 	}
 	a.paletteOpen = false
 	tt.Frame()
-
-	// A map leads to it; 全部任务 to the tasks.
-	if err := tt.Click("导图 使用指南"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Frame()
-	if a.libOpen {
-		t.Fatal("the map not opened")
-	}
-	a.showLibrary()
-	a.libHome = true
-	tt.Frame()
-	if err := tt.Click("全部任务 今天要做"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Frame()
-	if !a.tasks.open {
-		t.Fatal("tasks not opened")
-	}
 }
 
 // The list's keys go through its maps; dark, the pages read as well.
@@ -181,16 +162,15 @@ func TestPanelPutAway(t *testing.T) {
 	}
 }
 
-// TestHomeTicksAndReads: a task ticked on the desk goes under those done
-// today, where it can be seen and unticked; the line says what it reads
-// of what is written in it.
+// TestHomeTicksAndReads: a task ticked on 今天 is done; the line says what
+// it reads of what is written in it.
 func TestHomeTicksAndReads(t *testing.T) {
 	a, tt := newTestApp(t)
 	a.addTask("今天 写周报", nil)
 	a.showLibrary()
 	a.libHome = true
 	tt.Frame()
-	if tt.HasText("做完的") {
+	if len(a.doneToday(testNow)) != 0 {
 		t.Fatal("nothing is done yet")
 	}
 	if err := tt.Click("完成 写周报"); err != nil {
@@ -198,7 +178,7 @@ func TestHomeTicksAndReads(t *testing.T) {
 	}
 	tt.Frame()
 	tt.Frame()
-	if !tt.HasText("做完的") || !tt.HasText("写周报") || !tt.HasText("1 / 1") {
+	if len(a.doneToday(testNow)) != 1 || !tt.HasText("已完成") {
 		t.Fatalf("the task done is not shown: %q", tt.Texts())
 	}
 	if err := tt.Click("记一条灵感或任务"); err != nil {
@@ -232,7 +212,7 @@ func TestHomeTicksAndReads(t *testing.T) {
 	}
 	a.homeDraft = "要点"
 	tt.Frame()
-	tt.Click("列表")
+	tt.Click("圆点列表")
 	tt.Frame()
 	tt.Click("编号列表")
 	tt.Frame()

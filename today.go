@@ -18,31 +18,6 @@ import (
 // and the maps; on the right what waits for a place, with where the AI
 // would put it.
 
-// homeView is 工作台: its name and the day, the line to write in, then
-// today's tasks and the maps beside the stream of what was written lately.
-func (a *app) homeView(c *ui.Context) {
-	now := a.now()
-	ui.Column(c.Key("home")).Grow(1).Label("今天的页面").Children(func() {
-		pageColumn(c, "home-column", true).Children(func() {
-			pageHeader(c, "home-head", fmt.Sprintf("%d月%d日", now.Month(), now.Day()), weekdays[now.Weekday()], func() {
-				if iconTextButton(c, iconSparkle, "问 AI", "AI 助手", "问问导图和资料里的内容", a.aiOpen).Height(34).Clicked() {
-					a.aiOpen = !a.aiOpen
-				}
-			})
-			a.homeLine(c)
-			ui.Scroll(c.Key("home-scroll")).Grow(1).Basis(0).Margin(16, 0, 0).Children(func() {
-				ui.Row(c).Gap(16).AlignItems(ui.Start).FillWidth().Padding(0, 0, 28).Children(func() {
-					ui.Column(c).Grow(5).Basis(0).MinWidth(0).Gap(20).Children(func() {
-						a.homeTasks(c, now)
-						a.homeMaps(c, now)
-					})
-					ui.Column(c).Grow(6).Basis(0).MinWidth(0).Children(func() { a.homeWaiting(c) })
-				})
-			})
-		})
-	})
-}
-
 var weekdays = []string{"周日", "周一", "周二", "周三", "周四", "周五", "周六"}
 
 // dateLabel is a day as 11月9日 周一.
@@ -145,156 +120,12 @@ func (a *app) doneToday(now time.Time) []taskItem {
 	return done
 }
 
-// homeTasks are the tasks of today, first on the desk: how far the day
-// is, then a row each, with the map it is of; under them those done
-// today, where a task goes as it is ticked.
-func (a *app) homeTasks(c *ui.Context, now time.Time) {
-	t := c.Theme()
-	due, done := a.dueToday(now), a.doneToday(now)
-	all := len(due) + len(done)
-	tray(c, "home-tasks").Children(func() {
-		count := ""
-		if all > 0 {
-			count = fmt.Sprintf("%d / %d", len(done), all)
-		}
-		trayHead(c, "head:今天要做", "今天要做", count, func() {
-			if textLink(c, "全部任务", "全部任务 今天要做").Clicked() {
-				a.later(a.openTasks)
-			}
-		})
-		day := today(now)
-		row := func(it taskItem) {
-			row := listCardRow(c, "home-task:"+it.key()).Cursor(ui.CursorPointer).Label("任务 " + it.node.Title)
-			if row.Clicked() {
-				a.later(func() {
-					a.openTasks()
-					a.showTask(it)
-				})
-			}
-			row.Children(func() {
-				a.taskCircle(c, it, 20)
-				words, site := titleAndSite(it.node.Title)
-				ui.Row(c).Gap(8).AlignItems(ui.Center).Grow(1).Shrink(1).MinWidth(0).PassThrough().Children(func() {
-					title := ui.Text(c, words).FontSize(15).Shrink(1).MinWidth(0).SingleLine()
-					if it.done() {
-						title.TextColor(t.TextMuted).Strikethrough()
-					}
-					if site != "" {
-						siteChip(c, site)
-					}
-				})
-				if d := it.date(); !it.done() && d != nil && d.Before(day) {
-					n := int(day.Sub(today(*d)).Hours()/24 + 0.5)
-					ui.Text(c, fmt.Sprintf("过期 %d 天", n)).FontSize(textSmall).TextColor(t.Danger).Shrink(0).PassThrough()
-				}
-				ui.Row(c).Gap(7).AlignItems(ui.Center).Shrink(0).MaxWidth(120).PassThrough().Children(func() {
-					mapDot(c, a.mapColor(it.path), 8)
-					ui.Text(c, it.mapName).FontSize(textSmall).TextColor(t.TextMuted).SingleLine()
-				})
-			})
-		}
-		listCard(c, "home-task-list").Children(func() {
-			for i, it := range due {
-				if i == homeTaskCount {
-					break
-				}
-				row(it)
-			}
-			if len(due) == 0 {
-				msg := "今天没有要做的事。"
-				if len(done) > 0 {
-					msg = "今天的都做完了。"
-				}
-				ui.Text(c.Key("all-done"), msg).FontSize(textBody).TextColor(t.TextMuted).Margin(12, 12)
-			}
-			if more := len(due) - homeTaskCount; more > 0 {
-				l := ui.Box(c.Key("home-more-tasks")).Padding(6, 12).Cursor(ui.CursorPointer).Label("还有任务")
-				if l.Clicked() {
-					a.later(a.openTasks)
-				}
-				l.Children(func() {
-					ui.Text(c, fmt.Sprintf("还有 %d 件", more)).FontSize(textSmall).TextColor(t.TextMuted).PassThrough()
-				})
-			}
-			if len(done) > 0 {
-				ui.Box(c.Key("done-rule")).Height(1).Margin(6, 12).Background(hairline(t))
-				ui.Text(c.Key("done-head"), "做完的").FontSize(textCaption).TextColor(t.TextMuted).Margin(6, 12, 2)
-				for i, it := range done {
-					if i == homeTaskCount {
-						break
-					}
-					row(it)
-				}
-			}
-		})
-	})
-}
-
 // siteChip is the site of a link taken out of a title, small beside it.
 func siteChip(c *ui.Context, site string) {
 	t := c.Theme()
 	ui.Row(c).Height(22).Padding(0, 7).Gap(5).Radius(6).AlignItems(ui.Center).Background(t.Text.Alpha(0.06)).Shrink(0).MaxWidth(170).Children(func() {
 		ui.Box(c).Size(6, 6).Radius(2).Background(t.TextMuted).Shrink(0)
 		ui.Text(c, site).FontSize(12.5).TextColor(t.Text.MixOklab(t.TextMuted, 0.5)).SingleLine()
-	})
-}
-
-// homeMaps are the maps opened last, a row each, as plain as the tasks:
-// the map's dot and name, its tasks and how far they are.
-func (a *app) homeMaps(c *ui.Context, now time.Time) {
-	t := c.Theme()
-	var files []model.FileInfo
-	for _, fi := range a.recentFiles() {
-		if fi.Path != a.inboxPath() && len(files) < 4 {
-			files = append(files, fi)
-		}
-	}
-	tray(c, "home-maps").Children(func() {
-		trayHead(c, "head:我的导图", "我的导图", "", func() {
-			if textLink(c, "＋ 新建", "＋ 新建 我的导图").Clicked() {
-				a.later(a.newMap)
-			}
-		})
-		listCard(c, "home-map-list").Children(func() {
-			if len(files) == 0 {
-				ui.Text(c, "还没有导图。").FontSize(textBody).TextColor(t.TextMuted).Margin(12, 12)
-			}
-			for _, fi := range files {
-				col := a.mapColor(fi.Path)
-				row := listCardRow(c, "home-map:"+fi.Path).Cursor(ui.CursorPointer).Label("导图 " + mapName(fi.Path))
-				if row.Clicked() {
-					a.later(func() { _ = a.open(fi.Path) })
-				}
-				total, done := 0, 0
-				f := a.file
-				if fi.Path != a.path {
-					f = a.indexed(fi.Path)
-				}
-				if f != nil {
-					for _, tn := range f.Tasks() {
-						total++
-						if tn.Node.Task.Status == model.StatusDone {
-							done++
-						}
-					}
-				}
-				row.Children(func() {
-					ui.Box(c).Size(20, 20).Center().Shrink(0).PassThrough().Children(func() { mapDot(c, col, 8) })
-					ui.Text(c, mapName(fi.Path)).FontSize(15).SingleLine().Grow(1).Shrink(1).MinWidth(0).PassThrough()
-					sub := "没有任务"
-					if total > 0 {
-						sub = fmt.Sprintf("%d / %d", done, total)
-					}
-					ui.Text(c, sub).FontSize(textSmall).TextColor(t.TextMuted).Shrink(0).PassThrough().Tooltip(relTime(now, modTime(fi.Path)) + "打开过")
-					if total > 0 {
-						ui.Box(c).Width(56).Height(4).Radius(2).Background(t.Text.Alpha(0.07)).Shrink(0).PassThrough().Children(func() {
-							ui.Box(c.Key("done")).Height(4).WidthPercent(float32(done) / float32(total) * 100).Radius(2).Background(col).
-								Transition(ui.ElementTransition{Duration: 500 * time.Millisecond, Ease: easeDetent, Width: true})
-						})
-					}
-				})
-			}
-		})
 	})
 }
 
