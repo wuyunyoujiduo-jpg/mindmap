@@ -85,6 +85,20 @@ func (a *app) placesBar(c *ui.Context) {
 		})
 		ui.Row(c).Grow(1).Basis(0).Gap(2).AlignItems(ui.Center).Children(func() {
 			ui.Spacer(c)
+			// The AI's panel, from every page of lists.
+			ai := ui.Box(c.Key("ask-ai")).Size(32, 32).Radius(radiusPill).Center().Cursor(ui.CursorPointer).Label("AI 助手").
+				Tooltip("问 AI：问问导图和资料里的内容").Background(t.Text.Alpha(0)).Transition(easeLook)
+			switch {
+			case a.aiOpen:
+				ai.Background(t.Accent.Alpha(0.14))
+			case ai.Hovered():
+				ai.Background(t.Text.Alpha(0.07))
+			}
+			if ai.Clicked() {
+				a.aiOpen = !a.aiOpen
+			}
+			press(ai, 0.92)
+			ai.Children(func() { glyph(c, iconSparkle, 16, t.Accent) })
 			if iconButton(c, iconSearch, "搜索全部", "搜索导图、主题、灵感和资料，#标签 按标签找", 32, true).Clicked() {
 				a.later(func() { a.openPalette(paletteAll) })
 			}

@@ -263,6 +263,17 @@ func (a *app) waitingCard(c *ui.Context, w waitingItem, i int) {
 		}
 		place, has = a.clipPlaces[cl.ID]
 	}
+	// With none of the AI's, where its words alone would put it: each card
+	// says a place, and one key puts it there.
+	near := false
+	if !has {
+		if w.task != nil {
+			place, has = a.nearPlace("t:"+w.task.node.ID, &library.Clip{Title: w.task.node.Title, Text: w.task.node.Note})
+		} else {
+			place, has = a.nearPlace("c:"+w.clip.ID, w.clip)
+		}
+		near = has
+	}
 	_ = ic
 	full := text // with what it refers to, which shows under its words
 	text = strings.TrimSpace(clipRef.ReplaceAllString(text, ""))
@@ -327,6 +338,20 @@ func (a *app) waitingCard(c *ui.Context, w waitingItem, i int) {
 				}
 				if go_.Clicked() {
 					a.later(func() {
+						if near { // taken as the AI's would be
+							if w.task != nil {
+								if a.tasks.places == nil {
+									a.tasks.places = map[string]taskPlace{}
+								}
+								a.tasks.places[w.task.node.ID] = place
+							} else {
+								if a.clipPlaces == nil {
+									a.clipPlaces = map[string]taskPlace{}
+								}
+								a.clipPlaces[w.clip.ID] = place
+							}
+							delete(a.nearPlaces, key)
+						}
 						if w.task != nil {
 							a.takePlace(*w.task)
 						} else {
@@ -366,4 +391,27 @@ func textKey(c *ui.Context, text, label, tip string) ui.Element {
 		ui.Text(c, text).FontSize(textSmall).TextColor(t.Text.MixOklab(t.TextMuted, 0.5)).NoWrap().PassThrough()
 	})
 	return press(b, 0.96)
+}
+
+// nearPlace is where something written down would go by its words alone,
+// with no AI: the topic of the maps most about it, not of the inbox. It
+// is looked for once, and again when a map changes.
+func (a *app) nearPlace(key string, cl *library.Clip) (taskPlace, bool) {
+	if a.nearPlaces == nil || a.nearEdits != a.edits {
+		a.nearPlaces, a.nearEdits = map[string]*taskPlace{}, a.edits
+	}
+	p, ok := a.nearPlaces[key]
+	if !ok {
+		for _, f := range a.placesFor(cl, 4) {
+			if f.path != a.inboxPath() {
+				p = &taskPlace{path: f.path, sheet: f.sheet, node: f.id, label: f.title}
+				break
+			}
+		}
+		a.nearPlaces[key] = p
+	}
+	if p == nil {
+		return taskPlace{}, false
+	}
+	return *p, true
 }

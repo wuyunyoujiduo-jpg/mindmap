@@ -332,7 +332,11 @@ func weekStart(d time.Time) time.Time {
 	return today(d).AddDate(0, 0, 1-wd)
 }
 
-// tasksView is the tasks' page.
+// todayWidth is the width of 今天's column where it is a list: narrower
+// than a page's, for it is read down.
+const todayWidth = 760
+
+// tasksView is 今天, the tasks' page.
 func (a *app) tasksView(c *ui.Context) {
 	if a.tasks.day.IsZero() {
 		a.tasks.day = today(a.now())
@@ -350,7 +354,11 @@ func (a *app) tasksView(c *ui.Context) {
 	calendar := a.tasks.view == tasksWeek || a.tasks.view == tasksMonth
 	ui.Row(c.Key("tasks")).Grow(1).AlignItems(ui.Stretch).Label("任务").Children(func() {
 		ui.Column(c).Grow(1).Basis(0).MinWidth(0).Children(func() {
-			pageColumn(c, "tasks-top", false).Children(func() {
+			top := pageColumn(c, "tasks-top", false)
+			if !calendar {
+				top.MaxWidth(todayWidth + 56) // one calm column, as what is under it
+			}
+			top.Children(func() {
 				a.tasksHead(c, all)
 				if calendar {
 					a.tasksAdd(c, now) // onto the day chosen
@@ -366,23 +374,21 @@ func (a *app) tasksView(c *ui.Context) {
 				})
 				return
 			}
-			pageColumn(c, "tasks-column", true).Children(func() {
-				ui.Row(c).Grow(1).Basis(0).MinHeight(0).Gap(14).AlignItems(ui.Stretch).FillWidth().Margin(12, 0, 0).Children(func() {
-					ui.Column(c).Grow(5).Basis(0).MinWidth(0).Children(func() {
-						counts := a.taskListCounts(items)
-						ui.Row(c.Key("tasks-lists")).Height(32).Gap(2).Shrink(0).FillWidth().AlignItems(ui.Center).Children(func() {
-							for _, l := range taskLists {
-								if pillTab(c, "list:"+l.name, l.name, counts[l.view], a.tasks.view == l.view).Clicked() {
-									a.tasks.view = l.view
-								}
+			// One column, read down: what is to do, by its lists, then what was
+			// written down and waits for a place.
+			ui.Scroll(c.Key(fmt.Sprint("today-scroll:", a.tasks.view))).Grow(1).Basis(0).MinHeight(0).Children(func() {
+				pageColumn(c, "tasks-column", false).MaxWidth(todayWidth+56).Padding(4, 28, 40).Gap(6).Children(func() {
+					counts := a.taskListCounts(items)
+					ui.Row(c.Key("tasks-lists")).Height(34).Gap(2).Shrink(0).FillWidth().AlignItems(ui.Center).Children(func() {
+						for _, l := range taskLists {
+							if pillTab(c, "list:"+l.name, l.name, counts[l.view], a.tasks.view == l.view).Clicked() {
+								a.tasks.view = l.view
 							}
-						})
-						ui.Column(c).Grow(1).Basis(0).MinHeight(0).FillWidth().Children(func() { a.taskList(c, items) })
+						}
 					})
-					// What was written down and waits for a place, beside what is to do.
-					ui.Scroll(c.Key("today-waiting")).Grow(6).Basis(0).MinWidth(0).Margin(0, -8).Children(func() {
-						ui.Column(c).Padding(0, 8, 28).FillWidth().Children(func() { a.homeWaiting(c) })
-					})
+					a.taskList(c, items)
+					ui.Box(c).Height(14)
+					a.homeWaiting(c)
 				})
 			})
 		})
@@ -425,9 +431,7 @@ func (a *app) tasksHead(c *ui.Context, all []taskItem) {
 		if m := tabGroup(c, "tasks-mode", []string{"列表", "周", "月"}, mode); m != mode {
 			a.tasks.view = []int{tasksToday, tasksWeek, tasksMonth}[m]
 		}
-		if iconTextButton(c, iconSparkle, "问 AI", "AI 助手", "问问导图和资料里的内容", a.aiOpen).Clicked() {
-			a.aiOpen = !a.aiOpen
-		}
+
 	})
 }
 
@@ -857,10 +861,10 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 	for _, g := range groups {
 		empty = empty && len(g.items) == 0
 	}
-	ui.Scroll(c.Key(fmt.Sprint("task-list:", a.tasks.view))).Grow(1).Children(func() {
-		ui.Column(c).Padding(10, 0, 32).Gap(10).FillWidth().Children(func() {
+	ui.Box(c.Key(fmt.Sprint("task-list:", a.tasks.view))).FillWidth().Children(func() {
+		ui.Column(c).Padding(6, 0, 8).Gap(10).FillWidth().Children(func() {
 			if empty && len(done) == 0 {
-				ui.Column(c).Padding(60, 0).Gap(8).AlignItems(ui.Center).FillWidth().Children(func() {
+				ui.Column(c).Padding(28, 0).Gap(8).AlignItems(ui.Center).FillWidth().Children(func() {
 					glyph(c, iconCheck, 36, t.TextMuted.Alpha(0.6))
 					ui.Text(c, "没有要做的事").FontSize(textTitle).TextColor(t.TextMuted)
 					ui.Text(c, "在上面写一句加任务，或在导图里把节点设为任务、给它一个日期").FontSize(textSmall).TextColor(t.TextMuted)

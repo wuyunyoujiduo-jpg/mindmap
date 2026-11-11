@@ -16,7 +16,7 @@ import (
 func (a *app) oneBar(c *ui.Context) {
 	t := c.Theme()
 	text := strings.TrimSpace(a.homeDraft)
-	ui.Column(c.Key("one-bar")).FillWidth().Shrink(0).AlignItems(ui.Center).Padding(4, 16, 10).ZIndex(20).Children(func() {
+	ui.Column(c.Key("one-bar")).FillWidth().Shrink(0).AlignItems(ui.Center).Padding(4, 16, 22).ZIndex(20).Children(func() {
 		// Its room is one line's, whatever it shows: open, the card lies over
 		// the page under it, so that nothing moves as it opens and closes.
 		ui.Column(c.Key("bar")).FillWidth().MaxWidth(640).Height(52).Children(func() {

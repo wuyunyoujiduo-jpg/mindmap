@@ -380,6 +380,8 @@ type app struct {
 	// clipPlaces are where the AI would put notes and clips, by their
 	// IDs (sortout.go); clipPlacing while it is asked.
 	clipPlaces    map[string]taskPlace
+	nearPlaces    map[string]*taskPlace // where what waits would go by its words alone (nearPlace)
+	nearEdits     int
 	clipPlacing   bool
 	clipPlaceErr  string
 	tagFilter     string

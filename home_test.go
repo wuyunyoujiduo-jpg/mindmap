@@ -27,7 +27,7 @@ func TestHome(t *testing.T) {
 	if !a.libOpen || !a.libHome {
 		t.Fatal("今天 not shown")
 	}
-	for _, want := range []string{"今天", "刚记下的", "放到导图 资料 0"} {
+	for _, want := range []string{"今天", "刚记下的", "放到导图 资料 3", "放过去 资料 0"} {
 		if !tt.HasText(want) {
 			t.Fatalf("no %q: %q", want, tt.Texts())
 		}
@@ -317,5 +317,34 @@ func TestOneBar(t *testing.T) {
 	tt.Frame()
 	if !a.aiOpen || a.homeDraft != "" {
 		t.Fatalf("the AI was not asked: open %v, draft %q", a.aiOpen, a.homeDraft)
+	}
+}
+
+// What waits for a place says one by its words alone, with no AI asked,
+// and one key puts it there.
+func TestWaitingSaysItsPlace(t *testing.T) {
+	a, tt := newTestApp(t)
+	clip, err := a.addClipText("登录 功能", "手动")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.showLibrary()
+	a.libHome = true
+	tt.Frame()
+	tt.Frame()
+	p, ok := a.nearPlace("c:"+clip.ID, clip)
+	if !ok || !strings.Contains(p.label, "登录") {
+		t.Fatalf("no place by its words: %+v %v", p, ok)
+	}
+	if !tt.HasText("→ " + shortPlace(p)) {
+		t.Fatalf("the card does not say it: %q", tt.Texts())
+	}
+	snapshot(t, tt, "today-places")
+	if err := tt.Click("放过去 " + clip.Label()); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if len(a.clipBacklinks(clip.ID)) != 1 {
+		t.Fatal("not put there")
 	}
 }
