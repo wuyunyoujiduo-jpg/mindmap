@@ -62,7 +62,8 @@ by AI, and an AI assistant.
   wall's kinds (`projectsView`, `projFolder`), and a
   map opened takes the page, its bar going back to 项目. 项目 alone has a
   directory at its left, which the user asked back (`tree.go`, `mapTree`,
-  `treeShown`: folders that open and close and their maps, beside the
+  `treeShown`: a pane the window's height, a shade deeper than the page;
+  folders that open and close and their maps, beside the
   cards and beside a map opened, so that going from a map to another is
   one click; put away by `config.HideTree`, and then the folders are the
   row of pills). Over a map the one bar is asked for from the map's bar
@@ -94,7 +95,9 @@ by AI, and an AI assistant.
   (`sheet` in `design.go`) are done. A task's state, priority and day are
   set the same way in both (`segmented`, `dateProp`). On the canvas the
   main topics are on a pastel of their branch's color, those below on a
-  faint tint (the scheme 明亮 of `style.go`). Notes and clips are one
+  faint tint (the scheme 明亮 of `style.go`); the center stands off the
+  canvas on a shadow, a main topic has an edge and a little shadow of its
+  branch's color, those below are plain, for they are many (`nodeView`). Notes and clips are one
   page, 收集 (`libview.go`: a wall of cards, narrowed by kind and by tag;
   its 回顾 shows a few old notes in place, `memos.go`). 项目 has the maps
   and their folders, those starred first, the folder they are all in at

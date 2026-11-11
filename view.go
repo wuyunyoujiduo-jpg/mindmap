@@ -27,73 +27,21 @@ func (a *app) view(c *ui.Context) {
 	}
 	// Selected text shows in the accent color, strong enough on the
 	// panels' gray: the system's highlight (a pale orange, say) hardly did.
-	root := ui.Column(c).Fill().AlignItems(ui.Stretch).SelectionColor(t.Accent.Alpha(0.32))
+	root := ui.Row(c).Fill().AlignItems(ui.Stretch).SelectionColor(t.Accent.Alpha(0.32))
 	root.Background(ground(t))
 	root.Children(func() {
-		if a.libOpen {
-			a.placesBar(c) // the three places; a map opened has its own bar
-			a.oneBar(c)    // writes, looks for, asks: on every page of lists
+		// The directory, in 项目, is a pane the window's height; the rest
+		// is beside it.
+		if a.treeShown() {
+			a.mapTree(c)
 		}
-		func() {
-			// The pages of lists lie on the ground; a map is on white.
-			page := ui.Row(c.Key("page")).Grow(1).Basis(0).MinWidth(0).MinHeight(0).AlignItems(ui.Stretch)
-			if !a.libOpen {
-				page.Background(t.Background)
+		ui.Column(c.Key("main")).Grow(1).Basis(0).MinWidth(0).FillHeight().Children(func() {
+			if a.libOpen {
+				a.placesBar(c) // the three places; a map opened has its own bar
+				a.oneBar(c)    // writes, looks for, asks: on every page of lists
 			}
-			func() {
-				page.Children(func() {
-					if a.treeShown() {
-						a.mapTree(c) // the directory, in 项目
-						if !a.libOpen {
-							ui.Box(c).Width(1).FillHeight().Background(hairline(t))
-						}
-					}
-					if a.libOpen {
-						if a.projOpen {
-							a.projectsView(c)
-						} else if a.tasks.open || a.libHome {
-							a.tasksView(c) // 今天: what is to do, and what was written down
-						} else {
-							a.libraryView(c)
-						}
-						if a.aiOpen {
-							a.panelResizer(c)
-							a.panel(c)
-						}
-						return
-					}
-					ui.Column(c).Grow(1).Children(func() {
-						a.toolbar(c)
-						if a.doc == nil || a.mode != viewMap && a.mode != viewOutline {
-							ui.Divider(c) // the map and the outline are the page itself
-						}
-						a.conflictBar(c)
-						a.brokenBar(c)
-						switch {
-						case a.doc == nil:
-							a.empty(c)
-						case a.mode == viewOutline:
-							ui.Column(c).Grow(1).Children(func() {
-								a.outlineView(c)
-								a.sheetTabs(c)
-							})
-						case a.mode == viewBoard:
-							a.boardView(c)
-						case a.mode == viewTimeline:
-							a.timelineView(c)
-						case a.mode == viewOverview:
-							a.overviewView(c)
-						default:
-							a.canvasView(c)
-						}
-					})
-					if a.panelShown(c) {
-						a.panelResizer(c)
-						a.panel(c)
-					}
-				})
-			}()
-		}()
+			a.pageView(c)
+		})
 		if !a.libOpen && a.barOpen && !a.presenting {
 			a.barOver(c)
 		}
@@ -116,6 +64,63 @@ func (a *app) view(c *ui.Context) {
 		a.runPending()
 		c.Invalidate()
 	}
+}
+
+// pageView is the page beside the directory: a place's, or a map's.
+func (a *app) pageView(c *ui.Context) {
+	t := c.Theme()
+	// The pages of lists lie on the ground; a map is on white.
+	page := ui.Row(c.Key("page")).Grow(1).Basis(0).MinWidth(0).MinHeight(0).AlignItems(ui.Stretch)
+	if !a.libOpen {
+		page.Background(t.Background)
+	}
+	func() {
+		page.Children(func() {
+			if a.libOpen {
+				if a.projOpen {
+					a.projectsView(c)
+				} else if a.tasks.open || a.libHome {
+					a.tasksView(c) // 今天: what is to do, and what was written down
+				} else {
+					a.libraryView(c)
+				}
+				if a.aiOpen {
+					a.panelResizer(c)
+					a.panel(c)
+				}
+				return
+			}
+			ui.Column(c).Grow(1).Children(func() {
+				a.toolbar(c)
+				if a.doc == nil || a.mode != viewMap && a.mode != viewOutline {
+					ui.Divider(c) // the map and the outline are the page itself
+				}
+				a.conflictBar(c)
+				a.brokenBar(c)
+				switch {
+				case a.doc == nil:
+					a.empty(c)
+				case a.mode == viewOutline:
+					ui.Column(c).Grow(1).Children(func() {
+						a.outlineView(c)
+						a.sheetTabs(c)
+					})
+				case a.mode == viewBoard:
+					a.boardView(c)
+				case a.mode == viewTimeline:
+					a.timelineView(c)
+				case a.mode == viewOverview:
+					a.overviewView(c)
+				default:
+					a.canvasView(c)
+				}
+			})
+			if a.panelShown(c) {
+				a.panelResizer(c)
+				a.panel(c)
+			}
+		})
+	}()
 }
 
 // panelResizer is the line left of the panel, which the pointer drags to

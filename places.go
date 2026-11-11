@@ -195,7 +195,9 @@ func (a *app) projectsView(c *ui.Context) {
 				wash = col.Alpha(0.13)
 			}
 			ui.Box(c.Key("face")).Height(108).FillWidth().Radius(radiusCard - 4).Background(wash).PassThrough().
-				Draw(func(pt *ui.Painter, r ui.Rect) { drawMapFace(pt, r, root, col) })
+				Draw(func(pt *ui.Painter, r ui.Rect) {
+					pt.Clip(r, radiusCard-4, func() { drawMapFace(pt, r, root, col) })
+				})
 			ui.Row(c).Padding(0, 4, 0, 8).Gap(6).AlignItems(ui.Center).FillWidth().Children(func() {
 				ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(2).Children(func() {
 					if a.renaming == path {
@@ -429,7 +431,7 @@ func countTopics(n *model.Node) int {
 // of its own and as long as its name, with those under it as short
 // strokes. It is the map's shape, not its words.
 func drawMapFace(p *ui.Painter, r ui.Rect, root *model.Node, col ui.Color) {
-	s := min(r.W/205, 1.45)
+	s := min(r.W/300, 1.3) // the whole of it within the face, whatever the card's width
 	cx, cy := r.X+r.W/2, r.Y+r.H/2
 	rw, rh := 52*s, 18*s
 	var kids []*model.Node

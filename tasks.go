@@ -251,12 +251,15 @@ func (a *app) taskCard(c *ui.Context, tn model.TaskNode, showStatus bool) {
 			if showStatus {
 				statusIcon(c, task.Status, 13).Margin(3, 0, 0, 0)
 			}
-			title := ui.Text(c, n.Title).Grow(1).Wrap()
+			title := ui.Text(c, n.Title).FontSize(textBody).FontWeight(500).LineHeight(1.4).Grow(1).Wrap()
 			if task.Status == model.StatusDone {
 				title.Strikethrough().TextColor(t.TextMuted)
 			}
-			if task.Priority != model.PriorityNone {
-				ui.Text(c, task.Priority.Label()).FontSize(11).TextColor(priorityColor(c, task.Priority)).NoWrap()
+			if task.Priority != model.PriorityNone { // on a wash of its color
+				pc := priorityColor(c, task.Priority)
+				ui.Box(c).Padding(1, 7).Radius(radiusPill).Background(pc.Alpha(0.13)).Shrink(0).Children(func() {
+					ui.Text(c, task.Priority.Label()).FontSize(11).FontWeight(600).TextColor(pc.MixOklab(t.Text, 0.25)).NoWrap()
+				})
 			}
 		})
 		where := tn.Parents

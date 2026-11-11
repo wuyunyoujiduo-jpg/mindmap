@@ -29,16 +29,15 @@ func (a *app) mapTree(c *ui.Context) {
 	// its edge: a pane of its own, not more of the page.
 	deep := ground(t).MixOklab(t.Text, 0.035)
 	if t.Dark {
-		deep = ground(t).MixOklab(ui.Hex("#000000"), 0.35)
+		deep = ui.Hex("#151517") // between the ground and a map's page
 	}
 	side := ui.Column(c.Key("map-tree")).Width(treeWidth).Shrink(0).FillHeight().Background(deep).
 		InsetShadow(-1, 0, 0, 0, t.Text.Alpha(0.06))
 	side.Children(func() {
-		head := float32(toolbarHeight)
-		if !a.libOpen { // by a map it is under the window's controls
-			head = max(toolbarHeight, bar.Height+8)
-		}
-		ui.Row(c.Key("tree-head")).Height(head).Padding(0, 8, 0, max(16, b2f(!a.libOpen)*bar.Left)).Gap(2).AlignItems(ui.Center).Shrink(0).DragWindow().Children(func() {
+		// At the window's top corner: its head is beside the window's
+		// controls, and drags the window.
+		head := max(toolbarHeight, bar.Height+8)
+		ui.Row(c.Key("tree-head")).Height(head).Padding(0, 8, 0, max(16, bar.Left)).Gap(2).AlignItems(ui.Center).Shrink(0).DragWindow().Children(func() {
 			if a.libOpen {
 				ui.Text(c, "目录").FontSize(textSmall).FontWeight(600).TextColor(t.TextMuted).Grow(1).PassThrough()
 			} else { // by a map: the way back to the cards
