@@ -124,46 +124,44 @@ func (a *app) iconSettings(c *ui.Context) {
 // rail's, and with it the shade of the trays.
 func (a *app) groundSettings(c *ui.Context) {
 	t := c.Theme()
-	field(c, "底色", func() {
-		ui.Column(c).Gap(6).Children(func() {
-			ui.Row(c).Gap(8).Wrap().GapY(8).Children(func() {
-				for _, g := range grounds {
-					on := a.cfg.Ground == g.key
-					box := ui.Row(c.Key("ground:"+g.key)).Height(30).Padding(0, 12, 0, 8).Gap(8).Radius(8).AlignItems(ui.Center).
-						Cursor(ui.CursorPointer).Label("底色 " + g.name)
-					key(box, t)
-					if on {
-						chosenCard(box, t)
-					}
-					if box.Clicked() {
-						a.cfg.Ground = g.key
-						a.cfg.save()
-					}
-					box.Children(func() {
-						ui.Box(c).Size(14, 14).Radius(7).Background(ui.Hex(g.ground)).Border(1, t.Text.Alpha(0.14)).PassThrough()
-						ui.Text(c, g.name).FontSize(textSmall).PassThrough()
-					})
+	rowsField(c, "外观", "", func() {
+		setRow(c, "底色", "页面的底色，卡片始终是白的；只在浅色外观下生效", func() {
+			for _, g := range grounds {
+				on := a.cfg.Ground == g.key
+				box := ui.Row(c.Key("ground:"+g.key)).Height(30).Padding(0, 12, 0, 8).Gap(7).Radius(radiusPill).AlignItems(ui.Center).
+					Cursor(ui.CursorPointer).Label("底色 " + g.name)
+				key(box, t)
+				if on {
+					box.Background(t.Accent.Alpha(0.14))
 				}
-			})
-			ui.Text(c, "页面和侧栏的底色，卡片始终是白的。只在浅色外观下生效。").FontSize(12).TextColor(t.TextMuted).Wrap()
+				if box.Clicked() {
+					a.cfg.Ground = g.key
+					a.cfg.save()
+				}
+				box.Children(func() {
+					ui.Box(c).Size(14, 14).Radius(7).Background(ui.Hex(g.ground)).Border(1, t.Text.Alpha(0.16)).PassThrough()
+					txt := ui.Text(c, g.name).FontSize(textSmall).PassThrough()
+					if on {
+						txt.FontWeight(600).TextColor(t.Accent.MixOklab(t.Text, 0.3))
+					}
+				})
+			}
 		})
 	})
 }
 
 // updateSettings shows the version, and checks for a newer one.
 func (a *app) updateSettings(c *ui.Context) {
-	field(c, "版本", func() {
-		ui.Column(c).Gap(6).Children(func() {
-			ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, appName+" "+version).FontSize(textBody).Grow(1)
-				if button(c, "检查更新…").Clicked() {
-					a.plat.CheckUpdates()
-				}
-			})
-			auto := a.plat.AutoUpdates()
-			switchRow(c, &auto, "自动检查更新", "每天检查一次；有新版本时显示更新说明，点「安装更新」后自动下载并重启", func() {
-				a.plat.SetAutoUpdates(auto)
-			})
+	rowsField(c, "版本", "", func() {
+		setRow(c, appName+" "+version, "", func() {
+			if button(c, "检查更新…").Clicked() {
+				a.plat.CheckUpdates()
+			}
+		})
+		setLine(c)
+		auto := a.plat.AutoUpdates()
+		switchRow(c, &auto, "自动检查更新", "每天检查一次；有新版本时显示更新说明，点「安装更新」后自动下载并重启", func() {
+			a.plat.SetAutoUpdates(auto)
 		})
 	})
 }

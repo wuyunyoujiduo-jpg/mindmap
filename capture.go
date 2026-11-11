@@ -452,31 +452,28 @@ func (a *app) settingsView(c *ui.Context) {
 					case "通用":
 						a.generalSettings(c)
 					case "资料整理":
-						field(c, "AI 整理", func() {
+						rowsField(c, "AI 整理", "用的是 AI 助手的 API Key，按用量计费。", func() {
 							auto := !a.cfg.LibraryManual
-							switchRow(c, &auto, "自动整理资料", "新收藏的资料由 AI 自动起标题、加说明、写摘要、分类、打标签，并生成同义词和分析（用 AI 助手的 API Key，按用量计费）", func() {
+							switchRow(c, &auto, "自动整理资料", "新收藏的资料由 AI 起标题、写摘要、分类、打标签，并生成同义词", func() {
 								a.cfg.LibraryManual = !auto
 								a.cfg.save()
 							})
 						})
-						field(c, "检索", func() { a.embedSettings(c) })
+						a.embedSettings(c)
 					case "备份":
 						a.backupSettings(c)
 					case "同步":
 						a.syncSettings(c)
 					case "连接":
-						field(c, "AI 助手", func() {
-							ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-								ui.Text(c, "服务商、API Key 和模型在 AI 助手面板的「⋯ → AI 设置」里。当前："+providerModelName(a.cfg)).FontSize(12).TextColor(t.TextMuted).Wrap().Grow(1)
+						rowsField(c, "AI", "", func() {
+							setRow(c, "AI 助手", "服务商、API Key 和模型。当前："+providerModelName(a.cfg), func() {
 								if button(c, "打开 AI 设置").Clicked() {
 									a.settingsOpen, a.aiOpen, a.ai.settings = false, true, true
 									a.loadKeyDrafts()
 								}
 							})
-						})
-						field(c, "AI 编程工具（MCP）", func() {
-							ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-								ui.Text(c, "让 Claude Code、Cursor 等读写导图、检索收集的资料").FontSize(12).TextColor(t.TextMuted).Grow(1)
+							setLine(c)
+							setRow(c, "AI 编程工具（MCP）", "让 Claude Code、Cursor 等读写导图、检索收集的资料", func() {
 								if button(c, "连接说明…").Clicked() {
 									a.settingsOpen, a.mcpOpen = false, true
 								}
@@ -493,63 +490,73 @@ func (a *app) settingsView(c *ui.Context) {
 
 // switchRow is a switch with what it does beside it.
 func switchRow(c *ui.Context, on *bool, label, text string, changed func()) {
-	ui.Row(c.Key(label)).Gap(10).AlignItems(ui.Center).Children(func() {
-		if ui.Switch(c, on).Label(label).Changed() {
-			changed()
-		}
-		ui.Column(c).Gap(2).Grow(1).Children(func() {
-			ui.Text(c, label).FontSize(textBody).FontWeight(600)
-			ui.Text(c, text).FontSize(textSmall).TextColor(c.Theme().TextMuted).Wrap()
+	t := c.Theme()
+	// The whole row sets it: a click anywhere on it.
+	row := ui.Row(c.Key("row:"+label)).MinHeight(52).Padding(10, 0).Gap(16).AlignItems(ui.Center).FillWidth().
+		Cursor(ui.CursorPointer).Label(label)
+	if row.Clicked() {
+		*on = !*on
+		changed()
+	}
+	row.Children(func() {
+		ui.Column(c).Gap(2).Grow(1).Shrink(1).Basis(0).MinWidth(0).PassThrough().Children(func() {
+			ui.Text(c, label).FontSize(textBody).FontWeight(500)
+			if text != "" {
+				ui.Text(c, text).FontSize(textSmall).TextColor(t.TextMuted).LineHeight(1.45).Wrap()
+			}
 		})
+		ui.Switch(c, on).Shrink(0).PassThrough()
 	})
 }
 
 // generalSettings are the shortcuts, the menu bar icon and the reminders.
 func (a *app) generalSettings(c *ui.Context) {
-	t := c.Theme()
-	field(c, "全局快捷键", func() {
-		ui.Column(c).Gap(10).Children(func() {
-			rows := []struct {
-				name, what, value, def string
-				save                   func(string)
-				reg                    func(string) error
-				effective              func() string
-			}{
-				{"快速记录快捷键", "快速记录：弹出小窗口记下想法", a.cfg.CaptureKey, defaultCaptureKey,
-					func(v string) { a.cfg.CaptureKey = v }, a.plat.SetCaptureKey, a.captureKey},
-				{"收藏剪贴板快捷键", "收藏剪贴板：复制后按下，直接存到收集", a.cfg.ClipKey, defaultClipKey,
-					func(v string) { a.cfg.ClipKey = v }, a.plat.SetClipKey, a.clipKey},
-				{"截图快捷键", "截图：框选屏幕、标注，存到收集或复制", a.cfg.ShotKey, defaultShotKey,
-					func(v string) { a.cfg.ShotKey = v }, a.plat.SetShotKey, a.shotKey},
+	rowsField(c, "全局快捷键", "在任何应用里都能用。点一个快捷键，再按下新的组合键。", func() {
+		rows := []struct {
+			name, title, what, value, def string
+			save                          func(string)
+			reg                           func(string) error
+			effective                     func() string
+		}{
+			{"快速记录快捷键", "快速记录", "弹出小窗口记下想法", a.cfg.CaptureKey, defaultCaptureKey,
+				func(v string) { a.cfg.CaptureKey = v }, a.plat.SetCaptureKey, a.captureKey},
+			{"收藏剪贴板快捷键", "收藏剪贴板", "复制后按下，直接存到收集", a.cfg.ClipKey, defaultClipKey,
+				func(v string) { a.cfg.ClipKey = v }, a.plat.SetClipKey, a.clipKey},
+			{"截图快捷键", "截图", "框选屏幕、标注，存到收集或复制", a.cfg.ShotKey, defaultShotKey,
+				func(v string) { a.cfg.ShotKey = v }, a.plat.SetShotKey, a.shotKey},
+		}
+		for i, r := range rows {
+			if i > 0 {
+				setLine(c)
 			}
-			for _, r := range rows {
-				ui.Row(c.Key(r.name)).Gap(10).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, r.what).FontSize(textBody).Grow(1).Shrink(1).Wrap()
-					a.shortcutField(c, r.name, r.value, r.def, func(acc string) error {
-						r.save(acc)
-						a.cfg.save()
-						return r.reg(r.effective())
-					}, func() { _ = r.reg("") })
-				})
-			}
-			ui.Text(c, "在任何应用里都能用。点快捷键框，再按下新的组合键；Esc 取消。").FontSize(12).TextColor(t.TextMuted).Wrap()
-		})
+			setRow(c, r.title, r.what, func() {
+				a.shortcutField(c, r.name, r.value, r.def, func(acc string) error {
+					r.save(acc)
+					a.cfg.save()
+					return r.reg(r.effective())
+				}, func() { _ = r.reg("") })
+			})
+		}
 	})
-	field(c, "菜单栏和提醒", func() {
+	rowsField(c, "菜单栏和提醒", "", func() {
 		tray := !a.cfg.NoTray
 		switchRow(c, &tray, "菜单栏图标", "显示今天到期和已逾期的任务数，点开列出任务、快速记录、收藏剪贴板", func() {
 			a.cfg.NoTray = !tray
 			a.cfg.save()
 			a.plat.SetTray(tray)
 		})
+		setLine(c)
 		on := !a.cfg.NoReminders
 		switchRow(c, &on, "到期提醒", "任务今天到期或已逾期时，每天发一次系统通知", func() {
 			a.cfg.NoReminders = !on
 			a.cfg.save()
 		})
-		if ui.Link(c, "重新查看新手引导", "").FontSize(12).Clicked() {
-			a.settingsOpen, a.tourStep = false, 1
-		}
+		setLine(c)
+		setRow(c, "新手引导", "再看一遍怎么用", func() {
+			if button(c, "重新查看").Label("重新查看新手引导").Clicked() {
+				a.settingsOpen, a.tourStep = false, 1
+			}
+		})
 	})
 	a.shotSettings(c)
 	a.updateSettings(c)

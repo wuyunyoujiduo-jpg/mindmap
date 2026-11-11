@@ -346,18 +346,20 @@ var embedPresets = []struct{ name, url, model, note string }{
 func (a *app) embedSettings(c *ui.Context) {
 	t := c.Theme()
 	d := &a.embedDrafts
-	func() {
-		ui.Column(c).Gap(8).Children(func() {
-			on := !a.cfg.NoEmbed
-			switchRow(c, &on, "语义检索", "按意思检索资料（如搜「数据库变慢」能找到「SQL 优化」），并推荐相关资料", func() {
-				a.cfg.NoEmbed = !on
-				a.cfg.save()
-				a.embedErr, a.qvecs = "", map[string][]float32{}
-				a.embedLibrary()
-			})
-			if a.cfg.NoEmbed {
-				return
-			}
+	rowsField(c, "检索", "", func() {
+		on := !a.cfg.NoEmbed
+		switchRow(c, &on, "语义检索", "按意思检索资料（如搜「数据库变慢」能找到「SQL 优化」），并推荐相关资料", func() {
+			a.cfg.NoEmbed = !on
+			a.cfg.save()
+			a.embedErr, a.qvecs = "", map[string][]float32{}
+			a.embedLibrary()
+		})
+	})
+	if a.cfg.NoEmbed {
+		return
+	}
+	field(c, "向量模型", func() {
+		ui.Column(c).Gap(10).FillWidth().Children(func() {
 			switch {
 			case a.cfg.EmbedURL == "":
 				a.pluginSettings(c)
@@ -416,52 +418,52 @@ func (a *app) embedSettings(c *ui.Context) {
 				}
 			})
 		})
-	}()
+	})
 }
 
 // backupSettings is the settings' part on backups.
 func (a *app) backupSettings(c *ui.Context) {
 	t := c.Theme()
-	field(c, "备份", func() {
-		ui.Column(c).Gap(8).Children(func() {
-			ui.Text(c, "把导图文件夹（含收集的资料、图片和附件）打包成 zip。建议把导图文件夹放在 iCloud 云盘里同步，再定期备份到另一个地方。").
-				FontSize(12).TextColor(t.TextMuted).Wrap()
-			ui.Row(c).Gap(8).Wrap().GapY(6).AlignItems(ui.Center).Children(func() {
-				if button(c, "立即备份…").Disabled(a.backupBusy).Clicked() {
-					a.backupNow()
-				}
-				label := "每天自动备份到…"
-				if a.cfg.BackupDir != "" {
-					label = "更换自动备份文件夹…"
-				}
-				if button(c, label).Clicked() {
-					a.plat.PickFolder(func(dir string) {
-						if dir != "" {
-							a.cfg.BackupDir, a.cfg.BackupLast = dir, time.Time{}
-							a.cfg.save()
-							a.autoBackup()
-						}
-					})
-				}
-				if a.cfg.BackupDir != "" && button(c, "关闭自动备份").Clicked() {
-					a.cfg.BackupDir = ""
-					a.cfg.save()
-				}
-				if a.backupBusy {
-					ui.Spinner(c)
-				}
-			})
-			if a.cfg.BackupDir != "" {
-				s := "每天第一次打开时备份到 " + a.cfg.BackupDir + "，保留最近 14 份"
-				if !a.cfg.BackupLast.IsZero() {
-					s += "；上次 " + a.cfg.BackupLast.Format("2006-01-02 15:04")
-				}
-				ui.Text(c, s).FontSize(12).TextColor(t.TextMuted).Wrap()
+	rowsField(c, "备份", "建议把导图文件夹放在 iCloud 云盘里同步，再定期备份到另一个地方。", func() {
+		setRow(c, "立即备份", "把导图文件夹（含收集的资料、图片和附件）打包成 zip", func() {
+			if a.backupBusy {
+				ui.Spinner(c)
 			}
-			if a.backupErr != "" {
-				ui.Text(c, "自动备份失败："+a.backupErr).FontSize(12).TextColor(t.Danger).Wrap()
+			if button(c, "立即备份…").Disabled(a.backupBusy).Clicked() {
+				a.backupNow()
 			}
 		})
+		setLine(c)
+		sub := "每天第一次打开时备份一份，保留最近 14 份"
+		if a.cfg.BackupDir != "" {
+			sub = "每天第一次打开时备份到 " + a.cfg.BackupDir + "，保留最近 14 份"
+			if !a.cfg.BackupLast.IsZero() {
+				sub += "；上次 " + a.cfg.BackupLast.Format("2006-01-02 15:04")
+			}
+		}
+		setRow(c, "每天自动备份", sub, func() {
+			label := "每天自动备份到…"
+			if a.cfg.BackupDir != "" {
+				label = "更换自动备份文件夹…"
+			}
+			if a.cfg.BackupDir != "" && button(c, "关闭自动备份").Clicked() {
+				a.cfg.BackupDir = ""
+				a.cfg.save()
+			}
+			if button(c, label).Clicked() {
+				a.plat.PickFolder(func(dir string) {
+					if dir != "" {
+						a.cfg.BackupDir, a.cfg.BackupLast = dir, time.Time{}
+						a.cfg.save()
+						a.autoBackup()
+					}
+				})
+			}
+		})
+		if a.backupErr != "" {
+			setLine(c)
+			ui.Text(c, "自动备份失败："+a.backupErr).FontSize(textSmall).TextColor(t.Danger).Wrap().Margin(10, 0)
+		}
 	})
 }
 

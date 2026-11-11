@@ -76,32 +76,27 @@ func (a *app) keepShot(png []byte, act screenshot.Action, fromApp bool) {
 // is a menu item away (帮助 → 在访达中显示截图记录), not shown.
 func (a *app) shotSettings(c *ui.Context) {
 	t := c.Theme()
-	field(c, "截图", func() {
-		ui.Column(c).Gap(8).Children(func() {
-			ui.Text(c, "屏幕定格后直接框选，可拖动、拉边调整；框选后加框线、箭头、画笔、文字，可选颜色。✓、回车或双击复制到剪贴板，书签按钮或 ⇧↩ 存到收集，⌘S 保存，Esc 取消。").
-				FontSize(12).TextColor(t.TextMuted).Wrap()
-			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				if button(c, "试一下").Clicked() {
-					a.settingsOpen = false
-					a.later(a.screenshot)
-				}
-				if button(c, "延时 3 秒截图").Tooltip("倒数时打开要截的菜单").Clicked() {
-					a.settingsOpen = false
-					a.later(func() { a.plat.DelayedScreenshot(3) })
-				}
-			})
-			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				if screenshot.KeysAllowed() {
-					ui.Text(c, "✓ 菜单展开时也能用快捷键截图").FontSize(12).TextColor(t.Success)
-					return
-				}
-				if button(c, "让菜单展开时也能截图…").Tooltip("需要「输入监控」权限：只用来在菜单展开时认出截图快捷键").Clicked() {
-					screenshot.RequestKeys()
-					a.later(func() { a.plat.SetShotKey(a.shotKey()) })
-				}
-			})
-			ui.Text(c, "右键菜单、「+」这样的下拉菜单展开时，macOS 不把全局快捷键交给应用。给 MyMind「输入监控」权限（系统设置 › 隐私与安全性 › 输入监控，授权后重启 MyMind），菜单开着也能按快捷键截图；或者用「延时 3 秒截图」（菜单栏图标或「文件」菜单里），倒数时把菜单打开。").
-				FontSize(12).TextColor(t.TextMuted).Wrap()
+	rowsField(c, "截图", "屏幕定格后直接框选，可拖动、拉边调整；框选后加框线、箭头、画笔、文字，可选颜色。✓ 或双击复制到剪贴板，书签按钮存到收集。", func() {
+		setRow(c, "截一张", "从这里开始，或者用上面的截图快捷键", func() {
+			if button(c, "试一下").Clicked() {
+				a.settingsOpen = false
+				a.later(a.screenshot)
+			}
+			if button(c, "延时 3 秒截图").Tooltip("倒数时打开要截的菜单").Clicked() {
+				a.settingsOpen = false
+				a.later(func() { a.plat.DelayedScreenshot(3) })
+			}
+		})
+		setLine(c)
+		setRow(c, "菜单展开时截图", "别的应用的菜单展开时，macOS 不把快捷键交给应用：给 MyMind「输入监控」权限（授权后重启），或者用「延时 3 秒截图」", func() {
+			if screenshot.KeysAllowed() {
+				ui.Text(c, "✓ 菜单展开时也能用快捷键截图").FontSize(textSmall).TextColor(t.Success)
+				return
+			}
+			if button(c, "让菜单展开时也能截图…").Tooltip("需要「输入监控」权限：只用来在菜单展开时认出截图快捷键").Clicked() {
+				screenshot.RequestKeys()
+				a.later(func() { a.plat.SetShotKey(a.shotKey()) })
+			}
 		})
 	})
 }

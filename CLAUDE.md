@@ -46,12 +46,15 @@ by AI, and an AI assistant.
   as they are written, a picture, bold, lists; a reference is kept in
   the note's text as `<clip:id>` and shown under its words, `noteText`); other keys are a
   shade of the ground (`key`, `textKey`). A part of a page is a small
-  heading (`trayHead`) over a card; the settings are so too, on the ground
-  (`field`, in a `modal`), and the system's buttons are pills (`button`).
+  heading (`trayHead`) over a card; the settings are so too, on the ground:
+  rows in white cards, a name and a word on it at the left, what sets it
+  at the right (`rowsField`, `setRow`, `setLine`, `switchRow`; `field` for
+  what is not rows), in a `modal`, and the system's buttons are pills (`button`).
   There is no sidebar: the app has three
   places, 今天, 项目 and 收集 (`places.go`), a switch of them at the top of
   the pages of lists (`placesBar`, with the search of everything and the
-  settings); 项目 is the maps as cards, by folder (`projectsView`), and a
+  settings); 项目 is the maps as cards, its folders a row of pills to choose from, as a
+  wall's kinds (`projectsView`, `projFolder`), and a
   map opened takes the page, its bar going back to 项目. The words of the
   UI are of no one device (记下, never 回车记下): a phone is to come.
   A map is on white, the pages of lists on the ground. The
@@ -69,8 +72,10 @@ by AI, and an AI assistant.
   which is put away until asked for. The whole was rebuilt to the draft
   https://claude.ai/artifact/J4Ngp4MFp9B7KnLVJhiavb, step by step: the places,
   项目, and 今天 with the tasks in it (`tasksView`: list, week, month; tasks
-  that repeat, `model.Repeat`, `repeatProp`, `parseRepeat`) and the one bar at
-  the window's foot (`bar.go`, `oneBar`: one line until written in, then
+  that repeat, `model.Repeat`, `repeatProp`, `parseRepeat`) and the one bar
+  under the places, at the user's wish, not at the window's foot (`bar.go`,
+  `oneBar`: its room is one line's, and open it lies over the page, so that
+  nothing moves; one line until written in, then
   `writeCard` with its tools; it keeps a thought, a task, a link, shows
   what there is already as it is written, and asks the AI after a ?) and
   what is chosen (a task, a clip) in a sheet over the page's right

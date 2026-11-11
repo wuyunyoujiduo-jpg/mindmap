@@ -7,21 +7,19 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// The one bar, at the foot of the window on the pages of lists: what is
+// The one bar, at the top of the pages of lists, under the places: what is
 // written in it is kept (a thought; a task where it begins with a day, or
 // says how it repeats; a link), looked for as it is written (what there
-// is already shows over the bar), or, begun with a ?, asked of the AI. It
+// is already shows under the bar), or, begun with a ?, asked of the AI. It
 // is one line until written in, then the card to write in, with its
 // tools (writeCard).
 func (a *app) oneBar(c *ui.Context) {
 	t := c.Theme()
 	text := strings.TrimSpace(a.homeDraft)
-	ui.Column(c.Key("one-bar")).FillWidth().Shrink(0).AlignItems(ui.Center).Padding(6, 16, 14).Children(func() {
-		col := ui.Column(c.Key("bar")).FillWidth().MaxWidth(640).Gap(8)
-		if col.PressedOutside() && text == "" {
-			a.barOpen = false
-		}
-		col.Children(func() {
+	ui.Column(c.Key("one-bar")).FillWidth().Shrink(0).AlignItems(ui.Center).Padding(4, 16, 10).ZIndex(20).Children(func() {
+		// Its room is one line's, whatever it shows: open, the card lies over
+		// the page under it, so that nothing moves as it opens and closes.
+		ui.Column(c.Key("bar")).FillWidth().MaxWidth(640).Height(52).Children(func() {
 			if !a.barOpen && text == "" {
 				// One line: a click opens the card, and writes in it.
 				pill := soft(ui.Row(c.Key("closed")).Height(52).Padding(0, 8, 0, 22).Gap(10).Radius(radiusPill).AlignItems(ui.Center).FillWidth().
@@ -37,37 +35,26 @@ func (a *app) oneBar(c *ui.Context) {
 				})
 				return
 			}
-			ask, asking := barQuestion(text)
-			// What there is already, as it is written: a click goes to it.
-			if hits := a.barHits(text, 4); len(hits) > 0 && !asking {
-				lifted(ui.Column(c.Key("found")).Padding(6).Gap(1).Radius(radiusCard).Background(cardColor(t)).FillWidth(), t).
-					Transition(ui.ElementTransition{Duration: 240 * time.Millisecond, Ease: easeDetent, Enter: &ui.Motion{Y: 8}}).Children(func() {
-					ui.Text(c, "已经有的").FontSize(textCaption).TextColor(t.TextMuted).Margin(6, 12, 2)
-					for i, it := range hits {
-						row := ui.Row(c.Key(i)).MinHeight(40).Padding(6, 12).Gap(10).Radius(radiusRow).AlignItems(ui.Center).FillWidth().
-							Cursor(ui.CursorPointer).Label("已有 " + it.title).Background(t.Text.Alpha(0)).Transition(easeLook)
-						if row.Hovered() {
-							row.Background(t.Text.Alpha(0.05))
-						}
-						if row.Clicked() {
-							run := it.run
-							a.homeDraft, a.barOpen = "", false
-							a.later(run)
-						}
-						row.Children(func() {
-							ui.Text(c, it.kind).FontSize(textCaption).TextColor(t.TextMuted).Width(32).Shrink(0).PassThrough()
-							ui.Text(c, it.title).FontSize(textBody).SingleLine().Grow(1).Shrink(1).MinWidth(0).PassThrough()
-							if it.detail != "" {
-								ui.Text(c, it.detail).FontSize(textSmall).TextColor(t.TextMuted).SingleLine().Shrink(2).MinWidth(0).MaxWidth(220).PassThrough()
-							}
-						})
-					}
-				})
+			open := ui.Column(c.Key("open")).Absolute().Top(0).Left(0).Right(0).Gap(8).ZIndex(20)
+			if open.PressedOutside() && text == "" {
+				a.barOpen = false
 			}
+			open.Children(func() { a.barCard(c, text) })
+		})
+	})
+}
+
+// barCard is the bar, open: the card to write in, and under it what
+// there is already of what is written.
+func (a *app) barCard(c *ui.Context, text string) {
+	t := c.Theme()
+	func() {
+		func() {
+			ask, asking := barQuestion(text)
 			a.writeCard(c, writeCard{
 				key: "home-line", label: "记一条灵感或任务", draft: &a.homeDraft, enterSaves: true,
-				placeholder: "记一句、搜索，或者问 AI…  以「周五」开头是任务，以 ? 开头问 AI",
-				sendLabel:   "记下", fileLabel: "加图片", save: a.saveHomeLine, lines: 1,
+				placeholder: "记一句、搜索，或者问 AI…",
+				sendLabel:   "记下", fileLabel: "加图片", save: a.saveHomeLine, lines: 1, over: true,
 				focused: func() { a.barOpen = true },
 				esc: func() {
 					if strings.TrimSpace(a.homeDraft) == "" {
@@ -112,8 +99,34 @@ func (a *app) oneBar(c *ui.Context) {
 					}
 				},
 			})
-		})
-	})
+			// What there is already, as it is written: a click goes to it.
+			if hits := a.barHits(text, 4); len(hits) > 0 && !asking {
+				lifted(ui.Column(c.Key("found")).Padding(6).Gap(1).Radius(radiusCard).Background(cardColor(t)).FillWidth(), t).
+					Transition(ui.ElementTransition{Duration: 240 * time.Millisecond, Ease: easeDetent, Enter: &ui.Motion{Y: -8}}).Children(func() {
+					ui.Text(c, "已经有的").FontSize(textCaption).TextColor(t.TextMuted).Margin(6, 12, 2)
+					for i, it := range hits {
+						row := ui.Row(c.Key(i)).MinHeight(40).Padding(6, 12).Gap(10).Radius(radiusRow).AlignItems(ui.Center).FillWidth().
+							Cursor(ui.CursorPointer).Label("已有 " + it.title).Background(t.Text.Alpha(0)).Transition(easeLook)
+						if row.Hovered() {
+							row.Background(t.Text.Alpha(0.05))
+						}
+						if row.Clicked() {
+							run := it.run
+							a.homeDraft, a.barOpen = "", false
+							a.later(run)
+						}
+						row.Children(func() {
+							ui.Text(c, it.kind).FontSize(textCaption).TextColor(t.TextMuted).Width(32).Shrink(0).PassThrough()
+							ui.Text(c, it.title).FontSize(textBody).SingleLine().Grow(1).Shrink(1).MinWidth(0).PassThrough()
+							if it.detail != "" {
+								ui.Text(c, it.detail).FontSize(textSmall).TextColor(t.TextMuted).SingleLine().Shrink(2).MinWidth(0).MaxWidth(220).PassThrough()
+							}
+						})
+					}
+				})
+			}
+		}()
+	}()
 }
 
 // barQuestion tells whether what is written in the bar asks the AI: it

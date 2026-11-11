@@ -335,44 +335,48 @@ func (a *app) linksSection(c *ui.Context, n *model.Node) {
 // that opens its files.
 func (a *app) projectSection(c *ui.Context) {
 	t := c.Theme()
-	ui.Field(c, "项目代码目录", func() {
-		ui.Column(c).Gap(6).Children(func() {
-			dir := a.file.Project
-			if dir == "" {
-				dir = "未设置（相对路径从导图所在文件夹算起）"
+	rowsField(c, "代码", "", func() {
+		dir := a.file.Project
+		if dir == "" {
+			dir = "未设置（相对路径从导图所在文件夹算起）"
+		}
+		setRow(c, "项目代码目录", dir, func() {
+			if a.file.Project != "" && button(c, "清除").Clicked() {
+				a.mutate("", func() { a.file.Project = "" })
 			}
-			ui.Text(c, dir).FontSize(12).TextColor(t.TextMuted).Wrap()
-			ui.Row(c).Gap(6).Children(func() {
-				if button(c, "选择…").FontSize(12).Clicked() {
-					a.plat.PickFolder(func(dir string) {
-						if dir != "" && a.file != nil {
-							a.mutate("", func() { a.file.Project = dir })
-						}
-					})
-				}
-				if a.file.Project != "" && button(c, "清除").FontSize(12).Clicked() {
-					a.mutate("", func() { a.file.Project = "" })
-				}
-			})
+			if button(c, "选择…").Clicked() {
+				a.plat.PickFolder(func(dir string) {
+					if dir != "" && a.file != nil {
+						a.mutate("", func() { a.file.Project = dir })
+					}
+				})
+			}
 		})
-	})
-	a.codeSyncField(c)
-	ui.Field(c, "代码文件用…打开", func() {
+		setLine(c)
 		cur := a.cfg.Editor
 		if cur == "" {
 			cur = "vscode"
 		}
-		ui.Row(c).Gap(6).Wrap().Children(func() {
+		setRow(c, "代码文件用…打开", "", func() {
 			for _, e := range editors {
-				b := button(c.Key("editor:"+e.id), e.name).FontSize(12)
-				if e.id == cur {
-					b.Background(t.Accent).TextColor(t.AccentText)
+				on := e.id == cur
+				b := ui.Box(c.Key("editor:"+e.id)).Height(30).Padding(0, 12).Radius(radiusPill).Center().Cursor(ui.CursorPointer).Label(e.name)
+				key(b, t)
+				if on {
+					b.Background(t.Accent.Alpha(0.14))
 				}
 				if b.Clicked() {
 					a.cfg.Editor = e.id
 					a.cfg.save()
 				}
+				b.Children(func() {
+					txt := ui.Text(c, e.name).FontSize(textSmall).NoWrap().PassThrough()
+					if on {
+						txt.FontWeight(600).TextColor(t.Accent.MixOklab(t.Text, 0.3))
+					}
+				})
 			}
 		})
 	})
+	a.codeSyncField(c)
 }

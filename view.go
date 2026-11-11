@@ -32,6 +32,7 @@ func (a *app) view(c *ui.Context) {
 	root.Children(func() {
 		if a.libOpen {
 			a.placesBar(c) // the three places; a map opened has its own bar
+			a.oneBar(c)    // writes, looks for, asks: on every page of lists
 		}
 		func() {
 			// The pages of lists lie on the ground; a map is on white.
@@ -87,9 +88,6 @@ func (a *app) view(c *ui.Context) {
 				})
 			}()
 		}()
-		if a.libOpen {
-			a.oneBar(c) // writes, looks for, asks: on every page of lists
-		}
 		if a.lightbox != "" && a.doc != nil {
 			a.lightboxView(c)
 		}

@@ -150,101 +150,97 @@ func (a *app) syncSettings(c *ui.Context) {
 		a.cfg.save()
 		a.syncErr, a.syncCheck, a.syncTried = "", "", time.Time{}
 	}
-	field(c, "GitHub 仓库", func() {
-		ui.Column(c).Gap(6).Children(func() {
-			in := ui.TextInput(c.Key("sync-repo"), &a.syncDrafts[0]).Placeholder("用户名/仓库名，如 yourname/mymind-data").Label("同步仓库")
+	rowsField(c, "GitHub", "令牌用 Fine-grained 的：只选这个仓库，Contents 权限设为 Read and write。", func() {
+		setRow(c, "仓库", "先在 GitHub 新建一个空的私有仓库", func() {
+			if ui.Link(c, "新建仓库", "").FontSize(textSmall).Clicked() {
+				a.plat.OpenURL("https://github.com/new")
+			}
+			in := ui.TextInput(c.Key("sync-repo"), &a.syncDrafts[0]).Placeholder("用户名/仓库名").Label("同步仓库").Width(240)
 			if in.Submitted() || in.PressedOutside() {
 				saveDrafts()
 			}
-			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, "先在 GitHub 新建一个空的私有仓库。").FontSize(12).TextColor(t.TextMuted)
-				if ui.Link(c, "新建仓库", "").FontSize(12).Clicked() {
-					a.plat.OpenURL("https://github.com/new")
-				}
-			})
 		})
-	})
-	field(c, "授权令牌", func() {
-		ui.Column(c).Gap(6).Children(func() {
-			in := ui.TextInput(c.Key("sync-token"), &a.syncDrafts[1]).Password().Placeholder("github_pat_…").Label("同步令牌")
+		setLine(c)
+		setRow(c, "授权令牌", "只存在这台电脑上", func() {
+			if ui.Link(c, "创建令牌", "").FontSize(textSmall).Clicked() {
+				a.plat.OpenURL("https://github.com/settings/personal-access-tokens/new")
+			}
+			in := ui.TextInput(c.Key("sync-token"), &a.syncDrafts[1]).Password().Placeholder("github_pat_…").Label("同步令牌").Width(240)
 			if in.Submitted() || in.PressedOutside() {
 				saveDrafts()
 			}
-			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, "在 GitHub 创建 Fine-grained 令牌：只选这个仓库，Contents 权限设为 Read and write。").
-					FontSize(12).TextColor(t.TextMuted).Wrap().Grow(1)
-				if ui.Link(c, "创建令牌", "").FontSize(12).Clicked() {
-					a.plat.OpenURL("https://github.com/settings/personal-access-tokens/new")
-				}
-			})
 		})
 	})
-	ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-		if button(c, "检查连接").Disabled(a.syncDrafts[0] == "" || a.syncDrafts[1] == "").Clicked() {
-			saveDrafts()
-			a.syncCheck = "正在检查…"
-			cfg, check := a.syncConfig(), a.syncCheckRepo
-			a.async(func() (any, error) { return check(context.Background(), cfg) }, func(v any, err error) {
-				r, _ := v.(*ghsync.Repo)
-				switch {
-				case err != nil:
-					a.syncCheck = "✕ " + err.Error()
-				case !r.Private:
-					a.syncCheck = "⚠ 已连接，但这是公开仓库：任何人都能看到你的导图和资料，建议在 GitHub 里改成私有"
-				default:
-					a.syncCheck = "✓ 已连接私有仓库 " + r.FullName
-				}
-			})
-		}
-		label := "立即同步"
-		if a.syncBusy {
-			label = "同步中…"
-		}
-		if inkButton(c, label, !a.syncBusy && a.syncReady()).Clicked() {
-			saveDrafts()
-			a.syncNow()
-		}
-	})
-	if a.syncCheck != "" {
-		col := t.TextMuted
-		switch {
-		case strings.HasPrefix(a.syncCheck, "✓"):
-			col = t.Success
-		case strings.HasPrefix(a.syncCheck, "⚠"):
-			col = t.Warning
-		case strings.HasPrefix(a.syncCheck, "✕"):
-			col = t.Danger
-		}
-		ui.Text(c, a.syncCheck).FontSize(12).TextColor(col).Wrap()
-	}
-	auto := !a.cfg.SyncOff
-	switchRow(c, &auto, "自动同步", "修改后十几秒内自动上传，每 5 分钟检查一次其他电脑的修改", func() {
-		a.cfg.SyncOff = !auto
-		a.cfg.save()
-	})
-	// How the last sync went.
-	ui.Column(c).Gap(4).Children(func() {
-		switch {
-		case a.syncBusy:
+	rowsField(c, "同步", "", func() {
+		ui.Column(c).Padding(12, 0, 10).Gap(8).FillWidth().Children(func() {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				ui.Spinner(c)
-				ui.Text(c, a.syncMsg).FontSize(12).TextColor(t.TextMuted)
+				if button(c, "检查连接").Disabled(a.syncDrafts[0] == "" || a.syncDrafts[1] == "").Clicked() {
+					saveDrafts()
+					a.syncCheck = "正在检查…"
+					cfg, check := a.syncConfig(), a.syncCheckRepo
+					a.async(func() (any, error) { return check(context.Background(), cfg) }, func(v any, err error) {
+						r, _ := v.(*ghsync.Repo)
+						switch {
+						case err != nil:
+							a.syncCheck = "✕ " + err.Error()
+						case !r.Private:
+							a.syncCheck = "⚠ 已连接，但这是公开仓库：任何人都能看到你的导图和资料，建议在 GitHub 里改成私有"
+						default:
+							a.syncCheck = "✓ 已连接私有仓库 " + r.FullName
+						}
+					})
+				}
+				label := "立即同步"
+				if a.syncBusy {
+					label = "同步中…"
+				}
+				if inkButton(c, label, !a.syncBusy && a.syncReady()).Clicked() {
+					saveDrafts()
+					a.syncNow()
+				}
 			})
-		case a.syncErr != "":
-			ui.Text(c, "同步失败："+a.syncErr).FontSize(12).TextColor(t.Danger).Wrap()
-		case !a.syncAt.IsZero():
-			r := a.syncLast
-			msg := "上次同步 " + a.syncAt.Format("15:04")
-			if r.Synced() {
-				msg += fmt.Sprintf("：下载 %d 个、上传 %d 个、删除 %d 个文件", r.Pulled, r.Pushed, r.Deleted)
-			} else {
-				msg += "：已是最新"
+			if a.syncCheck != "" {
+				col := t.TextMuted
+				switch {
+				case strings.HasPrefix(a.syncCheck, "✓"):
+					col = t.Success
+				case strings.HasPrefix(a.syncCheck, "⚠"):
+					col = t.Warning
+				case strings.HasPrefix(a.syncCheck, "✕"):
+					col = t.Danger
+				}
+				ui.Text(c, a.syncCheck).FontSize(12).TextColor(col).Wrap()
 			}
-			ui.Text(c, msg).FontSize(12).TextColor(t.TextMuted)
-		}
-		if n := len(a.syncLast.Skipped); n > 0 {
-			ui.Text(c, fmt.Sprintf("%d 个文件超过 50MB，没有同步：%s", n, strings.Join(a.syncLast.Skipped, "、"))).
-				FontSize(12).TextColor(t.Warning).Wrap()
-		}
+			auto := !a.cfg.SyncOff
+			switchRow(c, &auto, "自动同步", "修改后十几秒内自动上传，每 5 分钟检查一次其他电脑的修改", func() {
+				a.cfg.SyncOff = !auto
+				a.cfg.save()
+			})
+			// How the last sync went.
+			ui.Column(c).Gap(4).Children(func() {
+				switch {
+				case a.syncBusy:
+					ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+						ui.Spinner(c)
+						ui.Text(c, a.syncMsg).FontSize(12).TextColor(t.TextMuted)
+					})
+				case a.syncErr != "":
+					ui.Text(c, "同步失败："+a.syncErr).FontSize(12).TextColor(t.Danger).Wrap()
+				case !a.syncAt.IsZero():
+					r := a.syncLast
+					msg := "上次同步 " + a.syncAt.Format("15:04")
+					if r.Synced() {
+						msg += fmt.Sprintf("：下载 %d 个、上传 %d 个、删除 %d 个文件", r.Pulled, r.Pushed, r.Deleted)
+					} else {
+						msg += "：已是最新"
+					}
+					ui.Text(c, msg).FontSize(12).TextColor(t.TextMuted)
+				}
+				if n := len(a.syncLast.Skipped); n > 0 {
+					ui.Text(c, fmt.Sprintf("%d 个文件超过 50MB，没有同步：%s", n, strings.Join(a.syncLast.Skipped, "、"))).
+						FontSize(12).TextColor(t.Warning).Wrap()
+				}
+			})
+		})
 	})
 }

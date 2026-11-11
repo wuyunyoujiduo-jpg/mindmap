@@ -274,6 +274,7 @@ type app struct {
 	libHome       bool              // 今天 is shown, not the list
 	barOpen       bool              // the one bar is open, a card to write in (bar.go)
 	projOpen      bool              // 项目, the maps by folder, is the page shown (places.go)
+	projFolder    string            // the folder whose maps 项目 shows: all of them when empty
 	homeFocus     bool              // the desk's line has the focus
 	writeRefocus  string            // the card to write in that takes the focus back, after a tool of its was clicked
 	writeRefs     map[string]string // the notes referred to in a draft: the @name written, the clip's ID

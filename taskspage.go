@@ -399,7 +399,18 @@ func (a *app) tasksView(c *ui.Context) {
 // months to go through, and how they show.
 func (a *app) tasksHead(c *ui.Context, all []taskItem) {
 	now := a.now()
-	pageHeader(c, "tasks-head", fmt.Sprintf("%d月%d日", now.Month(), now.Day()), weekdays[now.Weekday()], func() {
+	th := c.Theme()
+	// The day, large, and under it how it stands; at the end what narrows
+	// the tasks and how they show.
+	ui.Row(c.Key("tasks-head")).MinHeight(72).Padding(6, 0, 10).Gap(10).AlignItems(ui.End).Shrink(0).FillWidth().DragWindow().Children(func() {
+		ui.Column(c).Gap(3).Grow(1).Shrink(1).MinWidth(0).Children(func() {
+			ui.Row(c).Gap(10).AlignItems(ui.End).Children(func() {
+				ui.Text(c, fmt.Sprintf("%d月%d日", now.Month(), now.Day())).FontSize(26).FontWeight(700).LineHeight(1.2).NoWrap()
+				ui.Text(c, weekdays[now.Weekday()]).FontSize(textTitle).TextColor(th.TextMuted).Margin(0, 0, 3).NoWrap()
+			})
+			ui.Text(c, fmt.Sprintf("%d 件要做，做完 %d 件，%d 条等着归位", len(a.dueToday(now)), len(a.doneToday(now)), len(a.waiting()))).
+				FontSize(textSmall).TextColor(th.TextMuted).SingleLine()
+		})
 		a.taskMapMenu(c, all)
 		if a.tasks.view == tasksWeek || a.tasks.view == tasksMonth || a.tasks.view == tasksDay {
 			a.calendarNav(c)

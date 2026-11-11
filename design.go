@@ -801,3 +801,41 @@ func field(c *ui.Context, title string, body func()) ui.Element {
 func button(c *ui.Context, text string) ui.Element {
 	return ui.Button(c, text).Radius(radiusPill).Padding(0, 14).MinHeight(30)
 }
+
+// rowsField is a part of the settings whose card holds rows (setRow),
+// one under another with a thin line between (setLine); note, if any, is
+// said small under the card.
+func rowsField(c *ui.Context, title, note string, body func()) ui.Element {
+	t := c.Theme()
+	return ui.Column(c.Key("field:" + title)).Gap(8).FillWidth().Children(func() {
+		if title != "" {
+			ui.Text(c, title).FontSize(textSmall).FontWeight(600).TextColor(t.Text.MixOklab(t.TextMuted, 0.45)).Margin(0, 6)
+		}
+		raise(ui.Column(c.Key("card")).Padding(4, 18).Radius(radiusCard).FillWidth(), t).Children(body)
+		if note != "" {
+			ui.Text(c, note).FontSize(textCaption).TextColor(t.TextMuted).LineHeight(1.5).Wrap().Margin(0, 8)
+		}
+	})
+}
+
+// setRow is a row of the settings: what it is, a word on it under its
+// name, and at its end what sets it.
+func setRow(c *ui.Context, title, sub string, control func()) {
+	t := c.Theme()
+	ui.Row(c.Key("row:"+title)).MinHeight(52).Padding(10, 0).Gap(16).AlignItems(ui.Center).FillWidth().Children(func() {
+		ui.Column(c).Gap(2).Grow(1).Shrink(1).Basis(0).MinWidth(0).Children(func() {
+			ui.Text(c, title).FontSize(textBody).FontWeight(500)
+			if sub != "" {
+				ui.Text(c, sub).FontSize(textSmall).TextColor(t.TextMuted).LineHeight(1.45).Wrap()
+			}
+		})
+		if control != nil {
+			ui.Row(c).Gap(8).AlignItems(ui.Center).Shrink(0).Children(control)
+		}
+	})
+}
+
+// setLine is the thin line between two rows of a card of the settings.
+func setLine(c *ui.Context) {
+	ui.Box(c).Height(1).FillWidth().Shrink(0).Background(hairline(c.Theme()))
+}

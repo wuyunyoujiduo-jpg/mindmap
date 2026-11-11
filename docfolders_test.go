@@ -91,13 +91,8 @@ func TestFolderRenameAndDelete(t *testing.T) {
 	if !ok {
 		t.Fatalf("no folder row: %q", tt.Texts())
 	}
-	tt.Move(row.X+30, row.Y+row.H/2) // its "···" shows under the pointer
-	tt.Frame()
-	more, _ := tt.Find("文件夹菜单")
-	if more.W < 20 {
-		t.Fatalf("no ··· on the row under the pointer: %v", more)
-	}
-	if err := tt.Click("文件夹菜单"); err != nil {
+	_ = row
+	if err := tt.RightClick("旧项目"); err != nil { // its menu
 		t.Fatal(err)
 	}
 	if err := tt.ChooseMenuItem("重命名"); err != nil {

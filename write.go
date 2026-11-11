@@ -28,12 +28,16 @@ type writeCard struct {
 	lines                   int                    // the lines it shows empty: 2 when zero
 	focused                 func()                 // told while it is written in
 	esc                     func()                 // told when Escape is pressed in it
+	over                    bool                   // it lies over the page: lifted
 }
 
 func (a *app) writeCard(c *ui.Context, w writeCard) {
 	t := c.Theme()
 	box := soft(ui.Column(c.Key(w.key)).Radius(radiusCard).Padding(14, 14, 12, 18).Gap(4).FillWidth().Shrink(0).
 		Background(cardColor(t)).Border(1.5, t.Text.Alpha(0)), t).Transition(easeLook)
+	if w.over {
+		lifted(box.NoShadow(), t)
+	}
 	box.Children(func() {
 		lines := 2
 		if w.lines > 0 {
