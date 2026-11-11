@@ -33,8 +33,8 @@ type writeCard struct {
 
 func (a *app) writeCard(c *ui.Context, w writeCard) {
 	t := c.Theme()
-	box := soft(ui.Column(c.Key(w.key)).Radius(radiusCard).Padding(14, 14, 12, 18).Gap(4).FillWidth().Shrink(0).
-		Background(cardColor(t)).Border(1.5, t.Text.Alpha(0)), t).Transition(easeLook)
+	box := ui.Column(c.Key(w.key)).Radius(radiusCard).Padding(10, 10, 8, 14).Gap(2).FillWidth().Shrink(0).
+		Background(cardColor(t)).Border(1.5, t.Text.Alpha(0)).Transition(easeLook)
 	if w.over {
 		lifted(box.NoShadow(), t)
 	}

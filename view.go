@@ -30,21 +30,27 @@ func (a *app) view(c *ui.Context) {
 	root := ui.Row(c).Fill().AlignItems(ui.Stretch).SelectionColor(t.Accent.Alpha(0.32))
 	root.Background(ground(t))
 	root.Children(func() {
-		// The directory, in 项目, is a pane the window's height; the rest
-		// is beside it.
-		if a.treeShown() {
-			a.mapTree(c)
-		}
+		// The window is a quiet gray: the top row on it, and under it the one
+		// white leaf everything else is on, cut into columns by thin lines:
+		// what of the place shows, the page, what is chosen.
 		ui.Column(c.Key("main")).Grow(1).Basis(0).MinWidth(0).FillHeight().Children(func() {
-			if a.libOpen {
-				a.placesBar(c) // the three places; a map opened has its own bar
-				a.oneBar(c)    // writes, looks for, asks: on every page of lists
-			}
-			a.pageView(c)
+			a.topBar(c)
+			leaf(c, "leaf").Grow(1).Basis(0).MinHeight(0).Margin(0, 6, 6).Children(func() {
+				ui.Row(c.Key("columns")).Grow(1).Basis(0).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
+					if a.sideShown() {
+						switch a.place() {
+						case placeMaps:
+							a.mapTree(c)
+						case placeToday:
+							a.todaySide(c)
+						default:
+							a.libSide(c)
+						}
+					}
+					a.pageView(c)
+				})
+			})
 		})
-		if !a.libOpen && a.barOpen && !a.presenting {
-			a.barOver(c)
-		}
 		if a.lightbox != "" && a.doc != nil {
 			a.lightboxView(c)
 		}
@@ -68,12 +74,8 @@ func (a *app) view(c *ui.Context) {
 
 // pageView is the page beside the directory: a place's, or a map's.
 func (a *app) pageView(c *ui.Context) {
-	t := c.Theme()
-	// The pages of lists lie on the ground; a map is on white.
+	// Every page is on the leaf's white.
 	page := ui.Row(c.Key("page")).Grow(1).Basis(0).MinWidth(0).MinHeight(0).AlignItems(ui.Stretch)
-	if !a.libOpen {
-		page.Background(t.Background)
-	}
 	func() {
 		page.Children(func() {
 			if a.libOpen {
@@ -206,21 +208,10 @@ func (a *app) toolbar(c *ui.Context) {
 	if room < 820 { // the seven views take what room there is
 		gap = 4
 	}
-	ui.Row(c.Key("toolbar")).Height(toolbarHeight).Padding(0, max(10, c.TitleBar().Right), 0, max(14, b2f(!a.treeShown())*(c.TitleBar().Left+12))).Gap(gap).AlignItems(ui.Center).DragWindow().Children(func() {
+	ui.Row(c.Key("toolbar")).Height(toolbarHeight).Padding(0, 10, 0, 16).Gap(gap).AlignItems(ui.Center).Children(func() {
 		if a.doc == nil {
 			ui.Spacer(c)
 			return
-		}
-		if a.cfg.HideTree { // the directory, put away, comes back from here
-			if iconButton(c, iconSidebar, "显示目录", "显示目录：文件夹和导图的列表", 30, true).Clicked() {
-				a.cfg.HideTree = false
-				a.cfg.save()
-			}
-		}
-		// Back to 项目, the maps as cards: from the directory's head where
-		// it shows, which leaves the bar its room.
-		if !a.treeShown() && textKey(c, "‹ 项目", "回到项目", "回到项目：所有导图").Clicked() {
-			a.later(a.showProjects)
 		}
 		ui.Column(c).Gap(1).Shrink(1).MinWidth(40).Children(func() {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
@@ -279,17 +270,6 @@ func (a *app) toolbar(c *ui.Context) {
 		}
 		if room >= 450 && iconButton(c, iconPlay, "开始演说", "开始演说 ⌘↩", 30, true).Clicked() {
 			a.later(func() { a.startPresenting("") })
-		}
-		// The one bar, over the map: write a thought down, look for, ask.
-		if room >= 740 && iconButton(c, iconPencil, "记一句", "记一句、搜索，或者问 AI", 30, true).Clicked() { // where there is room for it
-			a.barOpen, a.writeRefocus = true, "home-line"
-		}
-		aiText := "问 AI"
-		if room < 760 {
-			aiText = ""
-		}
-		if iconTextButton(c, iconSparkle, aiText, "AI 助手", "问 AI：关于这张导图和收集的资料", a.aiOpen).Clicked() {
-			a.aiOpen = !a.aiOpen
 		}
 		// The panel of the topic chosen, put away or shown.
 		tip := "显示主题面板：备注、任务、标签、链接 ⌘⌥I"

@@ -156,7 +156,7 @@ func TestMapTree(t *testing.T) {
 	a.refreshFiles()
 	a.setFolderOpen(dir, true)
 	tt.Frame()
-	if !a.treeShown() || !tt.HasText("目录") || a.sideWidth() != treeWidth {
+	if !a.treeShown() || !tt.HasText("目录") || a.sideWidth() != sideWidthOf {
 		t.Fatalf("no directory beside the map: %q", tt.Texts())
 	}
 	snapshot(t, tt, "tree-map")
@@ -181,7 +181,7 @@ func TestMapTree(t *testing.T) {
 	snapshot(t, tt, "tree-projects")
 	_ = other
 	// Put away, the folders are a row of pills again; 今天 has none.
-	if err := tt.Click("收起目录"); err != nil {
+	if err := tt.Click("收起侧栏"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
@@ -197,10 +197,10 @@ func TestMapTree(t *testing.T) {
 	}
 }
 
-// The one bar is over a map too, asked for from the map's bar.
+// The one bar is in the top row over a map too.
 func TestBarOverMap(t *testing.T) {
 	a, tt := newTestApp(t)
-	if err := tt.Click("记一句"); err != nil {
+	if err := tt.Click("记一条灵感或任务"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()

@@ -37,28 +37,36 @@ func (a *app) showProjects() {
 	a.projOpen = true
 }
 
-// sideWidth is the room the maps' directory takes beside a map.
+// sideWidth is the room the left column takes.
 func (a *app) sideWidth() float32 {
-	if a.treeShown() && !a.libOpen {
-		return treeWidth
+	if a.sideShown() {
+		return sideWidthOf
 	}
 	return 0
 }
 
-// placesBar is the top of the window on the pages of lists: the switch of
-// the three places in its middle, the search of everything and the
-// settings at its end. It is the window's title bar there, and drags it.
-func (a *app) placesBar(c *ui.Context) {
+// topBar is the top of the window, on every page: the left column's
+// key, the switch of the three places, the one bar, which takes the room,
+// then the AI's key, the search of everything and the settings. It is the
+// window's title bar, and drags it.
+func (a *app) topBar(c *ui.Context) {
 	t := c.Theme()
 	bar := c.TitleBar()
 	now := a.place()
-	ui.Row(c.Key("places-bar")).Height(toolbarHeight).Padding(0, max(14, bar.Right), 0, max(14, bar.Left)).AlignItems(ui.Center).
-		Shrink(0).FillWidth().DragWindow().Children(func() {
-		ui.Box(c).Grow(1).Basis(0)
-		well(ui.Row(c.Key("places")).Padding(3).Gap(2).Radius(radiusPill).Shrink(0).Label("位置"), t).Children(func() {
+	ui.Row(c.Key("top-bar")).Height(toolbarHeight).Padding(0, max(10, bar.Right), 0, max(12, bar.Left+6)).Gap(10).AlignItems(ui.Center).
+		Shrink(0).FillWidth().DragWindow().ZIndex(20).Children(func() {
+		side := "收起侧栏"
+		if a.cfg.HideTree {
+			side = "显示侧栏"
+		}
+		if iconButton(c, iconSidebar, side, side, 32, true).Clicked() {
+			a.cfg.HideTree = !a.cfg.HideTree
+			a.cfg.save()
+		}
+		well(ui.Row(c.Key("places")).Padding(2).Gap(2).Radius(radiusPill).Shrink(0).Label("位置"), t).Children(func() {
 			part := func(p int, name, tip string, click func()) {
 				on := p == now
-				b := ui.Box(c.Key("place:"+name)).Height(30).Padding(0, 18).Radius(radiusPill).Center().Cursor(ui.CursorPointer).
+				b := ui.Box(c.Key("place:"+name)).Height(30).Padding(0, 16).Radius(radiusPill - 2).Center().Cursor(ui.CursorPointer).
 					Label(name).Tooltip(tip).Background(t.Text.Alpha(0)).Transition(easeLook)
 				if !on && b.Hovered() {
 					b.Background(t.Text.Alpha(0.05))
@@ -66,10 +74,10 @@ func (a *app) placesBar(c *ui.Context) {
 				if b.Clicked() {
 					a.later(click)
 				}
-				press(b, 0.96)
+				press(b, 0.97)
 				b.Children(func() {
 					if on {
-						slidePill(c, "places", radiusPill)
+						slidePill(c, "places", radiusPill-2)
 						b.ZIndex(-1) // under the others, which the pill slides behind
 					}
 					txt := ui.Text(c, name).FontSize(textBody).PassThrough()
@@ -87,29 +95,27 @@ func (a *app) placesBar(c *ui.Context) {
 			part(placeMaps, "项目", "导图：一张就是一个项目", a.showProjects)
 			part(placeCollect, "收集", "灵感、链接、文档和图片", func() { a.openList(kindAll, "") })
 		})
-		ui.Row(c).Grow(1).Basis(0).Gap(2).AlignItems(ui.Center).Children(func() {
-			ui.Spacer(c)
-			// The AI's panel, from every page of lists.
-			ai := ui.Box(c.Key("ask-ai")).Size(32, 32).Radius(radiusPill).Center().Cursor(ui.CursorPointer).Label("AI 助手").
-				Tooltip("问 AI：问问导图和资料里的内容").Background(t.Text.Alpha(0)).Transition(easeLook)
-			switch {
-			case a.aiOpen:
-				ai.Background(t.Accent.Alpha(0.14))
-			case ai.Hovered():
-				ai.Background(t.Text.Alpha(0.07))
-			}
-			if ai.Clicked() {
-				a.aiOpen = !a.aiOpen
-			}
-			press(ai, 0.92)
-			ai.Children(func() { glyph(c, iconSparkle, 16, t.Accent) })
-			if iconButton(c, iconSearch, "搜索全部", "搜索导图、主题、灵感和资料，#标签 按标签找", 32, true).Clicked() {
-				a.later(func() { a.openPalette(paletteAll) })
-			}
-			if iconButton(c, iconGear, "设置", "设置", 32, true).Clicked() {
-				a.later(a.openSettings)
-			}
-		})
+		a.oneBar(c)
+		// The AI's panel, from every page.
+		ai := ui.Box(c.Key("ask-ai")).Size(32, 32).Radius(radiusPill).Center().Cursor(ui.CursorPointer).Label("AI 助手").
+			Tooltip("问 AI：问问导图和资料里的内容").Background(t.Text.Alpha(0)).Transition(easeLook)
+		switch {
+		case a.aiOpen:
+			ai.Background(t.Accent.Alpha(0.14))
+		case ai.Hovered():
+			ai.Background(t.Text.Alpha(0.07))
+		}
+		if ai.Clicked() {
+			a.aiOpen = !a.aiOpen
+		}
+		press(ai, 0.92)
+		ai.Children(func() { glyph(c, iconSparkle, 16, t.Accent) })
+		if iconButton(c, iconSearch, "搜索全部", "搜索导图、主题、灵感和资料，#标签 按标签找", 32, true).Clicked() {
+			a.later(func() { a.openPalette(paletteAll) })
+		}
+		if iconButton(c, iconGear, "设置", "设置", 32, true).Clicked() {
+			a.later(a.openSettings)
+		}
 	})
 }
 
@@ -155,13 +161,13 @@ func (a *app) projectsView(c *ui.Context) {
 	}
 	w, _ := c.Size()
 	if a.treeShown() {
-		w -= treeWidth // the directory's
+		w -= sideWidthOf // the directory's
 	}
 	cols := max(int((min(w, pageWidth+56)-56+16)/256), 1)
 
 	card := func(f model.FileInfo) {
 		path, col := f.Path, a.mapColor(f.Path)
-		el := raise(ui.Column(c.Key("map:"+path)).Padding(8, 8, 14).Gap(10).Radius(radiusCard+2).MinWidth(0).Cursor(ui.CursorPointer).
+		el := raise(ui.Column(c.Key("map:"+path)).Padding(8, 8, 12).Gap(10).Radius(radiusCard).MinWidth(0).Cursor(ui.CursorPointer).
 			Label(f.Name).Drag(fileDrag{Path: path}), t)
 		// Another map dropped on a map goes under its center.
 		if d, ok := ui.Drop[fileDrag](el); ok && d.Path != path {
@@ -190,11 +196,7 @@ func (a *app) projectsView(c *ui.Context) {
 			topics = countTopics(root) - 1
 		}
 		el.Children(func() {
-			wash := col.Alpha(0.07)
-			if t.Dark {
-				wash = col.Alpha(0.13)
-			}
-			ui.Box(c.Key("face")).Height(108).FillWidth().Radius(radiusCard - 4).Background(wash).PassThrough().
+			ui.Box(c.Key("face")).Height(104).FillWidth().Radius(radiusCard - 4).Background(cardColor(t)).PassThrough().
 				Draw(func(pt *ui.Painter, r ui.Rect) {
 					pt.Clip(r, radiusCard-4, func() { drawMapFace(pt, r, root, col) })
 				})

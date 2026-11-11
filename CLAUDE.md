@@ -25,91 +25,77 @@ by AI, and an AI assistant.
 
 - The UI's look is in `design.go` (sizes, helpers, the theme of
   `quietTheme`) and `icons.go` (icons drawn, not glyphs, so that they sit
-  centered; the rail's and the lists' are one family of thin lines,
-  `drawRailIcon`). The look is plain and restrained, as Apple's pages are
-  (the user's reference is https://library.aimran.es/, after flomo): two
-  levels only, a cool pale ground (`ground`, one of `grounds` chosen in
-  the settings, `config.Ground`) and white cards on it with large round
-  corners (`radiusCard`), which are a material, not stickers (the user
-  found the flat look wanting in 质感): a hairline at their edge, a shadow
-  close under them and a wide faint one (`soft`, in `raise` and `listCard`; `lifted` for what is over the page:
-  a card under the pointer, `hoverLift`, the canvas's bars, popups,
-  `modal`), with no ring; keys, tabs and the fields of search are pills
-  (`radiusPill`), icon buttons round; text large (14 to 16) with room
-  around it; few controls in sight, what can be done with a row showing
-  under the pointer; one color, the violet-blue accent: the keys that act
-  (`inkButton`, `accentButton`: a `jewel`, lighter at its top, light on
-  its edge, a glow of its color under it), tracks hollowed in the page
-  (`well`) which the white pill chosen stands out of, the outline and halo of the line written
-  in (`focusHalo`; a box of several lines is `area`, and the notes' rich
-  editor looks the same), tags on a pale wash of it (`softTag`). What is chosen
-  among a few (the sidebar's part, a `pillTab`, a `segmented`, the views'
-  tabs) is on a white pill that slides to it from the one chosen before
-  (`slidePill`, a `Match` transition, behind the others' words). The desk and 收集 write in
-  the same card (`write.go`, `writeCard`: a tag and a reference offered
-  as they are written, a picture, bold, lists; a reference is kept in
-  the note's text as `<clip:id>` and shown under its words, `noteText`); other keys are a
-  shade of the ground (`key`, `textKey`). A part of a page is a small
-  heading (`trayHead`) over a card; the settings are so too, on the ground:
-  rows in white cards, a name and a word on it at the left, what sets it
-  at the right (`rowsField`, `setRow`, `setLine`, `switchRow`; `field` for
-  what is not rows), in a `modal`, and the system's buttons are pills (`button`).
-  There is no sidebar of the app's parts: the app has three
-  places, 今天, 项目 and 收集 (`places.go`), a switch of them at the top of
-  the pages of lists (`placesBar`, with the AI's key, the search of everything and the
-  settings); 项目 is the maps as cards, each with the map drawn small as its face
-  (`drawMapFace`) and a ring for its tasks, its folders a row of pills to choose from, as a
-  wall's kinds (`projectsView`, `projFolder`), and a
-  map opened takes the page, its bar going back to 项目. 项目 alone has a
-  directory at its left, which the user asked back (`tree.go`, `mapTree`,
-  `treeShown`: a pane the window's height, a shade deeper than the page;
-  folders that open and close and their maps, beside the
-  cards and beside a map opened, so that going from a map to another is
-  one click; put away by `config.HideTree`, and then the folders are the
-  row of pills). Over a map the one bar is asked for from the map's bar
-  (`barOver`). The words of the
-  UI are of no one device (记下, never 回车记下): a phone is to come.
-  A map is on white, the pages of lists on the ground. The
-  accent is kept for
-  what is chosen, for links and for the AI's spark. Color is kept for
-  small things that mean something: each map has its own (`mapcolor.go`),
-  shown as a dot by its tasks and what was put on it, or as a pastel with
-  a deep ink (`tinted`); a kind of clip has its own. The pages of lists
-  are laid out the same: a `pageColumn` in the middle, its heading, pills
-  to narrow by, then cards; a map's topic shows its details in a panel on
-  the right,
-  which is put away until asked for. The whole was rebuilt to the draft
-  https://claude.ai/artifact/J4Ngp4MFp9B7KnLVJhiavb, step by step: the places,
-  项目, and 今天 with the tasks in it (`tasksView`: as a list it is one
-  column read down, `todayWidth`: the day and how it stands, what is to
-  do, then what waits for a place, each card saying one by its words
-  alone, with no AI asked, `nearPlace`; week, month; tasks
-  that repeat, `model.Repeat`, `repeatProp`, `parseRepeat`, shown faint in
-  the week and the month on the days they come again, `taskGhost`) and the one bar
-  under the places, at the user's wish, not at the window's foot (`bar.go`,
-  `oneBar`: its room is one line's, and open it lies over the page, so that
-  nothing moves; one line until written in, then
-  `writeCard` with its tools; it keeps a thought, a task, a link, shows
-  what there is already as it is written, and asks the AI after a ?) and
-  what is chosen (a task, a clip) in a sheet over the page's right
-  (`sheet` in `design.go`) are done. A task's state, priority and day are
-  set the same way in both (`segmented`, `dateProp`). On the canvas the
-  main topics are on a pastel of their branch's color, those below on a
-  faint tint (the scheme 明亮 of `style.go`); the center stands off the
-  canvas on a shadow, a main topic has an edge and a little shadow of its
-  branch's color, those below are plain, for they are many (`nodeView`). Notes and clips are one
-  page, 收集 (`libview.go`: a wall of cards, narrowed by kind and by tag;
-  its 回顾 shows a few old notes in place, `memos.go`). 项目 has the maps
-  and their folders, those starred first, the folder they are all in at
-  its foot: what is
-  collected is 收集's (the word of the UI, never 资料库), and is on a map
-  by a topic's link. The AI has two entries, 问 AI (the spark at the top of
-  the pages of lists and in a map's bar; its panel lists what else it
-  does, before a conversation) and AI 归位, for places better than those
-  `nearPlace` finds by words (which must share a word with what waits,
-  `sharesWord`, not a number only).
-  A page is drawn first as an interactive draft (an HTML artifact, the
-  desk's is https://claude.ai/artifact/RU6pxJSxMAsGbVYQrvs21b), then built
+  centered). It is flat and exact. The user's references, in turn, were
+  flomo, https://library.aimran.es/ and TickTick: TickTick's is the one
+  for the style (and the user found shadows, gradients and glows wanting,
+  two versions of them); the structure is the app's own, thought out from
+  its functions, borrowing where a borrowing serves them and never copied.
+  - The shell (`view.go`): the window is a quiet gray (`ground`, one of
+    `grounds` chosen in the settings, `config.Ground`). One row at its top,
+    on every page, a map's too (`topBar` in `places.go`): the left column's
+    key, the switch of the three places, 今天, 项目 and 收集, the one bar,
+    the AI's spark, the search of everything, the settings. Under it one
+    white leaf with round corners (`leaf`), everything else on it, cut
+    into columns by thin lines: what of the place shows, the page, what is
+    chosen.
+  - The left column (`side.go`, `sidePane`, `sideRow`; put away by
+    `config.HideTree`) is the one way to narrow a page: 今天's lists, what
+    waits for a place, and the maps to see the tasks of alone
+    (`todaySide`); 项目's directory (`tree.go`, `mapTree`: folders that
+    open and close and their maps, so that going from a map to another is
+    one click); 收集's kinds, ways to look back and every tag (`libSide`).
+  - The one bar (`bar.go`, `oneBar`) is in the top row: one line until
+    written in, then the card to write in with its tools (`write.go`,
+    `writeCard`: a tag and a reference offered as they are written, a
+    picture, bold, lists; a reference is kept as `<clip:id>`, `noteText`),
+    lying over the page so that nothing moves. It keeps a thought, a task
+    (and how it repeats), a link; shows what there is already as it is
+    written; asks the AI after a ?.
+  - What is chosen (a task, a clip) is in a column at the leaf's right
+    (`sheet`); a map's topic has its panel there.
+  - On the leaf a card is a pale block (`raise`, `blockFill`), a card on a
+    block is white with a hairline (`paper`), a list is rows with a thin
+    line under each (`listCardRow`, the tasks' rows), a field is a pale
+    block that turns white in the accent's line when written in
+    (`captureBox`, `area`, `focusHalo`). Nothing has a shadow but what
+    floats over the page (`lifted`: the canvas's bars, popups, `modal`,
+    the bar open). Corners are small and alike (`radiusPill` is 9, not a
+    pill). The key that acts is the accent, flat (`jewel`, `inkButton`,
+    `accentButton`); other keys a shade (`key`, `textKey`); a track of tabs
+    a pale block (`well`) with a white pill that slides to what is chosen
+    (`slidePill`, a `Match` transition, behind the others' words). Type
+    does the ranking: a page's name large and bold (`pageHeader`), a
+    part's name small and bold (`trayHead`), words on things small and
+    gray. The settings are rows in pale blocks, a name and a word on it at
+    the left, what sets it at the right (`rowsField`, `setRow`, `setLine`,
+    `switchRow`; `field` for what is not rows); the system's buttons take
+    the app's corners (`button`).
+  - 今天 (`taskspage.go`, `tasksView`): as a list it is one column read
+    down (`todayWidth`), headed by the list's name; with today's list,
+    what waits for a place, each card saying one by its words alone, with
+    no AI asked (`nearPlace`, which must share a word with it,
+    `sharesWord`); AI 归位 for better. The week and the month show tasks
+    on their days, and those that repeat (`model.Repeat`, `repeatProp`,
+    `parseRepeat`) faint on the days they come again (`taskGhost`). A
+    task's state, priority and day are set with `segmented` and `dateProp`.
+  - 项目 (`projectsView`): the maps as cards, each with the map drawn
+    small as its face (`drawMapFace`) and a ring for its tasks; with the
+    left column put away, the folders are a row of pills (`projFolder`).
+    A map opened has its own bar under the top row; on the canvas the
+    center is in the ink, the main topics on a pastel of their branch's
+    color, those below on a faint tint (the scheme 明亮 of `style.go`).
+  - 收集 (`libview.go`): notes and clips, a wall of cards; its 回顾 shows a
+    few old notes in place (`memos.go`). What is collected is 收集's (the
+    word of the UI, never 资料库), and is on a map by a topic's link.
+  - Color is kept for small things that mean something: each map has its
+    own (`mapcolor.go`), shown as a dot or as a pastel with a deep ink
+    (`tinted`); a kind of clip has its own. The accent is for what acts,
+    what is chosen, links and the AI's spark.
+  - The words of the UI are of no one device (记下, never 回车记下): a
+    phone is to come.
+  A page is drawn first as an interactive draft (an HTML artifact; the
+  structure's is https://claude.ai/artifact/J4Ngp4MFp9B7KnLVJhiavb, the
+  style's https://claude.ai/artifact/PrnAB6DckyndB9iRduA9bN), then built
   to it, its snapshot held beside the draft: the draft uses only what
   MyGo has (stacked and inset shadows, transitions, poses, the system's
   fonts). Things move as in the drafts (`design.go`: `easeLook` for colors

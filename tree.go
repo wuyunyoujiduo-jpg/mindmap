@@ -9,13 +9,10 @@ import (
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
 
-// treeWidth is the width of the maps' directory.
-const treeWidth = 236
-
 // treeShown tells whether the maps' directory is beside the page: in 项目
 // only, by its cards and by a map opened, unless put away. 今天 and 收集
 // have the window's whole width.
-func (a *app) treeShown() bool { return !a.cfg.HideTree && a.place() == placeMaps }
+func (a *app) treeShown() bool { return a.sideShown() && a.place() == placeMaps }
 
 // mapTree is the maps' directory, at the left in 项目: the folders, which
 // open and close, and their maps, those starred first. A click on a map
@@ -24,28 +21,10 @@ func (a *app) treeShown() bool { return !a.cfg.HideTree && a.place() == placeMap
 // the folder the maps are all kept in and how the sync goes.
 func (a *app) mapTree(c *ui.Context) {
 	t := c.Theme()
-	bar := c.TitleBar()
-	// A shade deeper than the page it stands by, with a line of light at
-	// its edge: a pane of its own, not more of the page.
-	deep := ground(t).MixOklab(t.Text, 0.035)
-	if t.Dark {
-		deep = ui.Hex("#151517") // between the ground and a map's page
-	}
-	side := ui.Column(c.Key("map-tree")).Width(treeWidth).Shrink(0).FillHeight().Background(deep).
-		InsetShadow(-1, 0, 0, 0, t.Text.Alpha(0.06))
+	side := ui.Column(c.Key("map-tree")).Width(sideWidthOf).Shrink(0).FillHeight().BorderWidth(0, 1, 0, 0).BorderColor(hairline(t))
 	side.Children(func() {
-		// At the window's top corner: its head is beside the window's
-		// controls, and drags the window.
-		head := max(toolbarHeight, bar.Height+8)
-		ui.Row(c.Key("tree-head")).Height(head).Padding(0, 8, 0, max(16, bar.Left)).Gap(2).AlignItems(ui.Center).Shrink(0).DragWindow().Children(func() {
-			if a.libOpen {
-				ui.Text(c, "目录").FontSize(textSmall).FontWeight(600).TextColor(t.TextMuted).Grow(1).PassThrough()
-			} else { // by a map: the way back to the cards
-				if textKey(c, "‹ 项目", "回到项目", "回到项目：所有导图的卡片").Margin(0, 0, 0, -8).Clicked() {
-					a.later(a.showProjects)
-				}
-				ui.Spacer(c)
-			}
+		ui.Row(c.Key("tree-head")).Height(44).Padding(6, 8, 0, 18).Gap(2).AlignItems(ui.Center).Shrink(0).Children(func() {
+			ui.Text(c, "目录").FontSize(textCaption).FontWeight(500).TextColor(t.TextMuted).Grow(1).PassThrough()
 			iconButton(c, iconPlus, "目录新建", "新建导图、文件夹", 28, true).Menu(func(m *ui.Menu) {
 				if m.Item("新建导图").Chosen() {
 					a.later(func() { a.newMapIn(a.treeFolder()) })
@@ -54,10 +33,6 @@ func (a *app) mapTree(c *ui.Context) {
 					a.later(func() { a.newFolder(a.treeFolder()) })
 				}
 			})
-			if iconButton(c, iconSidebar, "收起目录", "收起目录", 28, true).Clicked() {
-				a.cfg.HideTree = true
-				a.cfg.save()
-			}
 		})
 		a.sideDrawn, a.sideItems = a.sideItems, nil // the keys go by the list drawn
 		ui.Scroll(c.Key("tree-scroll")).Grow(1).Children(func() {
@@ -110,15 +85,14 @@ func (a *app) treeFolder() string {
 // name, a count at its end, lit when it is the one shown.
 func (a *app) treeRow(c *ui.Context, depth int, name, count, path string, on bool, ic icon, col ui.Color, click func(), menu func(m *ui.Menu)) ui.Element {
 	t := c.Theme()
-	row := ui.Row(c).Height(32).Padding(0, 4, 0, 8+float32(depth)*14).Gap(8).Radius(radiusSmall).AlignItems(ui.Center).FillWidth().
+	row := ui.Row(c).Height(34).Padding(0, 4, 0, 10+float32(depth)*14).Gap(8).Radius(radiusRow).AlignItems(ui.Center).FillWidth().
 		Cursor(ui.CursorPointer).Label(name).Background(t.Text.Alpha(0)).Transition(easeLook)
 	hover := row.Hovered()
 	switch {
-	case on: // a white pill, lifted a little
-		row.Background(pillColor(t)).Shadow(0, 0, 0, 0.5, ui.RGBA(0, 0, 0, 0.08)).Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.08)).
-			Shadow(0, 3, 8, -2, ui.RGBA(0, 0, 0, 0.1))
+	case on:
+		row.Background(t.Text.Alpha(0.07))
 	case hover:
-		row.Background(t.Text.Alpha(0.06))
+		row.Background(t.Text.Alpha(0.04))
 	}
 	if row.Clicked() && (path == "" || a.renaming != path) { // not on a press, which may start dragging it
 		a.later(click)
@@ -136,7 +110,7 @@ func (a *app) treeRow(c *ui.Context, depth int, name, count, path string, on boo
 			a.renameInput(c)
 			return
 		}
-		txt := ui.Text(c, midEllipsis(name, treeWidth-96-float32(depth)*14)).FontSize(textSmall + 0.5).Grow(1).Shrink(1).MinWidth(0).SingleLine().PassThrough()
+		txt := ui.Text(c, midEllipsis(name, sideWidthOf-96-float32(depth)*14)).FontSize(textSmall + 0.5).Grow(1).Shrink(1).MinWidth(0).SingleLine().PassThrough()
 		if on {
 			txt.FontWeight(600)
 		}

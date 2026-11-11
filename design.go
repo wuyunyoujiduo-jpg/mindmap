@@ -6,21 +6,24 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// The app's look, in a few pieces used everywhere. It is quiet as Apple's
-// pages are (the reference is library.aimran.es): a cool pale ground; what
-// is read and worked on in white cards with large round corners, lifted by
-// a shadow so soft that it is hardly seen; keys, tabs and the fields of
-// search are pills; what is chosen among a few is a white pill that slides
-// to its place (slidePill); things give under the pointer and settle along
-// one curve (easeDetent). The accent is kept for what is chosen, for the
-// key that acts and for the AI.
+// The app's look, in a few pieces used everywhere. It is flat and exact,
+// as TickTick's is (the user's reference for the style, not for the
+// layout, which is the app's own): the window is a quiet gray, and what is
+// read and worked on is on one white leaf with round corners (leaf); on
+// the leaf a card is a pale block (raise, blockFill), a list is rows with a
+// thin line between them, a field is a pale block that turns white with
+// the accent's line when written in. Nothing has a shadow but what floats
+// over the page (lifted). Corners are small and alike, not pills. Type
+// does the ranking: a page's name large and bold, a part's name smaller
+// and bold, words on things small and gray. One color, the accent, flat:
+// the key that acts, what is chosen, links, the AI.
 
 // Corners: a card's, a row's in a card, and a small thing's.
 const (
-	radiusCard  = 16
-	radiusRow   = 10
-	radiusSmall = 8
-	radiusPill  = 999
+	radiusCard  = 12
+	radiusRow   = 8
+	radiusSmall = 7
+	radiusPill  = 9 // a key, a tab, a field: a small round corner, not a pill
 )
 
 // keyHeight is the height of a key of words.
@@ -64,7 +67,7 @@ const pageHeadHeight = 56
 func pageHeader(c *ui.Context, key, title, sub string, right func()) {
 	t := c.Theme()
 	ui.Row(c.Key(key)).Height(pageHeadHeight).Gap(12).AlignItems(ui.Center).Shrink(0).FillWidth().DragWindow().Children(func() {
-		ui.Text(c, title).FontSize(17).FontWeight(600).NoWrap()
+		ui.Text(c, title).FontSize(textPage).FontWeight(700).NoWrap()
 		if sub != "" {
 			ui.Text(c, sub).FontSize(textBody).TextColor(t.TextMuted).SingleLine().Shrink(1).MinWidth(0)
 		}
@@ -81,59 +84,43 @@ func pageHeader(c *ui.Context, key, title, sub string, right func()) {
 // while its field has the focus (captureFocus).
 func captureBox(c *ui.Context, key string) ui.Element {
 	t := c.Theme()
-	return soft(ui.Row(c.Key(key)).MinHeight(52).Padding(5, 8, 5, 18).Gap(10).Radius(radiusCard).AlignItems(ui.Center).FillWidth().Shrink(0).
-		Background(cardColor(t)).Border(1.5, t.Text.Alpha(0)), t).Transition(easeLook)
+	return ui.Row(c.Key(key)).MinHeight(44).Padding(4, 8, 4, 14).Gap(10).Radius(radiusRow+2).AlignItems(ui.Center).FillWidth().Shrink(0).
+		Background(blockFill(t)).Border(1.5, t.Text.Alpha(0)).Transition(easeLook)
 }
 
 // captureFocus outlines a captureBox whose field has the focus.
 func captureFocus(c *ui.Context, box, field ui.Element) {
 	if field.Focused() {
-		focusHalo(box, c.Theme()) // the one thing outlined in the accent
+		focusHalo(box.Background(cardColor(c.Theme())), c.Theme()) // white, in the accent's line
 	}
 }
 
-// focusHalo outlines what is written in: a line in the accent, and a pale
-// halo of it around, as the system's fields have.
+// focusHalo outlines what is written in: a line in the accent, on white.
 func focusHalo(el ui.Element, t *ui.Theme) ui.Element {
-	return el.Border(1.5, t.Accent).NoShadow().Shadow(0, 0, 0, 4, t.Accent.Alpha(0.14))
+	return el.Border(1.5, t.Accent).NoShadow()
 }
 
-// soft is the shadow a card rests on: one close under it, one wide and
-// faint. It is hardly seen, and tells the card from the ground.
-func soft(el ui.Element, t *ui.Theme) ui.Element {
-	// A material, not a sticker: a hairline that draws its edge, a shadow
-	// close under it and a wide faint one, and light on its top edge.
-	if t.Dark {
-		return el.Shadow(0, 0, 0, 1, ui.RGBA(255, 255, 255, 0.07)).Shadow(0, 8, 24, -6, ui.RGBA(0, 0, 0, 0.5)).
-			InsetShadow(0, 1, 0, 0, ui.RGBA(255, 255, 255, 0.05))
-	}
-	return el.Shadow(0, 0, 0, 0.5, ui.RGBA(0, 0, 0, 0.07)).Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.05)).
-		Shadow(0, 8, 24, -6, ui.RGBA(0, 0, 0, 0.08))
-}
+// soft is what a card has under it: nothing. A card on the leaf is told
+// by its fill alone.
+func soft(el ui.Element, t *ui.Theme) ui.Element { return el }
 
-// lifted is the shadow of what is over the page: a card under the pointer,
-// a bar on the canvas, a popup.
+// lifted is the shadow of what floats over the page, the one thing that
+// has one: a bar on the canvas, a popup, a sheet, a dialog. A hairline at
+// its edge, and one soft shadow.
 func lifted(el ui.Element, t *ui.Theme) ui.Element {
 	if t.Dark {
-		return el.Shadow(0, 0, 0, 1, ui.RGBA(255, 255, 255, 0.1)).Shadow(0, 16, 40, -8, ui.RGBA(0, 0, 0, 0.7)).
-			InsetShadow(0, 1, 0, 0, ui.RGBA(255, 255, 255, 0.06))
+		return el.Shadow(0, 0, 0, 1, ui.RGBA(255, 255, 255, 0.1)).Shadow(0, 12, 32, -8, ui.RGBA(0, 0, 0, 0.6))
 	}
-	return el.Shadow(0, 0, 0, 0.5, ui.RGBA(0, 0, 0, 0.09)).Shadow(0, 2, 6, 0, ui.RGBA(0, 0, 0, 0.06)).
-		Shadow(0, 18, 44, -10, ui.RGBA(0, 0, 0, 0.18))
+	return el.Shadow(0, 0, 0, 0.5, ui.RGBA(0, 0, 0, 0.12)).Shadow(0, 8, 28, -6, ui.RGBA(0, 0, 0, 0.16))
 }
 
-// hoverLift has a card that opens rise a little under the pointer, its
-// shadow growing with it, and give when pressed.
+// hoverLift has a card that opens answer the pointer: a shade deeper
+// under it, and it gives when pressed. It does not rise: nothing does.
 func hoverLift(el ui.Element, t *ui.Theme) ui.Element {
-	p := ui.Pose{Scale: 1}
-	switch {
-	case el.Pressed():
-		p.Scale = 0.985
-	case el.Hovered():
-		p.Y = -2
-		lifted(el.NoShadow(), t)
+	if el.Hovered() {
+		el.Background(t.Text.Alpha(0.075))
 	}
-	return el.AnimatePose(p, ui.Animation{Duration: 260 * time.Millisecond, Ease: easeDetent})
+	return press(el, 0.985)
 }
 
 // A pillMatch is the identity of the white pill of a group of tabs: the
@@ -149,9 +136,9 @@ func slidePill(c *ui.Context, group string, radius float32) {
 		Background(pillColor(t)).
 		Transition(ui.ElementTransition{Duration: 320 * time.Millisecond, Ease: easeDetent, Match: pillMatch{group}})
 	if t.Dark {
-		pill.Shadow(0, 0, 0, 1, ui.RGBA(255, 255, 255, 0.08)).InsetShadow(0, 1, 0, 0, ui.RGBA(255, 255, 255, 0.08))
+		pill.Shadow(0, 0, 0, 1, ui.RGBA(255, 255, 255, 0.08))
 	} else {
-		pill.Shadow(0, 0, 0, 0.5, ui.RGBA(0, 0, 0, 0.1)).Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.1)).Shadow(0, 3, 8, -2, ui.RGBA(0, 0, 0, 0.12))
+		pill.Shadow(0, 0, 0, 0.5, ui.RGBA(0, 0, 0, 0.1)).Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.07))
 	}
 }
 
@@ -230,10 +217,25 @@ func cardEdge(t *ui.Theme) ui.Color {
 // shadowColor is the shadow under a card: hardly there, the ring tells it.
 var shadowColor = ui.RGBA(0, 0, 0, 0.05)
 
-// raise gives an element a card's look: white, on a soft shadow; its
-// color and its shadow go smoothly where they change.
+// raise gives an element a card's look on the leaf: a pale block, no
+// line and no shadow; its color goes smoothly where it changes.
 func raise(el ui.Element, t *ui.Theme) ui.Element {
-	return soft(el.Background(cardColor(t)), t).Transition(easeLook)
+	return el.Background(blockFill(t)).Transition(easeLook)
+}
+
+// blockFill is the fill of a block on the leaf: a card, a field, a track.
+func blockFill(t *ui.Theme) ui.Color { return t.Text.Alpha(0.045) }
+
+// paper gives an element the look of a card on a block (a task in a
+// column of the board, of the week): white, with a hairline at its edge.
+func paper(el ui.Element, t *ui.Theme) ui.Element {
+	return el.Background(cardColor(t)).Shadow(0, 0, 0, 0.5, t.Text.Alpha(0.12)).Transition(easeLook)
+}
+
+// leaf is the white sheet the pages are on, in the gray window: round
+// corners, and what is in it cut to them.
+func leaf(c *ui.Context, key string) ui.Element {
+	return ui.Column(c.Key(key)).Background(c.Theme().Background).Radius(radiusCard).Clip()
 }
 
 // easeLook has an element's colors and shadows change smoothly, and no
@@ -260,10 +262,9 @@ func press(el ui.Element, by float32) ui.Element {
 	return el.AnimatePose(p, ui.Animation{Duration: 220 * time.Millisecond, Ease: easeDetent})
 }
 
-// chosenCard marks the card chosen: its ring in the accent, a soft halo
-// around it; its size is as it was.
+// chosenCard marks the card chosen: the accent's line around it.
 func chosenCard(el ui.Element, t *ui.Theme) ui.Element {
-	return el.NoShadow().Shadow(0, 0, 0, 1.5, t.Accent).Shadow(0, 0, 0, 5, t.Accent.Alpha(0.12))
+	return el.NoShadow().Shadow(0, 0, 0, 1.5, t.Accent)
 }
 
 // tray is a part of a page: a soft ground with its heading on it
@@ -290,24 +291,25 @@ func trayHead(c *ui.Context, key, title, sub string, right func()) ui.Element {
 	})
 }
 
-// listCard is a white card of rows (listCardRow): the lists of a tray.
+// listCard is a list of rows (listCardRow) on the leaf: no block around
+// them, a thin line under each.
 func listCard(c *ui.Context, key string) ui.Element {
-	return raise(ui.Column(c.Key(key)).FillWidth().Padding(6).Gap(1).Radius(radiusCard), c.Theme())
+	return ui.Column(c.Key(key)).FillWidth()
 }
 
-// listCardRow is a row of a listCard: no lines between rows, each lit
-// under the pointer.
+// listCardRow is a row of a list on the leaf: a thin line under it, a
+// shade under the pointer.
 func listCardRow(c *ui.Context, key string) ui.Element {
 	t := c.Theme()
-	row := ui.Row(c.Key(key)).MinHeight(48).Padding(8, 12).Gap(12).Radius(radiusRow).AlignItems(ui.Center).FillWidth().
-		Background(t.Text.Alpha(0)).Transition(rowMotion)
+	row := ui.Row(c.Key(key)).MinHeight(50).Padding(8, 6).Gap(12).AlignItems(ui.Center).FillWidth().
+		BorderWidth(0, 0, 1, 0).BorderColor(hairline(t)).Background(t.Text.Alpha(0)).Transition(rowMotion)
 	switch {
 	case row.Pressed():
-		row.Background(t.Text.Alpha(0.07))
+		row.Background(t.Text.Alpha(0.06))
 	case row.Hovered():
-		row.Background(t.Text.Alpha(0.04))
+		row.Background(t.Text.Alpha(0.035))
 	}
-	return press(row, 0.985)
+	return row
 }
 
 // textLink is a few words in the accent that go somewhere: no box, so
@@ -761,25 +763,20 @@ func emptyNote(c *ui.Context, text string) {
 func modal(c *ui.Context, key string, open *bool, fn func()) ui.Element {
 	t := c.Theme()
 	m := ui.Modal(c.Key(key), open, fn).Radius(20)
-	if key == "settings" {
-		m.Background(ground(t)) // a page of white cards (field)
-	}
 	if t.Dark {
 		return m.Shadow(0, 0, 0, 1, ui.RGBA(255, 255, 255, 0.08)).Shadow(0, 30, 70, -20, ui.RGBA(0, 0, 0, 0.7))
 	}
 	return m.Shadow(0, 4, 12, 0, ui.RGBA(0, 0, 0, 0.05)).Shadow(0, 30, 80, -10, ui.RGBA(0, 0, 0, 0.22))
 }
 
-// sheet is what is chosen, shown over the page from its right: a white
-// leaf with round corners, lifted, which slides in; the page beside it
-// stays as it is, so that another row chosen shows in the same sheet.
+// sheet is what is chosen, in a column at the leaf's right, a thin line
+// between it and the page: the page beside it stays as it is, so that
+// another row chosen shows in the same column.
 func sheet(c *ui.Context, key string, width float32, body func()) {
 	t := c.Theme()
 	w, _ := c.Size()
-	lifted(ui.Column(c.Key(key)).Absolute().Top(4).Right(10).Bottom(10).Width(min(width, w-20)).Radius(20).Clip().ZIndex(5).
-		Background(cardColor(t)), t).
-		Transition(ui.ElementTransition{Duration: 360 * time.Millisecond, Ease: easeDetent, Enter: &ui.Motion{X: 56},
-			Exit: &ui.Motion{X: 56}, ExitDuration: 200 * time.Millisecond}).Children(body)
+	ui.Column(c.Key(key)).Width(min(width, w*0.4)).Shrink(0).FillHeight().BorderWidth(0, 0, 0, 1).BorderColor(hairline(t)).
+		Transition(ui.ElementTransition{Duration: 240 * time.Millisecond, Ease: easeDetent, Enter: &ui.Motion{X: 24}}).Children(body)
 }
 
 // field is a part of the settings: its name, small, over a white card
@@ -851,32 +848,22 @@ func area(c *ui.Context, value *string) ui.Element {
 	return in
 }
 
-// well gives a track (of tabs, of a segmented control, of a field of
-// search) the look of a hollow in the page: a shade, darker at its top
-// edge, which the white pill chosen stands out of.
+// well is a track (of tabs, of a segmented control): a pale block, which
+// the white pill chosen stands on.
 func well(el ui.Element, t *ui.Theme) ui.Element {
-	if t.Dark {
-		return el.Background(ui.RGBA(255, 255, 255, 0.06)).InsetShadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.5))
-	}
-	return el.Background(t.Text.Alpha(0.055)).InsetShadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.06)).InsetShadow(0, 0, 0, 0.5, ui.RGBA(0, 0, 0, 0.05))
+	return el.Background(t.Text.Alpha(0.055))
 }
 
-// jewel gives the key that acts its body: the accent from a lighter top
-// to a deeper foot, light on its top edge, and a glow of its own color
-// under it, stronger under the pointer.
+// jewel is the key that acts: the accent, flat; a shade deeper under the
+// pointer and when pressed.
 func jewel(b ui.Element, t *ui.Theme, enabled bool) ui.Element {
-	if !enabled {
-		return b.Background(t.Text.Alpha(0.14))
-	}
-	top, foot := t.Accent.MixOklab(ui.Hex("#FFFFFF"), 0.16), t.Accent.MixOklab(ui.Hex("#000000"), 0.1)
-	glow := float32(0.3)
 	switch {
+	case !enabled:
+		return b.Background(t.Text.Alpha(0.14))
 	case b.Pressed():
-		top, foot, glow = t.Accent, t.Accent.MixOklab(ui.Hex("#000000"), 0.18), 0.18
+		return b.Background(t.AccentPressed)
 	case b.Hovered():
-		glow = 0.42
+		return b.Background(t.AccentHover)
 	}
-	return b.Gradient(top, foot, 180).InsetShadow(0, 1, 0, 0, ui.RGBA(255, 255, 255, 0.28)).
-		Shadow(0, 0, 0, 0.5, t.Accent.MixOklab(ui.Hex("#000000"), 0.3)).Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.14)).
-		Shadow(0, 6, 14, -4, t.Accent.Alpha(glow))
+	return b.Background(t.Accent)
 }

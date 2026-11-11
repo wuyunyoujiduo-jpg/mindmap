@@ -28,8 +28,8 @@ func (a *app) libraryView(c *ui.Context) {
 				pageColumn(c, "lib-column", true).Children(func() { a.libraryColumn(c) })
 			})
 			if sel != nil {
-				// The clip chosen, in a sheet over the page's right.
-				sheet(c, "clip-sheet", 480, func() {
+				// The clip chosen, in a column at the page's right.
+				sheet(c, "clip-sheet", 420, func() {
 					ui.Scroll(c.Key("clip-detail:"+sel.ID)).Grow(1).Basis(0).Padding(14, 18, 20).Gap(12).Children(func() {
 						a.clipDetail(c, sel)
 					})
@@ -234,55 +234,20 @@ func (a *app) dropClips(files []string) {
 // to look back beside them; then the tags, the most used first.
 func (a *app) clipFilters(c *ui.Context) {
 	t := c.Theme()
-	l := a.lib
-	ui.Row(c.Key("lib-kinds")).Height(32).Gap(2).FillWidth().AlignItems(ui.Center).Shrink(0).Children(func() {
-		for _, k := range []struct {
-			kind int
-			name string
-		}{{kindAll, "全部"}, {kindMemos, "灵感"}, {kindLinks, "链接"}, {kindDocs, "文档"}, {kindImages, "图片"}} {
-			n := 0
-			for _, cl := range l.Clips {
-				if ofKind(cl, k.kind) {
-					n++
-				}
-			}
-			on := a.libKind == k.kind && a.libReview == reviewOff
-			if pillTab(c, "kind:"+k.name, k.name, fmt.Sprint(n), on).Clicked() {
-				a.libKind, a.libReview = k.kind, reviewOff
-			}
-		}
-		ui.Spacer(c)
-		// Looking back at the old notes, as flomo does.
-		ghostButton(c, "回顾 ⌄", "回头看以前记下的灵感").Menu(func(m *ui.Menu) {
-			if m.Item("每日回顾：几条以前的灵感，每天换").Checked(a.libReview == reviewDaily).Chosen() {
-				a.libReview, a.libSel = reviewDaily, ""
-			}
-			if m.Item("随机漫步：一次看一条").Checked(a.libReview == reviewWalk).Chosen() {
-				a.libReview, a.libSel = reviewWalk, ""
-			}
-		})
-	})
-	ui.Row(c.Key("lib-tags")).Padding(10, 0, 6).MinHeight(46).Gap(6).Wrap().GapY(6).AlignItems(ui.Center).Children(func() {
-		chip := func(key, label string, active bool) bool {
-			b := ui.Box(c.Key("cat:"+key)).Padding(4, 10).Radius(999).Cursor(ui.CursorPointer).Label(label)
-			switch { // quiet pills, the one chosen dark
-			case active:
-				b.Background(t.Text.Alpha(0.85))
-			case b.Hovered():
-				b.Background(t.Text.Alpha(0.08))
-			default:
-				b.Background(t.Text.Alpha(0.045))
-			}
-			col := t.Text
-			if active {
-				col = t.Background
-			}
-			b.Children(func() { ui.Text(c, label).FontSize(12).TextColor(col).NoWrap() })
+	// Which kind and which tag show is chosen in the left column (libSide);
+	// here, what narrows further, and how many are found.
+	ui.Row(c.Key("lib-tags")).Padding(2, 0, 8).MinHeight(40).Gap(6).Wrap().GapY(6).AlignItems(ui.Center).Children(func() {
+		chip := func(key, label string) bool {
+			b := ui.Box(c.Key("cat:"+key)).Height(26).Padding(0, 10).Radius(radiusSmall).Center().Cursor(ui.CursorPointer).Label(label).
+				Background(t.Accent.Alpha(0.12)).Transition(easeLook)
+			b.Children(func() {
+				ui.Text(c, label).FontSize(textCaption).FontWeight(600).TextColor(t.Accent.MixOklab(t.Text, 0.3)).NoWrap()
+			})
 			return b.Clicked()
 		}
 		if a.libReview != reviewOff {
 			name := map[int]string{reviewDaily: "每日回顾", reviewWalk: "随机漫步"}[a.libReview]
-			if chip("review", name+" ✕", true) {
+			if chip("review", name+" ✕") {
 				a.libReview = reviewOff
 			}
 			if a.libReview == reviewWalk && softButton(c, "换一条", "再随机看一条").Clicked() {
@@ -290,61 +255,10 @@ func (a *app) clipFilters(c *ui.Context) {
 			}
 			return
 		}
-		toggle := func(key, label, cat string) {
-			if chip(key, label, a.libCat == cat) {
-				if a.libCat == cat {
-					a.libCat = ""
-				} else {
-					a.libCat = cat
-				}
-			}
-		}
-		if slices.ContainsFunc(l.Clips, func(c *library.Clip) bool { return c.Starred }) {
-			toggle("★", "★ 星标", "★")
-		}
-		if k := len(l.Unorganized()); k > 0 {
-			toggle("-", fmt.Sprintf("未整理 %d", k), "-")
-		}
-		// The tags: the few most used, the rest in a menu.
-		tags := a.clipTags()
-		const shown = 6
-		pick := func(tag string) {
-			if a.libTag == tag {
-				a.libTag = ""
-			} else {
-				a.libTag = tag
-			}
-		}
-		chosen := a.libTag // as the frame began: a click changes it
-		listed := false
-		for i, tc := range tags {
-			if i == shown {
-				break
-			}
-			listed = listed || tc.name == chosen
-			if chip("tag:"+tc.name, fmt.Sprintf("#%s %d", tc.name, tc.n), chosen == tc.name) {
-				pick(tc.name)
-			}
-		}
-		if chosen != "" && !listed && chip("tag-chosen", "#"+chosen+" ✕", true) {
+		if a.cfg.HideTree && a.libTag != "" && chip("tag-chosen", "#"+a.libTag+" ✕") { // with no left column to show it
 			a.libTag = ""
 		}
-		if len(tags) > shown {
-			ghostButton(c, "更多标签 ⌄", fmt.Sprintf("全部 %d 个标签", len(tags))).Menu(func(m *ui.Menu) {
-				for i, tc := range tags {
-					if i < shown {
-						continue
-					}
-					if i == shown+40 {
-						break
-					}
-					if m.Item(fmt.Sprintf("#%s  %d", tc.name, tc.n)).Checked(a.libTag == tc.name).Chosen() {
-						pick(tc.name)
-					}
-				}
-			})
-		}
-		if !a.libDay.IsZero() && chip("day", a.libDay.Format("1月2日")+" ✕", true) {
+		if !a.libDay.IsZero() && chip("day", a.libDay.Format("1月2日")+" ✕") {
 			a.libDay = time.Time{}
 		}
 		ui.Spacer(c)

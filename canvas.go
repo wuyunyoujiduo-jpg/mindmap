@@ -781,19 +781,6 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 		}
 	}
 	el.Background(fill)
-	// Not flat patches: the center stands off the canvas, light on its
-	// top edge; a main topic has an edge of its branch's color and a
-	// little shadow of it. Those below stay plain, for they are many.
-	plain := st.Shape == model.ShapeUnderline || st.Shape == model.ShapeNone || summary
-	switch {
-	case plain:
-	case depth == 0:
-		el.Shadow(0, 1*z, 2*z, 0, ui.RGBA(0, 0, 0, 0.2)).Shadow(0, 8*z, 20*z, -6*z, ui.RGBA(0, 0, 0, 0.28)).
-			InsetShadow(0, 1*z, 0, 0, ui.RGBA(255, 255, 255, 0.14))
-	case depth == 1 && st.Fill == "":
-		el.Shadow(0, 0, 0, 0.75*z, accent.Alpha(0.35)).Shadow(0, 2*z, 5*z, -1*z, accent.Alpha(0.22)).
-			InsetShadow(0, 1*z, 0, 0, ui.RGBA(255, 255, 255, 0.45))
-	}
 	onFill := t.Text
 	if depth == 1 {
 		onFill = branchText
@@ -812,8 +799,8 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 		el.Border(max(st.BorderWidth, 1)*z, ui.Hex(st.Border))
 	}
 	el.Font(a.doc.Style.Font)
-	if selected { // the accent's line, and a halo of it
-		el.Border(2*z, t.Accent).Shadow(0, 0, 0, 4*z, t.Accent.Alpha(0.16))
+	if selected {
+		el.Border(2*z, t.Accent)
 	}
 	if a.filtering() && !a.highlighted(n) {
 		el.Opacity(0.35)

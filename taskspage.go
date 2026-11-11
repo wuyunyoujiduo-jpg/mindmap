@@ -26,8 +26,9 @@ const (
 	tasksDay
 	tasksWeek
 	tasksMonth
-	tasksInbox // the tasks written down, not yet put in a map
-	tasksDone  // those done, the last first
+	tasksInbox   // the tasks written down, not yet put in a map
+	tasksDone    // those done, the last first
+	tasksWaiting // what was written down and waits for a place
 )
 
 // The lists of the tasks' page, as its tabs show them.
@@ -378,17 +379,16 @@ func (a *app) tasksView(c *ui.Context) {
 			// written down and waits for a place.
 			ui.Scroll(c.Key(fmt.Sprint("today-scroll:", a.tasks.view))).Grow(1).Basis(0).MinHeight(0).Children(func() {
 				pageColumn(c, "tasks-column", false).MaxWidth(todayWidth+56).Padding(4, 28, 40).Gap(6).Children(func() {
-					counts := a.taskListCounts(items)
-					ui.Row(c.Key("tasks-lists")).Height(34).Gap(2).Shrink(0).FillWidth().AlignItems(ui.Center).Children(func() {
-						for _, l := range taskLists {
-							if pillTab(c, "list:"+l.name, l.name, counts[l.view], a.tasks.view == l.view).Clicked() {
-								a.tasks.view = l.view
-							}
-						}
-					})
+					// Which list shows is chosen in the left column (todaySide).
+					if a.tasks.view == tasksWaiting {
+						a.homeWaiting(c)
+						return
+					}
 					a.taskList(c, items)
-					ui.Box(c).Height(14)
-					a.homeWaiting(c)
+					if a.tasks.view == tasksToday { // and, with today's, what waits for a place
+						ui.Box(c).Height(14)
+						a.homeWaiting(c)
+					}
 				})
 			})
 		})
@@ -410,14 +410,31 @@ func (a *app) tasksHead(c *ui.Context, all []taskItem) {
 	// the tasks and how they show.
 	ui.Row(c.Key("tasks-head")).MinHeight(82).Padding(16, 0, 10).Gap(10).AlignItems(ui.End).Shrink(0).FillWidth().DragWindow().Children(func() {
 		ui.Column(c).Gap(3).Grow(1).Shrink(1).MinWidth(0).Children(func() {
+			name := "今天"
+			for _, l := range taskLists {
+				if l.view == a.tasks.view {
+					name = l.name
+				}
+			}
+			switch a.tasks.view {
+			case tasksWaiting:
+				name = "等着归位"
+			case tasksWeek, tasksMonth, tasksDay:
+				name = "日程"
+			}
+			if a.tasks.onMap != "" {
+				name = mapName(a.tasks.onMap)
+			}
 			ui.Row(c).Gap(10).AlignItems(ui.End).Children(func() {
-				ui.Text(c, fmt.Sprintf("%d月%d日", now.Month(), now.Day())).FontSize(26).FontWeight(700).LineHeight(1.2).NoWrap()
-				ui.Text(c, weekdays[now.Weekday()]).FontSize(textTitle).TextColor(th.TextMuted).Margin(0, 0, 3).NoWrap()
+				ui.Text(c, name).FontSize(textPage + 2).FontWeight(700).LineHeight(1.2).NoWrap()
+				ui.Text(c, fmt.Sprintf("%d月%d日 %s", now.Month(), now.Day(), weekdays[now.Weekday()])).FontSize(textSmall).TextColor(th.TextMuted).Margin(0, 0, 3).NoWrap()
 			})
 			ui.Text(c, fmt.Sprintf("%d 件要做，做完 %d 件，%d 条等着归位", len(a.dueToday(now)), len(a.doneToday(now)), len(a.waiting()))).
 				FontSize(textSmall).TextColor(th.TextMuted).SingleLine()
 		})
-		a.taskMapMenu(c, all)
+		if a.cfg.HideTree { // with no left column, the map to narrow by is here
+			a.taskMapMenu(c, all)
+		}
 		if a.tasks.view == tasksWeek || a.tasks.view == tasksMonth || a.tasks.view == tasksDay {
 			a.calendarNav(c)
 		}
@@ -944,11 +961,11 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 func (a *app) taskRow(c *ui.Context, it taskItem, overdue bool) {
 	t := c.Theme()
 	task := it.node.Task
-	row := ui.Row(c.Key("task:"+it.path+"#"+it.node.ID)).MinHeight(48).Padding(6, 12, 6, 10).Gap(10).Radius(radiusRow).AlignItems(ui.Center).
-		FillWidth().Cursor(ui.CursorPointer).Label("任务 " + it.node.Title).Drag(taskDrag{it.path, it.node.ID}).
-		Background(t.Text.Alpha(0)).Transition(rowMotion)
+	row := ui.Row(c.Key("task:"+it.path+"#"+it.node.ID)).MinHeight(50).Padding(6, 6).Gap(12).AlignItems(ui.Center).
+		FillWidth().Cursor(ui.CursorPointer).Label("任务 "+it.node.Title).Drag(taskDrag{it.path, it.node.ID}).
+		BorderWidth(0, 0, 1, 0).BorderColor(hairline(t)).Background(t.Text.Alpha(0)).Transition(rowMotion)
 	if row.Hovered() {
-		row.Background(t.Text.Alpha(0.045))
+		row.Background(t.Text.Alpha(0.035))
 	}
 	switch {
 	case row.DoubleClicked():
@@ -1285,13 +1302,13 @@ func (a *app) taskChip(c *ui.Context, it taskItem) {
 	t := c.Theme()
 	// A white card, as the lists' are: its circle says its priority, a dot
 	// its map.
-	chip := raise(ui.Row(c.Key("chip:"+it.path+"#"+it.node.ID)).Padding(5, 8).Gap(6).Radius(radiusSmall).AlignItems(ui.Center).FillWidth(), t).Cursor(ui.CursorPointer).
+	chip := paper(ui.Row(c.Key("chip:"+it.path+"#"+it.node.ID)).Padding(5, 8).Gap(6).Radius(radiusSmall).AlignItems(ui.Center).FillWidth(), t).Cursor(ui.CursorPointer).
 		Label("任务 " + it.node.Title).Tooltip(it.mapName + " · " + it.node.Title).Drag(taskDrag{it.path, it.node.ID})
 	switch {
 	case a.tasks.sel == it.key():
 		chosenCard(chip, t)
 	case chip.Hovered():
-		chip.NoShadow().Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.04)).Shadow(0, 6, 16, 0, ui.RGBA(0, 0, 0, 0.1))
+		chip.Background(t.Text.Alpha(0.03))
 	}
 	switch {
 	case chip.DoubleClicked():

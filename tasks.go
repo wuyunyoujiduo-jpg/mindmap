@@ -95,8 +95,7 @@ func (a *app) boardColumns(c *ui.Context, tasks []model.TaskNode) {
 				}
 			}
 			// A hollow in the page, faintly of its state's color.
-			column := well(ui.Column(c.Key(string(s))).Grow(1).Basis(0).Radius(radiusCard).Padding(0, 6), t).
-				Background(statusColor(s).MixOklab(t.Text, 0.5).Alpha(0.055))
+			column := ui.Column(c.Key(string(s))).Grow(1).Basis(0).Radius(radiusCard).Padding(0, 6).Background(blockFill(t))
 			if _, over := ui.DragOver[nodeDrag](column); over {
 				column.Background(statusColor(s).Alpha(0.08))
 			}
@@ -207,7 +206,7 @@ func (a *app) taskCard(c *ui.Context, tn model.TaskNode, showStatus bool) {
 	if task == nil { // a 重点问题 that is not a task
 		task = &model.Task{}
 	}
-	card := raise(ui.Column(c).Padding(12, 14).Gap(6).Radius(12), t).
+	card := paper(ui.Column(c).Padding(11, 13).Gap(6).Radius(radiusRow+2), t).
 		Drag(nodeDrag{n.ID}).Cursor(ui.CursorPointer).Label(n.Title)
 	if n.ID == a.selected {
 		chosenCard(card, t)

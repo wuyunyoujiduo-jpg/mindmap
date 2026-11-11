@@ -7,7 +7,8 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// The one bar, at the top of the pages of lists, under the places: what is
+// The one bar, in the top row of every page, between the places and the
+// keys: what is
 // written in it is kept (a thought; a task where it begins with a day, or
 // says how it repeats; a link), looked for as it is written (what there
 // is already shows under the bar), or, begun with a ?, asked of the AI. It
@@ -16,26 +17,23 @@ import (
 func (a *app) oneBar(c *ui.Context) {
 	t := c.Theme()
 	text := strings.TrimSpace(a.homeDraft)
-	ui.Column(c.Key("one-bar")).FillWidth().Shrink(0).AlignItems(ui.Center).Padding(4, 16, 14).ZIndex(20).Children(func() {
-		// Its room is one line's, whatever it shows: open, the card lies over
-		// the page under it, so that nothing moves as it opens and closes.
-		ui.Column(c.Key("bar")).FillWidth().MaxWidth(640).Height(52).Children(func() {
+	// Its room is one line's in the top row, whatever it shows: open, the
+	// card lies over the page under it, so that nothing moves.
+	ui.Row(c.Key("one-bar")).Grow(1).Basis(0).MinWidth(120).Height(36).Justify(ui.Center).Children(func() {
+		ui.Column(c.Key("bar")).Grow(1).MaxWidth(560).Height(36).Children(func() {
 			if !a.barOpen && text == "" {
 				// One line: a click opens the card, and writes in it.
-				pill := soft(ui.Row(c.Key("closed")).Height(52).Padding(0, 8, 0, 22).Gap(10).Radius(radiusPill).AlignItems(ui.Center).FillWidth().
-					Background(cardColor(t)).Cursor(ui.CursorText).Label("记一条灵感或任务"), t).Transition(easeLook)
-				if pill.Clicked() {
+				field := ui.Row(c.Key("closed")).Height(36).Padding(0, 6, 0, 14).Gap(10).Radius(radiusPill).AlignItems(ui.Center).FillWidth().
+					Background(cardColor(t)).Shadow(0, 0, 0, 0.5, t.Text.Alpha(0.1)).Cursor(ui.CursorText).Label("记一条灵感或任务").Transition(easeLook)
+				if field.Clicked() {
 					a.barOpen, a.writeRefocus = true, "home-line"
 				}
-				pill.Children(func() {
-					ui.Text(c, "记一句、搜索，或者问 AI…").FontSize(textTitle).TextColor(t.TextMuted).SingleLine().Grow(1).Shrink(1).MinWidth(0).PassThrough()
-					ui.Box(c).Height(36).Padding(0, 16).Radius(radiusPill).Center().Background(t.Text.Alpha(0.05)).Shrink(0).PassThrough().Children(func() {
-						ui.Text(c, "记下").FontSize(textSmall).FontWeight(600).TextColor(t.TextMuted).NoWrap()
-					})
+				field.Children(func() {
+					ui.Text(c, "记一句、搜索，或者问 AI…").FontSize(textBody).TextColor(t.TextMuted).SingleLine().Grow(1).Shrink(1).MinWidth(0).PassThrough()
 				})
 				return
 			}
-			open := ui.Column(c.Key("open")).Absolute().Top(0).Left(0).Right(0).Gap(8).ZIndex(20)
+			open := ui.Column(c.Key("open")).Absolute().Top(-6).Left(0).Right(0).Gap(8).ZIndex(20)
 			if open.PressedOutside() && text == "" {
 				a.barOpen = false
 			}
@@ -57,7 +55,7 @@ func (a *app) barCard(c *ui.Context, text string) {
 				sendLabel:   "记下", fileLabel: "加图片", save: a.saveHomeLine, lines: 1, over: true,
 				focused: func() { a.barOpen = true },
 				esc: func() {
-					if strings.TrimSpace(a.homeDraft) == "" || !a.libOpen {
+					if strings.TrimSpace(a.homeDraft) == "" {
 						a.barOpen = false
 					}
 				},
@@ -157,17 +155,4 @@ func (a *app) barHits(text string, n int) []paletteItem {
 		}
 	}
 	return out
-}
-
-// barOver is the bar over a map, asked for from the map's own bar: the
-// card to write in under the top of the window, put away by a press
-// beside it, by Escape, and once it has kept what was written.
-func (a *app) barOver(c *ui.Context) {
-	w, _ := c.Size()
-	bw := min(640, w-32)
-	open := ui.Column(c.Key("bar-over")).Absolute().Top(toolbarHeight + 6).Left((w - bw) / 2).Width(bw).Gap(8).ZIndex(30)
-	if open.PressedOutside() {
-		a.barOpen = false
-	}
-	open.Children(func() { a.barCard(c, strings.TrimSpace(a.homeDraft)) })
 }

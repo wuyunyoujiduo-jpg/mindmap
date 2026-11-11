@@ -94,10 +94,7 @@ func TestMemos(t *testing.T) {
 	a.lib.Version++
 	a.libReview = reviewOff
 	tt.Frame()
-	r, _ := tt.Find("回顾 ⌄")
-	tt.Press(r.X+r.W/2, r.Y+r.H/2)
-	tt.Release(r.X+r.W/2, r.Y+r.H/2)
-	if err := tt.ChooseMenuItem("随机漫步：一次看一条"); err != nil {
+	if err := tt.Click("随机漫步"); err != nil { // in the left column
 		t.Fatal(err)
 	}
 	tt.Frame()
