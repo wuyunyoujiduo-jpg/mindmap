@@ -15,7 +15,10 @@ by AI, and an AI assistant.
    `GOOS=darwin GOARCH=arm64 go build -o /dev/null .`,
    `GOOS=windows go build -o /dev/null .`, `go tool mygo vet`.
    UI snapshots: `MINDMAP_SNAPSHOTS=<dir> go test .`, then look at them.
-4. Commit, push to the working branch, bump `version` in `mygo.json` (the
+4. Work on `main` (the user's choice: a branch left behind once shipped
+   a version from an old base over a newer one). Before anything, fetch
+   and start from `origin/main`, and check that `mygo.json`'s version is
+   the one the update manifest serves. Commit, push to `main`, bump `version` in `mygo.json` (the
    third number for fixes and small changes, 0.25.0 → 0.25.1; the second
    only for a new feature of some size, 0.25.x → 0.26.0), add
    its section to `CHANGELOG.md` (in Chinese: the update window shows it),
