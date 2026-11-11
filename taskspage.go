@@ -576,7 +576,7 @@ func (a *app) taskDetail(c *ui.Context, it taskItem) {
 					a.repeatProp(c, it)
 				})
 				section(c, iconPencil, "备注", nil, func() {
-					in := ui.TextArea(c.Key("task-note"), &a.tasks.note).Lines(3, 14).FontSize(textBody).FillWidth().
+					in := area(c.Key("task-note"), &a.tasks.note).Lines(3, 14).FontSize(textBody).FillWidth().
 						Placeholder("写点细节、链接、想法…").Label("任务备注")
 					if !in.Focused() && a.tasks.note != it.node.Note {
 						a.later(a.saveTaskDrafts)

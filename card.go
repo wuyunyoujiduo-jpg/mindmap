@@ -299,7 +299,7 @@ func (a *app) cardWindow(c *ui.Context) {
 					}
 				})
 				ui.Field(c, "内容", func() {
-					ui.TextArea(c.Key("card-text"), &a.cardOpts.text).Lines(4, 12).Label("卡片内容")
+					area(c.Key("card-text"), &a.cardOpts.text).Lines(4, 12).Label("卡片内容")
 				})
 				if cardStyles[a.cardOpts.style].kind == "mint" {
 					ui.Field(c, "题记", func() {

@@ -839,3 +839,19 @@ func setRow(c *ui.Context, title, sub string, control func()) {
 func setLine(c *ui.Context) {
 	ui.Box(c).Height(1).FillWidth().Shrink(0).Background(hairline(c.Theme()))
 }
+
+// area is a box to write several lines in, in the app's look: a pale
+// shade of the page with round corners, white with the accent's line and
+// halo while written in, as the one bar is.
+func area(c *ui.Context, value *string) ui.Element {
+	t := c.Theme()
+	in := ui.TextAreaBase(c, value).Padding(10, 12).Radius(12).FillWidth().LineHeight(1.5).FontSize(textBody).
+		Background(t.Text.Alpha(0.04)).Border(1.5, t.Text.Alpha(0)).Transition(easeLook)
+	switch {
+	case in.Focused():
+		focusHalo(in.Background(cardColor(t)), t)
+	case in.Hovered():
+		in.Background(t.Text.Alpha(0.06))
+	}
+	return in
+}

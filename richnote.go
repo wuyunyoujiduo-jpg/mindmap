@@ -42,7 +42,7 @@ func richNote(note string) bool { return !tableLine.MatchString(note) }
 func (a *app) noteEditor(c *ui.Context, place string, n *model.Node, size float32, placeholder string) ui.Element {
 	if !richNote(n.Note) {
 		note := n.Note
-		in := ui.TextArea(c.Key(place+"-text"), &note).Lines(4, 16).Label("备注内容").Placeholder(placeholder)
+		in := area(c.Key(place+"-text"), &note).Lines(4, 16).Label("备注内容").Placeholder(placeholder)
 		if in.Changed() {
 			a.mutate("note:"+n.ID, func() { n.Note = note })
 		}
@@ -61,6 +61,13 @@ func (a *app) noteEditor(c *ui.Context, place string, n *model.Node, size float3
 	ed := richtext.Editor(c.Key(place+"-rich"), d.doc, richtext.EditorOptions{
 		Label: "备注内容", Placeholder: placeholder, Font: ui.Font{Size: size},
 	}).Clip().Height(noteHeight(d.doc.Text(), size))
+	// In the app's look, as area: a pale shade, white with the accent's
+	// line and halo while written in.
+	th := c.Theme()
+	ed.Radius(12).Background(th.Text.Alpha(0.04)).Border(1.5, th.Text.Alpha(0)).Transition(easeLook)
+	if ed.Focused() {
+		focusHalo(ed.Background(cardColor(th)), th)
+	}
 	// A picture file dropped on the note goes into it.
 	for _, f := range ed.DroppedFiles() {
 		if isImageFile(f) {

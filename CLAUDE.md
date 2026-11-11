@@ -38,7 +38,8 @@ by AI, and an AI assistant.
   around it; few controls in sight, what can be done with a row showing
   under the pointer; one color, the violet-blue accent: the keys that act
   (`inkButton`, `accentButton`), the outline and halo of the line written
-  in (`focusHalo`), tags on a pale wash of it (`softTag`). What is chosen
+  in (`focusHalo`; a box of several lines is `area`, and the notes' rich
+  editor looks the same), tags on a pale wash of it (`softTag`). What is chosen
   among a few (the sidebar's part, a `pillTab`, a `segmented`, the views'
   tabs) is on a white pill that slides to it from the one chosen before
   (`slidePill`, a `Match` transition, behind the others' words). The desk and 收集 write in
