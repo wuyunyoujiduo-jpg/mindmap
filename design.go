@@ -57,6 +57,26 @@ func pageColumn(c *ui.Context, key string, grow bool) ui.Element {
 	return col.Shrink(0)
 }
 
+// titleTrack draws the letters of a page's name a little together.
+const titleTrack = -0.5
+
+// The inks, four and no more (DESIGN.md): the theme's Text for what is
+// read first, ink2 for what is read second (a row not chosen), the
+// theme's TextMuted for words on things, faint for counts and small names.
+func ink2(t *ui.Theme) ui.Color {
+	if t.Dark {
+		return ui.Hex("#C7C7CC")
+	}
+	return ui.Hex("#48484D")
+}
+
+func faint(t *ui.Theme) ui.Color {
+	if t.Dark {
+		return ui.Hex("#6E6E73")
+	}
+	return ui.Hex("#A9A9AF")
+}
+
 // pageHeadHeight is the height of a page's heading: more than the
 // toolbar's, for its name stands under the window's edge with room over it.
 const pageHeadHeight = 56
@@ -67,7 +87,7 @@ const pageHeadHeight = 56
 func pageHeader(c *ui.Context, key, title, sub string, right func()) {
 	t := c.Theme()
 	ui.Row(c.Key(key)).Height(pageHeadHeight).Gap(12).AlignItems(ui.Center).Shrink(0).FillWidth().DragWindow().Children(func() {
-		ui.Text(c, title).FontSize(textPage).FontWeight(700).NoWrap()
+		ui.Text(c, title).FontSize(textPage).FontWeight(700).LetterSpacing(titleTrack).NoWrap()
 		if sub != "" {
 			ui.Text(c, sub).FontSize(textBody).TextColor(t.TextMuted).SingleLine().Shrink(1).MinWidth(0)
 		}
@@ -500,7 +520,7 @@ func dateProp(c *ui.Context, name, label string, date *time.Time, now time.Time,
 			return
 		}
 		d := *date
-		if ui.DateInput(c.Key("date:"+label), &d).Label(label).FontSize(textSmall).Changed() {
+		if ui.DateInput(c.Key("date:"+label), &d).Label(label).FontSize(textSmall).Background(blockFill(c.Theme())).BorderColor(ui.RGBA(0, 0, 0, 0)).Changed() {
 			d = today(d)
 			set(&d)
 		}
@@ -666,6 +686,8 @@ func quietTheme(base *ui.Theme) *ui.Theme {
 		t.Danger = ui.Hex("#E5484D")
 	}
 	t.AccentText = ui.Hex("#FFFFFF")
+	// Scroll bars are thin and faint until the pointer is on them.
+	t.ScrollbarStyle = ui.ScrollbarStyle{ThumbWidth: 4, TrackWidth: 10, Thumb: t.Text.Alpha(0.13), Hover: t.Text.Alpha(0.3), Active: t.Text.Alpha(0.4)}
 	t.Success = ui.Hex("#30A46C")
 	t.Radius = 10
 	t.Selection = t.Accent.Alpha(0.22)

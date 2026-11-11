@@ -25,7 +25,9 @@ by AI, and an AI assistant.
 
 - The UI's look is in `design.go` (sizes, helpers, the theme of
   `quietTheme`) and `icons.go` (icons drawn, not glyphs, so that they sit
-  centered). It is flat and exact. The user's references, in turn, were
+  centered); `DESIGN.md` says it token by token (the four inks, type,
+  corners, what to do and not), to be read before the look is changed
+  and changed with it. It is flat and exact. The user's references, in turn, were
   flomo, https://library.aimran.es/ and TickTick: TickTick's is the one
   for the style (and the user found shadows, gradients and glows wanting,
   two versions of them); the structure is the app's own, thought out from
