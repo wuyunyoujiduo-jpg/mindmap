@@ -52,7 +52,7 @@ by AI, and an AI assistant.
   what is not rows), in a `modal`, and the system's buttons are pills (`button`).
   There is no sidebar: the app has three
   places, 今天, 项目 and 收集 (`places.go`), a switch of them at the top of
-  the pages of lists (`placesBar`, with the search of everything and the
+  the pages of lists (`placesBar`, with the AI's key, the search of everything and the
   settings); 项目 is the maps as cards, its folders a row of pills to choose from, as a
   wall's kinds (`projectsView`, `projFolder`), and a
   map opened takes the page, its bar going back to 项目. The words of the
@@ -71,7 +71,10 @@ by AI, and an AI assistant.
   details in a pane on the right, as the topic's panel on the maps' page,
   which is put away until asked for. The whole was rebuilt to the draft
   https://claude.ai/artifact/J4Ngp4MFp9B7KnLVJhiavb, step by step: the places,
-  项目, and 今天 with the tasks in it (`tasksView`: list, week, month; tasks
+  项目, and 今天 with the tasks in it (`tasksView`: as a list it is one
+  column read down, `todayWidth`: the day and how it stands, what is to
+  do, then what waits for a place, each card saying one by its words
+  alone, with no AI asked, `nearPlace`; week, month; tasks
   that repeat, `model.Repeat`, `repeatProp`, `parseRepeat`) and the one bar
   under the places, at the user's wish, not at the window's foot (`bar.go`,
   `oneBar`: its room is one line's, and open it lies over the page, so that
