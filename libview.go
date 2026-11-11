@@ -105,14 +105,19 @@ func (a *app) libraryColumn(c *ui.Context) {
 					cols = 1
 				}
 				rows := (len(hits) + cols - 1) / cols
-				ui.List(c.Key(fmt.Sprint("clips:", cols)), nil, rows).Grow(1).Basis(0).Radius(radiusCard + 4).Background(blockFill(t)).ItemKey(func(i int) any { return hits[i*cols].Clip.ID }).
+				ui.List(c.Key(fmt.Sprint("clips:", cols)), nil, rows).Grow(1).Basis(0).ItemKey(func(i int) any { return hits[i*cols].Clip.ID }).
 					Rows(func(r ui.ListRow) {
-						// One pale ground, the cards white on it.
-						top := float32(4)
+						// One pale ground, the cards white on it: the rows carry
+						// it, the first and the last its corners, so that it
+						// ends where the cards do.
+						top, bottom, head, foot := float32(4), float32(4), float32(0), float32(0)
 						if r.Index == 0 {
-							top = 10
+							top, head = 10, radiusCard+4
 						}
-						ui.Row(r.Context).Padding(top, 10, 4).Gap(8).AlignItems(ui.Stretch).FillWidth().Children(func() {
+						if r.Index == rows-1 {
+							bottom, foot = 10, radiusCard+4
+						}
+						ui.Row(r.Context).Padding(top, 10, bottom).Gap(8).Radius(head, head, foot, foot).Background(blockFill(t)).AlignItems(ui.Stretch).FillWidth().Children(func() {
 							for k := range cols {
 								i := r.Index*cols + k
 								if i >= len(hits) {
