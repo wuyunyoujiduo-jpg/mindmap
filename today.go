@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
@@ -406,7 +407,7 @@ func (a *app) nearPlace(key string, cl *library.Clip) (taskPlace, bool) {
 	p, ok := a.nearPlaces[key]
 	if !ok {
 		for _, f := range a.placesFor(cl, 4) {
-			if f.path != a.inboxPath() {
+			if f.path != a.inboxPath() && sharesWord(clipQuery(cl), f.title) {
 				p = &taskPlace{path: f.path, sheet: f.sheet, node: f.id, label: f.title}
 				break
 			}
@@ -417,4 +418,19 @@ func (a *app) nearPlace(key string, cl *library.Clip) (taskPlace, bool) {
 		return taskPlace{}, false
 	}
 	return *p, true
+}
+
+// sharesWord tells whether a text and a place's name have two letters
+// running in common, letters of words and not digits or marks: a place
+// that only shares a number with what waits is not its place.
+func sharesWord(text, name string) bool {
+	word := func(r rune) bool { return unicode.IsLetter(r) }
+	rs := []rune(strings.ToLower(text))
+	name = strings.ToLower(name)
+	for i := 0; i+1 < len(rs); i++ {
+		if word(rs[i]) && word(rs[i+1]) && strings.Contains(name, string(rs[i:i+2])) {
+			return true
+		}
+	}
+	return false
 }

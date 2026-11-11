@@ -27,7 +27,7 @@ func TestHome(t *testing.T) {
 	if !a.libOpen || !a.libHome {
 		t.Fatal("今天 not shown")
 	}
-	for _, want := range []string{"今天", "刚记下的", "放到导图 资料 3", "放过去 资料 0"} {
+	for _, want := range []string{"今天", "刚记下的", "放到导图 资料 0"} {
 		if !tt.HasText(want) {
 			t.Fatalf("no %q: %q", want, tt.Texts())
 		}

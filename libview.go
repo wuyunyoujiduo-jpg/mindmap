@@ -72,9 +72,6 @@ func (a *app) libraryColumn(c *ui.Context) {
 			if iconButton(c, iconShot, "截图", "截图：框选屏幕、标注后存到收集（"+keyLabel(a.shotKey())+"）", 30, true).Clicked() {
 				a.later(a.screenshot)
 			}
-			if iconTextButton(c, iconSparkle, "问 AI", "AI 助手", "和 AI 聊收集里的内容，它会检索相关资料来回答", a.aiOpen).Clicked() {
-				a.aiOpen = !a.aiOpen
-			}
 		})
 		a.pluginBanner(c)
 		a.clipFilters(c)

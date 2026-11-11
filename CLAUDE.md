@@ -68,13 +68,10 @@ by AI, and an AI assistant.
   what is chosen, for links and for the AI's spark. Color is kept for
   small things that mean something: each map has its own (`mapcolor.go`),
   shown as a dot by its tasks and what was put on it, or as a pastel with
-  a deep ink (`tinted`); a kind of clip has its own. The
-  desk (`today.go`) is the first page: write it down, today's tasks, what
-  was written lately (only the inbox's tasks wait for a map: a note's
-  place is 收集). The desk, the tasks and 收集 are laid out the same: a
-  `pageColumn` in the middle, its `pageHeader`, a `captureBox` to write
-  in, `pillTab`s to narrow by, then trays; what is chosen shows its
-  details in a pane on the right, as the topic's panel on the maps' page,
+  a deep ink (`tinted`); a kind of clip has its own. The pages of lists
+  are laid out the same: a `pageColumn` in the middle, its heading, pills
+  to narrow by, then cards; a map's topic shows its details in a panel on
+  the right,
   which is put away until asked for. The whole was rebuilt to the draft
   https://claude.ai/artifact/J4Ngp4MFp9B7KnLVJhiavb, step by step: the places,
   项目, and 今天 with the tasks in it (`tasksView`: as a list it is one
@@ -97,8 +94,11 @@ by AI, and an AI assistant.
   and their folders, those starred first, the folder they are all in at
   its foot: what is
   collected is 收集's (the word of the UI, never 资料库), and is on a map
-  by a topic's link. The AI has two entries, 问 AI (whose panel lists
-  what else it does, before a conversation) and AI 归位.
+  by a topic's link. The AI has two entries, 问 AI (the spark at the top of
+  the pages of lists and in a map's bar; its panel lists what else it
+  does, before a conversation) and AI 归位, for places better than those
+  `nearPlace` finds by words (which must share a word with what waits,
+  `sharesWord`, not a number only).
   A page is drawn first as an interactive draft (an HTML artifact, the
   desk's is https://claude.ai/artifact/RU6pxJSxMAsGbVYQrvs21b), then built
   to it, its snapshot held beside the draft: the draft uses only what
