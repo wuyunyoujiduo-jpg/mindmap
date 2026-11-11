@@ -25,9 +25,14 @@ by AI, and an AI assistant.
 
 - The UI's look is in `design.go` (sizes, helpers, the theme of
   `quietTheme`) and `icons.go` (icons drawn, not glyphs, so that they sit
-  centered); `DESIGN.md` says it token by token (the four inks, type,
-  corners, what to do and not), to be read before the look is changed
-  and changed with it. It is flat and exact. The user's references, in turn, were
+  centered); `DESIGN.md` says it token by token and names its sources,
+  to be read before the look is changed and changed with it: the style
+  is Apple's (`DESIGN.apple.md`, from awesome-design-md), the icons of
+  places and lists are Kubai Icons (`kubai.go`, drawn by
+  `tools/kubai/gen.mjs`), what moves takes transitions.dev's lengths
+  (`motion*` in `design.go`, and no other), and every list has its empty
+  state (`emptyState`), what loads its `skeleton`, what was done its
+  toast (`tell`; `tellUndo` where it can be taken back). It is flat and exact. The user's references, in turn, were
   flomo, https://library.aimran.es/ and TickTick: TickTick's is the one
   for the style (and the user found shadows, gradients and glows wanting,
   two versions of them); the structure is the app's own, thought out from

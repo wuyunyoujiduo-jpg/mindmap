@@ -1,84 +1,117 @@
 ---
 version: alpha
 name: MyMind
-description: A flat, exact desktop workspace after TickTick's manner — a quiet gray window, one white leaf cut into columns by thin lines, pale blocks and white cards, four inks, one violet-blue accent; no shadow but under what floats.
+description: A desktop workspace in Apple's manner (DESIGN.apple.md) — near-invisible chrome, one accent, type that ranks by weight and tracking, no shadow on the page — with Kubai's icons for the places gone to and transitions.dev's scale for what moves.
 
 colors:
-  ground: "#F4F4F6"       # the window (one of four, chosen in the settings)
-  leaf: "#FFFFFF"         # the page, white cards
-  block: "rgba(29,29,31,0.045)"  # a lone card, a field, a track of tabs (blockFill)
+  ground: "#F4F4F6"       # the window (Apple's parchment #f5f5f7, a shade cooler)
+  leaf: "#FFFFFF"
+  block: "rgba(29,29,31,0.045)"
   hairline: "#E5E5EA"
-  ink: "#1D1D1F"          # read first (Text)
-  ink2: "#48484D"         # read second: a row not chosen (ink2)
-  muted: "#86868B"        # words on things (TextMuted)
-  faint: "#A9A9AF"        # counts, small names of parts (faint)
-  primary: "#5B5BD6"
-  on-primary: "#FFFFFF"
+  ink: "#1D1D1F"          # Apple's ink
+  ink2: "#48484D"
+  muted: "#86868B"        # Apple's secondary gray
+  faint: "#A9A9AF"
+  primary: "#5B5BD6"      # the one accent: Apple's is blue, MyMind's its own violet-blue
   danger: "#E5484D"
   success: "#30A46C"
 
 typography:
-  page-title:  { fontSize: 22px, fontWeight: 700, letterSpacing: -0.5px }
+  page-title:  { fontSize: 22px, fontWeight: 600, letterSpacing: -0.5px }
   write:       { fontSize: 16px, fontWeight: 400 }
   row:         { fontSize: 14.5px, fontWeight: 400 }   # 600 when chosen
-  body:        { fontSize: 14px }
+  body:        { fontSize: 14px, fontWeight: 400 }
   part-name:   { fontSize: 13px, fontWeight: 600 }
-  small:       { fontSize: 13px }
-  caption:     { fontSize: 12px }
-  side-head:   { fontSize: 12px, fontWeight: 600, letterSpacing: 0.4px }  # faint
-  count:       { fontSize: 12px, features: tnum }                         # faint
+  caption:     { fontSize: 12px, fontWeight: 400 }
+  side-head:   { fontSize: 12px, fontWeight: 600, letterSpacing: 0.4px }
+  count:       { fontSize: 12px, features: tnum }
 
 rounded: { small: 7px, row: 8px, key: 9px, card: 12px }
+
+motion:   # transitions.dev's scale; design.go's motion* and easeDetent
+  micro: 80ms
+  quick: 150ms    # a color under the pointer, a press, what closes or goes
+  fast: 250ms     # what opens from a key, tabs' pill, an icon's swap, a row to its place
+  medium: 350ms   # a panel closing
+  slow: 400ms     # a panel opening, an empty state coming, what was loading shown
+  ease: "cubic-bezier(0.22, 1, 0.36, 1)"
 ---
 
 # MyMind's design
 
-The tokens are `design.go`'s. The form is that of the DESIGN.md files of
-[awesome-design-md](https://github.com/VoltAgent/awesome-design-md);
-what is in it is the app's own, and the user's corrections (kept at
-length in `CLAUDE.md`) come before anything here.
+**Follow `DESIGN.apple.md`.** It is Apple's DESIGN.md from
+[awesome-design-md](https://github.com/VoltAgent/awesome-design-md), kept
+whole beside this file. This file says what of it a desktop app takes,
+what it cannot (Apple's is a site of product photographs), and the three
+other sources: the icons, the motion, the states. The user's corrections
+(at length in `CLAUDE.md`) come before anything here. `design.go` is
+these tokens.
 
-## Colors
+## What is Apple's
 
-- **Four inks, no more.** Ink for what is read first; `ink2` for a row of
-  the left column not chosen; muted for words on things; `faint` for
-  counts and the small names of parts. Anything else is a link, a danger
-  or on the accent.
-- **The accent** is for what acts, what is chosen, links and the AI's
-  spark. Small colors mean something: a map's dot, a kind's dot, a
-  priority's circle.
+| Apple's rule | Here |
+|---|---|
+| UI recedes; no decorative chrome | one white leaf on a quiet ground, columns cut by hairlines |
+| A single accent for everything that acts | the violet-blue: keys that act, what is chosen, links, the focus |
+| Ink `#1d1d1f`, gray `#86868b`, parchment `#f5f5f7` | the same ink and gray; the ground a shade cooler |
+| Weights 400 and 600; 500 absent; headlines 600, not 700 | the same: no 500, no 700 |
+| Negative tracking on headlines, never on small text | page titles at -0.5; small names of parts +0.4 |
+| No shadow on cards, buttons or text | none on the leaf; only what floats over the page has one |
+| No gradient as decoration | none in the UI (the icons' own shading is theirs) |
+| A press scales the control down | `press`, on every key |
+| Don't mix radii grammars | 7, 8, 9, 12 and nothing between |
 
-## Elevation
+Not taken: full-bleed photo tiles, the black global nav, pill CTAs (the
+user found small round corners right), 17px body (a desktop app's rows
+are 14 to 16).
 
-Nothing has a shadow but what floats over the page (the bar open, bars
-of the canvas, popups, modals), and what floats has a shadow and no line
-round it. On the leaf, depth is by fill alone: white, the pale block,
-the gray of what is chosen.
+## Icons
 
-## Shapes
+- **Places and lists** (the top row's keys, the left column's rows, the
+  directory's folders, empty states): [Kubai Icons](https://github.com/kubai087/kubai-icons)
+  (MIT), `kubai.go`. Soft at rest; under the pointer or chosen, in the
+  accent and in the pose the set gives each on hover, one fading into the
+  other in `motion.fast`. Bitmaps drawn by `tools/kubai/gen.mjs` from
+  `tools/kubai/names.txt`: add a name there and run it for a new one.
+  Never draw a look-alike by hand.
+- **Marks on keys and tools** (＋, ×, ⋯, bold, a chevron): thin drawn
+  lines, one family (`icons.go`), in the ink. They are marks, not places,
+  as on macOS.
 
-Corners are small and alike: 7, 8, 9, 12. Nothing is a pill.
+## Motion
 
-## Components
+Only the five lengths and the one curve above (from
+[transitions.dev](https://transitions.dev)), each for what it names. No
+other length in a file: `rg "time.Millisecond"` should find only
+`design.go`'s scale and what is not an animation. Tabs slide (tabs
+sliding), a toast rises and fades (MyGo's own), what opens from a key
+grows from 0.96 (modal), a panel slides in (panel reveal), an icon swaps
+by a fade (icon swap).
 
-- **Left column's row** (`sideRow`): 36 high, radius 8; `ink2` until
-  chosen or pointed at, then ink; chosen, a gray block at 600. Its count
-  in `faint`, in figures of one width.
-- **Task's row** (`taskRow`): a thin line under it; chosen, a round gray
-  block whose line goes.
-- **Field** (`captureBox`, `area`, the day's field): a pale block with no
-  line, white in the accent's line when written in.
-- **Tabs** (`well`, `slidePill`): a pale track, a white pill that slides.
-- **Scroll bars**: 4 wide and faint, darker under the pointer.
+## States
 
-## Do
+Every list and page has all of these, or does not need one:
 
-- Rank by weight and ink before size or color.
-- Keep fields, keys and tracks to the one pale block.
+- **Empty** (`emptyState`): an icon, a line, what to do, and the key that
+  does it when there is one. 今天's list, 收集's wall (nothing yet,
+  nothing found, nothing to look back at), 项目.
+- **Loading** (`skeleton`): pale lines that breathe where the words will
+  be, while a page is read or the AI writes. Never a bare spinner.
+- **Said at the field** (`setRowSays`): what is wrong with what is
+  written is said under the field's name as it is written (the sync's
+  repository and token), not after it fails.
+- **Told** (`tell`, `toasts`): what was done is said in a toast, on
+  whatever page.
+- **Taken back** (`tellUndo`): what is deleted goes at once and the toast
+  offers 撤销; only what a topic links to is asked about first.
+- Everything is on this computer: what is clicked is done before it is
+  drawn again, so nothing waits on a server to show.
 
 ## Don't
 
 - Don't add a shadow, a gradient or a glow to anything on the leaf.
 - Don't outline what floats.
-- Don't give a field a darker fill or a line of its own.
-- Don't add a fifth ink.
+- Don't use weight 500 or 700.
+- Don't add a second accent, or a fifth ink.
+- Don't write a length of time outside the scale.
+- Don't ship a list without its empty state.

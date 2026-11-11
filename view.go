@@ -4,7 +4,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
@@ -14,6 +13,7 @@ import (
 // tasks in the middle, and the selected node's details on the right.
 func (a *app) view(c *ui.Context) {
 	a.tick(c)
+	motionOff = a.noMotion
 	if a.noMotion {
 		c.DisableAnimations()
 	}
@@ -55,6 +55,7 @@ func (a *app) view(c *ui.Context) {
 		if a.aiOpen && !a.presenting {
 			a.aiFloat(c)
 		}
+		a.toasts(c)
 		if a.lightbox != "" && a.doc != nil {
 			a.lightboxView(c)
 		}
@@ -134,8 +135,8 @@ func (a *app) aiFloat(c *ui.Context) {
 	w, h := c.Size()
 	lifted(ui.Column(c.Key("ai-float")).Absolute().Right(16).Bottom(16).Width(min(392, w-32)).Height(min(580, (h-toolbarHeight)*0.78)).
 		Radius(16).Clip().ZIndex(25).Background(cardColor(t)).Label("AI 窗口"), t).
-		Transition(ui.ElementTransition{Duration: 280 * time.Millisecond, Ease: easeDetent, Enter: &ui.Motion{Y: 16, Scale: 0.98},
-			Exit: &ui.Motion{Y: 12, Scale: 0.98}, ExitDuration: 160 * time.Millisecond}).
+		Transition(ui.ElementTransition{Duration: motionFast, Ease: easeDetent, Enter: &ui.Motion{Y: 16, Scale: 0.96},
+			Exit: &ui.Motion{Y: 12, Scale: 0.96}, ExitDuration: motionQuick}).
 		Children(func() { a.aiPanel(c) })
 }
 
@@ -250,9 +251,6 @@ func (a *app) toolbar(c *ui.Context) {
 			switch {
 			case a.saveErr != "":
 				status, col = a.saveErr, t.Danger
-			case a.notice != "" && a.now().Sub(a.noticeAt) < noticeTime:
-				status, col = a.notice, t.Accent
-				c.After(noticeTime - a.now().Sub(a.noticeAt))
 			case a.dirty:
 				status = "编辑中…"
 			case !a.savedAt.IsZero():

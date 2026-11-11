@@ -34,7 +34,7 @@ func (a *app) sidePane(c *ui.Context, key string, body, foot func()) {
 
 // sideRow is a row of the left column: what lead builds, a name, a count
 // at its end; the one shown is on a shade. The caller acts on its click.
-func sideRow(c *ui.Context, key, name, count string, on bool, lead func()) ui.Element {
+func sideRow(c *ui.Context, key, name, count string, on bool, lead func(hot bool)) ui.Element {
 	t := c.Theme()
 	row := ui.Row(c.Key(key)).Height(36).Padding(0, 10).Gap(10).Radius(radiusRow).AlignItems(ui.Center).FillWidth().
 		Cursor(ui.CursorPointer).Label(name).Background(t.Text.Alpha(0)).Transition(easeLook)
@@ -46,7 +46,7 @@ func sideRow(c *ui.Context, key, name, count string, on bool, lead func()) ui.El
 	}
 	row.Children(func() {
 		if lead != nil {
-			lead()
+			lead(on || row.Hovered())
 		}
 		txt := ui.Text(c, name).FontSize(textBody + 0.5).SingleLine().Grow(1).Shrink(1).MinWidth(0).PassThrough()
 		if on {
@@ -59,6 +59,14 @@ func sideRow(c *ui.Context, key, name, count string, on bool, lead func()) ui.El
 		}
 	})
 	return row
+}
+
+// sideIconSize is the room an icon takes before a row's name, a map's dot too.
+const sideIconSize = 22
+
+// sideIcon is a row's icon, lit when the row is chosen or pointed at.
+func sideIcon(c *ui.Context, name string) func(bool) {
+	return func(hot bool) { kubaiIcon(c, name, sideIconSize, hot) }
 }
 
 // sideHead is the small name of a part of the left column.
@@ -79,12 +87,12 @@ func (a *app) todaySide(c *ui.Context) {
 	counts := a.taskListCounts(items)
 	a.sidePane(c, "today-side", func() {
 		for _, l := range taskLists {
-			if sideRow(c, "list:"+l.name, l.name, counts[l.view], a.tasks.view == l.view, nil).Clicked() {
+			if sideRow(c, "list:"+l.name, l.name, counts[l.view], a.tasks.view == l.view, sideIcon(c, l.icon)).Clicked() {
 				a.tasks.view, a.tasks.onMap = l.view, ""
 			}
 		}
 		if n := len(a.waiting()); n > 0 || a.tasks.view == tasksWaiting {
-			if sideRow(c, "list:waiting", "等着归位", fmt.Sprint(n), a.tasks.view == tasksWaiting, nil).Clicked() {
+			if sideRow(c, "list:waiting", "等着归位", fmt.Sprint(n), a.tasks.view == tasksWaiting, sideIcon(c, "import")).Clicked() {
 				a.tasks.view = tasksWaiting
 			}
 		}
@@ -100,8 +108,8 @@ func (a *app) todaySide(c *ui.Context) {
 			path := fi.Path
 			if n := open[path]; n > 0 || a.tasks.onMap == path {
 				col := a.mapColor(path)
-				row := sideRow(c, "map:"+path, mapName(path), fmt.Sprint(n), a.tasks.onMap == path, func() {
-					ui.Box(c).Size(14, 14).Center().Shrink(0).PassThrough().Children(func() { mapDot(c, col, 8) })
+				row := sideRow(c, "map:"+path, mapName(path), fmt.Sprint(n), a.tasks.onMap == path, func(bool) {
+					ui.Box(c).Size(sideIconSize, 14).Center().Shrink(0).PassThrough().Children(func() { mapDot(c, col, 8) })
 				})
 				row.Label("只看 " + mapName(path))
 				if row.Clicked() {
@@ -125,9 +133,9 @@ func (a *app) libSide(c *ui.Context) {
 	l := a.lib
 	a.sidePane(c, "lib-side", func() {
 		for _, k := range []struct {
-			kind int
-			name string
-		}{{kindAll, "全部"}, {kindMemos, "灵感"}, {kindLinks, "链接"}, {kindDocs, "文档"}, {kindImages, "图片"}} {
+			kind       int
+			name, icon string
+		}{{kindAll, "全部", "layers"}, {kindMemos, "灵感", "lightbulb"}, {kindLinks, "链接", "link"}, {kindDocs, "文档", "file-text"}, {kindImages, "图片", "image"}} {
 			n := 0
 			for _, cl := range l.Clips {
 				if ofKind(cl, k.kind) {
@@ -135,27 +143,27 @@ func (a *app) libSide(c *ui.Context) {
 				}
 			}
 			on := a.libKind == k.kind && a.libReview == reviewOff && a.libCat == "" && a.libTag == ""
-			row := sideRow(c, "kind:"+k.name, k.name, fmt.Sprint(n), on, nil)
+			row := sideRow(c, "kind:"+k.name, k.name, fmt.Sprint(n), on, sideIcon(c, k.icon))
 			if row.Clicked() {
 				a.libKind, a.libReview, a.libCat, a.libTag = k.kind, reviewOff, "", ""
 			}
 		}
 		sideLine(c)
 		if hasStarred(l) {
-			if sideRow(c, "cat:★", "★ 星标", "", a.libCat == "★", nil).Clicked() {
+			if sideRow(c, "cat:★", "星标", "", a.libCat == "★", sideIcon(c, "star")).Clicked() {
 				a.libCat, a.libReview = toggled(a.libCat, "★"), reviewOff
 			}
 		}
 		if k := len(l.Unorganized()); k > 0 {
-			if sideRow(c, "cat:-", fmt.Sprintf("未整理 %d", k), "", a.libCat == "-", nil).Clicked() {
+			if sideRow(c, "cat:-", "未整理", fmt.Sprint(k), a.libCat == "-", sideIcon(c, "archive")).Label(fmt.Sprintf("未整理 %d", k)).Clicked() {
 				a.libCat, a.libReview = toggled(a.libCat, "-"), reviewOff
 			}
 		}
 		// Looking back at the old notes, as flomo does.
-		if sideRow(c, "review:daily", "每日回顾", "", a.libReview == reviewDaily, nil).Tooltip("几条以前的灵感，每天换").Clicked() {
+		if sideRow(c, "review:daily", "每日回顾", "", a.libReview == reviewDaily, sideIcon(c, "history")).Tooltip("几条以前的灵感，每天换").Clicked() {
 			a.libReview, a.libSel = reviewDaily, ""
 		}
-		if sideRow(c, "review:walk", "随机漫步", "", a.libReview == reviewWalk, nil).Tooltip("一次看一条以前的灵感").Clicked() {
+		if sideRow(c, "review:walk", "随机漫步", "", a.libReview == reviewWalk, sideIcon(c, "shuffle")).Tooltip("一次看一条以前的灵感").Clicked() {
 			a.libReview, a.libSel = reviewWalk, ""
 		}
 		if tags := a.clipTags(); len(tags) > 0 {

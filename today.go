@@ -32,7 +32,7 @@ func softTag(c *ui.Context, text string) ui.Element {
 	t := c.Theme()
 	bg, ink := t.Accent.Alpha(0.1), t.Accent.MixOklab(t.Text, 0.25)
 	return ui.Box(c.Key("tag:"+text)).Height(24).Padding(0, 8).Radius(6).Center().Background(bg).Shrink(0).
-		Transition(ui.ElementTransition{Duration: 240 * time.Millisecond, Ease: easeDetent, Enter: &ui.Motion{Scale: 0.85}}).Children(func() {
+		Transition(ui.ElementTransition{Duration: motionFast, Ease: easeDetent, Enter: &ui.Motion{Scale: 0.85}}).Children(func() {
 		ui.Text(c, text).FontSize(textSmall).TextColor(ink).NoWrap()
 	})
 }
@@ -347,7 +347,7 @@ func (a *app) waitingCard(c *ui.Context, w waitingItem, i int) {
 		a.noteText(c, words, 15, 4)
 		if has {
 			ui.Row(c.Key("sugg")).Gap(8).AlignItems(ui.Center).FillWidth().Padding(8, 0, 0).
-				Transition(ui.ElementTransition{Duration: 300 * time.Millisecond, Ease: easeDetent, Enter: &ui.Motion{Y: -6}}).Children(func() {
+				Transition(ui.ElementTransition{Duration: motionFast, Ease: easeDetent, Enter: &ui.Motion{Y: -6}}).Children(func() {
 				softTag(c, "→ "+shortPlace(place)).Tooltip(place.label)
 				ui.Spacer(c)
 				if textKey(c, "换一个", "换一个 "+text, "自己选放到哪").Clicked() {

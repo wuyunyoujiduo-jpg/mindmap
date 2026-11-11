@@ -5,7 +5,6 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
@@ -42,7 +41,7 @@ func (a *app) writeCard(c *ui.Context, w writeCard) {
 	}
 	if w.over {
 		// It floats: come forward from the line it was, over a deep shadow.
-		floated(box.NoShadow(), t).Transition(ui.ElementTransition{Duration: 220 * time.Millisecond, Ease: easeDetent,
+		floated(box.NoShadow(), t).Transition(ui.ElementTransition{Duration: motionFast, Ease: easeDetent,
 			Enter: &ui.Motion{Y: -4, Scale: 0.97}})
 	}
 	box.Children(func() {
@@ -104,7 +103,7 @@ func (a *app) writeCard(c *ui.Context, w writeCard) {
 				}
 				b.Children(func() {
 					if mark != "" {
-						ui.Text(c, mark).FontSize(16).FontWeight(500).TextColor(ink).PassThrough()
+						ui.Text(c, mark).FontSize(16).FontWeight(600).TextColor(ink).PassThrough()
 					} else {
 						glyph(c, ic, 17, ink)
 					}

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -151,7 +152,7 @@ func (a *app) syncSettings(c *ui.Context) {
 		a.syncErr, a.syncCheck, a.syncTried = "", "", time.Time{}
 	}
 	rowsField(c, "GitHub", "令牌用 Fine-grained 的：只选这个仓库，Contents 权限设为 Read and write。", func() {
-		setRow(c, "仓库", "先在 GitHub 新建一个空的私有仓库", func() {
+		setRowSays(c, "仓库", "先在 GitHub 新建一个空的私有仓库", syncRepoWrong(a.syncDrafts[0]), func() {
 			if ui.Link(c, "新建仓库", "").FontSize(textSmall).Clicked() {
 				a.plat.OpenURL("https://github.com/new")
 			}
@@ -161,7 +162,7 @@ func (a *app) syncSettings(c *ui.Context) {
 			}
 		})
 		setLine(c)
-		setRow(c, "授权令牌", "只存在这台电脑上", func() {
+		setRowSays(c, "授权令牌", "只存在这台电脑上", syncTokenWrong(a.syncDrafts[1]), func() {
 			if ui.Link(c, "创建令牌", "").FontSize(textSmall).Clicked() {
 				a.plat.OpenURL("https://github.com/settings/personal-access-tokens/new")
 			}
@@ -243,4 +244,35 @@ func (a *app) syncSettings(c *ui.Context) {
 			})
 		})
 	})
+}
+
+// syncRepoWrong says what is wrong with a repository's name as it is
+// written, or nothing: it is told at the field, not after a failed sync.
+func syncRepoWrong(repo string) string {
+	repo = strings.TrimSpace(repo)
+	switch {
+	case repo == "":
+		return ""
+	case strings.Contains(repo, "github.com"):
+		return "只写「用户名/仓库名」，不用整个网址"
+	case !syncRepoForm.MatchString(repo):
+		return "格式是「用户名/仓库名」，中间一个斜杠"
+	}
+	return ""
+}
+
+var syncRepoForm = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9._-]+$`)
+
+// syncTokenWrong says what is wrong with a token as it is written.
+func syncTokenWrong(token string) string {
+	token = strings.TrimSpace(token)
+	switch {
+	case token == "":
+		return ""
+	case strings.ContainsAny(token, " \t\n"):
+		return "令牌里不该有空格，可能多复制了内容"
+	case !strings.HasPrefix(token, "github_pat_") && !strings.HasPrefix(token, "ghp_"):
+		return "GitHub 的令牌以 github_pat_ 或 ghp_ 开头"
+	}
+	return ""
 }

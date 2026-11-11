@@ -122,3 +122,42 @@ func TestIsURL(t *testing.T) {
 		}
 	}
 }
+
+// TestTakeGivesBack: a clip taken away is gone, with its file, and comes
+// back as it was, where it was.
+func TestTakeGivesBack(t *testing.T) {
+	l, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	for _, s := range []string{"一", "二", "三"} {
+		if err := l.Add(&Clip{Kind: KindText, Text: s}, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pic, err := l.AddData([]byte("png"), "a.png", KindImage, "", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, at := l.Clips[2].ID, 2
+	for _, take := range []struct {
+		id string
+		at int
+	}{{id, at}, {pic.ID, 0}} {
+		back, err := l.Take(take.id)
+		if err != nil || len(l.Clips) != 3 {
+			t.Fatalf("take: %v, %d left", err, len(l.Clips))
+		}
+		if err := back(); err != nil || len(l.Clips) != 4 || l.Clips[take.at].ID != take.id {
+			t.Fatalf("back: %v, %d clips", err, len(l.Clips))
+		}
+	}
+	if data, err := os.ReadFile(l.FilePath(pic)); err != nil || string(data) != "png" {
+		t.Fatalf("the file is not back: %v %q", err, data)
+	}
+	again, err := Open(l.Dir)
+	if err != nil || len(again.Clips) != 4 {
+		t.Fatalf("read again: %v, %d clips", err, len(again.Clips))
+	}
+}

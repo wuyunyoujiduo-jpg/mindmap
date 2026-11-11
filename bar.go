@@ -2,7 +2,6 @@ package main
 
 import (
 	"strings"
-	"time"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -113,7 +112,7 @@ func (a *app) barCard(c *ui.Context, text string) {
 			// What there is already, as it is written: a click goes to it.
 			if hits := a.barHits(text, 4); len(hits) > 0 && !asking {
 				lifted(ui.Column(c.Key("found")).Padding(6).Gap(1).Radius(radiusCard).Background(cardColor(t)).FillWidth(), t).
-					Transition(ui.ElementTransition{Duration: 240 * time.Millisecond, Ease: easeDetent, Enter: &ui.Motion{Y: -8}}).Children(func() {
+					Transition(ui.ElementTransition{Duration: motionFast, Ease: easeDetent, Enter: &ui.Motion{Y: -8}}).Children(func() {
 					ui.Text(c, "已经有的").FontSize(textCaption).TextColor(t.TextMuted).Margin(6, 12, 2)
 					for i, it := range hits {
 						row := ui.Row(c.Key(i)).MinHeight(40).Padding(6, 12).Gap(10).Radius(radiusRow).AlignItems(ui.Center).FillWidth().

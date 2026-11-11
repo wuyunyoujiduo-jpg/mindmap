@@ -397,6 +397,8 @@ type app struct {
 	tagQuery      string
 	notice        string    // a passing message in the toolbar, as "已复制"
 	noticeAt      time.Time // since when it shows, for noticeTime
+	noticeToasted time.Time // the notice shown as a toast already
+	noticeUndo    func()    // what takes back what the notice says, if it can be
 	exportCam     *camera   // set while the canvas is drawn into an image
 	tagDraft      string    // a tag being typed in the node panel
 	tagAdding     bool      // the sidebar's new-tag field is shown
@@ -545,7 +547,26 @@ func (a *app) currentFolder() string {
 const noticeTime = 3 * time.Second
 
 // tell shows a passing message in the toolbar.
-func (a *app) tell(msg string) { a.notice, a.noticeAt = msg, a.now() }
+func (a *app) tell(msg string) { a.notice, a.noticeAt, a.noticeUndo = msg, a.now(), nil }
+
+// tellUndo says what was done and offers to take it back.
+func (a *app) tellUndo(msg string, undo func()) {
+	a.notice, a.noticeAt, a.noticeUndo = msg, a.now(), undo
+}
+
+// toasts shows a notice not shown yet as a toast, on whatever page: with
+// 撤销 on it when what was done can be taken back.
+func (a *app) toasts(c *ui.Context) {
+	if a.notice == "" || a.noticeAt.Equal(a.noticeToasted) {
+		return
+	}
+	a.noticeToasted = a.noticeAt
+	if undo := a.noticeUndo; undo != nil {
+		c.ToastAction(a.notice, "撤销", func() { undo() })
+		return
+	}
+	c.Toast(a.notice)
+}
 
 // freeMapPath is the path of a map named name in dir, numbered past the
 // maps there: "name", "name 2", "name 3"…
