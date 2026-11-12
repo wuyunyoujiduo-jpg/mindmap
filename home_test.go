@@ -454,3 +454,45 @@ func find2(a *app, title string) *model.Node {
 	}
 	return nil
 }
+
+// TestLateTasksPutOnToday: the heading of what is late puts it all on
+// today, and that can be taken back.
+func TestLateTasksPutOnToday(t *testing.T) {
+	a, tt := newTestApp(t)
+	a.addTask("写周报", nil)
+	a.addTask("交报销", nil)
+	late := today(a.now()).AddDate(0, 0, -3)
+	for _, it := range a.taskItems() {
+		a.setTaskDay(it, &late)
+	}
+	a.openTasks()
+	tt.Frame()
+	if !tt.HasText("已逾期") {
+		t.Fatalf("nothing is late: %q", tt.Texts())
+	}
+	if err := tt.Click("顺延到今天"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Frame()
+	for _, it := range a.taskItems() {
+		if it.done() {
+			continue
+		}
+		if d := it.date(); d == nil || !sameDay(*d, a.now()) {
+			t.Fatalf("%s is on %v", it.node.Title, d)
+		}
+	}
+	if tt.HasText("已逾期") || a.noticeUndo == nil {
+		t.Fatalf("still late, or no way back: %q", tt.Texts())
+	}
+	a.noticeUndo()
+	for _, it := range a.taskItems() {
+		if it.done() {
+			continue
+		}
+		if d := it.date(); d == nil || !sameDay(*d, late) {
+			t.Fatalf("%s is not back: %v", it.node.Title, d)
+		}
+	}
+}

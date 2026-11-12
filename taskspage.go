@@ -185,6 +185,48 @@ func (a *app) setTaskDay(it taskItem, day *time.Time) {
 	})
 }
 
+// postponeToToday puts tasks that are late on today, and says so with the
+// way to take it back: each has again the days it had.
+func (a *app) postponeToToday(items []taskItem) {
+	day := today(a.now())
+	type was struct {
+		it         taskItem
+		due, start *time.Time
+	}
+	var before []was
+	for _, it := range items {
+		task := it.node.Task
+		if task == nil || it.done() {
+			continue
+		}
+		before = append(before, was{it, task.Due, task.Start})
+		late := task.Due == nil // late by the day it starts on: that day moves
+		a.editTask(it, "顺延到今天", func(n *model.Node) {
+			d := day
+			if late {
+				n.Task.Start = &d
+				return
+			}
+			n.Task.Due = &d
+			if n.Task.Start != nil && n.Task.Start.After(d) {
+				n.Task.Start = nil
+			}
+		})
+	}
+	if len(before) == 0 {
+		return
+	}
+	a.tellUndo(fmt.Sprintf("%d 件任务顺延到今天", len(before)), func() {
+		for _, w := range before {
+			a.editTask(w.it, "撤销顺延", func(n *model.Node) {
+				if n.Task != nil {
+					n.Task.Due, n.Task.Start = w.due, w.start
+				}
+			})
+		}
+	})
+}
+
 // addTask adds a task written in a line, with its day in words, to the
 // inbox; day, when not nil, is the day it goes on when the line says none.
 func (a *app) addTask(line string, day *time.Time) {
@@ -914,6 +956,23 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 						ui.Text(c, g.title).FontSize(textCaption).FontWeight(700).LetterSpacing(0.3).TextColor(col)
 						if len(g.items) > 0 {
 							ui.Text(c, fmt.Sprint(len(g.items))).FontSize(textCaption).TextColor(faint(t)).FontFeatures("tnum")
+						}
+						if g.danger && len(g.items) > 0 {
+							// What is late is put on today in one go, as TickTick's 顺延.
+							ui.Spacer(c)
+							items := g.items
+							move := ui.Box(c.Key("postpone")).Height(24).Padding(0, 8).Radius(radiusSmall).Center().Cursor(ui.CursorPointer).Shrink(0).
+								Label("顺延到今天").Tooltip(fmt.Sprintf("把这 %d 件逾期的任务都改到今天", len(items))).
+								Background(t.Accent.Alpha(0)).Transition(easeLook)
+							if move.Hovered() {
+								move.Background(t.Accent.Alpha(0.09))
+							}
+							if move.Clicked() {
+								a.later(func() { a.postponeToToday(items) })
+							}
+							move.Children(func() {
+								ui.Text(c, "顺延到今天").FontSize(textCaption).FontWeight(700).TextColor(t.Accent).NoWrap().PassThrough()
+							})
 						}
 					})
 					if len(g.items) > 0 {
