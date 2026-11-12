@@ -263,7 +263,7 @@ func (a *app) placeBar(c *ui.Context, open int) {
 				ui.Text(c, "记下的任务先在这里，再放进导图。").FontSize(textSmall).TextColor(t.TextMuted)
 			}
 			ui.Spacer(c)
-			if iconTextButton(c, iconSparkle, "AI 归位", "AI 归位", "让 AI 建议每个任务该放到哪张导图的哪个主题下，你确认后才移动", false).Clicked() {
+			if sparkKey(c, "AI 归位", "让 AI 建议每个任务该放到哪张导图的哪个主题下，你确认后才移动").Clicked() {
 				a.later(a.suggestPlaces)
 			}
 		}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -50,7 +51,10 @@ const pageWidth = 1080
 // pageColumn is a page's column, in the middle of the room it has; grow
 // has it take the height left.
 func pageColumn(c *ui.Context, key string, grow bool) ui.Element {
-	col := ui.Column(c.Key(key)).FillWidth().MaxWidth(pageWidth+56).Margin(0, ui.Auto).Padding(0, 28)
+	// It starts at the left column's line, on every page: a page's name
+	// stays where it is from a place to another, and the room left is on
+	// the right, where what is chosen opens.
+	col := ui.Column(c.Key(key)).FillWidth().MaxWidth(pageWidth+56).Padding(0, 28)
 	if grow {
 		return col.Grow(1).Basis(0).MinHeight(0)
 	}
@@ -80,6 +84,49 @@ func faint(t *ui.Theme) ui.Color {
 // pageHeadHeight is the height of a page's heading: more than the
 // toolbar's, for its name stands under the window's edge with room over it.
 const pageHeadHeight = 56
+
+// A figure is a number of a page's heading and what it counts.
+type figure struct {
+	n    int
+	name string
+}
+
+// figures shows a page in a few figures under its name: the figure in the
+// ink, what it counts in the muted ink.
+func figures(c *ui.Context, fs ...figure) ui.Element {
+	t := c.Theme()
+	return ui.Row(c.Key("figures")).Gap(18).Shrink(0).Children(func() {
+		for _, f := range fs {
+			ui.Row(c.Key(f.name)).Gap(5).AlignItems(ui.Center).Label(fmt.Sprintf("%d %s", f.n, f.name)).Children(func() {
+				ui.Text(c, fmt.Sprint(f.n)).FontSize(textSmall).FontWeight(600).FontFeatures("tnum")
+				ui.Text(c, f.name).FontSize(textSmall).TextColor(t.TextMuted).NoWrap()
+			})
+		}
+	})
+}
+
+// pageHead is a page's heading where it is told in figures: its name
+// large, a word beside it, the figures under them, and at the end what
+// right builds. 今天, 项目 and 收集 are headed so.
+func pageHead(c *ui.Context, key, title, sub string, fs []figure, right func()) {
+	t := c.Theme()
+	ui.Row(c.Key(key)).Padding(14, 0, 10).Gap(12).AlignItems(ui.End).Shrink(0).FillWidth().DragWindow().Children(func() {
+		ui.Column(c).Gap(6).Grow(1).Shrink(1).Basis(0).MinWidth(0).Children(func() {
+			ui.Row(c).Gap(10).AlignItems(ui.End).Children(func() {
+				ui.Text(c, title).FontSize(26).FontWeight(600).LetterSpacing(-0.7).LineHeight(1.2).NoWrap()
+				if sub != "" {
+					ui.Text(c, sub).FontSize(textBody).TextColor(ink2(t)).Margin(0, 0, 4).SingleLine().Shrink(1).MinWidth(0)
+				}
+			})
+			if len(fs) > 0 {
+				figures(c, fs...)
+			}
+		})
+		if right != nil {
+			ui.Row(c).Gap(10).AlignItems(ui.Center).Shrink(0).Children(right)
+		}
+	})
+}
 
 // pageHeader is a page's heading, the same on every page: its name, a
 // word on it, and at the end what right builds. It is the window's title

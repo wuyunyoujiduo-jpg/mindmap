@@ -430,17 +430,8 @@ func (a *app) tasksHead(c *ui.Context, all []taskItem) {
 				ui.Text(c, fmt.Sprintf("%d月%d日 %s", now.Month(), now.Day(), weekdays[now.Weekday()])).FontSize(textBody).TextColor(ink2(th)).Margin(0, 0, 4).NoWrap()
 			})
 			// The day in three figures: the figure in the ink, what it counts faint.
-			ui.Row(c.Key("figures")).Gap(18).Margin(6, 0, 0).Label(fmt.Sprintf("%d 件要做，做完 %d 件，%d 条等着归位", len(a.dueToday(now)), len(a.doneToday(now)), len(a.waiting()))).Children(func() {
-				for _, f := range []struct {
-					n    int
-					name string
-				}{{len(a.dueToday(now)), "要做"}, {len(a.doneToday(now)), "做完"}, {len(a.waiting()), "等着归位"}} {
-					ui.Row(c.Key(f.name)).Gap(5).AlignItems(ui.Center).Children(func() {
-						ui.Text(c, fmt.Sprint(f.n)).FontSize(textSmall).FontWeight(600).FontFeatures("tnum")
-						ui.Text(c, f.name).FontSize(textSmall).TextColor(th.TextMuted).NoWrap()
-					})
-				}
-			})
+			figures(c, figure{len(a.dueToday(now)), "要做"}, figure{len(a.doneToday(now)), "做完"}, figure{len(a.waiting()), "等着归位"}).Margin(6, 0, 0).
+				Label(fmt.Sprintf("%d 件要做，做完 %d 件，%d 条等着归位", len(a.dueToday(now)), len(a.doneToday(now)), len(a.waiting())))
 		})
 		if a.cfg.HideTree { // with no left column, the map to narrow by is here
 			a.taskMapMenu(c, all)

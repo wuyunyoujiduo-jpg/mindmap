@@ -46,7 +46,13 @@ func (a *app) libraryColumn(c *ui.Context) {
 	t := c.Theme()
 	l := a.lib
 	func() {
-		pageHeader(c, "lib-head", "收集", fmt.Sprintf("%d 条灵感和资料", len(l.Clips)), func() {
+		memos := 0
+		for _, cl := range l.Clips {
+			if ofKind(cl, kindMemos) {
+				memos++
+			}
+		}
+		pageHead(c, "lib-head", "收集", "灵感和资料", []figure{{len(l.Clips), "条"}, {memos, "条灵感"}, {len(l.Unorganized()), "条未整理"}}, func() {
 			if a.libWorking != "" {
 				ui.Spinner(c)
 				ui.Text(c, fmt.Sprintf("整理中，还有 %d 条", len(a.libQueue)+1)).FontSize(12).TextColor(t.TextMuted).NoWrap()

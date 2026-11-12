@@ -143,7 +143,7 @@ func (a *app) materialBar(c *ui.Context) {
 	if providerKey(a.cfg) == "" {
 		tip = "先在「问 AI」的设置里填写 API Key"
 	}
-	if iconTextButton(c, iconSparkle, "AI 归位", "AI 归位", tip, false).Clicked() {
+	if sparkKey(c, "AI 归位", tip).Clicked() {
 		clips := a.listedMaterial()
 		a.later(func() { a.suggestClipPlaces(clips) })
 	}

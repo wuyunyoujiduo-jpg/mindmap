@@ -271,11 +271,16 @@ func (a *app) projectsView(c *ui.Context) {
 
 	ui.Column(c.Key("projects")).Grow(1).Label("项目").Children(func() {
 		pageColumn(c, "projects-column", true).Children(func() {
-			title, sub := "项目", fmt.Sprintf("%d 张导图，一张就是一个项目", len(a.files))
+			title, sub, shown := "项目", "一张导图就是一个项目", a.files
 			if a.projFolder != "" && a.treeShown() {
-				title, sub = at.Name, fmt.Sprintf("%d 张导图", len(at.AllFiles()))
+				title, sub, shown = at.Name, "", at.AllFiles()
 			}
-			pageHeader(c, "projects-head", title, sub, func() {
+			open, done := 0, 0
+			for _, fi := range shown {
+				n := counts[fi.Path]
+				open, done = open+n.total-n.done, done+n.done
+			}
+			pageHead(c, "projects-head", title, sub, []figure{{len(shown), "张导图"}, {open, "件要做"}, {done, "件做完"}}, func() {
 				if a.cfg.HideTree {
 					if iconButton(c, iconSidebar, "显示目录", "显示目录：文件夹和导图的列表", 32, true).Clicked() {
 						a.cfg.HideTree = false

@@ -107,6 +107,16 @@ Every list and page has all of these, or does not need one:
 - Everything is on this computer: what is clicked is done before it is
   drawn again, so nothing waits on a server to show.
 
+## A page
+
+- **It starts at the left column's line** (`pageColumn`), 28 in, on every
+  page, and is no wider than it reads well: the room left is on the
+  right, where what is chosen opens. Never centered: a page's name must
+  not move from a place to another, nor when a task is opened.
+- **Its head** (`pageHead`): the name at 26/600, -0.7; a word beside it in
+  `ink2`; under them the page in figures (`figures`), the figure at 600
+  in the ink, what it counts muted. 今天, 项目 and 收集 are headed so.
+
 ## 今天's page
 
 Built to the draft https://claude.ai/artifact/5Nw4Mn4q4ozd9rpUNGh8AP.
