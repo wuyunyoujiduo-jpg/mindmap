@@ -230,16 +230,7 @@ func (a *app) homeWaiting(c *ui.Context) {
 		})
 		// What was just left in 收集, and the way back: it stays said until
 		// another is left, or the page is.
-		if cl := a.lib.Find(a.keptLast); cl != nil && cl.Kept {
-			ui.Row(c.Key("kept-last")).MinHeight(36).Margin(0, 0, 8).Padding(4, 12, 4, 20).Gap(8).Radius(radiusRow).AlignItems(ui.Center).FillWidth().
-				Background(blockFill(t)).Transition(rowMotion).Children(func() {
-				ui.Text(c, "已留在收集，不再出现在这里：").FontSize(textSmall).TextColor(t.TextMuted).Shrink(0)
-				ui.Text(c, refName(cl)).FontSize(textSmall).SingleLine().Grow(1).Shrink(1).MinWidth(0)
-				if ghostButton(c, "撤回", "放回「刚记下的」").Clicked() {
-					a.later(func() { a.unkeep(cl) })
-				}
-			})
-		}
+		a.keptLastRow(c)
 		if len(items) == 0 {
 			emptyNote(c, "这几天记下的会出现在这里。")
 			return
@@ -256,6 +247,122 @@ func (a *app) homeWaiting(c *ui.Context) {
 		if more := len(items) - homeWaitingCount; more > 0 {
 			ui.Text(c, fmt.Sprintf("还有 %d 条，在任务的收件箱和收集里", more)).FontSize(textSmall).TextColor(t.TextMuted).Margin(8, 10, 4)
 		}
+	})
+}
+
+// keptLastRow says what was just left in 收集, and gives the way back: it
+// stays said until another is left, or the page is.
+func (a *app) keptLastRow(c *ui.Context) {
+	t := c.Theme()
+	cl := a.lib.Find(a.keptLast)
+	if cl == nil || !cl.Kept {
+		return
+	}
+	ui.Row(c.Key("kept-last")).MinHeight(36).Margin(0, 0, 8).Padding(4, 12, 4, 20).Gap(8).Radius(radiusRow).AlignItems(ui.Center).FillWidth().
+		Background(blockFill(t)).Transition(rowMotion).Children(func() {
+		ui.Text(c, "已留在收集，不再出现在这里：").FontSize(textSmall).TextColor(t.TextMuted).Shrink(0)
+		ui.Text(c, refName(cl)).FontSize(textSmall).SingleLine().Grow(1).Shrink(1).MinWidth(0)
+		if ghostButton(c, "撤回", "放回「等着归位」").Clicked() {
+			a.later(func() { a.unkeep(cl) })
+		}
+	})
+}
+
+// bandCount is how many waiting things today's page shows.
+const bandCount = 4
+
+// waitingBand is what waits for a place, under today's tasks: cut from
+// them by a line and a breath of shade the page's width, each thing one
+// line (its words, where it would go, when), a few of them; a click opens
+// one, and the rest are a click away, on the left column's list. The
+// cards with all that can be done are that list's: here they crowded the
+// tasks.
+func (a *app) waitingBand(c *ui.Context, shown []taskItem) {
+	t := c.Theme()
+	now := a.now()
+	listed := map[string]bool{}
+	for _, it := range shown {
+		if d := it.date(); d != nil && !it.done() && !d.After(today(now)) {
+			listed[it.key()] = true // today's and the late are above already
+		}
+	}
+	items := slices.DeleteFunc(a.waiting(), func(w waitingItem) bool { return w.task != nil && listed[w.task.key()] })
+	if cl := a.lib.Find(a.keptLast); len(items) == 0 && (cl == nil || !cl.Kept) {
+		return
+	}
+	all := func() { a.tasks.view, a.tasks.onMap = tasksWaiting, "" }
+	ui.Column(c.Key("waiting-band")).FillWidth().Padding(14, 0, 28).BorderWidth(1, 0, 0, 0).BorderColor(hairline(t)).
+		Background(t.Text.Alpha(0.018)).Children(func() {
+		pageColumn(c, "band-column", false).MaxWidth(todayWidth + 56).Gap(2).Children(func() {
+			trayHead(c, "head:等着归位", "等着归位", fmt.Sprintf("%d 条，这几天记下的", len(items)), func() {
+				if textLink(c, "去整理 ›", "去整理").Tooltip("每条该放到哪张导图：在「等着归位」里一条条放，或让 AI 归位").Clicked() {
+					a.later(all)
+				}
+			})
+			a.keptLastRow(c)
+			for i, w := range items {
+				if i == bandCount {
+					break
+				}
+				a.waitingLine(c, w)
+			}
+			if more := len(items) - bandCount; more > 0 {
+				ui.Box(c).Padding(6, 4, 0).Children(func() {
+					if textLink(c, fmt.Sprintf("还有 %d 条 ›", more), "还有更多").Clicked() {
+						a.later(all)
+					}
+				})
+			}
+		})
+	})
+}
+
+// waitingLine is one waiting thing as a line of the band.
+func (a *app) waitingLine(c *ui.Context, w waitingItem) {
+	t := c.Theme()
+	key, text, when := "", "", ""
+	var place taskPlace
+	has := false
+	if w.task != nil {
+		key, text, when = "t:"+w.task.node.ID, w.task.node.Title, "任务"
+		place, has = a.tasks.places[w.task.node.ID]
+		if !has {
+			place, has = a.nearPlace(key, &library.Clip{Title: w.task.node.Title, Text: w.task.node.Note})
+		}
+	} else {
+		cl := w.clip
+		key, text, when = "c:"+cl.ID, cl.Label(), relTime(a.now(), cl.Created)
+		if isMemo(cl) {
+			if first, _, _ := strings.Cut(strings.TrimSpace(cl.Text), "\n"); first != "" {
+				text = first
+			}
+		}
+		place, has = a.clipPlaces[cl.ID]
+		if !has {
+			place, has = a.nearPlace(key, cl)
+		}
+	}
+	text, _ = titleAndSite(strings.TrimSpace(clipRef.ReplaceAllString(text, "")))
+	row := ui.Row(c.Key("line:"+key)).Height(36).Padding(0, 8).Gap(10).Radius(radiusRow).AlignItems(ui.Center).FillWidth().
+		Cursor(ui.CursorPointer).Label("记下的 " + text).Background(t.Text.Alpha(0)).Transition(rowMotion)
+	if row.Hovered() {
+		row.Background(t.Text.Alpha(0.05))
+	}
+	if row.Clicked() {
+		a.later(func() { a.openWaiting(w) })
+	}
+	row.ContextMenu(func(m *ui.Menu) { a.waitingMenu(m, w, has) })
+	row.Children(func() {
+		if w.task != nil {
+			a.taskCircle(c, *w.task, 15)
+		} else {
+			ui.Box(c).Size(15, 15).Center().Shrink(0).PassThrough().Children(func() { mapDot(c, clipColor(w.clip.Kind), 7) })
+		}
+		ui.Text(c, text).FontSize(textBody).SingleLine().Grow(1).Shrink(1).MinWidth(0).PassThrough()
+		if has {
+			ui.Box(c).Shrink(0).MaxWidth(220).PassThrough().Children(func() { softTag(c, "→ "+shortPlace(place)).Tooltip(place.label) })
+		}
+		ui.Text(c, when).FontSize(textCaption).TextColor(faint(t)).NoWrap().Shrink(0).PassThrough()
 	})
 }
 

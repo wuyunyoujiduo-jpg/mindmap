@@ -173,6 +173,13 @@ Built to the draft https://claude.ai/artifact/5Nw4Mn4q4ozd9rpUNGh8AP.
 - **The AI's key by a heading** (`sparkKey`): the spark and its words in
   the accent, on no block until pointed at.
 
+Built to the draft https://claude.ai/artifact/V87PRBUjrJQQk1Kb3sj4Pw (A):
+what waits for a place is a band under today's tasks, the page's width,
+a line above it and a breath of shade; in it a line each, four at most,
+its words, where it would go, when. All that can be done with one is on
+the list 等着归位, a click away. Two kinds of thing on a page are cut
+apart so, not stacked as cards of one weight.
+
 ## Don't
 
 - Don't add a shadow, a gradient or a glow to anything on the leaf.

@@ -29,12 +29,27 @@ func TestHome(t *testing.T) {
 	if !a.libOpen || !a.libHome {
 		t.Fatal("今天 not shown")
 	}
-	for _, want := range []string{"今天", "刚记下的", "操作 资料 0"} {
+	// Today's page: what waits is a band of lines under the tasks; its
+	// cards, with all that can be done, are the list's of the left column.
+	for _, want := range []string{"今天", "等着归位", "记下的 资料 0", "去整理"} {
 		if !tt.HasText(want) {
 			t.Fatalf("no %q: %q", want, tt.Texts())
 		}
 	}
+	if tt.HasText("操作 资料 0") {
+		t.Fatal("a card of what waits is on today's page")
+	}
 	snapshot(t, tt, "home")
+	if err := tt.Click("去整理"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.tasks.view != tasksWaiting || !tt.HasText("操作 资料 0") {
+		t.Fatalf("the list of what waits is not shown: %q", tt.Texts())
+	}
+	snapshot(t, tt, "home-waiting")
+	a.tasks.view = tasksToday
+	tt.Frame()
 
 	// The line: a day makes it a task, else it is a note of 灵感.
 	if err := tt.Click("记一条灵感或任务"); err != nil {
@@ -100,7 +115,10 @@ func TestHome(t *testing.T) {
 		t.Fatalf("an old note stays: %d", n)
 	}
 	a.lib.Clips[0].Created = testNow
-	// What can be done with a row shows under the pointer.
+	// What can be done with a card is under the key at its corner, on the
+	// list of what waits.
+	a.tasks.view = tasksWaiting
+	tt.Frame()
 	row, _ := tt.Find("记下的 灵感来了")
 	tt.Move(row.X+row.W/2, row.Y+row.H/2)
 	tt.Frame()
@@ -269,6 +287,7 @@ func TestHomeTicksAndReads(t *testing.T) {
 	tt.Frame()
 	a.homeDraft += "**要紧**"
 	a.saveHomeLine()
+	a.tasks.view = tasksWaiting // where a note shows whole, with what it refers to
 	tt.Frame()
 	kept := a.clipsNamed("接着上次", 1)
 	if len(kept) != 1 || !strings.Contains(kept[0].Text, "<clip:"+old.ID+">") {
@@ -374,6 +393,11 @@ func TestWaitingSaysItsPlace(t *testing.T) {
 	if !ok || !strings.Contains(p.label, "登录") {
 		t.Fatalf("no place by its words: %+v %v", p, ok)
 	}
+	if !tt.HasText("→ " + shortPlace(p)) { // the line of today's page says it too
+		t.Fatalf("the line does not say it: %q", tt.Texts())
+	}
+	a.tasks.view = tasksWaiting
+	tt.Frame()
 	if !tt.HasText("→ " + shortPlace(p)) {
 		t.Fatalf("the card does not say it: %q", tt.Texts())
 	}
@@ -396,6 +420,7 @@ func TestThoughtAndTask(t *testing.T) {
 		t.Fatal(err)
 	}
 	a.openTasks()
+	a.tasks.view = tasksWaiting
 	tt.Frame()
 	if err := tt.Click("操作 换一家云服务商 #运维"); err != nil {
 		t.Fatalf("%v: %q", err, tt.Texts())

@@ -91,8 +91,11 @@ by AI, and an AI assistant.
     the app's corners (`button`).
   - 今天 (`taskspage.go`, `tasksView`): as a list it is one column read
     down (`todayWidth`), headed by the list's name and the line to add a
-    task (`tasksAdd`); with today's list,
-    what waits for a place, each card saying one by its words alone, with
+    task (`tasksAdd`); under today's list, cut from it by a band the
+    page's width, what waits for a place as a few lines (`waitingBand`,
+    `waitingLine`: the user found the cards there crowding the tasks, and
+    chose lines); its cards are the left column's list 等着归位
+    (`homeWaiting`), each card saying a place by its words alone, with
     no AI asked (`nearPlace`, which must share a word with it,
     `sharesWord`); AI 归位 for better; what waits is white cards on one pale ground, as
     flomo's notes lie (the user held ours beside them: pale blocks on
@@ -107,6 +110,9 @@ by AI, and an AI assistant.
     on their days, and those that repeat (`model.Repeat`, `repeatProp`,
     `parseRepeat`) faint on the days they come again (`taskGhost`). A
     task's state, priority and day are set with `segmented` and `dateProp`.
+    A project chosen in the left column shows all of its tasks not done,
+    by when (`tasksOfMap`), with the way to its map, and nothing that
+    waits: that is of no one project.
   - 项目 (`projectsView`): the maps as cards, each with the map drawn
     small as its face (`drawMapFace`) and a ring for its tasks; with the
     left column put away, the folders are a row of pills (`projFolder`).

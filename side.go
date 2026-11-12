@@ -2,9 +2,12 @@ package main
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
+
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
 
 // Every place has a column at the leaf's left that says what of it shows
@@ -103,8 +106,10 @@ func (a *app) todaySide(c *ui.Context) {
 			}
 		}
 		sideLine(c)
-		sideHead(c, "按项目")
-		for _, fi := range a.files {
+		sideHead(c, "项目")
+		files := slices.Clone(a.files) // those starred first
+		slices.SortStableFunc(files, func(x, y model.FileInfo) int { return b2i(a.starred(y.Path)) - b2i(a.starred(x.Path)) })
+		for _, fi := range files {
 			path := fi.Path
 			if n := open[path]; n > 0 || a.tasks.onMap == path {
 				col := a.mapColor(path)

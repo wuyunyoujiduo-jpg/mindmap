@@ -29,6 +29,7 @@ const (
 	tasksInbox   // the tasks written down, not yet put in a map
 	tasksDone    // those done, the last first
 	tasksWaiting // what was written down and waits for a place
+	tasksOfMap   // not a list of the left column: how a project's tasks are grouped
 )
 
 // The lists of the tasks' page, as its tabs show them.
@@ -420,18 +421,24 @@ func (a *app) tasksView(c *ui.Context) {
 			// One column, read down: what is to do, by its lists, then what was
 			// written down and waits for a place.
 			ui.Scroll(c.Key(fmt.Sprint("today-scroll:", a.tasks.view))).Grow(1).Basis(0).MinHeight(0).Children(func() {
-				pageColumn(c, "tasks-column", false).MaxWidth(todayWidth+56).Padding(4, 28, 40).Gap(6).Children(func() {
+				// What waits for a place stands under today's tasks, of no one
+				// project, cut from them by a band of its own.
+				band := a.tasks.view == tasksToday && a.tasks.onMap == ""
+				foot := float32(40)
+				if band {
+					foot = 22
+				}
+				pageColumn(c, "tasks-column", false).MaxWidth(todayWidth+56).Padding(4, 28, foot).Gap(6).Children(func() {
 					// Which list shows is chosen in the left column (todaySide).
 					if a.tasks.view == tasksWaiting {
 						a.homeWaiting(c)
 						return
 					}
 					a.taskList(c, items)
-					if a.tasks.view == tasksToday { // and, with today's, what waits for a place
-						ui.Box(c).Height(14)
-						a.homeWaiting(c)
-					}
 				})
+				if band {
+					a.waitingBand(c, items)
+				}
 			})
 		})
 		for _, it := range all {
@@ -469,8 +476,30 @@ func (a *app) tasksHead(c *ui.Context, all []taskItem) {
 			}
 			ui.Row(c).Gap(10).AlignItems(ui.End).Children(func() {
 				ui.Text(c, name).FontSize(26).FontWeight(700).LetterSpacing(-0.7).LineHeight(1.2).NoWrap()
+				if path := a.tasks.onMap; path != "" { // a project's tasks: the way to its map
+					ui.Box(c).Margin(0, 0, 2).Children(func() {
+						if textLink(c, "打开导图 ›", "打开导图").Clicked() {
+							a.later(func() { _ = a.open(path) })
+						}
+					})
+					return
+				}
 				ui.Text(c, fmt.Sprintf("%d月%d日 %s", now.Month(), now.Day(), weekdays[now.Weekday()])).FontSize(textBody).TextColor(ink2(th)).Margin(0, 0, 4).NoWrap()
 			})
+			if path := a.tasks.onMap; path != "" {
+				open, done := 0, 0
+				for _, it := range all {
+					if it.path == path {
+						if it.done() {
+							done++
+						} else {
+							open++
+						}
+					}
+				}
+				figures(c, figure{open, "要做"}, figure{done, "做完"}).Margin(6, 0, 0)
+				return
+			}
 			// The day in three figures: the figure in the ink, what it counts faint.
 			figures(c, figure{len(a.dueToday(now)), "要做"}, figure{len(a.doneToday(now)), "做完"}, figure{len(a.waiting()), "等着归位"}).Margin(6, 0, 0).
 				Label(fmt.Sprintf("%d 件要做，做完 %d 件，%d 条等着归位", len(a.dueToday(now)), len(a.doneToday(now)), len(a.waiting())))
@@ -791,7 +820,30 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 		return g
 	}
 	at := func(d time.Time) *time.Time { return &d }
-	switch a.tasks.view {
+	view := a.tasks.view
+	if a.tasks.onMap != "" && (view == tasksToday || view == tasksWeekAhead || view == tasksAll) {
+		view = tasksOfMap // a project's: all that is not done, by when
+	}
+	switch view {
+	case tasksOfMap:
+		over, todayG, later, undated := add("已逾期", true, at(day)), add("今天", false, at(day)), add("之后", false, nil), add("没定日期", false, nil)
+		for _, it := range items {
+			d := it.date()
+			switch {
+			case it.done():
+				if it.node.Task.DoneAt != nil && sameDay(*it.node.Task.DoneAt, now) {
+					done = append(done, it)
+				}
+			case d == nil:
+				undated.items = append(undated.items, it)
+			case d.Before(day):
+				over.items = append(over.items, it)
+			case sameDay(*d, day):
+				todayG.items = append(todayG.items, it)
+			default:
+				later.items = append(later.items, it)
+			}
+		}
 	case tasksToday:
 		over, todayG := add("已逾期", true, at(day)), add("今天", false, at(day))
 		for _, it := range items {
@@ -935,6 +987,11 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 				// Empty, a group of a day still shows, quietly: a place to drop
 				// a task on; others empty do not.
 				if len(g.items) == 0 && (g.danger || g.drop == nil) && len(groups) > 1 {
+					continue
+				}
+				// On today's list and a project's, a group with nothing is not
+				// named: only the week ahead keeps its empty days, to drop on.
+				if len(g.items) == 0 && (view == tasksToday || view == tasksOfMap) && !empty {
 					continue
 				}
 				// The whole group, its heading and its tasks, takes a task
