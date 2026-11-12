@@ -82,14 +82,17 @@ func (a *app) mcpView(c *ui.Context) {
 				FontSize(13).Wrap()
 			step := func(title, body, copyLabel string) {
 				ui.Column(c.Key(title)).Gap(6).Children(func() {
-					ui.Text(c, title).FontSize(13).Bold()
-					ui.Box(c).Padding(8, 10).Radius(6).Background(t.Surface).Border(1, t.Border).FillWidth().Children(func() {
-						ui.Text(c, body).Font("monospace").FontSize(12).Wrap().Selectable()
+					// Its name, and at the row's end the key that copies what is under it.
+					ui.Row(c).Gap(8).AlignItems(ui.Center).FillWidth().Children(func() {
+						ui.Text(c, title).FontSize(textSmall).FontWeight(700).Grow(1).Shrink(1).MinWidth(0)
+						if textKey(c, copyLabel, copyLabel, "复制到剪贴板").Clicked() {
+							a.plat.CopyText(body)
+							a.tell("已复制")
+						}
 					})
-					if button(c, copyLabel).Clicked() {
-						a.plat.CopyText(body)
-						a.tell("已复制")
-					}
+					ui.Box(c).Padding(10, 12).Radius(radiusRow).Background(blockFill(t)).FillWidth().Children(func() {
+						ui.Text(c, body).Font("monospace").FontSize(12).LineHeight(1.5).Wrap().Selectable()
+					})
 				})
 			}
 			step("Claude Code：在终端运行", claude, "复制命令")

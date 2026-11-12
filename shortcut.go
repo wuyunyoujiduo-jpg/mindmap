@@ -147,14 +147,13 @@ func (a *app) shortcutField(c *ui.Context, name, value, def string, set func(acc
 	if recording {
 		label, col = "请按下新的快捷键…", t.TextMuted
 	}
-	border := t.Border
-	if recording {
-		border = t.Accent
-	}
 	ui.Row(c.Key("sc:" + name)).Gap(10).AlignItems(ui.Center).Children(func() {
 		box := ui.Row(c.Key("rec")).Width(180).Height(30).Padding(0, 10).AlignItems(ui.Center).
-			Radius(7).Border(1, border).Background(t.Background).Focusable().Cursor(ui.CursorPointer).
+			Radius(radiusPill).Background(blockFill(t)).Transition(easeLook).Focusable().Cursor(ui.CursorPointer).
 			Label(name).Tooltip("点一下，再按下新的组合键")
+		if recording { // as a field written in: white, in the accent's line
+			box.Background(t.Background).InsetShadow(0, 0, 0, 1.5, t.Accent)
+		}
 		box.HandleInput(func(ev ui.InputEvent) bool {
 			if a.recordingKey != name || ev.Kind != ui.InputKeyDown {
 				return false

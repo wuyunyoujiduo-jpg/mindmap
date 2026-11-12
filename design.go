@@ -948,7 +948,8 @@ func rowsField(c *ui.Context, title, note string, body func()) ui.Element {
 	t := c.Theme()
 	return ui.Column(c.Key("field:" + title)).Gap(8).FillWidth().Children(func() {
 		if title != "" {
-			ui.Text(c, title).FontSize(textSmall).FontWeight(700).TextColor(t.Text.MixOklab(t.TextMuted, 0.45)).Margin(0, 6)
+			// A group's name, small and quiet, as a list's groups are named.
+			ui.Text(c, title).FontSize(textCaption).FontWeight(700).LetterSpacing(0.3).TextColor(t.TextMuted).Margin(0, 6)
 		}
 		raise(ui.Column(c.Key("card")).Padding(4, 18).Radius(radiusCard).FillWidth(), t).Children(body)
 		if note != "" {
@@ -969,7 +970,7 @@ func setRowSays(c *ui.Context, title, sub, wrong string, control func()) {
 	t := c.Theme()
 	ui.Row(c.Key("row:"+title)).MinHeight(52).Padding(10, 0).Gap(16).AlignItems(ui.Center).FillWidth().Children(func() {
 		ui.Column(c).Gap(2).Grow(1).Shrink(1).Basis(0).MinWidth(0).Children(func() {
-			ui.Text(c, title).FontSize(textBody).FontWeight(700)
+			ui.Text(c, title).FontSize(textBody) // a row's name is read, not shouted: regular, its word under it muted
 			switch {
 			case wrong != "":
 				ui.Text(c.Key("wrong"), wrong).FontSize(textSmall).TextColor(t.Danger).LineHeight(1.45).Wrap().

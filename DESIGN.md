@@ -128,6 +128,16 @@ at its foot.
 What is done from any page (a screenshot, the AI, the search) has its
 key in the top row, not on one page's head.
 
+## The settings
+
+Rows in pale blocks (`rowsField`, `setRow`): a group's name small, heavy
+and muted, as a list's groups; a row's name regular, its word under it
+muted; only the page's and the part's names are heavy. Its list of parts
+is rows with icons, as the left column's. A shortcut's box is a pale
+block, white in the accent's line while it records. What copies a block
+of text is a small key at the end of the block's name, never a bar
+across the page.
+
 ## A map's page
 
 The same rules where they fit a tool's page: the map's name and a topic's

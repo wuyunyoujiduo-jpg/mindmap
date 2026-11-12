@@ -405,12 +405,13 @@ func (a *app) settingsView(c *ui.Context) {
 		// The parts on the left, as a list; the one chosen on the right.
 		ui.Row(c).Gap(22).Width(min(820, w-80)).AlignItems(ui.Start).Children(func() {
 			ui.Column(c.Key("settings-tabs")).Width(160).Shrink(0).Gap(2).Children(func() {
-				ui.Text(c, "设置").FontSize(textPage).FontWeight(700).LetterSpacing(titleTrack).Margin(2, 12, 16)
+				ui.Text(c, "设置").FontSize(26).FontWeight(700).LetterSpacing(-0.7).Margin(0, 12, 14)
 				for i, name := range tabs {
 					on := i == a.settingsTab
-					row := ui.Row(c.Key("settings-tab:"+name)).Height(38).Padding(0, 14).Radius(radiusRow).AlignItems(ui.Center).
+					row := ui.Row(c.Key("settings-tab:"+name)).Height(36).Padding(0, 10).Gap(10).Radius(radiusRow).AlignItems(ui.Center).
 						FillWidth().Cursor(ui.CursorPointer).Label(name).Background(t.Text.Alpha(0)).Transition(easeLook)
-					if !on && row.Hovered() {
+					hot := on || row.Hovered()
+					if !on && hot {
 						row.Background(t.Text.Alpha(0.05))
 					}
 					if row.Clicked() {
@@ -422,11 +423,13 @@ func (a *app) settingsView(c *ui.Context) {
 							slidePill(c, "settings-tabs", radiusRow)
 							row.ZIndex(-1) // under the others, which the pill slides behind
 						}
-						txt := ui.Text(c, name).FontSize(15).PassThrough()
+						// Its icon, as a row of the left column has.
+						kubaiIcon(c, map[string]string{"通用": "sliders", "资料整理": "sparkles", "备份": "save", "同步": "sync", "连接": "plug", "当前导图": "sitemap"}[name], sideIconSize, hot)
+						txt := ui.Text(c, name).FontSize(textBody + 0.5).PassThrough()
 						if on {
 							txt.FontWeight(700)
-						} else {
-							txt.TextColor(t.Text.MixOklab(t.TextMuted, 0.3))
+						} else if !hot {
+							txt.TextColor(ink2(t))
 						}
 					})
 				}
@@ -493,7 +496,7 @@ func switchRow(c *ui.Context, on *bool, label, text string, changed func()) {
 	}
 	row.Children(func() {
 		ui.Column(c).Gap(2).Grow(1).Shrink(1).Basis(0).MinWidth(0).PassThrough().Children(func() {
-			ui.Text(c, label).FontSize(textBody).FontWeight(700)
+			ui.Text(c, label).FontSize(textBody)
 			if text != "" {
 				ui.Text(c, text).FontSize(textSmall).TextColor(t.TextMuted).LineHeight(1.45).Wrap()
 			}
