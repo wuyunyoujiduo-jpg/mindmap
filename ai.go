@@ -1359,6 +1359,6 @@ func (a *app) scopeChip(c *ui.Context) {
 		}
 		glyph(c, ic, 12, t.TextMuted)
 		ui.Text(c, aiScopes[ai.scope].name).FontSize(11).TextColor(t.Text).NoWrap().PassThrough()
-		ui.Text(c, "▾").FontSize(9).TextColor(t.TextMuted).PassThrough()
+		chevron(c, t.TextMuted)
 	})
 }

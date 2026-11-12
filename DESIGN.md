@@ -128,6 +128,16 @@ at its foot.
 What is done from any page (a screenshot, the AI, the search) has its
 key in the top row, not on one page's head.
 
+## What opens a menu
+
+Ends in `chevron`: a small angle drawn as a thin line, the same wherever
+it is. Never a letter (⌄, ▾): it sits low and is of another weight on
+each font. A key that opens a choice is a key as the others beside it
+(`key`, `dropButton`), never bare gray words.
+
+A map's face on its card (`drawMapFace`) is the map itself, small: its
+first two levels laid out by the canvas's own layout for its structure.
+
 ## The settings
 
 Rows in pale blocks (`rowsField`, `setRow`): a group's name small, heavy

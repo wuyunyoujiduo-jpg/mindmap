@@ -1758,20 +1758,25 @@ func drawLineEdges(p *ui.Painter, r layout.Result, fishbone bool, ox, oy, z, wid
 // structure alone.
 func (a *app) structurePicker(c *ui.Context, short bool) {
 	t := c.Theme()
-	btn := ui.Box(c.Key("structure")).Height(30).Padding(0, 10).Radius(7).Center().Shrink(0).
-		Cursor(ui.CursorPointer).Label("结构").Tooltip("换这个画布的结构（思维导图、逻辑图…）和配色")
-	if btn.Hovered() || a.structureOpen {
-		btn.Background(t.SurfaceHover)
+	// A key as the others of the bar: the structure drawn small, its name,
+	// and the chevron of what opens.
+	btn := key(ui.Row(c.Key("structure")).Height(30).Padding(0, 10, 0, 9).Gap(7).Radius(radiusPill).AlignItems(ui.Center).Shrink(0).
+		Cursor(ui.CursorPointer).Label("结构").Tooltip("换这个画布的结构（思维导图、逻辑图…）和配色"), t)
+	if a.structureOpen {
+		btn.Background(t.Text.Alpha(0.1))
 	}
 	if btn.Clicked() {
 		a.structureOpen = !a.structureOpen
 	}
 	btn.Children(func() {
-		label := a.doc.Structure.Label() + " · " + schemeOf(a.doc.Style.Scheme).name + "配色 ⌄"
+		label := a.doc.Structure.Label() + " · " + schemeOf(a.doc.Style.Scheme).name + "配色"
 		if short {
-			label = a.doc.Structure.Label() + " ⌄"
+			label = a.doc.Structure.Label()
 		}
-		ui.Text(c, label).FontSize(textSmall).TextColor(t.Text.MixOklab(t.TextMuted, 0.6)).NoWrap().PassThrough()
+		s := a.doc.Structure
+		ui.Box(c).Size(22, 14).Shrink(0).PassThrough().Draw(func(p *ui.Painter, r ui.Rect) { drawStructureIcon(p, r, s, t.TextMuted) })
+		ui.Text(c, label).FontSize(textSmall).NoWrap().PassThrough()
+		chevron(c, t.TextMuted)
 	})
 	ui.Popover(c, btn, &a.structureOpen, func() {
 		sectionHeader(c, "结构").Margin(4, 6, 2)

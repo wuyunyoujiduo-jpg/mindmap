@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/layout"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
 
@@ -183,16 +184,16 @@ func (a *app) projectsView(c *ui.Context) {
 		if path != a.path {
 			file = a.indexed(path)
 		}
-		var root *model.Node
+		var sheet *model.Document
 		topics := 0
 		if file != nil && len(file.Sheets) > 0 {
-			root = file.Sheets[0].Root
-			topics = countTopics(root) - 1
+			sheet = file.Sheets[0]
+			topics = countTopics(sheet.Root) - 1
 		}
 		el.Children(func() {
 			ui.Box(c.Key("face")).Height(104).FillWidth().Radius(radiusCard - 4).Background(cardColor(t)).PassThrough().
 				Draw(func(pt *ui.Painter, r ui.Rect) {
-					pt.Clip(r, radiusCard-4, func() { drawMapFace(pt, r, root, col) })
+					pt.Clip(r, radiusCard-4, func() { drawMapFace(pt, r, sheet, col) })
 				})
 			ui.Row(c).Padding(0, 4, 0, 8).Gap(6).AlignItems(ui.Center).FillWidth().Children(func() {
 				ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(2).Children(func() {
@@ -426,53 +427,65 @@ func countTopics(n *model.Node) int {
 	return k
 }
 
-// drawMapFace draws a map small, in r, as the face of its card: its
-// center in the map's color, its main topics around it, each in a color
-// of its own and as long as its name, with those under it as short
-// strokes. It is the map's shape, not its words.
-func drawMapFace(p *ui.Painter, r ui.Rect, root *model.Node, col ui.Color) {
-	s := min(r.W/300, 1.3) // the whole of it within the face, whatever the card's width
-	cx, cy := r.X+r.W/2, r.Y+r.H/2
-	rw, rh := 52*s, 18*s
-	var kids []*model.Node
-	if root != nil {
-		kids = root.Children
+// drawMapFace draws a map small, as the face of its card: its center and
+// its first two levels, laid out as the map itself is (a mind map, a logic
+// chart, an org chart, a timeline…) by the canvas's own layout, each
+// branch in a color, so that a map is told at a glance from another by
+// its shape.
+func drawMapFace(p *ui.Painter, r ui.Rect, doc *model.Document, col ui.Color) {
+	if doc == nil || doc.Root == nil {
+		rw, rh := float32(52), float32(18)
+		p.Fill(ui.Rect{X: r.X + r.W/2 - rw/2, Y: r.Y + r.H/2 - rh/2, W: rw, H: rh}, col, rh/2)
+		return
 	}
-	if len(kids) > 6 {
-		kids = kids[:6]
+	// A copy of what shows: seven branches at most, four topics on each.
+	small := &model.Document{Structure: doc.Structure, Root: &model.Node{ID: "r"}}
+	depth := map[string]int{"r": 0}
+	branch := map[string]int{}
+	for i, k := range doc.Root.Children {
+		if i == 7 {
+			break
+		}
+		kid := &model.Node{ID: fmt.Sprint("b", i), Title: k.Title}
+		depth[kid.ID], branch[kid.ID] = 1, i
+		for j := range min(len(k.Children), 4) {
+			g := &model.Node{ID: fmt.Sprint("b", i, "-", j)}
+			depth[g.ID], branch[g.ID] = 2, i
+			kid.Children = append(kid.Children, g)
+		}
+		small.Root.Children = append(small.Root.Children, kid)
 	}
-	right := (len(kids) + 1) / 2
-	for i, k := range kids {
-		side, j, of := float32(1), i, right
-		if i >= right {
-			side, j, of = -1, i-right, len(kids)-right
+	measure := func(n *model.Node, d int) (float32, float32) {
+		switch d {
+		case 0:
+			return 52, 18
+		case 1:
+			return min(max(float32(len([]rune(n.Title)))*5.5+16, 26), 62), 12
 		}
-		gap := min(28*s, (r.H-22*s)/float32(of))
-		by := cy + (float32(j)-float32(of-1)/2)*gap
-		bw := min(max(float32(len([]rune(k.Title)))*5.5+16, 26), 62) * s
-		bh := 12 * s
-		near := cx + side*(rw/2+30*s) // the topic's edge toward the center
-		bx := near
-		if side < 0 {
-			bx = near - bw
-		}
-		bc := ui.Hex(mapPalette[(colorIndex(col)+i+1)%len(mapPalette)])
-		p.StrokePath(new(ui.Path).MoveTo(cx+side*rw/2, cy).CubeTo(cx+side*(rw/2+16*s), cy, near-side*16*s, by, near, by), 1.5*s, bc.Alpha(0.75))
-		p.Fill(ui.Rect{X: bx, Y: by - bh/2, W: bw, H: bh}, bc.Alpha(0.36), bh/2)
-		far := near + side*bw
-		m := min(len(k.Children), 3)
-		for q := range m {
-			sy := by + (float32(q)-float32(m-1)/2)*7*s
-			sw := 14 * s
-			sx := far + side*8*s
-			if side < 0 {
-				sx -= sw
-			}
-			p.Line(far, by, far+side*8*s, sy, 1*s, bc.Alpha(0.45))
-			p.Fill(ui.Rect{X: sx, Y: sy - 2*s, W: sw, H: 4 * s}, bc.Alpha(0.3), 2*s)
+		return 16, 4
+	}
+	o := layoutOptions(doc.Structure)
+	o.Margin, o.GapX, o.GapY = 0, 26, 7
+	lr := layout.Compute(small, measure, o)
+	if lr.Width <= 0 || lr.Height <= 0 {
+		return
+	}
+	z := min((r.W-28)/lr.Width, (r.H-22)/lr.Height, 1.25)
+	ox := r.X + (r.W-lr.Width*z)/2
+	oy := r.Y + (r.H-lr.Height*z)/2
+	tint := func(id string) ui.Color { return ui.Hex(mapPalette[(colorIndex(col)+branch[id]+1)%len(mapPalette)]) }
+	drawEdges(p, lr, doc.Structure, ox, oy, z, 1.4, ui.Rect{}, func(to string) ui.Color { return tint(to).Alpha(0.7) })
+	for id, b := range lr.Boxes {
+		box := ui.Rect{X: ox + b.X*z, Y: oy + b.Y*z, W: b.W * z, H: b.H * z}
+		switch depth[id] {
+		case 0:
+			p.Fill(box, col, box.H/2)
+		case 1:
+			p.Fill(box, tint(id).Alpha(0.36), box.H/2)
+		default:
+			p.Fill(box, tint(id).Alpha(0.3), box.H/2)
 		}
 	}
-	p.Fill(ui.Rect{X: cx - rw/2, Y: cy - rh/2, W: rw, H: rh}, col, rh/2)
 }
 
 // colorIndex is a map's color's place among the maps' colors, or 0.

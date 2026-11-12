@@ -217,3 +217,38 @@ func TestBarOverMap(t *testing.T) {
 		t.Fatalf("not kept and put away: open %v, clips %d", a.barOpen, len(a.lib.Clips))
 	}
 }
+
+// TestMapFacesFollowStructure: a map's card shows it laid out as it is,
+// a logic chart to one side, an org chart downward, and so on.
+func TestMapFacesFollowStructure(t *testing.T) {
+	a, tt := newTestApp(t)
+	for _, s := range model.Structures {
+		f := model.NewFile(s.Label())
+		d := f.Sheets[0]
+		d.Structure = s
+		for i, name := range []string{"目标", "范围说明", "里程碑", "风险", "分工"} {
+			n, err := d.AddChild(d.Root.ID, name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for range i % 3 {
+				if _, err := d.AddChild(n.ID, "细项"); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		if err := f.Save(filepath.Join(a.dir, model.FileName(s.Label()))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a.refreshFiles()
+	a.showProjects()
+	tt.Frame()
+	tt.Frame()
+	for _, s := range model.Structures {
+		if !tt.HasText(s.Label()) {
+			t.Fatalf("%s is not shown: %q", s.Label(), tt.Texts())
+		}
+	}
+	snapshot(t, tt, "projects-faces")
+}

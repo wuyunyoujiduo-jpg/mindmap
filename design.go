@@ -448,12 +448,19 @@ func dropButton(c *ui.Context, k, text, label, tip string) ui.Element {
 		Label(label).Tooltip(tip).Shrink(0), t)
 	b.Children(func() {
 		ui.Text(c, text).FontSize(textBody).MaxWidth(160).SingleLine().PassThrough()
-		ui.Box(c).Size(10, 10).Shrink(0).PassThrough().Draw(func(p *ui.Painter, r ui.Rect) {
-			cx, cy := r.X+r.W/2, r.Y+r.H/2+0.5
-			p.StrokePath(new(ui.Path).MoveTo(cx-3.5, cy-1.75).LineTo(cx, cy+1.75).LineTo(cx+3.5, cy-1.75), 1.3, t.TextMuted)
-		})
+		chevron(c, t.TextMuted)
 	})
 	return b
+}
+
+// chevron is the mark that something opens a menu or a choice: a small
+// angle drawn as a thin line, the same wherever it is. Never a letter
+// (⌄, ▾), which sits low and is of another weight on each font.
+func chevron(c *ui.Context, col ui.Color) ui.Element {
+	return ui.Box(c).Size(10, 10).Shrink(0).PassThrough().Draw(func(p *ui.Painter, r ui.Rect) {
+		cx, cy := r.X+r.W/2, r.Y+r.H/2+0.5
+		p.StrokePath(new(ui.Path).MoveTo(cx-3.5, cy-1.75).LineTo(cx, cy+1.75).LineTo(cx+3.5, cy-1.75), 1.3, col)
+	})
 }
 
 // hairline is the color of the thin lines between parts.

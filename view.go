@@ -244,7 +244,7 @@ func (a *app) toolbar(c *ui.Context) {
 				name.Menu(a.mapSwitchMenu)
 				name.Children(func() {
 					ui.Text(c, mapName(a.path)).FontWeight(700).LetterSpacing(-0.3).FontSize(textTitle).NoWrap().MaxWidth(220).Ellipsis("…").PassThrough()
-					ui.Text(c, "⌄").FontSize(textSmall).TextColor(t.TextMuted).PassThrough()
+					chevron(c, t.TextMuted)
 				})
 			})
 			status, col := "已自动保存", t.TextMuted
@@ -335,8 +335,10 @@ func (a *app) viewTabs(c *ui.Context, room float32) {
 		return
 	}
 	well(ui.Row(c.Key("view-tabs")).Padding(2).Gap(2).Radius(radiusPill).Shrink(0), t).Children(func() {
+		opens := false // the tab being built opens a menu: it ends in a chevron
 		tab := func(key, name string, on bool) ui.Element {
-			b := ui.Box(c.Key("view:"+key)).Height(28).Padding(0, 14).Radius(radiusPill).Center().Cursor(ui.CursorPointer).Label(name).
+			more := opens
+			b := ui.Row(c.Key("view:"+key)).Height(28).Padding(0, 14).Gap(5).Radius(radiusPill).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(name).
 				Background(t.Text.Alpha(0)).Transition(easeLook)
 			if !on && b.Hovered() {
 				b.Background(t.Text.Alpha(0.05))
@@ -347,10 +349,15 @@ func (a *app) viewTabs(c *ui.Context, room float32) {
 					b.ZIndex(-1) // under the others, which the pill slides behind
 				}
 				txt := ui.Text(c, name).FontSize(textSmall).PassThrough()
+				col := t.Text
 				if on {
 					txt.FontWeight(700)
 				} else {
-					txt.TextColor(t.Text.MixOklab(t.TextMuted, 0.6))
+					col = t.Text.MixOklab(t.TextMuted, 0.6)
+					txt.TextColor(col)
+				}
+				if more {
+					chevron(c, col)
 				}
 			})
 			return b
@@ -360,12 +367,13 @@ func (a *app) viewTabs(c *ui.Context, room float32) {
 				a.mode = v.mode
 			}
 		}
-		more, on := "更多 ⌄", false
+		more, on := "更多", false
 		for _, v := range moreViews {
 			if a.mode == v.mode {
-				more, on = v.name+" ⌄", true
+				more, on = v.name, true
 			}
 		}
+		opens = true
 		tab("more", more, on).Label("更多视图").Menu(func(m *ui.Menu) {
 			for _, v := range moreViews {
 				if m.Item(v.name).Checked(a.mode == v.mode).Chosen() {
