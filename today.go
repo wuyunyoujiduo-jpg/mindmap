@@ -213,18 +213,7 @@ func (a *app) homeWaiting(c *ui.Context) {
 				}
 			case len(items) > 0:
 				if sparkKey(c, "AI 归位", "让 AI 建议每条该放到哪张导图的哪个主题下，你确认后才放").Clicked() {
-					a.later(func() {
-						a.suggestPlaces()
-						var clips []*library.Clip
-						for _, w := range a.waiting() {
-							if w.clip != nil {
-								clips = append(clips, w.clip)
-							}
-						}
-						if len(clips) > 0 {
-							a.suggestClipPlaces(clips)
-						}
-					})
+					a.later(a.askAllPlaces)
 				}
 			}
 		})
@@ -248,6 +237,21 @@ func (a *app) homeWaiting(c *ui.Context) {
 			ui.Text(c, fmt.Sprintf("还有 %d 条，在任务的收件箱和收集里", more)).FontSize(textSmall).TextColor(t.TextMuted).Margin(8, 10, 4)
 		}
 	})
+}
+
+// askAllPlaces asks the AI where each thing that waits would go: the tasks
+// of the inbox and the notes. Nothing is moved until each is agreed to.
+func (a *app) askAllPlaces() {
+	a.suggestPlaces()
+	var clips []*library.Clip
+	for _, w := range a.waiting() {
+		if w.clip != nil {
+			clips = append(clips, w.clip)
+		}
+	}
+	if len(clips) > 0 {
+		a.suggestClipPlaces(clips)
+	}
 }
 
 // keptLastRow says what was just left in 收集, and gives the way back: it
@@ -295,7 +299,20 @@ func (a *app) waitingBand(c *ui.Context, shown []taskItem) {
 		Background(t.Text.Alpha(0.018)).Children(func() {
 		pageColumn(c, "band-column", false).MaxWidth(todayWidth + 56).Gap(2).Children(func() {
 			trayHead(c, "head:等着归位", "等着归位", fmt.Sprintf("%d 条，这几天记下的", len(items)), func() {
-				if textLink(c, "去整理 ›", "去整理").Tooltip("每条该放到哪张导图：在「等着归位」里一条条放，或让 AI 归位").Clicked() {
+				// The AI's key is here too: it asks, and shows the list, where
+				// each of its places is agreed to on its card.
+				switch {
+				case a.tasks.placing || a.clipPlacing:
+					ui.Spinner(c)
+				default:
+					if sparkKey(c, "AI 归位", "让 AI 建议每条该放到哪张导图的哪个主题下；到「等着归位」里逐条确认后才放").Clicked() {
+						a.later(func() {
+							a.askAllPlaces()
+							all()
+						})
+					}
+				}
+				if textLink(c, "去整理 ›", "去整理").Tooltip("每条该放到哪张导图：在「等着归位」里一条条放").Clicked() {
 					a.later(all)
 				}
 			})
