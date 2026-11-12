@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -336,38 +337,30 @@ type trayTask struct {
 
 // trayMenu is the menu of the menu bar icon.
 func (a *app) trayMenu() []trayEntry {
-	items := []trayEntry{{label: "快速记录…", run: a.plat.ShowCapture},
-		{label: "收藏剪贴板到收集", run: a.clipFromShortcut},
-		{label: "截图…", run: func() { a.plat.Screenshot(false) }},
-		{label: "延时 3 秒截图（截菜单）", run: func() { a.plat.DelayedScreenshot(3) }},
-		{label: fmt.Sprintf("收集（%d）", len(a.lib.Clips)), run: func() {
-			a.plat.ShowMain()
-			a.showLibrary()
-		}}}
-	if k := a.inboxCount(); k > 0 {
-		items = append(items, trayEntry{label: fmt.Sprintf("收件箱（%d）", k), run: func() {
-			a.plat.ShowMain()
-			_ = a.open(a.inboxPath())
-		}})
-	}
+	// Three things to do from anywhere, then today's tasks, then the app:
+	// nothing that only goes to a page of it, which opening it does.
+	items := []trayEntry{{label: "记一条…", run: a.plat.ShowCapture},
+		{label: "截图", run: func() { a.plat.Screenshot(false) }},
+		{label: "收藏剪贴板", run: a.clipFromShortcut}}
 	tasks := a.trayTasks()
+	slices.SortStableFunc(tasks, func(x, y trayTask) int { return b2i(y.overdue) - b2i(x.overdue) }) // those late first
 	items = append(items, trayEntry{sep: true})
 	if len(tasks) == 0 {
-		items = append(items, trayEntry{label: "今天没有到期的任务"})
+		items = append(items, trayEntry{label: "今天没有要做的"})
 	} else {
-		items = append(items, trayEntry{label: fmt.Sprintf("今天到期和已逾期 %d", len(tasks))})
+		items = append(items, trayEntry{label: fmt.Sprintf("今天要做 %d 件", len(tasks))})
 		for i, tt := range tasks {
-			if i == 12 {
-				items = append(items, trayEntry{label: fmt.Sprintf("还有 %d 个…", len(tasks)-i)})
+			if i == 8 {
+				items = append(items, trayEntry{label: fmt.Sprintf("还有 %d 件，在 MyMind 里看", len(tasks)-i), run: a.plat.ShowMain})
 				break
 			}
-			mark := "○ "
-			if tt.overdue {
-				mark = "⚠ "
+			// Its words, without the link written in them; late, it says so.
+			label, _ := titleAndSite(tt.node.Title)
+			if r := []rune(label); len(r) > 28 {
+				label = string(r[:28]) + "…"
 			}
-			label := mark + tt.node.Title
-			if tt.path != a.path {
-				label += "　· " + mapName(tt.path)
+			if tt.overdue {
+				label = "逾期 · " + label
 			}
 			tt := tt
 			items = append(items, trayEntry{label: label, run: func() {

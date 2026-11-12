@@ -65,7 +65,6 @@ func (f *fakePlatform) SetTray(on bool)                {}
 func (f *fakePlatform) SetClipKey(key string) error    { return nil }
 func (f *fakePlatform) SetShotKey(key string) error    { return nil }
 func (f *fakePlatform) Screenshot(fromApp bool)        { f.shots++ }
-func (f *fakePlatform) DelayedScreenshot(int)          { f.shots++ }
 func (f *fakePlatform) OpenShotSettings()              { f.opened = append(f.opened, "shot-settings") }
 func (f *fakePlatform) ShotLog() string                { return "2026-10-11 15:04:05 截图开始" }
 func (f *fakePlatform) SetAppIcon(png, tray []byte)    { f.icon, f.tray = png, tray }
@@ -2516,7 +2515,7 @@ func TestTrayAndSettings(t *testing.T) {
 		labels = append(labels, e.label)
 	}
 	all := strings.Join(labels, "|")
-	if !strings.Contains(all, "今天到期和已逾期 2") || !strings.Contains(all, "⚠ 列表加载慢") || !strings.Contains(all, "○ 搜索") {
+	if !strings.Contains(all, "今天要做 2 件") || !strings.Contains(all, "逾期 · 列表加载慢") || !strings.Contains(all, "搜索") || strings.Contains(all, "延时") {
 		t.Fatalf("menu %q", labels)
 	}
 	if a.trayTitle() != "2" {

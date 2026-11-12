@@ -54,10 +54,6 @@ type platform interface {
 	// taken from the app.
 	SetShotKey(accelerator string) error
 	Screenshot(fromApp bool)
-	// DelayedScreenshot takes one after a countdown, in which a menu of
-	// any app is opened: the system gives no app its shortcuts while
-	// another's menu is open.
-	DelayedScreenshot(seconds int)
 	// OpenShotSettings opens the system's settings of screen recording.
 	OpenShotSettings()
 	// ShotLog is the end of the screenshots' log.

@@ -82,13 +82,9 @@ func (a *app) shotSettings(c *ui.Context) {
 				a.settingsOpen = false
 				a.later(a.screenshot)
 			}
-			if button(c, "延时 3 秒截图").Tooltip("倒数时打开要截的菜单").Clicked() {
-				a.settingsOpen = false
-				a.later(func() { a.plat.DelayedScreenshot(3) })
-			}
 		})
 		setLine(c)
-		setRow(c, "菜单展开时截图", "别的应用的菜单展开时，macOS 不把快捷键交给应用：给 MyMind「输入监控」权限（授权后重启），或者用「延时 3 秒截图」", func() {
+		setRow(c, "菜单展开时截图", "别的应用的菜单展开时，macOS 不把快捷键交给应用：给 MyMind「输入监控」权限（授权后重启）", func() {
 			if screenshot.KeysAllowed() {
 				ui.Text(c, "✓ 菜单展开时也能用快捷键截图").FontSize(textSmall).TextColor(t.Success)
 				return
