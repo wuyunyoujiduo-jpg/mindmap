@@ -426,11 +426,21 @@ func (a *app) tasksHead(c *ui.Context, all []taskItem) {
 				name = mapName(a.tasks.onMap)
 			}
 			ui.Row(c).Gap(10).AlignItems(ui.End).Children(func() {
-				ui.Text(c, name).FontSize(textPage + 2).FontWeight(600).LetterSpacing(titleTrack).LineHeight(1.2).NoWrap()
-				ui.Text(c, fmt.Sprintf("%d月%d日 %s", now.Month(), now.Day(), weekdays[now.Weekday()])).FontSize(textSmall).TextColor(th.TextMuted).Margin(0, 0, 3).NoWrap()
+				ui.Text(c, name).FontSize(26).FontWeight(600).LetterSpacing(-0.7).LineHeight(1.2).NoWrap()
+				ui.Text(c, fmt.Sprintf("%d月%d日 %s", now.Month(), now.Day(), weekdays[now.Weekday()])).FontSize(textBody).TextColor(ink2(th)).Margin(0, 0, 4).NoWrap()
 			})
-			ui.Text(c, fmt.Sprintf("%d 件要做，做完 %d 件，%d 条等着归位", len(a.dueToday(now)), len(a.doneToday(now)), len(a.waiting()))).
-				FontSize(textSmall).TextColor(th.TextMuted).SingleLine()
+			// The day in three figures: the figure in the ink, what it counts faint.
+			ui.Row(c.Key("figures")).Gap(18).Margin(6, 0, 0).Label(fmt.Sprintf("%d 件要做，做完 %d 件，%d 条等着归位", len(a.dueToday(now)), len(a.doneToday(now)), len(a.waiting()))).Children(func() {
+				for _, f := range []struct {
+					n    int
+					name string
+				}{{len(a.dueToday(now)), "要做"}, {len(a.doneToday(now)), "做完"}, {len(a.waiting()), "等着归位"}} {
+					ui.Row(c.Key(f.name)).Gap(5).AlignItems(ui.Center).Children(func() {
+						ui.Text(c, fmt.Sprint(f.n)).FontSize(textSmall).FontWeight(600).FontFeatures("tnum")
+						ui.Text(c, f.name).FontSize(textSmall).TextColor(th.TextMuted).NoWrap()
+					})
+				}
+			})
 		})
 		if a.cfg.HideTree { // with no left column, the map to narrow by is here
 			a.taskMapMenu(c, all)
@@ -901,17 +911,18 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 					a.dropTaskOn(box, *g.drop)
 				}
 				box.Children(func() {
-					ui.Row(c).Height(34).Padding(0, 10, 2).Gap(8).AlignItems(ui.Center).FillWidth().Children(func() {
-						col := t.Text
+					ui.Row(c).Height(32).Padding(6, 8, 0).Gap(6).AlignItems(ui.Center).FillWidth().Children(func() {
+						// A group's name is small and quiet: the tasks are what is read.
+						col := t.TextMuted
 						switch {
 						case g.danger:
 							col = t.Danger
 						case len(g.items) == 0:
-							col = t.TextMuted
+							col = faint(t)
 						}
-						ui.Text(c, g.title).FontSize(textBody).FontWeight(600).TextColor(col)
+						ui.Text(c, g.title).FontSize(textCaption).FontWeight(600).LetterSpacing(0.3).TextColor(col)
 						if len(g.items) > 0 {
-							ui.Text(c, fmt.Sprint(len(g.items))).FontSize(textSmall).TextColor(t.TextMuted)
+							ui.Text(c, fmt.Sprint(len(g.items))).FontSize(textCaption).TextColor(faint(t)).FontFeatures("tnum")
 						}
 					})
 					if len(g.items) > 0 {
@@ -958,9 +969,9 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 func (a *app) taskRow(c *ui.Context, it taskItem, overdue bool) {
 	t := c.Theme()
 	task := it.node.Task
-	row := ui.Row(c.Key("task:"+it.path+"#"+it.node.ID)).MinHeight(50).Padding(6, 6).Gap(12).AlignItems(ui.Center).
+	row := ui.Row(c.Key("task:"+it.path+"#"+it.node.ID)).MinHeight(54).Padding(8, 6).Gap(12).AlignItems(ui.Center).
 		FillWidth().Cursor(ui.CursorPointer).Label("任务 "+it.node.Title).Drag(taskDrag{it.path, it.node.ID}).
-		BorderWidth(0, 0, 1, 0).BorderColor(hairline(t)).Background(t.Text.Alpha(0)).Transition(rowMotion)
+		BorderWidth(0, 0, 1, 0).BorderColor(t.Border.Alpha(0.55)).Background(t.Text.Alpha(0)).Transition(rowMotion)
 	if row.Hovered() {
 		row.Background(t.Text.Alpha(0.035))
 	}
@@ -1012,7 +1023,14 @@ func (a *app) taskRow(c *ui.Context, it taskItem, overdue bool) {
 			if task.Repeat != nil {
 				label += " ↻"
 			}
-			ui.Text(c, label).FontSize(textSmall).TextColor(col).Shrink(0).PassThrough()
+			if col == t.Danger {
+				// Late, its day is a small pale tag.
+				ui.Box(c).Padding(2, 8).Radius(6).Background(t.Danger.Alpha(0.1)).Shrink(0).PassThrough().Children(func() {
+					ui.Text(c, label).FontSize(textCaption).TextColor(t.Danger).FontFeatures("tnum").NoWrap()
+				})
+			} else {
+				ui.Text(c, label).FontSize(textSmall).TextColor(col).FontFeatures("tnum").Shrink(0).PassThrough()
+			}
 		}
 	})
 }
@@ -1155,23 +1173,39 @@ func (a *app) theme() *ui.Theme {
 func (a *app) weekView(c *ui.Context, items []taskItem) {
 	t := c.Theme()
 	start := weekStart(a.tasks.day)
-	// A tray a day, as the board's columns: its tasks white cards on it.
-	ui.Row(c.Key("week")).Grow(1).AlignItems(ui.Stretch).Padding(4, 12, 12).Gap(8).Children(func() {
+	// A column a day, cut from the next by a thin line, as a calendar's:
+	// today's on a breath of the accent, its day in a dot of it.
+	ui.Row(c.Key("week")).Grow(1).AlignItems(ui.Stretch).Margin(10, 28, 0).BorderWidth(1, 0, 0, 0).BorderColor(hairline(t)).Children(func() {
 		for i := range 7 {
 			d := start.AddDate(0, 0, i)
 			isToday := sameDay(d, a.now())
-			col := ui.Column(c.Key(fmt.Sprint("week-day:", i))).Grow(1).Basis(0).MinWidth(0).Padding(4, 6, 6).Gap(2).Radius(radiusCard).Background(t.Text.Alpha(0.04))
+			rest := d.Weekday() == time.Saturday || d.Weekday() == time.Sunday
+			col := ui.Column(c.Key(fmt.Sprint("week-day:", i))).Grow(1).Basis(0).MinWidth(0).Padding(8, 8, 10).Gap(4).Background(t.Text.Alpha(0))
+			if i < 6 {
+				col.BorderWidth(0, 1, 0, 0).BorderColor(t.Border.Alpha(0.55))
+			}
+			if isToday {
+				col.Background(t.Accent.Alpha(0.035))
+			}
 			a.dropTaskOn(col, d)
 			if col.DoubleClicked() {
 				a.tasks.day, a.tasks.view = d, tasksDay
 			}
 			col.Children(func() {
-				ui.Row(c).Height(34).Padding(0, 6).Gap(6).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, weekdayName(d)).FontSize(textSmall).TextColor(t.TextMuted)
-					num := ui.Text(c, fmt.Sprint(d.Day())).FontSize(textBody).FontWeight(600)
-					if isToday {
-						num.TextColor(t.Accent)
+				ui.Row(c).Height(34).Padding(0, 2).Gap(8).AlignItems(ui.Center).Children(func() {
+					dot := ui.Box(c).Size(26, 26).Radius(13).Center().Shrink(0)
+					ink, word, name := t.Text, t.TextMuted, weekdayName(d)
+					switch {
+					case isToday:
+						dot.Background(t.Accent)
+						ink, word, name = t.AccentText, t.Accent, "今天"
+					case rest:
+						ink, word = faint(t), faint(t)
 					}
+					dot.Children(func() {
+						ui.Text(c, fmt.Sprint(d.Day())).FontSize(textBody).FontWeight(600).FontFeatures("tnum").TextColor(ink)
+					})
+					ui.Text(c, name).FontSize(textCaption).TextColor(word).NoWrap()
 				})
 				ui.Scroll(c.Key("scroll")).Grow(1).Children(func() {
 					ui.Column(c).Gap(4).FillWidth().Children(func() {
@@ -1285,7 +1319,7 @@ func (a *app) comesAgain(it taskItem, from, to time.Time) bool {
 func (a *app) taskGhost(c *ui.Context, it taskItem, d time.Time) {
 	t := c.Theme()
 	chip := ui.Row(c.Key("again:"+it.path+"#"+it.node.ID+d.Format("0102"))).Padding(5, 8).Gap(6).Radius(radiusSmall).AlignItems(ui.Center).FillWidth().
-		Background(t.Text.Alpha(0.035)).Cursor(ui.CursorPointer).Label("到时再做 " + it.node.Title).
+		Background(t.Text.Alpha(0)).Cursor(ui.CursorPointer).Label("到时再做 " + it.node.Title).
 		Tooltip(it.node.Task.Repeat.Label() + "：做完上一次，这一天再出现").Transition(easeLook)
 	if chip.Hovered() {
 		chip.Background(t.Text.Alpha(0.07))
@@ -1306,13 +1340,14 @@ func (a *app) taskChip(c *ui.Context, it taskItem) {
 	t := c.Theme()
 	// A white card, as the lists' are: its circle says its priority, a dot
 	// its map.
-	chip := paper(ui.Row(c.Key("chip:"+it.path+"#"+it.node.ID)).Padding(5, 8).Gap(6).Radius(radiusSmall).AlignItems(ui.Center).FillWidth(), t).Cursor(ui.CursorPointer).
+	chip := ui.Row(c.Key("chip:"+it.path+"#"+it.node.ID)).Padding(5, 8).Gap(6).Radius(radiusSmall).AlignItems(ui.Center).FillWidth().
+		Background(blockFill(t)).Transition(easeLook).Cursor(ui.CursorPointer).
 		Label("任务 " + it.node.Title).Tooltip(it.mapName + " · " + it.node.Title).Drag(taskDrag{it.path, it.node.ID})
 	switch {
 	case a.tasks.sel == it.key():
 		chosenCard(chip, t)
 	case chip.Hovered():
-		chip.Background(t.Text.Alpha(0.03))
+		chip.Background(t.Text.Alpha(0.08))
 	}
 	switch {
 	case chip.DoubleClicked():

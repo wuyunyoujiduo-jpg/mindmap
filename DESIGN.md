@@ -107,6 +107,22 @@ Every list and page has all of these, or does not need one:
 - Everything is on this computer: what is clicked is done before it is
   drawn again, so nothing waits on a server to show.
 
+## 今天's page
+
+Built to the draft https://claude.ai/artifact/5Nw4Mn4q4ozd9rpUNGh8AP.
+
+- **Head**: the page's name at 26/600, -0.7; the day beside it in `ink2`;
+  under it the day in three figures, the figure at 600 in the ink, what
+  it counts in the muted ink.
+- **A group's name**: 12/600, +0.3, muted (the danger's color when late):
+  the tasks are what is read. A row is 54 high, its line faint; a late
+  day is a small pale tag of the danger's color.
+- **The week**: a column a day cut by a faint line, not a block each;
+  today's on a breath of the accent, its day in a dot of it, named 今天;
+  the days of rest faint. A task there is a pale block.
+- **The AI's key by a heading** (`sparkKey`): the spark and its words in
+  the accent, on no block until pointed at.
+
 ## Don't
 
 - Don't add a shadow, a gradient or a glow to anything on the leaf.

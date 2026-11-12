@@ -212,7 +212,7 @@ func (a *app) homeWaiting(c *ui.Context) {
 					})
 				}
 			case len(items) > 0:
-				if iconTextButton(c, iconSparkle, "AI 归位", "AI 归位", "让 AI 建议每条该放到哪张导图的哪个主题下，你确认后才放", false).Clicked() {
+				if sparkKey(c, "AI 归位", "让 AI 建议每条该放到哪张导图的哪个主题下，你确认后才放").Clicked() {
 					a.later(func() {
 						a.suggestPlaces()
 						var clips []*library.Clip
@@ -486,6 +486,22 @@ func textKey(c *ui.Context, text, label, tip string) ui.Element {
 	}
 	b.Children(func() {
 		ui.Text(c, text).FontSize(textSmall).TextColor(t.Text.MixOklab(t.TextMuted, 0.5)).NoWrap().PassThrough()
+	})
+	return press(b, 0.96)
+}
+
+// sparkKey is a key of the AI's that stands by a heading: the spark and
+// its words in the accent, on no block until pointed at.
+func sparkKey(c *ui.Context, text, tip string) ui.Element {
+	t := c.Theme()
+	b := ui.Row(c.Key("spark:"+text)).Height(28).Padding(0, 8).Gap(5).Radius(radiusPill).AlignItems(ui.Center).Cursor(ui.CursorPointer).
+		Label(text).Tooltip(tip).Shrink(0).Background(t.Accent.Alpha(0)).Transition(easeLook)
+	if b.Hovered() {
+		b.Background(t.Accent.Alpha(0.09))
+	}
+	b.Children(func() {
+		glyph(c, iconSparkle, 13, t.Accent)
+		ui.Text(c, text).FontSize(textSmall).FontWeight(600).TextColor(t.Accent).NoWrap().PassThrough()
 	})
 	return press(b, 0.96)
 }
