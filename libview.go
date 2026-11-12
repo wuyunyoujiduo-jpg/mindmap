@@ -280,7 +280,7 @@ func (a *app) clipFilters(c *ui.Context) {
 			b := ui.Box(c.Key("cat:"+key)).Height(26).Padding(0, 10).Radius(radiusSmall).Center().Cursor(ui.CursorPointer).Label(label).
 				Background(t.Accent.Alpha(0.12)).Transition(easeLook)
 			b.Children(func() {
-				ui.Text(c, label).FontSize(textCaption).FontWeight(600).TextColor(t.Accent.MixOklab(t.Text, 0.3)).NoWrap()
+				ui.Text(c, label).FontSize(textCaption).FontWeight(700).TextColor(t.Accent.MixOklab(t.Text, 0.3)).NoWrap()
 			})
 			return b.Clicked()
 		}
@@ -350,7 +350,7 @@ func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 		} else {
 			ui.Row(c).Gap(10).AlignItems(ui.Center).PassThrough().Children(func() {
 				glyph(c, kindTile(clip.Kind), 16, t.TextMuted)
-				ui.Text(c, clip.Label()).FontSize(14).FontWeight(600).Grow(1).Shrink(1).MinWidth(0).MaxLines(2)
+				ui.Text(c, clip.Label()).FontSize(14).FontWeight(700).Grow(1).Shrink(1).MinWidth(0).MaxLines(2)
 				if clip.Starred {
 					glyph(c, iconStarFilled, 12, t.Warning)
 				}
@@ -386,7 +386,7 @@ func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 				kind = "灵感"
 			}
 			mapDot(c, kcol, 6)
-			ui.Text(c, kind).FontSize(textCaption).FontWeight(600).TextColor(ink).NoWrap()
+			ui.Text(c, kind).FontSize(textCaption).FontWeight(700).TextColor(ink).NoWrap()
 			ui.Text(c, clip.Created.Format("1/2 15:04")).FontSize(textCaption).TextColor(t.TextMuted).NoWrap()
 			for i, tag := range clip.Tags {
 				if i == 3 {

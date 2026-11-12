@@ -381,7 +381,7 @@ func (a *app) waitingCard(c *ui.Context, w waitingItem, i int) {
 				}
 				press(go_, 0.96)
 				go_.Children(func() {
-					ui.Text(c, "放过去").FontSize(textSmall).FontWeight(600).TextColor(t.AccentText).PassThrough()
+					ui.Text(c, "放过去").FontSize(textSmall).FontWeight(700).TextColor(t.AccentText).PassThrough()
 				})
 			})
 		}
@@ -501,7 +501,7 @@ func sparkKey(c *ui.Context, text, tip string) ui.Element {
 	}
 	b.Children(func() {
 		glyph(c, iconSparkle, 13, t.Accent)
-		ui.Text(c, text).FontSize(textSmall).FontWeight(600).TextColor(t.Accent).NoWrap().PassThrough()
+		ui.Text(c, text).FontSize(textSmall).FontWeight(700).TextColor(t.Accent).NoWrap().PassThrough()
 	})
 	return press(b, 0.96)
 }

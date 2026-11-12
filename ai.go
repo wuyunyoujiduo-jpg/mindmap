@@ -952,7 +952,7 @@ func (a *app) aiPanel(c *ui.Context) {
 		ui.Row(c.Key("ai-head")).Height(toolbarHeight).Padding(0, 10, 0, 16).Gap(6).AlignItems(ui.Center).Shrink(0).
 			BorderWidth(0, 0, 1, 0).BorderColor(hairline(t)).DragWindow().Children(func() {
 			ui.Box(c).Size(16, 16).Draw(func(p *ui.Painter, r ui.Rect) { drawIcon(p, r, 14, iconSparkle, t.Accent) })
-			ui.Text(c, "问 AI").FontSize(textBody).FontWeight(600)
+			ui.Text(c, "问 AI").FontSize(textBody).FontWeight(700)
 			about := "收集"
 			if !a.libOpen && a.doc != nil {
 				about = "「" + mapName(a.path) + "」"

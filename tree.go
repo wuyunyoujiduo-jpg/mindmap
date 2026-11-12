@@ -24,7 +24,7 @@ func (a *app) mapTree(c *ui.Context) {
 	side := ui.Column(c.Key("map-tree")).Width(sideWidthOf).Shrink(0).FillHeight().BorderWidth(0, 1, 0, 0).BorderColor(hairline(t))
 	side.Children(func() {
 		ui.Row(c.Key("tree-head")).Height(44).Padding(6, 8, 0, 18).Gap(2).AlignItems(ui.Center).Shrink(0).Children(func() {
-			ui.Text(c, "目录").FontSize(textCaption).FontWeight(600).TextColor(t.TextMuted).Grow(1).PassThrough()
+			ui.Text(c, "目录").FontSize(textCaption).FontWeight(700).TextColor(t.TextMuted).Grow(1).PassThrough()
 			iconButton(c, iconPlus, "目录新建", "新建导图、文件夹", 28, true).Menu(func(m *ui.Menu) {
 				if m.Item("新建导图").Chosen() {
 					a.later(func() { a.newMapIn(a.treeFolder()) })
@@ -121,7 +121,7 @@ func (a *app) treeRow(c *ui.Context, depth int, name, count, path string, on boo
 		}
 		txt := ui.Text(c, midEllipsis(name, sideWidthOf-96-float32(depth)*14)).FontSize(textSmall + 0.5).Grow(1).Shrink(1).MinWidth(0).SingleLine().PassThrough()
 		if on {
-			txt.FontWeight(600)
+			txt.FontWeight(700)
 		}
 		if path != "" && a.starred(path) && !hover {
 			ui.Text(c, "★").FontSize(11).TextColor(ui.Hex("#D4A836")).Margin(0, 6, 0, 0).PassThrough()

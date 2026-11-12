@@ -206,7 +206,12 @@ func (a *app) tagPicker(c *ui.Context, n *model.Node) {
 				}
 			}
 		})
-		in := ui.TextInput(c.Key("new-tag"), &a.tagDraft).Placeholder("新标签").Label("新标签").FontSize(12)
+		// A pale block, as the other fields: no darker fill, no line of its own.
+		in := ui.TextInputBase(c.Key("new-tag"), &a.tagDraft).Placeholder("新标签").Label("新标签").FontSize(textSmall).
+			Height(30).Padding(0, 10).Radius(radiusPill).FillWidth().Background(blockFill(t))
+		if in.Focused() {
+			in.Background(t.Background).InsetShadow(0, 0, 0, 1.5, t.Accent)
+		}
 		if in.Submitted() {
 			if tag := a.addTag(a.tagDraft); tag != "" && !slices.Contains(n.Tags, tag) {
 				a.toggleTag(n, tag)

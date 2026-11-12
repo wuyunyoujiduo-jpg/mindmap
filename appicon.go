@@ -142,7 +142,7 @@ func (a *app) groundSettings(c *ui.Context) {
 					ui.Box(c).Size(14, 14).Radius(7).Background(ui.Hex(g.ground)).Border(1, t.Text.Alpha(0.16)).PassThrough()
 					txt := ui.Text(c, g.name).FontSize(textSmall).PassThrough()
 					if on {
-						txt.FontWeight(600).TextColor(t.Accent.MixOklab(t.Text, 0.3))
+						txt.FontWeight(700).TextColor(t.Accent.MixOklab(t.Text, 0.3))
 					}
 				})
 			}

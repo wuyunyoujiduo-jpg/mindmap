@@ -63,7 +63,7 @@ func (a *app) inspector(c *ui.Context) {
 				glyph(c, iconBack, 14, t.TextMuted)
 				ui.Text(c, "主题").FontSize(textSmall).TextColor(t.TextMuted).PassThrough()
 			})
-			ui.Text(c, []string{"主题", "样式", "标记", "画布", "演说"}[a.panelTab]).FontSize(textBody).FontWeight(600).Margin(0, 0, 0, 6)
+			ui.Text(c, []string{"主题", "样式", "标记", "画布", "演说"}[a.panelTab]).FontSize(textBody).FontWeight(700).Margin(0, 0, 0, 6)
 		})
 		ui.Scroll(c.Key(fmt.Sprint("panel", a.panelTab))).Grow(1).Children(func() {
 			switch {
@@ -208,7 +208,7 @@ func (a *app) nodePanel(c *ui.Context) {
 				}
 			})
 
-			ui.Text(c, a.nodeStats(n)).FontSize(textCaption).TextColor(t.TextMuted)
+			a.nodeFigures(c, n)
 		})
 	}()
 }
@@ -293,6 +293,30 @@ func (a *app) taskEditor(c *ui.Context, n *model.Node) {
 func today(now time.Time) time.Time {
 	y, m, d := now.Date()
 	return time.Date(y, m, d, 0, 0, 0, 0, now.Location())
+}
+
+// nodeFigures tells what is below a node in figures, as a page's head.
+func (a *app) nodeFigures(c *ui.Context, n *model.Node) {
+	var nodes, tasks, done int
+	var walk func(*model.Node)
+	walk = func(n *model.Node) {
+		for _, ch := range n.Children {
+			nodes++
+			if ch.Task != nil {
+				tasks++
+				if ch.Task.Status == model.StatusDone {
+					done++
+				}
+			}
+			walk(ch)
+		}
+	}
+	walk(n)
+	fs := []figure{{nodes, "个下级节点"}}
+	if tasks > 0 {
+		fs = append(fs, figure{tasks - done, "件要做"}, figure{done, "件做完"})
+	}
+	figures(c, fs...).Label(a.nodeStats(n))
 }
 
 // nodeStats counts what is below a node.

@@ -17,13 +17,13 @@ colors:
   success: "#30A46C"
 
 typography:
-  page-title:  { fontSize: 22px, fontWeight: 600, letterSpacing: -0.5px }
+  page-title:  { fontSize: 22px, fontWeight: 700, letterSpacing: -0.5px }
   write:       { fontSize: 16px, fontWeight: 400 }
-  row:         { fontSize: 14.5px, fontWeight: 400 }   # 600 when chosen
+  row:         { fontSize: 14.5px, fontWeight: 400 }   # 700 when chosen
   body:        { fontSize: 14px, fontWeight: 400 }
-  part-name:   { fontSize: 13px, fontWeight: 600 }
+  part-name:   { fontSize: 13px, fontWeight: 700 }
   caption:     { fontSize: 12px, fontWeight: 400 }
-  side-head:   { fontSize: 12px, fontWeight: 600, letterSpacing: 0.4px }
+  side-head:   { fontSize: 12px, fontWeight: 700, letterSpacing: 0.4px }
   count:       { fontSize: 12px, features: tnum }
 
 rounded: { small: 7px, row: 8px, key: 9px, card: 12px }
@@ -54,7 +54,7 @@ these tokens.
 | UI recedes; no decorative chrome | one white leaf on a quiet ground, columns cut by hairlines |
 | A single accent for everything that acts | the violet-blue: keys that act, what is chosen, links, the focus |
 | Ink `#1d1d1f`, gray `#86868b`, parchment `#f5f5f7` | the same ink and gray; the ground a shade cooler |
-| Weights 400 and 600; 500 absent; headlines 600, not 700 | the same: no 500, no 700 |
+| Weights 400 and 600; 500 absent; headlines 600, not 700 | two weights, 400 and 700: asked for 600, Chinese is drawn regular; at 700 PingFang draws its Semibold, which is Apple's 600 |
 | Negative tracking on headlines, never on small text | page titles at -0.5; small names of parts +0.4 |
 | No shadow on cards, buttons or text | none on the leaf; only what floats over the page has one |
 | No gradient as decoration | none in the UI (the icons' own shading is theirs) |
@@ -113,18 +113,27 @@ Every list and page has all of these, or does not need one:
   page, and is no wider than it reads well: the room left is on the
   right, where what is chosen opens. Never centered: a page's name must
   not move from a place to another, nor when a task is opened.
-- **Its head** (`pageHead`): the name at 26/600, -0.7; a word beside it in
-  `ink2`; under them the page in figures (`figures`), the figure at 600
+- **Its head** (`pageHead`): the name at 26/700, -0.7; a word beside it in
+  `ink2`; under them the page in figures (`figures`), the figure at 700
   in the ink, what it counts muted. 今天, 项目 and 收集 are headed so.
+
+## A map's page
+
+The same rules where they fit a tool's page: the map's name and a topic's
+name in the panel are heavy and a little together, the outline's first
+line is a page's name (26/700, -0.7); what is below a topic is told in
+figures (`nodeFigures`); the field for a new tag is a pale block as every
+field; a column of the board says its count faint. The board's columns
+stay pale grounds under white cards (things of a kind, the user's rule).
 
 ## 今天's page
 
 Built to the draft https://claude.ai/artifact/5Nw4Mn4q4ozd9rpUNGh8AP.
 
-- **Head**: the page's name at 26/600, -0.7; the day beside it in `ink2`;
+- **Head**: the page's name at 26/700, -0.7; the day beside it in `ink2`;
   under it the day in three figures, the figure at 600 in the ink, what
   it counts in the muted ink.
-- **A group's name**: 12/600, +0.3, muted (the danger's color when late):
+- **A group's name**: 12/700, +0.3, muted (the danger's color when late):
   the tasks are what is read. A row is 54 high, its line faint; a late
   day is a small pale tag of the danger's color.
 - **The week**: a column a day cut by a faint line, not a block each;
@@ -137,7 +146,7 @@ Built to the draft https://claude.ai/artifact/5Nw4Mn4q4ozd9rpUNGh8AP.
 
 - Don't add a shadow, a gradient or a glow to anything on the leaf.
 - Don't outline what floats.
-- Don't use weight 500 or 700.
+- Don't use weight 500 or 600: Chinese shows neither. Heavy is 700.
 - Don't add a second accent, or a fifth ink.
 - Don't write a length of time outside the scale.
 - Don't ship a list without its empty state.

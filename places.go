@@ -82,7 +82,7 @@ func (a *app) topBar(c *ui.Context) {
 					}
 					txt := ui.Text(c, name).FontSize(textBody).PassThrough()
 					if on {
-						txt.FontWeight(600)
+						txt.FontWeight(700)
 					} else {
 						txt.TextColor(t.TextMuted)
 					}
@@ -195,7 +195,7 @@ func (a *app) projectsView(c *ui.Context) {
 					if a.renaming == path {
 						a.renameInput(c)
 					} else {
-						ui.Text(c, f.Name).FontSize(15).FontWeight(600).SingleLine().FillWidth().PassThrough()
+						ui.Text(c, f.Name).FontSize(15).FontWeight(700).SingleLine().FillWidth().PassThrough()
 					}
 					// A word on it: where it is, when not in the folder shown; how
 					// much it holds; how its tasks stand.
@@ -263,7 +263,7 @@ func (a *app) projectsView(c *ui.Context) {
 			}
 			txt := ui.Text(c, name).FontSize(textBody).NoWrap().PassThrough()
 			if on {
-				txt.FontWeight(600)
+				txt.FontWeight(700)
 			}
 			ui.Text(c, count).FontSize(textSmall).TextColor(t.TextMuted).PassThrough()
 		})

@@ -412,7 +412,7 @@ func (a *app) settingsView(c *ui.Context) {
 		// The parts on the left, as a list; the one chosen on the right.
 		ui.Row(c).Gap(22).Width(min(820, w-80)).AlignItems(ui.Start).Children(func() {
 			ui.Column(c.Key("settings-tabs")).Width(160).Shrink(0).Gap(2).Children(func() {
-				ui.Text(c, "设置").FontSize(textPage).FontWeight(600).LetterSpacing(titleTrack).Margin(2, 12, 16)
+				ui.Text(c, "设置").FontSize(textPage).FontWeight(700).LetterSpacing(titleTrack).Margin(2, 12, 16)
 				for i, name := range tabs {
 					on := i == a.settingsTab
 					row := ui.Row(c.Key("settings-tab:"+name)).Height(38).Padding(0, 14).Radius(radiusRow).AlignItems(ui.Center).
@@ -431,7 +431,7 @@ func (a *app) settingsView(c *ui.Context) {
 						}
 						txt := ui.Text(c, name).FontSize(15).PassThrough()
 						if on {
-							txt.FontWeight(600)
+							txt.FontWeight(700)
 						} else {
 							txt.TextColor(t.Text.MixOklab(t.TextMuted, 0.3))
 						}
@@ -440,7 +440,7 @@ func (a *app) settingsView(c *ui.Context) {
 			})
 			ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(10).Children(func() {
 				ui.Row(c).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, tabs[a.settingsTab]).FontSize(textTitle).FontWeight(600).Grow(1)
+					ui.Text(c, tabs[a.settingsTab]).FontSize(textTitle).FontWeight(700).Grow(1)
 					if iconButton(c, iconClose, "关闭", "关闭（Esc）", 28, true).Clicked() {
 						a.settingsOpen = false
 					}
@@ -500,7 +500,7 @@ func switchRow(c *ui.Context, on *bool, label, text string, changed func()) {
 	}
 	row.Children(func() {
 		ui.Column(c).Gap(2).Grow(1).Shrink(1).Basis(0).MinWidth(0).PassThrough().Children(func() {
-			ui.Text(c, label).FontSize(textBody).FontWeight(600)
+			ui.Text(c, label).FontSize(textBody).FontWeight(700)
 			if text != "" {
 				ui.Text(c, text).FontSize(textSmall).TextColor(t.TextMuted).LineHeight(1.45).Wrap()
 			}

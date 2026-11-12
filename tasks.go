@@ -160,8 +160,8 @@ func boardHead(c *ui.Context, mark func(), name string, n int) {
 	t := c.Theme()
 	ui.Row(c).Padding(12, 6, 10).Gap(8).AlignItems(ui.Center).Children(func() {
 		mark()
-		ui.Text(c, name).FontSize(textBody).FontWeight(600)
-		ui.Text(c, fmt.Sprint(n)).FontSize(textSmall).TextColor(t.TextMuted)
+		ui.Text(c, name).FontSize(textBody).FontWeight(700)
+		ui.Text(c, fmt.Sprint(n)).FontSize(textCaption).TextColor(faint(t)).FontFeatures("tnum")
 	})
 }
 
@@ -250,14 +250,14 @@ func (a *app) taskCard(c *ui.Context, tn model.TaskNode, showStatus bool) {
 			if showStatus {
 				statusIcon(c, task.Status, 13).Margin(3, 0, 0, 0)
 			}
-			title := ui.Text(c, n.Title).FontSize(textBody).FontWeight(600).LineHeight(1.4).Grow(1).Wrap()
+			title := ui.Text(c, n.Title).FontSize(textBody).FontWeight(700).LineHeight(1.4).Grow(1).Wrap()
 			if task.Status == model.StatusDone {
 				title.Strikethrough().TextColor(t.TextMuted)
 			}
 			if task.Priority != model.PriorityNone { // on a wash of its color
 				pc := priorityColor(c, task.Priority)
 				ui.Box(c).Padding(1, 7).Radius(radiusPill).Background(pc.Alpha(0.13)).Shrink(0).Children(func() {
-					ui.Text(c, task.Priority.Label()).FontSize(11).FontWeight(600).TextColor(pc.MixOklab(t.Text, 0.25)).NoWrap()
+					ui.Text(c, task.Priority.Label()).FontSize(11).FontWeight(700).TextColor(pc.MixOklab(t.Text, 0.25)).NoWrap()
 				})
 			}
 		})

@@ -372,7 +372,7 @@ func (a *app) projectSection(c *ui.Context) {
 				b.Children(func() {
 					txt := ui.Text(c, e.name).FontSize(textSmall).NoWrap().PassThrough()
 					if on {
-						txt.FontWeight(600).TextColor(t.Accent.MixOklab(t.Text, 0.3))
+						txt.FontWeight(700).TextColor(t.Accent.MixOklab(t.Text, 0.3))
 					}
 				})
 			}

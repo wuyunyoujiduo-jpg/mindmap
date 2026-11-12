@@ -243,7 +243,7 @@ func (a *app) toolbar(c *ui.Context) {
 				}
 				name.Menu(a.mapSwitchMenu)
 				name.Children(func() {
-					ui.Text(c, mapName(a.path)).Bold().FontSize(textTitle).NoWrap().MaxWidth(220).Ellipsis("…").PassThrough()
+					ui.Text(c, mapName(a.path)).FontWeight(700).LetterSpacing(-0.3).FontSize(textTitle).NoWrap().MaxWidth(220).Ellipsis("…").PassThrough()
 					ui.Text(c, "⌄").FontSize(textSmall).TextColor(t.TextMuted).PassThrough()
 				})
 			})
@@ -348,7 +348,7 @@ func (a *app) viewTabs(c *ui.Context, room float32) {
 				}
 				txt := ui.Text(c, name).FontSize(textSmall).PassThrough()
 				if on {
-					txt.FontWeight(600)
+					txt.FontWeight(700)
 				} else {
 					txt.TextColor(t.Text.MixOklab(t.TextMuted, 0.6))
 				}

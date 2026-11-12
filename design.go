@@ -98,7 +98,7 @@ func figures(c *ui.Context, fs ...figure) ui.Element {
 	return ui.Row(c.Key("figures")).Gap(18).Shrink(0).Children(func() {
 		for _, f := range fs {
 			ui.Row(c.Key(f.name)).Gap(5).AlignItems(ui.Center).Label(fmt.Sprintf("%d %s", f.n, f.name)).Children(func() {
-				ui.Text(c, fmt.Sprint(f.n)).FontSize(textSmall).FontWeight(600).FontFeatures("tnum")
+				ui.Text(c, fmt.Sprint(f.n)).FontSize(textSmall).FontWeight(700).FontFeatures("tnum")
 				ui.Text(c, f.name).FontSize(textSmall).TextColor(t.TextMuted).NoWrap()
 			})
 		}
@@ -113,7 +113,7 @@ func pageHead(c *ui.Context, key, title, sub string, fs []figure, right func()) 
 	ui.Row(c.Key(key)).Padding(14, 0, 10).Gap(12).AlignItems(ui.End).Shrink(0).FillWidth().DragWindow().Children(func() {
 		ui.Column(c).Gap(6).Grow(1).Shrink(1).Basis(0).MinWidth(0).Children(func() {
 			ui.Row(c).Gap(10).AlignItems(ui.End).Children(func() {
-				ui.Text(c, title).FontSize(26).FontWeight(600).LetterSpacing(-0.7).LineHeight(1.2).NoWrap()
+				ui.Text(c, title).FontSize(26).FontWeight(700).LetterSpacing(-0.7).LineHeight(1.2).NoWrap()
 				if sub != "" {
 					ui.Text(c, sub).FontSize(textBody).TextColor(ink2(t)).Margin(0, 0, 4).SingleLine().Shrink(1).MinWidth(0)
 				}
@@ -134,7 +134,7 @@ func pageHead(c *ui.Context, key, title, sub string, fs []figure, right func()) 
 func pageHeader(c *ui.Context, key, title, sub string, right func()) {
 	t := c.Theme()
 	ui.Row(c.Key(key)).Height(pageHeadHeight).Gap(12).AlignItems(ui.Center).Shrink(0).FillWidth().DragWindow().Children(func() {
-		ui.Text(c, title).FontSize(textPage).FontWeight(600).LetterSpacing(titleTrack).NoWrap()
+		ui.Text(c, title).FontSize(textPage).FontWeight(700).LetterSpacing(titleTrack).NoWrap()
 		if sub != "" {
 			ui.Text(c, sub).FontSize(textBody).TextColor(t.TextMuted).SingleLine().Shrink(1).MinWidth(0)
 		}
@@ -380,7 +380,7 @@ func tray(c *ui.Context, key string) ui.Element {
 func trayHead(c *ui.Context, key, title, sub string, right func()) ui.Element {
 	t := c.Theme()
 	return ui.Row(c.Key(key)).Height(30).Padding(0, 4, 6).Gap(8).AlignItems(ui.Center).FillWidth().Shrink(0).Children(func() {
-		ui.Text(c, title).FontSize(textSmall).FontWeight(600).TextColor(t.Text.MixOklab(t.TextMuted, 0.45)).NoWrap()
+		ui.Text(c, title).FontSize(textSmall).FontWeight(700).TextColor(t.Text.MixOklab(t.TextMuted, 0.45)).NoWrap()
 		if sub != "" {
 			ui.Text(c, sub).FontSize(textSmall).TextColor(t.TextMuted).Shrink(1).MinWidth(0).SingleLine()
 		}
@@ -470,8 +470,11 @@ func inlineInput(c *ui.Context, value *string, size float32, bold bool, placehol
 	t := c.Theme()
 	in := ui.TextInputBase(c, value).FontSize(size).Placeholder(placeholder).Label(label).
 		Padding(4, 6).Radius(radiusSmall).FillWidth()
-	if bold {
-		in.Bold()
+	if bold { // a name: heavy, and at a heading's size a little together
+		in.FontWeight(700)
+		if size >= textHeadline {
+			in.LetterSpacing(-0.4)
+		}
 	}
 	switch {
 	case in.Focused():
@@ -532,7 +535,7 @@ func segmented(c *ui.Context, key, label string, names []string, chosenPart int)
 				}
 				txt := ui.Text(c, name).FontSize(textSmall).NoWrap().PassThrough()
 				if on {
-					txt.FontWeight(600)
+					txt.FontWeight(700)
 				} else {
 					txt.TextColor(t.Text.MixOklab(t.TextMuted, 0.6))
 				}
@@ -673,7 +676,7 @@ func section(c *ui.Context, ic icon, title string, right func(), body func()) {
 		BorderWidth(1, 0, 0, 0).BorderColor(hairline(t)).Children(func() {
 		ui.Row(c).Gap(6).AlignItems(ui.Center).MinHeight(20).Children(func() {
 			glyph(c, ic, 13, t.TextMuted)
-			ui.Text(c, title).FontSize(textSmall).FontWeight(600).TextColor(t.TextMuted).Grow(1)
+			ui.Text(c, title).FontSize(textSmall).FontWeight(700).TextColor(t.TextMuted).Grow(1)
 			if right != nil {
 				right()
 			}
@@ -690,7 +693,7 @@ func accentButton(c *ui.Context, text, tip string) ui.Element {
 		Cursor(ui.CursorPointer).Label(text).Tooltip(tip).Shrink(0)
 	jewel(b, t, true)
 	b.Children(func() {
-		ui.Text(c, text).FontSize(textSmall).FontWeight(600).TextColor(t.AccentText).NoWrap().PassThrough()
+		ui.Text(c, text).FontSize(textSmall).FontWeight(700).TextColor(t.AccentText).NoWrap().PassThrough()
 	})
 	return press(b.Transition(easeLook), 0.97)
 }
@@ -706,7 +709,7 @@ func inkButton(c *ui.Context, text string, enabled bool) ui.Element {
 		b.Cursor(ui.CursorPointer)
 	}
 	b.Children(func() {
-		ui.Text(c, text).FontSize(textSmall).FontWeight(600).TextColor(t.AccentText).NoWrap().PassThrough()
+		ui.Text(c, text).FontSize(textSmall).FontWeight(700).TextColor(t.AccentText).NoWrap().PassThrough()
 	})
 	return press(b.Transition(easeLook), 0.97)
 }
@@ -798,7 +801,7 @@ func tabGroup(c *ui.Context, key string, names []string, chosenTab int) int {
 				}
 				txt := ui.Text(c, name).FontSize(textSmall).PassThrough()
 				if on {
-					txt.FontWeight(600)
+					txt.FontWeight(700)
 				} else {
 					txt.TextColor(t.Text.MixOklab(t.TextMuted, 0.6))
 				}
@@ -825,7 +828,7 @@ func pillTab(c *ui.Context, key, name, count string, on bool) ui.Element {
 		}
 		txt := ui.Text(c, name).FontSize(textBody).PassThrough()
 		if on {
-			txt.FontWeight(600)
+			txt.FontWeight(700)
 		} else {
 			txt.TextColor(t.TextMuted)
 		}
@@ -862,7 +865,7 @@ func emptyState(c *ui.Context, key, icon, title, sub string, act func()) {
 	ui.Column(c.Key("empty:"+key)).Padding(36, 20).Gap(6).AlignItems(ui.Center).FillWidth().
 		Transition(ui.ElementTransition{Duration: motionSlow, Ease: easeDetent, Enter: &ui.Motion{Y: 12}}).Children(func() {
 		kubaiIcon(c, icon, 64, false).Margin(0, 0, 6)
-		ui.Text(c, title).FontSize(textTitle).FontWeight(600).TextColor(ink2(t))
+		ui.Text(c, title).FontSize(textTitle).FontWeight(700).TextColor(ink2(t))
 		if sub != "" {
 			ui.Text(c, sub).FontSize(textSmall).TextColor(t.TextMuted).LineHeight(1.5).MaxWidth(420).Wrap().TextAlign(ui.Center)
 		}
@@ -928,7 +931,7 @@ func sheet(c *ui.Context, key string, width float32, body func()) {
 func field(c *ui.Context, title string, body func()) ui.Element {
 	t := c.Theme()
 	return ui.Column(c.Key("field:" + title)).Gap(8).FillWidth().Children(func() {
-		ui.Text(c, title).FontSize(textSmall).FontWeight(600).TextColor(t.Text.MixOklab(t.TextMuted, 0.45)).Margin(0, 6)
+		ui.Text(c, title).FontSize(textSmall).FontWeight(700).TextColor(t.Text.MixOklab(t.TextMuted, 0.45)).Margin(0, 6)
 		raise(ui.Column(c.Key("card")).Padding(16, 18).Gap(12).Radius(radiusCard).FillWidth(), t).Children(body)
 	})
 }
@@ -945,7 +948,7 @@ func rowsField(c *ui.Context, title, note string, body func()) ui.Element {
 	t := c.Theme()
 	return ui.Column(c.Key("field:" + title)).Gap(8).FillWidth().Children(func() {
 		if title != "" {
-			ui.Text(c, title).FontSize(textSmall).FontWeight(600).TextColor(t.Text.MixOklab(t.TextMuted, 0.45)).Margin(0, 6)
+			ui.Text(c, title).FontSize(textSmall).FontWeight(700).TextColor(t.Text.MixOklab(t.TextMuted, 0.45)).Margin(0, 6)
 		}
 		raise(ui.Column(c.Key("card")).Padding(4, 18).Radius(radiusCard).FillWidth(), t).Children(body)
 		if note != "" {
@@ -966,7 +969,7 @@ func setRowSays(c *ui.Context, title, sub, wrong string, control func()) {
 	t := c.Theme()
 	ui.Row(c.Key("row:"+title)).MinHeight(52).Padding(10, 0).Gap(16).AlignItems(ui.Center).FillWidth().Children(func() {
 		ui.Column(c).Gap(2).Grow(1).Shrink(1).Basis(0).MinWidth(0).Children(func() {
-			ui.Text(c, title).FontSize(textBody).FontWeight(600)
+			ui.Text(c, title).FontSize(textBody).FontWeight(700)
 			switch {
 			case wrong != "":
 				ui.Text(c.Key("wrong"), wrong).FontSize(textSmall).TextColor(t.Danger).LineHeight(1.45).Wrap().

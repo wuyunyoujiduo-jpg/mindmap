@@ -103,7 +103,7 @@ func (a *app) writeCard(c *ui.Context, w writeCard) {
 				}
 				b.Children(func() {
 					if mark != "" {
-						ui.Text(c, mark).FontSize(16).FontWeight(600).TextColor(ink).PassThrough()
+						ui.Text(c, mark).FontSize(16).FontWeight(700).TextColor(ink).PassThrough()
 					} else {
 						glyph(c, ic, 17, ink)
 					}

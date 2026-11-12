@@ -72,7 +72,7 @@ func (a *app) outlineView(c *ui.Context) {
 			title := root.Title
 			head := ui.Box(c).Padding(0, 0, 4)
 			head.Children(func() {
-				in := ui.TextInputBase(c.Key("outline-root"), &title).FontSize(26).Bold().FillWidth().
+				in := ui.TextInputBase(c.Key("outline-root"), &title).FontSize(26).FontWeight(700).LetterSpacing(-0.7).FillWidth().
 					Placeholder("中心主题").FocusBind(&a.outlineFocus, root.ID)
 				if in.Changed() {
 					a.mutate("title:"+root.ID, func() { root.Title = title })
@@ -157,7 +157,7 @@ func (a *app) outlineLine(c *ui.Context, rows []outlineRow, i int) {
 		in := ui.TextAreaBase(c.Key("line"), &title).Lines(1, 30).FontSize(size).Grow(1).Shrink(1).MinWidth(40).
 			Placeholder("输入内容").Label("大纲 "+n.Title).FocusBind(&a.outlineFocus, n.ID)
 		if depth == 0 {
-			in.FontWeight(600)
+			in.FontWeight(700)
 		}
 		if n.Task != nil && n.Task.Status == model.StatusDone {
 			in.TextColor(t.TextMuted)

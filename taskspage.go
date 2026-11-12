@@ -426,7 +426,7 @@ func (a *app) tasksHead(c *ui.Context, all []taskItem) {
 				name = mapName(a.tasks.onMap)
 			}
 			ui.Row(c).Gap(10).AlignItems(ui.End).Children(func() {
-				ui.Text(c, name).FontSize(26).FontWeight(600).LetterSpacing(-0.7).LineHeight(1.2).NoWrap()
+				ui.Text(c, name).FontSize(26).FontWeight(700).LetterSpacing(-0.7).LineHeight(1.2).NoWrap()
 				ui.Text(c, fmt.Sprintf("%d月%d日 %s", now.Month(), now.Day(), weekdays[now.Weekday()])).FontSize(textBody).TextColor(ink2(th)).Margin(0, 0, 4).NoWrap()
 			})
 			// The day in three figures: the figure in the ink, what it counts faint.
@@ -718,7 +718,7 @@ func (a *app) calendarNav(c *ui.Context) {
 		if iconButton(c, iconBack, "上一个", "往前", 26, true).Clicked() {
 			step(-1)
 		}
-		ui.Text(c, label).FontSize(textBody).FontWeight(600).MinWidth(120).TextAlign(ui.Center)
+		ui.Text(c, label).FontSize(textBody).FontWeight(700).MinWidth(120).TextAlign(ui.Center)
 		if iconButton(c, iconForward, "下一个", "往后", 26, true).Clicked() {
 			step(1)
 		}
@@ -911,7 +911,7 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 						case len(g.items) == 0:
 							col = faint(t)
 						}
-						ui.Text(c, g.title).FontSize(textCaption).FontWeight(600).LetterSpacing(0.3).TextColor(col)
+						ui.Text(c, g.title).FontSize(textCaption).FontWeight(700).LetterSpacing(0.3).TextColor(col)
 						if len(g.items) > 0 {
 							ui.Text(c, fmt.Sprint(len(g.items))).FontSize(textCaption).TextColor(faint(t)).FontFeatures("tnum")
 						}
@@ -933,7 +933,7 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 						a.tasks.showDone = !a.tasks.showDone
 					}
 					head.Children(func() {
-						ui.Text(c, fmt.Sprintf("已完成 %d", len(done))).FontSize(textBody).FontWeight(600).TextColor(t.TextMuted)
+						ui.Text(c, fmt.Sprintf("已完成 %d", len(done))).FontSize(textBody).FontWeight(700).TextColor(t.TextMuted)
 						ui.Spacer(c)
 						word := "展开"
 						if a.tasks.showDone {
@@ -1194,7 +1194,7 @@ func (a *app) weekView(c *ui.Context, items []taskItem) {
 						ink, word = faint(t), faint(t)
 					}
 					dot.Children(func() {
-						ui.Text(c, fmt.Sprint(d.Day())).FontSize(textBody).FontWeight(600).FontFeatures("tnum").TextColor(ink)
+						ui.Text(c, fmt.Sprint(d.Day())).FontSize(textBody).FontWeight(700).FontFeatures("tnum").TextColor(ink)
 					})
 					ui.Text(c, name).FontSize(textCaption).TextColor(word).NoWrap()
 				})
@@ -1502,7 +1502,7 @@ func (a *app) repeatProp(c *ui.Context, it taskItem) {
 		b.Children(func() {
 			txt := ui.Text(c, text).FontSize(textSmall).NoWrap().PassThrough()
 			if on {
-				txt.FontWeight(600).TextColor(t.Accent.MixOklab(t.Text, 0.3))
+				txt.FontWeight(700).TextColor(t.Accent.MixOklab(t.Text, 0.3))
 			}
 		})
 		return b

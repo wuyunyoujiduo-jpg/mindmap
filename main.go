@@ -149,7 +149,7 @@ func (d *desktop) DelayedScreenshot(seconds int) {
 		Content: ui.View(func(c *ui.Context) {
 			t := quietTheme(c.Theme())
 			ui.Row(c).Fill().Padding(0, 16).Gap(10).AlignItems(ui.Center).Background(t.Text.MixOklab(t.Background, 0.05)).Children(func() {
-				ui.Text(c, fmt.Sprint(left)).FontSize(20).FontWeight(600).TextColor(t.Background)
+				ui.Text(c, fmt.Sprint(left)).FontSize(20).FontWeight(700).TextColor(t.Background)
 				ui.Text(c, "秒后截图，现在打开菜单").FontSize(13).TextColor(t.Background.Alpha(0.85))
 			})
 		}),
