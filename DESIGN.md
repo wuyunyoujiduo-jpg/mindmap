@@ -117,6 +117,17 @@ Every list and page has all of these, or does not need one:
   `ink2`; under them the page in figures (`figures`), the figure at 700
   in the ink, what it counts muted. 今天, 项目 and 收集 are headed so.
 
+## 收集's wall
+
+Cards of their own height in three columns (`clipWall`), each put in the
+column that is shortest (`clipTall` guesses a card's height), the newest
+at the top: never rows of one height, which left a hole under every
+short note. One pale ground under them all. 120 at first, more asked for
+at its foot.
+
+What is done from any page (a screenshot, the AI, the search) has its
+key in the top row, not on one page's head.
+
 ## A map's page
 
 The same rules where they fit a tool's page: the map's name and a topic's

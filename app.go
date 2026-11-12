@@ -397,6 +397,7 @@ type app struct {
 	tagQuery      string
 	notice        string    // a passing message in the toolbar, as "已复制"
 	noticeAt      time.Time // since when it shows, for noticeTime
+	wallShown     int       // how many clips 收集's wall shows, when more than wallStep
 	noticeToasted time.Time // the notice shown as a toast already
 	noticeUndo    func()    // what takes back what the notice says, if it can be
 	exportCam     *camera   // set while the canvas is drawn into an image

@@ -75,9 +75,6 @@ func (a *app) libraryColumn(c *ui.Context) {
 				a.libQueryAt = a.now()
 			}
 			a.searchQueryVector(c)
-			if iconButton(c, iconShot, "截图", "截图：框选屏幕、标注后存到收集（"+keyLabel(a.shotKey())+"）", 30, true).Clicked() {
-				a.later(a.screenshot)
-			}
 		})
 		a.pluginBanner(c)
 		a.clipFilters(c)
@@ -105,43 +102,89 @@ func (a *app) libraryColumn(c *ui.Context) {
 					emptyState(c, "wall", icon, title, msg, nil)
 				})
 			} else {
-				// A wall of cards, three across, one beside a clip chosen; a
-				// virtual list of its rows, so that only those in view are built.
-				cols := 3
-				if a.lib.Find(a.libSel) != nil {
-					cols = 1
-				}
-				rows := (len(hits) + cols - 1) / cols
-				ui.List(c.Key(fmt.Sprint("clips:", cols)), nil, rows).Grow(1).Basis(0).ItemKey(func(i int) any { return hits[i*cols].Clip.ID }).
-					Rows(func(r ui.ListRow) {
-						// One pale ground, the cards white on it: the rows carry
-						// it, the first and the last its corners, so that it
-						// ends where the cards do.
-						top, bottom, head, foot := float32(4), float32(4), float32(0), float32(0)
-						if r.Index == 0 {
-							top, head = 10, radiusCard+4
-						}
-						if r.Index == rows-1 {
-							bottom, foot = 10, radiusCard+4
-						}
-						ui.Row(r.Context).Padding(top, 10, bottom).Gap(8).Radius(head, head, foot, foot).Background(blockFill(t)).AlignItems(ui.Stretch).FillWidth().Children(func() {
-							for k := range cols {
-								i := r.Index*cols + k
-								if i >= len(hits) {
-									ui.Box(r.Context).Grow(1).Basis(0).MinWidth(0)
-									continue
-								}
-								if clip := hits[i].Clip; clip.Kind == kindMap {
-									ui.Box(r.Context.Key(clip.ID)).Grow(1).Basis(0).MinWidth(0).Children(func() { a.mapRow(r.Context, clip) })
-								} else {
-									a.clipRow(r.Context.Key(clip.ID), clip)
-								}
-							}
-						})
-					})
+				a.clipWall(c, hits)
 			}
 		})
 	}()
+}
+
+// wallStep is how many clips the wall shows at first, and more at a time.
+const wallStep = 120
+
+// clipWall is the wall of cards: three columns, one beside a clip chosen,
+// each card as tall as what it says and put in the column that is
+// shortest, as notes pinned to a wall are, so that a short note leaves no
+// hole under it. The newest are at the top, read across.
+func (a *app) clipWall(c *ui.Context, hits []library.Hit) {
+	t := c.Theme()
+	cols := 3
+	if a.lib.Find(a.libSel) != nil {
+		cols = 1
+	}
+	shown := min(len(hits), max(a.wallShown, wallStep))
+	tall := make([]float32, cols)
+	in := make([][]*library.Clip, cols)
+	for _, h := range hits[:shown] {
+		k := 0
+		for j := range tall {
+			if tall[j] < tall[k] {
+				k = j
+			}
+		}
+		in[k] = append(in[k], h.Clip)
+		tall[k] += clipTall(h.Clip, cols) + 8
+	}
+	ui.Scroll(c.Key(fmt.Sprint("clips:", cols))).Grow(1).Basis(0).Children(func() {
+		// One pale ground, the cards white on it, ending where they do.
+		ui.Row(c.Key("ground")).Padding(10).Gap(8).Radius(radiusCard + 4).Background(blockFill(t)).AlignItems(ui.Start).FillWidth().Children(func() {
+			for k := range cols {
+				ui.Column(c.Key(k)).Grow(1).Basis(0).MinWidth(0).Gap(8).Children(func() {
+					for _, clip := range in[k] {
+						if clip.Kind == kindMap {
+							ui.Box(c.Key(clip.ID)).FillWidth().Children(func() { a.mapRow(c, clip) })
+						} else {
+							a.clipRow(c.Key(clip.ID), clip)
+						}
+					}
+				})
+			}
+		})
+		if rest := len(hits) - shown; rest > 0 {
+			ui.Column(c).Padding(12, 0, 4).AlignItems(ui.Center).FillWidth().Children(func() {
+				if textKey(c, fmt.Sprintf("再显示 %d 条", min(rest, wallStep)), "再显示", "还有 "+fmt.Sprint(rest)+" 条").Clicked() {
+					a.wallShown = shown + wallStep
+				}
+			})
+		}
+		ui.Box(c).Height(24)
+	})
+}
+
+// clipTall is about how tall a clip's card is on a wall of cols columns:
+// enough to tell which column is shortest.
+func clipTall(clip *library.Clip, cols int) float32 {
+	per := 24 // the characters of a line
+	if cols == 1 {
+		per = 44
+	}
+	lines := func(s string, most int) float32 {
+		n := 0
+		for _, l := range strings.Split(strings.TrimSpace(s), "\n") {
+			n += 1 + len([]rune(l))/per
+		}
+		return float32(min(n, most))
+	}
+	if isMemo(clip) {
+		return 32 + lines(clip.Text, 7)*24 + 34
+	}
+	h := float32(32 + 24 + 34)
+	if clip.Kind == library.KindImage {
+		h += 120
+	}
+	if sub := cmpOr(cmpOr(cmpOr(clip.Desc, clip.Summary), cmpOr(clip.Note, clip.Text)), clip.URL); sub != "" {
+		h += lines(sub, 3) * 22
+	}
+	return h
 }
 
 // libraryDialogs are the library's questions.
@@ -322,7 +365,7 @@ func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 	t := c.Theme()
 	memo := isMemo(clip)
 	kcol := clipColor(clip.Kind)
-	row := ui.Column(c).Grow(1).Basis(0).MinWidth(0).Padding(16, 18).Gap(10).Radius(radiusCard).Cursor(ui.CursorPointer).
+	row := ui.Column(c).FillWidth().Padding(16, 18).Gap(12).Radius(radiusCard).Cursor(ui.CursorPointer).
 		Label("资料 " + clip.Label())
 	// A white card, as all are: a note is its text, the others have their
 	// kind's icon by their title.
@@ -378,7 +421,6 @@ func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 			}
 		}
 		a.clipPlaceLine(c, clip)
-		ui.Spacer(c)
 		ui.Row(c).Gap(6).Wrap().GapY(4).AlignItems(ui.Center).Children(func() {
 			_, ink := tinted(t, kcol)
 			kind := library.KindLabel(clip.Kind)

@@ -100,6 +100,10 @@ func (a *app) topBar(c *ui.Context) {
 		if kubaiKey(c, "sparkles", "AI 助手", "问 AI：问问导图和资料里的内容", a.aiOpen).Clicked() {
 			a.aiOpen = !a.aiOpen
 		}
+		// A screenshot is taken from any page, of any app: its key is here.
+		if kubaiKey(c, "scan", "截图", "截图：框选屏幕、标注后存到收集（"+keyLabel(a.shotKey())+"）", false).Clicked() {
+			a.later(a.screenshot)
+		}
 		if kubaiKey(c, "search", "搜索全部", "搜索导图、主题、灵感和资料，#标签 按标签找", false).Clicked() {
 			a.later(func() { a.openPalette(paletteAll) })
 		}

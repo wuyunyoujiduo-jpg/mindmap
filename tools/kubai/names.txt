@@ -1,3 +1,3 @@
 calendar calendar-week inbox list circle-check import
 layers lightbulb link file-text image star archive history shuffle hash
-sidebar sparkles search settings folder folder-open sitemap
+sidebar sparkles search settings folder folder-open sitemap scan

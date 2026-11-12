@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
@@ -336,4 +337,29 @@ func TestOrganizeWithDeepSeek(t *testing.T) {
 	if _, err := askOrganize(context.Background(), cfg, nil, send, "整理", nil, ""); err == nil || strings.HasPrefix(aiError(err), "网络错误") {
 		t.Fatalf("cut short: %v", err)
 	}
+}
+
+// TestWallOfUnevenCards: on 收集's wall a card is as tall as what it
+// says, in the column that is shortest: a short note leaves no hole.
+func TestWallOfUnevenCards(t *testing.T) {
+	a, tt := newTestApp(t)
+	long := "https://example.com/docs/features 这个比昨天哪个更好点。如果只要操作界面，助手在前端，可以造成业务系统页面。而且昨天那个项目只是提供了前端和后端智能体之间的协议封装。比如引导用户怎么操作我们的系统，可以问它，它操作页面给他看。传统业务系统可以引入。"
+	for i, s := range []string{"钱来？", long, "#方法", "买了永久的流量", "我总说，等这只股票回本了，就带爸妈去一趟他们念叨了半辈子的远方，就给爱人换一台不再卡顿的手机。", "周报改成三段式", long + "再记一笔。", "短的"} {
+		if err := a.lib.Add(&library.Clip{Kind: library.KindText, Text: s}, a.now().Add(-time.Duration(i)*time.Hour)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a.showLibrary()
+	a.libHome = false
+	tt.Frame()
+	tt.Frame()
+	short, ok1 := tt.Find("资料 钱来？")
+	tall, ok2 := tt.Find("资料 " + a.lib.Clips[1].Label())
+	if !ok1 || !ok2 {
+		t.Fatalf("cards not shown: %q", tt.Texts())
+	}
+	if short.H >= tall.H {
+		t.Fatalf("a short note is as tall as a long one: %v and %v", short.H, tall.H)
+	}
+	snapshot(t, tt, "library-wall")
 }
