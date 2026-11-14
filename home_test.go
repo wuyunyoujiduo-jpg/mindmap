@@ -312,8 +312,6 @@ func TestGroundChosen(t *testing.T) {
 	snapshot(t, tt, "ground-gray")
 	a.openSettings()
 	tt.Frame()
-	tt.Scroll(720, 400, 0, 560) // the ground is under the version
-	tt.Frame()
 	if err := tt.Click("底色 淡紫"); err != nil {
 		t.Fatal(err)
 	}

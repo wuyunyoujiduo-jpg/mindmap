@@ -69,6 +69,9 @@ type platform interface {
 	SetAutoUpdates(on bool)
 	SetTray(on bool)
 	UpdateTray()
+	// SetAppearance has the app light ("light"), dark ("dark"), or as
+	// the system is ("").
+	SetAppearance(look string)
 	ShowInFolder(path string)
 	Trash(path string) error
 	SetFullScreen(on bool)

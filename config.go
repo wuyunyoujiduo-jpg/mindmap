@@ -17,6 +17,9 @@ type config struct {
 	// Ground is the color of the window's ground, a key of grounds: ""
 	// is white, as the page.
 	Ground string `json:"ground,omitempty"`
+	// Appearance is the look chosen whatever the system's: "light",
+	// "dark", or "" for the system's own.
+	Appearance string `json:"appearance,omitempty"`
 	// ShowTree shows the maps' folders beside the rail (rail.go).
 	ShowTree bool `json:"showTree,omitempty"`
 	// HideTree puts away the maps' directory of 项目 (tree.go), which

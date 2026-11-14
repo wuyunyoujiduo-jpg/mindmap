@@ -28,6 +28,7 @@ import (
 
 type fakePlatform struct {
 	folder      string
+	look        string
 	trashed     []string
 	fullScreen  bool
 	clipImage   []byte
@@ -62,6 +63,7 @@ func (f *fakePlatform) HideCapture()                   { f.capture = false }
 func (f *fakePlatform) ShowMain()                      {}
 func (f *fakePlatform) SetCaptureKey(key string) error { f.captureKey = key; return nil }
 func (f *fakePlatform) SetTray(on bool)                {}
+func (f *fakePlatform) SetAppearance(look string)      { f.look = look }
 func (f *fakePlatform) SetClipKey(key string) error    { return nil }
 func (f *fakePlatform) SetShotKey(key string) error    { return nil }
 func (f *fakePlatform) Screenshot(fromApp bool)        { f.shots++ }
@@ -2956,7 +2958,7 @@ func TestUpdateSettings(t *testing.T) {
 	fp := a.plat.(*fakePlatform)
 	a.openSettings()
 	tt.Frame()
-	tt.Scroll(720, 400, 0, 420) // the version is under the shortcuts and the screenshots
+	tt.Scroll(720, 400, 0, 580) // the version is under the look, the shortcuts and the screenshots
 	tt.Frame()
 	if !tt.HasText(appName + " " + version) {
 		t.Fatalf("no version: %q", tt.Texts())

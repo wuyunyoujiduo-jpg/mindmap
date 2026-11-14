@@ -507,6 +507,7 @@ func switchRow(c *ui.Context, on *bool, label, text string, changed func()) {
 
 // generalSettings are the shortcuts, the menu bar icon and the reminders.
 func (a *app) generalSettings(c *ui.Context) {
+	a.groundSettings(c) // how it looks, first: it is what is looked for here
 	rowsField(c, "全局快捷键", "在任何应用里都能用。点一个快捷键，再按下新的组合键。", func() {
 		rows := []struct {
 			name, title, what, value, def string
@@ -556,6 +557,5 @@ func (a *app) generalSettings(c *ui.Context) {
 	})
 	a.shotSettings(c)
 	a.updateSettings(c)
-	a.groundSettings(c)
 	a.iconSettings(c)
 }

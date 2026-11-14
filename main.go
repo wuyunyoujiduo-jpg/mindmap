@@ -267,6 +267,20 @@ func (d *desktop) CheckUpdates() { updater.CheckForUpdates() }
 func (d *desktop) AutoUpdates() bool      { return updater.AutomaticChecks() }
 func (d *desktop) SetAutoUpdates(on bool) { updater.SetAutomaticChecks(on) }
 
+// SetAppearance has the whole app light or dark, whatever the system is,
+// or as the system is: its windows, its menus, and the theme the pages
+// are drawn in.
+func (d *desktop) SetAppearance(look string) {
+	switch look {
+	case "light":
+		mygo.Theme.SetSource(mygo.ThemeLight)
+	case "dark":
+		mygo.Theme.SetSource(mygo.ThemeDark)
+	default:
+		mygo.Theme.SetSource(mygo.ThemeSystem)
+	}
+}
+
 func (d *desktop) SetAppIcon(png, tray []byte) {
 	_ = mygo.App.Dock.SetIcon(png)
 	_ = d.win.SetIcon(png)
@@ -498,6 +512,9 @@ func main() {
 			logShot("已注册截图快捷键 %s", a.shotKey())
 		}
 		plat.SetTray(!a.cfg.NoTray)
+		if a.cfg.Appearance != "" {
+			plat.SetAppearance(a.cfg.Appearance)
+		}
 		if a.cfg.Icon != "" {
 			plat.SetAppIcon(appIconPNG(a.cfg.Icon), trayIcon(a.cfg.Icon))
 		}

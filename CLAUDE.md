@@ -92,7 +92,9 @@ by AI, and an AI assistant.
     gray. The settings are rows in pale blocks, a name and a word on it at
     the left, what sets it at the right (`rowsField`, `setRow`, `setLine`,
     `switchRow`; `field` for what is not rows); the system's buttons take
-    the app's corners (`button`).
+    the app's corners (`button`). The app is light, dark or as the
+    system is by the settings' first rows (`config.Appearance`,
+    `SetAppearance`, MyGo's `Theme.SetSource`).
   - 今天 (`taskspage.go`, `tasksView`): as a list it is one column read
     down (`todayWidth`), headed by the list's name and the line to add a
     task (`tasksAdd`); under today's list, cut from it by a band the

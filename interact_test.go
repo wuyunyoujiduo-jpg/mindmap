@@ -542,3 +542,32 @@ func TestMoveBackKeepsItsPlace(t *testing.T) {
 		t.Fatalf("not back at the head of its parent: %v", p)
 	}
 }
+
+// The app is light, dark, or as the system is, by the settings.
+func TestAppearanceIsChosen(t *testing.T) {
+	a, tt := newTestApp(t)
+	plat := a.plat.(*fakePlatform)
+	a.openSettings()
+	for tab := range 8 {
+		a.settingsTab = tab
+		tt.Frame()
+		if tt.HasText("深浅 深色") {
+			break
+		}
+	}
+	if err := tt.Click("深浅 深色"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.cfg.Appearance != "dark" || plat.look != "dark" {
+		t.Fatalf("appearance %q, platform %q", a.cfg.Appearance, plat.look)
+	}
+	snapshot(t, tt, "settings-appearance")
+	if err := tt.Click("深浅 跟随系统"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.cfg.Appearance != "" || plat.look != "" {
+		t.Fatalf("appearance %q, platform %q", a.cfg.Appearance, plat.look)
+	}
+}
