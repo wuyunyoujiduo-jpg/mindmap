@@ -122,8 +122,10 @@ Every list and page has all of these, or does not need one:
 Cards of their own height in three columns (`clipWall`), each put in the
 column that is shortest (`clipTall` guesses a card's height), the newest
 at the top: never rows of one height, which left a hole under every
-short note. One pale ground under them all. 120 at first, more asked for
-at its foot.
+short note. Each card stands apart on the white page, white with a
+hairline that darkens under the pointer (`wallCard`), 12 between them:
+the user found one gray ground under them all a slab. 120 at first, more
+asked for at its foot.
 
 What is done from any page (a screenshot, the AI, the search) has its
 key in the top row, not on one page's head.
@@ -167,6 +169,15 @@ Built to the draft https://claude.ai/artifact/5Nw4Mn4q4ozd9rpUNGh8AP.
 - **A group's name**: 12/700, +0.3, muted (the danger's color when late):
   the tasks are what is read. A row is 54 high, its line faint; a late
   day is a small pale tag of the danger's color.
+- **A table when there is room** (`tableRoom`): the tasks' columns are
+  named once over the list (`taskTableHead`: 任务, 项目 or 位置, 日期), a
+  task's project in a column of its own with its dot, its day at the
+  right. A priority is a small pill in its color, a state that is not
+  plain 待做 a pill with a dot (`taskPills`). The list's foot says how
+  many it holds, faint.
+- **A toast** (`toastLook`): a white card at the window's foot, led by a
+  small tile, a green tick for what was done, a red cross for what failed;
+  its key in the accent.
 - **The week**: a column a day cut by a faint line, not a block each;
   today's on a breath of the accent, its day in a dot of it, named 今天;
   the days of rest faint. A task there is a pale block.

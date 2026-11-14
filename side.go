@@ -106,7 +106,15 @@ func (a *app) todaySide(c *ui.Context) {
 			}
 		}
 		sideLine(c)
-		sideHead(c, "项目")
+		// The projects, and the key that makes another.
+		ui.Row(c.Key("head:项目")).AlignItems(ui.Center).FillWidth().Padding(0, 4, 0, 0).Children(func() {
+			ui.Box(c).Grow(1).Children(func() { sideHead(c, "项目") })
+			ui.Box(c).Margin(8, 0, 0).Children(func() {
+				if iconButton(c, iconPlus, "新建导图", "新建一张导图：一张就是一个项目", 24, true).Clicked() {
+					a.later(a.newMap)
+				}
+			})
+		})
 		files := slices.Clone(a.files) // those starred first
 		slices.SortStableFunc(files, func(x, y model.FileInfo) int { return b2i(a.starred(y.Path)) - b2i(a.starred(x.Path)) })
 		for _, fi := range files {

@@ -304,3 +304,37 @@ func (a *app) jobs() []jobCard {
 	}
 	return out
 }
+
+// toastLook is how a toast looks: a small card at the window's foot, in
+// its middle, told by its shadow as all that floats; a check on a green
+// tile before its words (a cross on red for what failed), and after them
+// the key of what is next with it, as 撤销.
+func toastLook(c *ui.Context) {
+	t := c.Theme()
+	ui.ToastViewportBase(c, func(viewport ui.Element, toasts []ui.Toast) {
+		viewport.Padding(0, 16, 22).AlignItems(ui.Center).Gap(8)
+		for _, one := range toasts {
+			toast := ui.ToastBase(c, one)
+			lifted(toast.Root.Row().Gap(10).Padding(7, 14, 7, 8).Radius(14).AlignItems(ui.Center).Background(cardColor(t)), t)
+			toast.Root.Transition(ui.ElementTransition{Duration: motionSlow, Ease: easeDetent, Enter: &ui.Motion{Y: 10, Scale: 0.97},
+				Exit: &ui.Motion{Scale: 0.97}, ExitDuration: motionMedium})
+			toast.Root.Children(func() {
+				tile := ui.Box(c).Size(24, 24).Radius(8).Center().Shrink(0)
+				if one.Type == "error" {
+					tile.Background(t.Danger.Alpha(0.14)).Children(func() { glyph(c, iconClose, 12, t.Danger) })
+				} else {
+					tile.Background(t.Success.Alpha(0.16)).Children(func() { glyph(c, iconCheck, 13, t.Success) })
+				}
+				ui.Text(c, one.Title).FontSize(textSmall).MaxWidth(420).MaxLines(2)
+				if one.Action != "" {
+					act := toast.ActionButton().Height(26).Padding(0, 10).Radius(radiusSmall).Center().Cursor(ui.CursorPointer).
+						Background(t.Accent.Alpha(0.1)).Transition(easeLook)
+					if act.Hovered() {
+						act.Background(t.Accent.Alpha(0.18))
+					}
+					act.Children(func() { ui.Text(c, one.Action).FontSize(textSmall).FontWeight(700).TextColor(t.Accent).NoWrap() })
+				}
+			})
+		}
+	})
+}

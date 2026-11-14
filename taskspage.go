@@ -62,6 +62,7 @@ type tasksState struct {
 	places   map[string]taskPlace
 	placing  bool
 	placeErr string
+	table    bool // the list has room to be a table, with a column for the project and the day
 }
 
 func (it taskItem) key() string { return it.path + "#" + it.node.ID }
@@ -401,6 +402,9 @@ func (a *app) tasksView(c *ui.Context) {
 	// a column of its own, the tasks' column wider for the room there is.
 	band := a.tasks.view == tasksToday && a.tasks.onMap == ""
 	rail := band && a.todayRoom(c) >= railRoom
+	// With room, the list is a table: a column for a task's project and
+	// one for its day, named once over them.
+	a.tasks.table = !calendar && a.tasks.view != tasksWaiting && a.todayRoom(c) >= tableRoom
 	listWidth := float32(todayWidth)
 	if rail {
 		listWidth = 920
@@ -992,6 +996,9 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 			if a.tasks.view == tasksInbox {
 				a.placeBar(c, len(groups[0].items))
 			}
+			if a.tasks.table {
+				taskTableHead(c, a.tasks.onMap != "")
+			}
 			for _, g := range groups {
 				// Empty, a group of a day still shows, quietly: a place to drop
 				// a task on; others empty do not.
@@ -1075,6 +1082,20 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 					}
 				})
 			}
+			// The list's foot says how much it holds, as a table's does.
+			open := 0
+			for _, g := range groups {
+				open += len(g.items)
+			}
+			if open+len(done) > 0 {
+				foot := fmt.Sprintf("共 %d 件", open+len(done))
+				if len(done) > 0 {
+					foot += fmt.Sprintf(" · 做完 %d 件", len(done))
+				}
+				ui.Row(c).Height(36).Padding(0, 8).AlignItems(ui.Center).FillWidth().Children(func() {
+					ui.Text(c, foot).FontSize(textCaption).TextColor(faint(t)).FontFeatures("tnum")
+				})
+			}
 		})
 	})
 }
@@ -1102,22 +1123,46 @@ func (a *app) taskRow(c *ui.Context, it taskItem, overdue bool) {
 		row.Background(chosen(t)).Radius(radiusRow).BorderColor(t.Text.Alpha(0))
 	}
 	row.ContextMenu(func(m *ui.Menu) { a.taskMenu(m, it) })
+	table := a.tasks.table
 	row.Children(func() {
 		a.taskCircle(c, it, 18)
-		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(2).PassThrough().Children(func() {
-			title := ui.Text(c, it.node.Title).FontSize(textBody).SingleLine()
-			if it.done() {
-				title.TextColor(t.TextMuted).Strikethrough()
-			}
+		ui.Column(c).Grow(1).Shrink(1).Basis(0).MinWidth(0).Gap(2).PassThrough().Children(func() {
+			// Its words, and after them what it is marked with: how
+			// pressing, and its state when that is not the plain one.
+			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+				title := ui.Text(c, it.node.Title).FontSize(textBody).SingleLine().Shrink(1).MinWidth(0)
+				if it.done() {
+					title.TextColor(t.TextMuted).Strikethrough()
+				}
+				taskPills(c, it)
+			})
 			sub := it.mapName
 			if it.where != "" && it.where != it.mapName {
 				sub += " · " + it.where
+			}
+			if table { // its map has a column of its own: here only where in it
+				if it.where != "" && it.where != it.mapName && a.tasks.onMap == "" {
+					ui.Text(c, it.where).FontSize(textCaption).TextColor(t.TextMuted).SingleLine()
+				}
+				return
 			}
 			ui.Row(c).Gap(5).AlignItems(ui.Center).Children(func() {
 				mapDot(c, a.mapColor(it.path), 6) // its map's color
 				ui.Text(c, sub).FontSize(textCaption).TextColor(t.TextMuted).SingleLine().Shrink(1).MinWidth(0)
 			})
 		})
+		if table {
+			// The column of its project: its map, or, on a project's own
+			// page, where in the map.
+			ui.Row(c).Width(taskColProject).Shrink(0).Gap(7).AlignItems(ui.Center).PassThrough().Children(func() {
+				if a.tasks.onMap != "" {
+					ui.Text(c, it.where).FontSize(textSmall).TextColor(t.TextMuted).SingleLine().Shrink(1).MinWidth(0)
+					return
+				}
+				mapDot(c, a.mapColor(it.path), 7)
+				ui.Text(c, it.mapName).FontSize(textSmall).TextColor(ink2(t)).SingleLine().Shrink(1).MinWidth(0)
+			})
+		}
 		if p, ok := a.tasks.places[it.node.ID]; ok { // where the AI would put it
 			ui.Text(c, "→ "+p.label).FontSize(textSmall).TextColor(t.Accent).SingleLine().Shrink(2).MinWidth(60).PassThrough()
 			if ghostButton(c.Key("take:"+it.node.ID), "放过去", "移到「"+p.label+"」下").Label("放过去 " + it.node.Title).Clicked() {
@@ -1139,7 +1184,18 @@ func (a *app) taskRow(c *ui.Context, it taskItem, overdue bool) {
 			if task.Repeat != nil {
 				label += " ↻"
 			}
-			if col == t.Danger {
+			if table { // the column of its day, its words at the column's end
+				ui.Row(c).Width(taskColDay).Shrink(0).PassThrough().Children(func() {
+					ui.Spacer(c)
+					if col == t.Danger {
+						ui.Box(c).Padding(2, 8).Radius(6).Background(t.Danger.Alpha(0.1)).Children(func() {
+							ui.Text(c, label).FontSize(textCaption).TextColor(t.Danger).FontFeatures("tnum").NoWrap()
+						})
+					} else {
+						ui.Text(c, label).FontSize(textSmall).TextColor(col).FontFeatures("tnum").NoWrap()
+					}
+				})
+			} else if col == t.Danger {
 				// Late, its day is a small pale tag.
 				ui.Box(c).Padding(2, 8).Radius(6).Background(t.Danger.Alpha(0.1)).Shrink(0).PassThrough().Children(func() {
 					ui.Text(c, label).FontSize(textCaption).TextColor(t.Danger).FontFeatures("tnum").NoWrap()
@@ -1149,6 +1205,66 @@ func (a *app) taskRow(c *ui.Context, it taskItem, overdue bool) {
 			}
 		}
 	})
+}
+
+// The widths of a task's columns, where the list has room to be a table.
+const (
+	taskColProject = 180
+	taskColDay     = 104
+	tableRoom      = 1000 // the room today's page needs for it
+)
+
+// taskTableHead names the columns of the tasks' table, once, over its
+// groups: the task, its project (or, on a project's page, where in the
+// map), its day.
+func taskTableHead(c *ui.Context, ofMap bool) {
+	t := c.Theme()
+	second := "项目"
+	if ofMap {
+		second = "位置"
+	}
+	ui.Row(c.Key("table-head")).Height(28).Padding(0, 6).Gap(12).AlignItems(ui.Center).FillWidth().
+		BorderWidth(0, 0, 1, 0).BorderColor(hairline(t)).Children(func() {
+		name := func(s string) ui.Element {
+			return ui.Text(c, s).FontSize(textCaption).FontWeight(700).LetterSpacing(0.3).TextColor(faint(t)).NoWrap()
+		}
+		ui.Box(c).Width(18).Shrink(0)
+		ui.Box(c).Grow(1).Basis(0).Children(func() { name("任务") })
+		ui.Box(c).Width(taskColProject).Shrink(0).Children(func() { name(second) })
+		ui.Row(c).Width(taskColDay).Shrink(0).Children(func() {
+			ui.Spacer(c)
+			name("日期")
+		})
+	})
+}
+
+// taskPills are the small tags after a task's words: how pressing it is,
+// when it is, in its priority's color, and its state when that is not the
+// plain one (an idea, or being done).
+func taskPills(c *ui.Context, it taskItem) {
+	t := c.Theme()
+	task := it.node.Task
+	if task == nil || it.done() {
+		return
+	}
+	pill := func(key, text string, col ui.Color, dot bool) {
+		bg, ink := tinted(t, col)
+		ui.Row(c.Key("pill:"+key)).Height(19).Padding(0, 7).Gap(4).Radius(6).AlignItems(ui.Center).Shrink(0).Background(bg).PassThrough().Children(func() {
+			if dot {
+				ui.Box(c).Size(5, 5).Radius(3).Background(col)
+			}
+			ui.Text(c, text).FontSize(11).FontWeight(700).TextColor(ink).NoWrap()
+		})
+	}
+	if task.Priority != model.PriorityNone {
+		pill("priority", task.Priority.Label(), taskPriorityColor(t, task.Priority), false)
+	}
+	switch task.Status {
+	case model.StatusDoing:
+		pill("state", "进行中", t.Success, true)
+	case model.StatusIdea:
+		pill("state", "想法", t.TextMuted, true)
+	}
 }
 
 // taskCircle ticks a task off, or back on: an open circle in its

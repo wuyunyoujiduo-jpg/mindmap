@@ -359,6 +359,16 @@ func chosenCard(el ui.Element, t *ui.Theme) ui.Element {
 // nothing round it until the pointer is over it, when a thin line comes.
 // Many pale blocks on the white leaf were dull, each its own island; one
 // ground and white cards read as a stack of paper.
+// wallCard is a card of 收集's wall, which stands by itself on the page:
+// white, told by a hairline inside its edge, darker under the pointer.
+func wallCard(el ui.Element, t *ui.Theme) ui.Element {
+	el.Background(cardColor(t)).InsetShadow(0, 0, 0, 1, t.Text.Alpha(0.1))
+	if el.Hovered() {
+		el.InsetShadow(0, 0, 0, 1, t.Text.Alpha(0.24))
+	}
+	return press(el.Transition(easeLook), 0.992)
+}
+
 func whiteCard(el ui.Element, t *ui.Theme) ui.Element {
 	el.Background(cardColor(t)).Shadow(0, 0, 0, 0.5, t.Text.Alpha(0))
 	if el.Hovered() {

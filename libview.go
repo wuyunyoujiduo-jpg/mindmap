@@ -112,7 +112,6 @@ const wallStep = 120
 // shortest, as notes pinned to a wall are, so that a short note leaves no
 // hole under it. The newest are at the top, read across.
 func (a *app) clipWall(c *ui.Context, hits []library.Hit) {
-	t := c.Theme()
 	// As many columns as the room has, each about a card wide: three in
 	// an ordinary window, five on a large screen, one or more beside a
 	// clip chosen. A card is never stretched across a wide window.
@@ -139,10 +138,12 @@ func (a *app) clipWall(c *ui.Context, hits []library.Hit) {
 		tall[k] += clipTall(h.Clip, cols) + 8
 	}
 	ui.Scroll(c.Key(fmt.Sprint("clips:", cols))).Grow(1).Basis(0).Children(func() {
-		// One pale ground, the cards white on it, ending where they do.
-		ui.Row(c.Key("ground")).Padding(10).Gap(8).Radius(radiusCard + 4).Background(blockFill(t)).AlignItems(ui.Start).FillWidth().Children(func() {
+		// The cards stand apart on the page, each told by a hairline: with
+		// columns of uneven ends one gray ground under them all showed as
+		// holes, and the user asked for them apart.
+		ui.Row(c.Key("ground")).Padding(2, 1).Gap(12).AlignItems(ui.Start).FillWidth().Children(func() {
 			for k := range cols {
-				ui.Column(c.Key(k)).Grow(1).Basis(0).MinWidth(0).Gap(8).Children(func() {
+				ui.Column(c.Key(k)).Grow(1).Basis(0).MinWidth(0).Gap(12).Children(func() {
 					for _, clip := range in[k] {
 						if clip.Kind == kindMap {
 							ui.Box(c.Key(clip.ID)).FillWidth().Children(func() { a.mapRow(c, clip) })
@@ -373,7 +374,7 @@ func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 		Label("资料 " + clip.Label())
 	// A white card, as all are: a note is its text, the others have their
 	// kind's icon by their title.
-	whiteCard(row, t)
+	wallCard(row, t)
 	if a.libSel == clip.ID {
 		chosenCard(row, t)
 	}

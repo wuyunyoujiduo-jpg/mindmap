@@ -57,6 +57,7 @@ func (a *app) view(c *ui.Context) {
 		}
 		a.jobsView(c)
 		a.toasts(c)
+		toastLook(c)
 		if a.lightbox != "" && a.doc != nil {
 			a.lightboxView(c)
 		}

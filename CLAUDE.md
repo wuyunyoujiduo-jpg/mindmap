@@ -123,8 +123,9 @@ by AI, and an AI assistant.
     A map opened has its own bar under the top row; on the canvas the
     center is in the ink, the main topics on a pastel of their branch's
     color, those below on a faint tint (the scheme 明亮 of `style.go`).
-  - 收集 (`libview.go`): notes and clips, a wall of white cards on
-    a pale ground; its 回顾 shows a
+  - 收集 (`libview.go`): notes and clips, a wall of cards that
+    stand apart on the white page, each white with a hairline
+    (`wallCard`; the user found one gray ground under them a slab); its 回顾 shows a
     few old notes in place (`memos.go`). What is collected is 收集's (the
     word of the UI, never 资料库), and is on a map by a topic's link.
   - Color is kept for small things that mean something: each map has its
@@ -147,9 +148,11 @@ by AI, and an AI assistant.
 - What the user's corrections taught, to design by (each cost a version
   to learn; the user asked that they be kept here):
   - Things of one kind lie as white cards on one pale ground they share
-    (`whiteCard` on `blockFill`: what waits on 今天, 收集's wall), not
+    (`whiteCard` on `blockFill`: what waits on 今天), not
     each a pale block of its own on the white leaf, which read as dull
-    islands. A lone thing on the leaf (a field, a map's card) may be a
+    islands. A wall of many cards is not that: there the ground was one
+    gray slab, and the cards stand apart, white with a hairline
+    (`wallCard`, 收集's wall). A lone thing on the leaf (a field, a map's card) may be a
     pale block.
   - A card shows what it is, not what can be done with it. A click opens
     it; all that can be done is one menu, under a faint ⋯ at its corner
