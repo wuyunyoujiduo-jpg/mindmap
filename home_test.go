@@ -521,3 +521,36 @@ func TestLateTasksPutOnToday(t *testing.T) {
 		}
 	}
 }
+
+// TestTodayOnAWideWindow: in a wide window what waits stands beside the
+// tasks, in a column of its own, not under them with half the window
+// empty; with a task's details open, or in a narrow window, it is the
+// band under them again.
+func TestTodayOnAWideWindow(t *testing.T) {
+	a, tt := newTestApp(t)
+	a.addTask("今天 写周报", nil)
+	a.addTask("交报销", nil)
+	for _, s := range []string{"周报模板改成三段式：做了什么、卡在哪、下周做什么", "买了永久的流量", "换一家云服务商，比较价格和迁移成本"} {
+		if _, err := a.addMemo(s, "手动"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a.openTasks()
+	tt.SetSize(2000, 1000)
+	tt.Frame()
+	tt.Frame()
+	rail, ok := tt.Find("记下的 买了永久的流量")
+	list, ok2 := tt.Find("任务 写周报")
+	if !ok || !ok2 || rail.X < list.X+list.W-1 {
+		t.Fatalf("what waits is not beside the tasks: %v %v", rail, list)
+	}
+	snapshot(t, tt, "today-wide")
+	tt.SetSize(1280, 800)
+	tt.Frame()
+	tt.Frame()
+	band, _ := tt.Find("记下的 买了永久的流量")
+	list, _ = tt.Find("任务 写周报")
+	if band.Y < list.Y+list.H {
+		t.Fatalf("narrow, what waits is not under the tasks: %v %v", band, list)
+	}
+}

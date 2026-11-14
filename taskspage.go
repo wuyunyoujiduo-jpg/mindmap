@@ -396,11 +396,20 @@ func (a *app) tasksView(c *ui.Context) {
 	// month take the page's width under the heading. The details of the
 	// task chosen stand on the right, the page's height.
 	calendar := a.tasks.view == tasksWeek || a.tasks.view == tasksMonth
+	// What waits for a place stands with today's tasks, of no one project:
+	// under them, cut from them by a band; in a wide window beside them, in
+	// a column of its own, the tasks' column wider for the room there is.
+	band := a.tasks.view == tasksToday && a.tasks.onMap == ""
+	rail := band && a.todayRoom(c) >= railRoom
+	listWidth := float32(todayWidth)
+	if rail {
+		listWidth = 920
+	}
 	ui.Row(c.Key("tasks")).Grow(1).AlignItems(ui.Stretch).Label("任务").Children(func() {
-		ui.Column(c).Grow(1).Basis(0).MinWidth(0).Children(func() {
+		ui.Column(c).Grow(3).Basis(0).MinWidth(0).Children(func() {
 			top := pageColumn(c, "tasks-top", false)
 			if !calendar {
-				top.MaxWidth(todayWidth + 56) // one calm column, as what is under it
+				top.MaxWidth(listWidth + 56) // one calm column, as what is under it
 			}
 			top.Children(func() {
 				a.tasksHead(c, all)
@@ -421,14 +430,11 @@ func (a *app) tasksView(c *ui.Context) {
 			// One column, read down: what is to do, by its lists, then what was
 			// written down and waits for a place.
 			ui.Scroll(c.Key(fmt.Sprint("today-scroll:", a.tasks.view))).Grow(1).Basis(0).MinHeight(0).Children(func() {
-				// What waits for a place stands under today's tasks, of no one
-				// project, cut from them by a band of its own.
-				band := a.tasks.view == tasksToday && a.tasks.onMap == ""
 				foot := float32(40)
-				if band {
+				if band && !rail {
 					foot = 22
 				}
-				pageColumn(c, "tasks-column", false).MaxWidth(todayWidth+56).Padding(4, 28, foot).Gap(6).Children(func() {
+				pageColumn(c, "tasks-column", false).MaxWidth(listWidth+56).Padding(4, 28, foot).Gap(6).Children(func() {
 					// Which list shows is chosen in the left column (todaySide).
 					if a.tasks.view == tasksWaiting {
 						a.homeWaiting(c)
@@ -436,11 +442,14 @@ func (a *app) tasksView(c *ui.Context) {
 					}
 					a.taskList(c, items)
 				})
-				if band {
+				if band && !rail {
 					a.waitingBand(c, items)
 				}
 			})
 		})
+		if rail {
+			a.waitingRail(c, items)
+		}
 		for _, it := range all {
 			if it.key() == a.tasks.sel {
 				// The task chosen, in a sheet over the page's right.

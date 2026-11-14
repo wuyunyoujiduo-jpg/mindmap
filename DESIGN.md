@@ -173,6 +173,12 @@ Built to the draft https://claude.ai/artifact/5Nw4Mn4q4ozd9rpUNGh8AP.
 - **The AI's key by a heading** (`sparkKey`): the spark and its words in
   the accent, on no block until pointed at.
 
+A page uses the room a wide window has by standing a second thing
+beside the first, not by stretching one column across it nor by leaving
+half the window empty: with `railRoom` or more, what waits is a column at
+the tasks' right (`waitingRail`), the page's height; with less, or with a
+task's details open, it is the band under them.
+
 Built to the draft https://claude.ai/artifact/V87PRBUjrJQQk1Kb3sj4Pw (A):
 what waits for a place is a band under today's tasks, the page's width,
 a line above it and a breath of shade; in it a line each, four at most,

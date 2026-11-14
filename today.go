@@ -294,14 +294,9 @@ func (a *app) keptLastRow(c *ui.Context) {
 // bandCount is how many waiting things today's page shows.
 const bandCount = 4
 
-// waitingBand is what waits for a place, under today's tasks: cut from
-// them by a line and a breath of shade the page's width, each thing one
-// line (its words, where it would go, when), a few of them; a click opens
-// one, and the rest are a click away, on the left column's list. The
-// cards with all that can be done are that list's: here they crowded the
-// tasks.
-func (a *app) waitingBand(c *ui.Context, shown []taskItem) {
-	t := c.Theme()
+// waitingOnToday is what waits for a place and is not among the tasks
+// shown: today's page says it once.
+func (a *app) waitingOnToday(shown []taskItem) []waitingItem {
 	now := a.now()
 	listed := map[string]bool{}
 	for _, it := range shown {
@@ -309,52 +304,125 @@ func (a *app) waitingBand(c *ui.Context, shown []taskItem) {
 			listed[it.key()] = true // today's and the late are above already
 		}
 	}
-	items := slices.DeleteFunc(a.waiting(), func(w waitingItem) bool { return w.task != nil && listed[w.task.key()] })
+	return slices.DeleteFunc(a.waiting(), func(w waitingItem) bool { return w.task != nil && listed[w.task.key()] })
+}
+
+// railRoom is the least room today's page needs to stand what waits
+// beside the tasks rather than under them.
+const railRoom = 1180
+
+// todayRoom is the room today's page has: the window's, less the left
+// column and the details of a task chosen.
+func (a *app) todayRoom(c *ui.Context) float32 {
+	w, _ := c.Size()
+	room := w - 12
+	if a.sideShown() {
+		room -= sideWidthOf
+	}
+	if a.tasks.sel != "" {
+		room -= min(400, w*0.4)
+	}
+	return room
+}
+
+// waitingHead is the heading of what waits on today's page, with the
+// AI's key and the way to the list where each is placed.
+func (a *app) waitingHead(c *ui.Context, n int) {
+	all := func() { a.tasks.view, a.tasks.onMap = tasksWaiting, "" }
+	trayHead(c, "head:等着归位", "等着归位", fmt.Sprintf("%d 条，这几天记下的", n), func() {
+		// The AI's key is here too: it asks, and shows the list, where
+		// each of its places is agreed to on its card.
+		switch {
+		case a.tasks.placing || a.clipPlacing:
+			ui.Spinner(c)
+		default:
+			if sparkKey(c, "AI 归位", "让 AI 建议每条该放到哪张导图的哪个主题下；到「等着归位」里逐条确认后才放").Clicked() {
+				a.later(func() {
+					a.askAllPlaces()
+					all()
+				})
+			}
+		}
+		if textLink(c, "去整理 ›", "去整理").Tooltip("每条该放到哪张导图：在「等着归位」里一条条放").Clicked() {
+			a.later(all)
+		}
+	})
+}
+
+// waitingMore is the way to those the page has no room for.
+func (a *app) waitingMore(c *ui.Context, more int) {
+	if more <= 0 {
+		return
+	}
+	ui.Box(c).Padding(6, 4, 0).Children(func() {
+		if textLink(c, fmt.Sprintf("还有 %d 条 ›", more), "还有更多").Clicked() {
+			a.later(func() { a.tasks.view, a.tasks.onMap = tasksWaiting, "" })
+		}
+	})
+}
+
+// waitingBand is what waits for a place, under today's tasks: cut from
+// them by a line and a breath of shade the page's width, each thing one
+// line (its words, where it would go, when), a few of them; a click opens
+// one, and the rest are a click away, on the left column's list. The
+// cards with all that can be done are that list's: here they crowded the
+// tasks. In a wide window it stands beside the tasks (waitingRail).
+func (a *app) waitingBand(c *ui.Context, shown []taskItem) {
+	t := c.Theme()
+	items := a.waitingOnToday(shown)
 	if cl := a.lib.Find(a.keptLast); len(items) == 0 && (cl == nil || !cl.Kept) {
 		return
 	}
-	all := func() { a.tasks.view, a.tasks.onMap = tasksWaiting, "" }
 	ui.Column(c.Key("waiting-band")).FillWidth().Padding(14, 0, 28).BorderWidth(1, 0, 0, 0).BorderColor(hairline(t)).
 		Background(t.Text.Alpha(0.018)).Children(func() {
 		pageColumn(c, "band-column", false).MaxWidth(todayWidth + 56).Gap(2).Children(func() {
-			trayHead(c, "head:等着归位", "等着归位", fmt.Sprintf("%d 条，这几天记下的", len(items)), func() {
-				// The AI's key is here too: it asks, and shows the list, where
-				// each of its places is agreed to on its card.
-				switch {
-				case a.tasks.placing || a.clipPlacing:
-					ui.Spinner(c)
-				default:
-					if sparkKey(c, "AI 归位", "让 AI 建议每条该放到哪张导图的哪个主题下；到「等着归位」里逐条确认后才放").Clicked() {
-						a.later(func() {
-							a.askAllPlaces()
-							all()
-						})
-					}
-				}
-				if textLink(c, "去整理 ›", "去整理").Tooltip("每条该放到哪张导图：在「等着归位」里一条条放").Clicked() {
-					a.later(all)
-				}
-			})
+			a.waitingHead(c, len(items))
 			a.keptLastRow(c)
 			for i, w := range items {
 				if i == bandCount {
 					break
 				}
-				a.waitingLine(c, w)
+				a.waitingLine(c, w, false)
 			}
-			if more := len(items) - bandCount; more > 0 {
-				ui.Box(c).Padding(6, 4, 0).Children(func() {
-					if textLink(c, fmt.Sprintf("还有 %d 条 ›", more), "还有更多").Clicked() {
-						a.later(all)
-					}
-				})
-			}
+			a.waitingMore(c, len(items)-bandCount)
 		})
 	})
 }
 
-// waitingLine is one waiting thing as a line of the band.
-func (a *app) waitingLine(c *ui.Context, w waitingItem) {
+// railCount is how many waiting things the rail shows.
+const railCount = 12
+
+// waitingRail is the band in a wide window: a column of its own at the
+// tasks' right, the page's height, so that the room a large screen has is
+// used and the tasks are not pushed down. Each thing is a line or two,
+// where it would go under its words.
+func (a *app) waitingRail(c *ui.Context, shown []taskItem) {
+	t := c.Theme()
+	items := a.waitingOnToday(shown)
+	ui.Column(c.Key("waiting-rail")).Grow(2).Basis(0).MinWidth(340).FillHeight().BorderWidth(0, 0, 0, 1).BorderColor(hairline(t)).
+		Background(t.Text.Alpha(0.018)).Label("等着归位").Children(func() {
+		ui.Scroll(c.Key("rail-scroll")).Grow(1).Basis(0).MinHeight(0).Children(func() {
+			ui.Column(c).Padding(18, 20, 32).Gap(2).FillWidth().MaxWidth(620).Children(func() {
+				a.waitingHead(c, len(items))
+				a.keptLastRow(c)
+				if len(items) == 0 {
+					emptyNote(c, "这几天记下的会出现在这里。")
+				}
+				for i, w := range items {
+					if i == railCount {
+						break
+					}
+					a.waitingLine(c, w, true)
+				}
+				a.waitingMore(c, len(items)-railCount)
+			})
+		})
+	})
+}
+
+// waitingLine is one waiting thing as a line of the band; in the rail,
+// which is narrower, where it would go is under its words.
+func (a *app) waitingLine(c *ui.Context, w waitingItem, rail bool) {
 	t := c.Theme()
 	key, text, when := "", "", ""
 	var place taskPlace
@@ -379,7 +447,7 @@ func (a *app) waitingLine(c *ui.Context, w waitingItem) {
 		}
 	}
 	text, _ = titleAndSite(strings.TrimSpace(clipRef.ReplaceAllString(text, "")))
-	row := ui.Row(c.Key("line:"+key)).Height(36).Padding(0, 8).Gap(10).Radius(radiusRow).AlignItems(ui.Center).FillWidth().
+	row := ui.Row(c.Key("line:"+key)).MinHeight(36).Padding(6, 8).Gap(10).Radius(radiusRow).AlignItems(ui.Center).FillWidth().
 		Cursor(ui.CursorPointer).Label("记下的 " + text).Background(t.Text.Alpha(0)).Transition(rowMotion)
 	if row.Hovered() {
 		row.Background(t.Text.Alpha(0.05))
@@ -394,9 +462,24 @@ func (a *app) waitingLine(c *ui.Context, w waitingItem) {
 		} else {
 			ui.Box(c).Size(15, 15).Center().Shrink(0).PassThrough().Children(func() { mapDot(c, clipColor(w.clip.Kind), 7) })
 		}
-		ui.Text(c, text).FontSize(textBody).SingleLine().Grow(1).Shrink(1).MinWidth(0).PassThrough()
-		if has {
-			ui.Box(c).Shrink(0).MaxWidth(220).PassThrough().Children(func() { softTag(c, "→ "+shortPlace(place)).Tooltip(place.label) })
+		// Where it would go, short enough for its room: the whole of it
+		// is said under the pointer.
+		where := shortPlace(place)
+		if r := []rune(where); len(r) > 18 {
+			where = string(r[:17]) + "…"
+		}
+		if rail {
+			ui.Column(c).Gap(5).Grow(1).Shrink(1).Basis(0).MinWidth(0).PassThrough().Children(func() {
+				ui.Text(c, text).FontSize(textBody).LineHeight(1.45).MaxLines(2).Wrap()
+				if has {
+					softTag(c, "→ "+where).Tooltip(place.label).AlignSelf(ui.Start)
+				}
+			})
+		} else {
+			ui.Text(c, text).FontSize(textBody).SingleLine().Grow(1).Shrink(1).MinWidth(0).PassThrough()
+			if has {
+				softTag(c, "→ "+where).Tooltip(place.label)
+			}
 		}
 		ui.Text(c, when).FontSize(textCaption).TextColor(faint(t)).NoWrap().Shrink(0).PassThrough()
 	})

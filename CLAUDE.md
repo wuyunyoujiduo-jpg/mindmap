@@ -97,7 +97,8 @@ by AI, and an AI assistant.
     task (`tasksAdd`); under today's list, cut from it by a band the
     page's width, what waits for a place as a few lines (`waitingBand`,
     `waitingLine`: the user found the cards there crowding the tasks, and
-    chose lines); its cards are the left column's list 等着归位
+    chose lines; in a wide window it is a column beside the tasks,
+    `waitingRail`, for half the window stood empty); its cards are the left column's list 等着归位
     (`homeWaiting`), each card saying a place by its words alone, with
     no AI asked (`nearPlace`, which must share a word with it,
     `sharesWord`); AI 归位 for better; what waits is white cards on one pale ground, as
