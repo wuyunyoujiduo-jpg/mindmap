@@ -58,7 +58,7 @@ func sideRow(c *ui.Context, key, name, count string, on bool, lead func(hot bool
 			txt.TextColor(ink2(t)) // read second, until it is chosen or pointed at
 		}
 		if count != "" && count != "0" {
-			ui.Text(c, count).FontSize(textCaption).TextColor(faint(t)).FontFeatures("tnum").PassThrough()
+			sideCount(c, count, on, false)
 		}
 	})
 	return row
@@ -93,6 +93,35 @@ func sideRowTrail(c *ui.Context, key, name, count string, on bool, lead, trail f
 		ui.Row(c).Gap(6).AlignItems(ui.Center).Shrink(0).Children(func() { trail(row.Hovered()) })
 	})
 	return row
+}
+
+// A count of the left column is a small tablet at the row's end: the
+// figure on a faint shade, all of one width so that they stand in a
+// column; white on the row chosen, where the row is the shade; what is
+// late on the danger's tint. Bare figures of uneven widths, faint, read
+// as left over, the user found.
+const (
+	sideCountWide = 26
+	sideCountTall = 20
+)
+
+func sideCount(c *ui.Context, text string, on, danger bool) {
+	t := c.Theme()
+	bg, ink := t.Text.Alpha(0.05), t.TextMuted
+	switch {
+	case danger:
+		bg, ink = t.Danger.Alpha(0.11), t.Danger
+	case on:
+		bg, ink = cardColor(t), t.Text
+	}
+	b := ui.Box(c).MinWidth(sideCountWide).Height(sideCountTall).Padding(0, 6).Radius(sideCountTall / 2).Center().Shrink(0).
+		Background(bg).Transition(easeLook).PassThrough()
+	b.Children(func() {
+		txt := ui.Text(c, text).FontSize(11).TextColor(ink).FontFeatures("tnum").NoWrap().PassThrough()
+		if on || danger {
+			txt.FontWeight(700)
+		}
+	})
 }
 
 // sideIconSize is the room an icon takes before a row's name, a map's dot too.
@@ -131,7 +160,7 @@ func (a *app) todaySide(c *ui.Context) {
 			// What is late, alone, under today's: there only when something is.
 			if l.view == tasksToday && (counts[tasksLate] != "" || a.tasks.view == tasksLate) {
 				late := sideRowTrail(c, "list:late", "已逾期", "", noMap && a.tasks.view == tasksLate, sideIcon(c, "alarm-clock"), func(bool) {
-					ui.Text(c, counts[tasksLate]).FontSize(textCaption).TextColor(c.Theme().Danger).FontFeatures("tnum").PassThrough()
+					sideCount(c, counts[tasksLate], noMap && a.tasks.view == tasksLate, true)
 				})
 				if late.Label("已逾期 " + counts[tasksLate]).Clicked() {
 					a.tasks.view, a.tasks.onMap = tasksLate, ""
@@ -209,10 +238,10 @@ func (a *app) todaySide(c *ui.Context) {
 					// phone need not be as this is, the user said).
 					th := c.Theme()
 					if !hot { // at the row's edge, as the lists' counts above
-						ui.Text(c, fmt.Sprint(n)).FontSize(textCaption).TextColor(faint(th)).FontFeatures("tnum").MinWidth(22).TextAlign(ui.End).PassThrough()
+						sideCount(c, fmt.Sprint(n), a.tasks.onMap == path, false)
 						return
 					}
-					key := ui.Box(c.Key("to-map")).Size(22, 22).Radius(radiusSmall).Center().Shrink(0).Margin(0, -4, 0, 0).Cursor(ui.CursorPointer).
+					key := ui.Box(c.Key("to-map")).Size(sideCountWide, sideCountTall).Radius(sideCountTall / 2).Center().Shrink(0).Cursor(ui.CursorPointer).
 						Label("打开导图 " + mapName(path)).Tooltip("打开这张导图").Background(th.Text.Alpha(0)).Transition(easeLook)
 					ink := ink2(th)
 					if key.Hovered() {

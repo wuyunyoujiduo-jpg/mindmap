@@ -53,7 +53,10 @@ by AI, and an AI assistant.
     into columns by thin lines: what of the place shows, the page, what is
     chosen.
   - The left column (`side.go`, `sidePane`, `sideRow`; put away by
-    `config.HideTree`) is the one way to narrow a page: 今天's lists, what
+    `config.HideTree`; a row's count a small tablet of one width,
+    `sideCount`, white on the row chosen, on the danger's tint for what
+    is late: bare faint figures read as left over, the user found) is
+    the one way to narrow a page: 今天's lists, what
     waits for a place, and the maps to see the tasks of alone
     (`todaySide`); 项目's directory (`tree.go`, `mapTree`: folders that
     open and close and their maps, so that going from a map to another is
