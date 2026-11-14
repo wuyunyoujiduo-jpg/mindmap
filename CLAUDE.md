@@ -75,7 +75,7 @@ by AI, and an AI assistant.
     a floating window suited it, and it does, the leaf having three
     columns already.
   - On the leaf a lone card is a pale block (`raise`, `blockFill`),
-    things of a kind are white cards on one pale ground (`whiteCard`), a
+    things of a kind are cards apart, white with a hairline (`wallCard`), a
     card on a block is white with a hairline (`paper`), a list is rows with a thin
     line under each (`listCardRow`, the tasks' rows), a field is a pale
     block that turns white in the accent's line when written in
@@ -101,9 +101,9 @@ by AI, and an AI assistant.
     `waitingRail`, for half the window stood empty); its cards are the left column's list 等着归位
     (`homeWaiting`), each card saying a place by its words alone, with
     no AI asked (`nearPlace`, which must share a word with it,
-    `sharesWord`); AI 归位 for better; what waits is white cards on one pale ground, as
-    flomo's notes lie (the user held ours beside them: pale blocks on
-    white were ugly); a card is clean, a click opens it, and
+    `sharesWord`); AI 归位 for better; what waits is cards that stand apart, white
+    with a hairline (`wallCard`: pale blocks on white were ugly, the user
+    found, and then one gray ground under white cards a slab); a card is clean, a click opens it, and
     what can be done with it is one menu, under the key at its corner (a
     phone has no other) and under the pointer's other key (`waitingMenu`;
     a row of keys at each card's foot was too much, the user found).
@@ -147,12 +147,11 @@ by AI, and an AI assistant.
   focus would. The tests run with no motion (`app.noMotion`).
 - What the user's corrections taught, to design by (each cost a version
   to learn; the user asked that they be kept here):
-  - Things of one kind lie as white cards on one pale ground they share
-    (`whiteCard` on `blockFill`: what waits on 今天), not
-    each a pale block of its own on the white leaf, which read as dull
-    islands. A wall of many cards is not that: there the ground was one
-    gray slab, and the cards stand apart, white with a hairline
-    (`wallCard`, 收集's wall). A lone thing on the leaf (a field, a map's card) may be a
+  - Cards of one kind stand apart on the white leaf, each white with a
+    hairline (`wallCard`: 收集's wall, what waits for a place). Not each
+    a pale block of its own, which read as dull islands; and not white
+    cards on one pale ground they share, which the user had asked for
+    and then found one gray slab. A lone thing on the leaf (a field, a map's card) may be a
     pale block.
   - A card shows what it is, not what can be done with it. A click opens
     it; all that can be done is one menu, under a faint ⋯ at its corner

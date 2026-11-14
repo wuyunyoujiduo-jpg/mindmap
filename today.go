@@ -243,8 +243,8 @@ func (a *app) homeWaiting(c *ui.Context) {
 			emptyNote(c, "这几天记下的会出现在这里。")
 			return
 		}
-		// A pale ground, and each thing a white card on it, as notes lie.
-		ui.Column(c.Key("home-lately")).Padding(10).Gap(8).Radius(radiusCard + 4).Background(blockFill(t)).FillWidth().Children(func() {
+		// Each thing a card of its own on the white page, as 收集's wall.
+		ui.Column(c.Key("home-lately")).Gap(10).FillWidth().Children(func() {
 			for i, w := range items {
 				if i == homeWaitingCount {
 					break
@@ -527,7 +527,7 @@ func (a *app) waitingCard(c *ui.Context, w waitingItem, i int) {
 	text = strings.TrimSpace(clipRef.ReplaceAllString(text, ""))
 	// A card each, as a note is: when over the words, what can be done
 	// with it under the pointer, where the AI would put it under the words.
-	card := whiteCard(ui.Column(c.Key("waiting:"+key)).Padding(14, 14, 18, 20).Gap(6).Radius(radiusCard).FillWidth().Label("记下的 "+text), t).
+	card := wallCard(ui.Column(c.Key("waiting:"+key)).Padding(14, 14, 18, 20).Gap(6).Radius(radiusCard).FillWidth().Label("记下的 "+text), t).
 		Transition(rowMotion).Cursor(ui.CursorPointer)
 	card.ContextMenu(func(m *ui.Menu) { a.waitingMenu(m, w, has) })
 	if card.Clicked() {
