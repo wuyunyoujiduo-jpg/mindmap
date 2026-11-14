@@ -94,7 +94,10 @@ are 14 to 16).
   column, left and right to the card beside), and the space bar ticks a
   task off; never
   while something is written in (`FocusTakesText`).
-- **The places** are ⌘1, ⌘2, ⌘3 and the bar ⌘K, said on their tips.
+- **The places** are ⌥⌘1, ⌥⌘2, ⌥⌘3 and the bar ⌘J, said on their tips
+  and in the menu 前往 (⌘1–5 are a map's views and ⌘K the commands,
+  older than these: 0.84.0 gave the places ⌘1–3 and the bar ⌘K, which
+  the menu took first).
 - **The left column takes what is dropped on it**: a task on a project
   goes to that map (`dropTaskOnMap`), a clip on a tag takes it
   (`tagClipUndoably`), as a map on a folder.

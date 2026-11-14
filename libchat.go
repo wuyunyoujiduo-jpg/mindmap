@@ -141,10 +141,10 @@ func (a *app) runLibraryTool(call aiCall) (result, shown string) {
 		if c == nil {
 			return "找不到这条资料：" + in.ID, "没有找到资料 " + in.ID
 		}
-		return library.Full(c, 20000), "📖 读取资料「" + c.Label() + "」"
+		return library.Mask(library.Full(c, 20000)), "📖 读取资料「" + c.Label() + "」"
 	}
 	text, n := library.SearchText(a.lib, in.Query, in.Category, 8, a.qvecs[strings.TrimSpace(in.Query)], a.embedder().Name())
-	return text, fmt.Sprintf("🔎 在收集中检索「%s」：%d 条结果", in.Query, n)
+	return library.Mask(text), fmt.Sprintf("🔎 在收集中检索「%s」：%d 条结果", in.Query, n)
 }
 
 // librarySnapshot is what the AI is given of the library, when it is what

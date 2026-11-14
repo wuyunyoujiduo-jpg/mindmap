@@ -373,7 +373,7 @@ func (a *app) suggestClipPlaces(clips []*library.Clip) {
 	for i, cl := range loose {
 		text := cl.Label()
 		for _, more := range []string{cl.Summary, cl.Desc, cl.Text} {
-			if more = strings.TrimSpace(more); more != "" && more != text {
+			if more = strings.TrimSpace(library.Mask(more)); more != "" && more != text {
 				if r := []rune(more); len(r) > 120 {
 					more = string(r[:120])
 				}

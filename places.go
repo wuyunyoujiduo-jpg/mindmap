@@ -89,23 +89,26 @@ func (a *app) topBar(c *ui.Context) {
 					}
 				})
 			}
-			part(placeToday, "今天", "今天要做的，和刚记下的（"+keyLabel("CmdOrCtrl+1")+"）", func() {
+			part(placeToday, "今天", "今天要做的，和刚记下的（"+keyLabel("CmdOrCtrl+Alt+1")+"）", func() {
 				a.showLibrary()
 				a.libHome = true
 			})
-			part(placeMaps, "项目", "导图：一张就是一个项目（"+keyLabel("CmdOrCtrl+2")+"）", a.showProjects)
-			part(placeCollect, "收集", "灵感、链接、文档和图片（"+keyLabel("CmdOrCtrl+3")+"）", func() { a.openList(kindAll, "") })
+			part(placeMaps, "项目", "导图：一张就是一个项目（"+keyLabel("CmdOrCtrl+Alt+2")+"）", a.showProjects)
+			part(placeCollect, "收集", "灵感、链接、文档和图片（"+keyLabel("CmdOrCtrl+Alt+3")+"）", func() { a.openList(kindAll, "") })
 		})
-		// The places and the bar by the keyboard, from every page.
+		// The places and the bar by the keyboard, from every page (the
+		// menu 前往 has them too, and takes the keys first where there is
+		// one). ⌘1–3 are the views of a map and ⌘K the commands: these are
+		// beside them.
 		switch {
-		case c.Shortcut(ui.Cmd, ui.Key1):
+		case c.Shortcut(ui.Cmd|ui.Alt, ui.Key1):
 			a.later(func() { a.showLibrary(); a.libHome = true })
-		case c.Shortcut(ui.Cmd, ui.Key2):
+		case c.Shortcut(ui.Cmd|ui.Alt, ui.Key2):
 			a.later(a.showProjects)
-		case c.Shortcut(ui.Cmd, ui.Key3):
+		case c.Shortcut(ui.Cmd|ui.Alt, ui.Key3):
 			a.later(func() { a.openList(kindAll, "") })
-		case c.Shortcut(ui.Cmd, ui.KeyK):
-			a.barOpen, a.writeRefocus = true, "home-line"
+		case c.Shortcut(ui.Cmd, ui.KeyJ):
+			a.openBar()
 		}
 		a.oneBar(c)
 		// The AI's panel, from every page.
@@ -668,3 +671,14 @@ func (a *app) projectsRail(c *ui.Context) {
 		})
 	})
 }
+
+// openBar opens the one bar to write in, from wherever.
+func (a *app) openBar() { a.barOpen, a.writeRefocus = true, "home-line" }
+
+// goToday, goCollect go to those places (showProjects is 项目's).
+func (a *app) goToday() {
+	a.showLibrary()
+	a.libHome = true
+}
+
+func (a *app) goCollect() { a.openList(kindAll, "") }

@@ -33,6 +33,9 @@ type paletteItem struct {
 	title  string
 	detail string // a shortcut, or where a node is
 	run    func()
+	// task, for a task found, is it: its row ticks it off and puts it
+	// on tomorrow where it is, the search staying open.
+	task *taskItem
 }
 
 // command is an action of the palette.
@@ -130,7 +133,30 @@ func (a *app) paletteItems() []paletteItem {
 	if a.paletteMode == paletteAll {
 		for _, cmd := range a.commands() {
 			if (cmd.ok == nil || cmd.ok()) && match(cmd.title) {
-				items = append(items, paletteItem{"命令", cmd.title, cmd.keys, cmd.run})
+				items = append(items, paletteItem{"命令", cmd.title, cmd.keys, cmd.run, nil})
+			}
+		}
+		// The tasks not done of every map, to do something with at once.
+		if q != "" {
+			n := 0
+			for _, it := range a.taskItems() {
+				if n == 8 {
+					break
+				}
+				if it.done() || !strings.Contains(strings.ToLower(it.node.Title), q) && !strings.Contains(strings.ToLower(it.node.Note), q) {
+					continue
+				}
+				n++
+				where := it.mapName
+				if d := it.date(); d != nil {
+					where += " · " + dayLabel(*d, a.now())
+				}
+				items = append(items, paletteItem{kind: "任务", title: it.node.Title, detail: where, task: &it, run: func() {
+					a.openTasks()
+					a.tasks.view, a.tasks.onMap = tasksAll, ""
+					a.showTask(it)
+					a.tasks.reveal = it.key()
+				}})
 			}
 		}
 		if q != "" && a.file != nil {
@@ -148,7 +174,7 @@ func (a *app) paletteItems() []paletteItem {
 			if c := a.lib.Find(strings.TrimPrefix(ref, clipScheme)); c != nil {
 				for _, p := range a.placesFor(c, 8) {
 					p := p
-					items = append(items, paletteItem{"建议", p.title, "", func() { attach(p.path, p.sheet, p.id) }})
+					items = append(items, paletteItem{"建议", p.title, "", func() { attach(p.path, p.sheet, p.id) }, nil})
 				}
 			}
 		}
@@ -160,7 +186,7 @@ func (a *app) paletteItems() []paletteItem {
 			if q == "" { // and every map's center
 				d := file.Sheets[0]
 				path, sheet, id := f.Path, d.ID, d.Root.ID
-				items = append(items, paletteItem{"导图", d.Root.Title, mapName(path), func() { attach(path, sheet, id) }})
+				items = append(items, paletteItem{"导图", d.Root.Title, mapName(path), func() { attach(path, sheet, id) }, nil})
 				continue
 			}
 			items = append(items, a.nodeItems(f.Path, file, q, 200-len(items), attach)...)
@@ -179,7 +205,7 @@ func (a *app) paletteItems() []paletteItem {
 				if n := a.file.Node(a.linkFrom); n != nil {
 					a.addLink(n, clipScheme+id)
 				}
-			}})
+			}, nil})
 		}
 	}
 	if a.paletteMode == paletteAll && q != "" || a.paletteMode == paletteMaps {
@@ -195,7 +221,7 @@ func (a *app) paletteItems() []paletteItem {
 				if an != nil && an.Desc != "" {
 					where = an.Desc
 				}
-				items = append(items, paletteItem{"导图", name, where, func() { a.openMap(path) }})
+				items = append(items, paletteItem{"导图", name, where, func() { a.openMap(path) }, nil})
 			}
 		}
 	}
@@ -207,7 +233,7 @@ func (a *app) paletteItems() []paletteItem {
 			id := h.Clip.ID
 			items = append(items, paletteItem{"资料", h.Clip.Label(), cmpOr(h.Clip.Desc, h.Clip.Category), func() {
 				a.libOpen, a.libSel = true, id
-			}})
+			}, nil})
 		}
 	}
 	// #标签: what carries the tag, wherever it is: notes and clips of the
@@ -233,7 +259,7 @@ func (a *app) paletteItems() []paletteItem {
 					if isMemo(cl) {
 						kind = "灵感"
 					}
-					items = append(items, paletteItem{kind, firstSentence(cl.Label()), "#" + strings.Join(cl.Tags, " #"), func() { a.showClip(id) }})
+					items = append(items, paletteItem{kind, firstSentence(cl.Label()), "#" + strings.Join(cl.Tags, " #"), func() { a.showClip(id) }, nil})
 				}
 			}
 		}
@@ -249,7 +275,7 @@ func (a *app) paletteItems() []paletteItem {
 				d.Walk(func(n, _ *model.Node, _ int) bool {
 					if len(items) < 200 && has(n.Tags) {
 						path, sheet, id := f.Path, d.ID, n.ID
-						items = append(items, paletteItem{"主题", n.Title, mapName(path) + " · #" + strings.Join(n.Tags, " #"), func() { a.goToNode(path, sheet, id) }})
+						items = append(items, paletteItem{"主题", n.Title, mapName(path) + " · #" + strings.Join(n.Tags, " #"), func() { a.goToNode(path, sheet, id) }, nil})
 					}
 					return true
 				})
@@ -272,7 +298,7 @@ func (a *app) paletteItems() []paletteItem {
 				if len(file.Sheets) > 1 {
 					where += " · " + d.Title
 				}
-				items = append(items, paletteItem{"导图", d.Root.Title, where, func() { a.moveToMap(path, sheet, id) }})
+				items = append(items, paletteItem{"导图", d.Root.Title, where, func() { a.moveToMap(path, sheet, id) }, nil})
 			}
 		}
 	}
@@ -331,7 +357,7 @@ func (a *app) nodeItems(path string, f *model.File, q string, limit int, act fun
 				title += "　— " + snippet(n.Note, q)
 			}
 			sheet, id := d.ID, n.ID
-			items = append(items, paletteItem{"节点", title, where, func() { act(path, sheet, id) }})
+			items = append(items, paletteItem{"节点", title, where, func() { act(path, sheet, id) }, nil})
 			return true
 		})
 	}
@@ -492,6 +518,22 @@ func (a *app) paletteView(c *ui.Context) {
 						}
 						row.Children(func() {
 							ui.Text(c, it.kind).FontSize(11).TextColor(t.TextMuted).Width(30).Shrink(0)
+							if it.task != nil { // a task: ticked off and put on tomorrow here
+								task := *it.task
+								a.taskCircle(c, task, 16)
+								ui.Column(c).Grow(1).Basis(0).MinWidth(0).Children(func() {
+									ui.Text(c, it.title).FontSize(14).MaxLines(1)
+									ui.Text(c, it.detail).FontSize(11).TextColor(t.TextMuted).MaxLines(1)
+								})
+								if ghostButton(c, "明天", "改到明天").Label("改到明天 " + task.node.Title).Clicked() {
+									d := today(a.now()).AddDate(0, 0, 1)
+									a.later(func() {
+										a.setTaskDay(task, &d)
+										a.tell("「" + task.node.Title + "」改到明天")
+									})
+								}
+								return
+							}
 							if it.kind == "命令" { // a command, with its keys at the end
 								ui.Text(c, it.title).FontSize(14).Grow(1)
 								ui.Text(c, it.detail).FontSize(12).TextColor(t.TextMuted).NoWrap()

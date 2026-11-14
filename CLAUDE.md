@@ -114,6 +114,12 @@ by AI, and an AI assistant.
     on their days, and those that repeat (`model.Repeat`, `repeatProp`,
     `parseRepeat`) faint on the days they come again (`taskGhost`). A
     task's state, priority and day are set with `segmented` and `dateProp`.
+    A task may have a time of its day to remind at (`Task.Remind`,
+    `remindProp`, `reminders.go`: a notification of its own, and one a
+    day of what is due and late in every map). 本周回顾 (`review.go`)
+    is the week looked back on: done, late, kept, with no AI asked.
+    The search of everything finds tasks, ticked off and put on tomorrow
+    in its list (`paletteItem.task`).
     A project chosen in the left column shows all of its tasks not done,
     by when (`tasksOfMap`), with the way to its map, and nothing that
     waits: that is of no one project.
@@ -121,7 +127,8 @@ by AI, and an AI assistant.
     small as its face (`drawMapFace`) and a ring for its tasks, white
     with a hairline as every card of a kind (`wallCard`); with the
     left column put away, the folders are a row of pills (`projFolder`).
-    A map opened has its own bar under the top row; on the canvas the
+    A map opened has its own bar under the top row, with the key that
+    shows some tasks alone, the rest dimmed (`taskFilterKey`); on the canvas the
     center is in the ink, the main topics on a pastel of their branch's
     color, those below on a faint tint (the scheme 明亮 of `style.go`).
   - 收集 (`libview.go`): notes and clips, a wall of cards that
@@ -132,7 +139,12 @@ by AI, and an AI assistant.
     whole as the cards were first drawn, a wall of screenshots held the
     window still the first time 收集 was opened, and a map of pictures
     when it was opened (the canvas's take the same way, `thumbnail`).
-    Nothing that reads a file or decodes a picture belongs in a frame. What is collected is 收集's (the
+    Nothing that reads a file or decodes a picture belongs in a frame.
+    What looks like a key or a password in what is kept (`library.Mask`,
+    `Clip.Secret`) is in dots on cards, lines, titles and cards to share,
+    and in what goes to an AI; a clip's details show it when asked
+    (`secretShown`). The thoughts that name a clip and those it names
+    are in its details (`clipMentions`). What is collected is 收集's (the
     word of the UI, never 资料库), and is on a map by a topic's link.
   - Color is kept for small things that mean something: each map has its
     own (`mapcolor.go`), shown as a dot or as a pastel with a deep ink
@@ -178,7 +190,7 @@ by AI, and an AI assistant.
   - What puts a thing away says so and gives the way back at once
     (撤回), and a way back later. The same for what is ticked off,
     moved or tagged (`tellUndo`; `DESIGN.md`'s Hands, with the keys:
-    Escape, the arrows, ⌘1–3, ⌘K, and what the left column takes when
+    Escape, the arrows, ⌥⌘1–3, ⌘J, and what the left column takes when
     dropped on).
   - Two kinds of thing that the user wants as one stay each in its own
     store and are joined by a link, made of each other without loss.
@@ -200,7 +212,10 @@ by AI, and an AI assistant.
   for apps before 0.30.1. The secrets `MYGO_UPDATER_PRIVATE_KEY` and
   `RELEASES_TOKEN` are the GitHub environment `mymind`'s.
 - macOS builds are per chip, `darwin/arm64` and `darwin/amd64`, a disk
-  image each; each updates from its own manifest.
+  image each; each updates from its own manifest. A release builds
+  Apple silicon alone unless the workflow is run with `all: true`, which
+  builds Intel's and Windows' too: without it now and then, those stay
+  at an old version (Intel's stood at 0.33.1 until 0.85.0).
 - Sync with GitHub: `internal/ghsync` (a three-way merge over the REST API,
   state in `<maps folder>/.sync/`), wired in `sync.go`.
 - Screenshots are the app's own (`internal/screenshot`), on OneShot's way:

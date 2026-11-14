@@ -108,6 +108,9 @@ type Task struct {
 	// many times it was done.
 	Repeat *Repeat `json:"repeat,omitempty"`
 	Times  int     `json:"times,omitempty"`
+	// Remind, if set, is the time of its day to be reminded of it at, as
+	// 15:04.
+	Remind string `json:"remind,omitempty"`
 }
 
 // SetStatus changes the status, noting when the task was done. A task

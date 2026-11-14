@@ -55,12 +55,12 @@ func (a *app) exportImage() (data []byte, err error) {
 	}
 	// What only the screen shows is put aside while drawing.
 	selected, boxes, vp, reveal := a.selected, a.boxes, a.vp, a.reveal
-	tagFilter, search := a.tagFilter, a.search
-	a.selected, a.tagFilter, a.search = "", "", ""
+	tagFilter, search, taskFilter := a.tagFilter, a.search, a.taskFilter
+	a.selected, a.tagFilter, a.search, a.taskFilter = "", "", "", taskFilterNone
 	a.exportCam = &camera{Zoom: 1, placed: true}
 	defer func() {
 		a.selected, a.boxes, a.vp, a.reveal = selected, boxes, vp, reveal
-		a.tagFilter, a.search = tagFilter, search
+		a.tagFilter, a.search, a.taskFilter = tagFilter, search, taskFilter
 		a.exportCam = nil
 		if r := recover(); r != nil {
 			err = fmt.Errorf("%v", r)

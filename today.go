@@ -437,7 +437,7 @@ func (a *app) waitingLine(c *ui.Context, w waitingItem, rail bool) {
 		cl := w.clip
 		key, text, when = "c:"+cl.ID, cl.Label(), relTime(a.now(), cl.Created)
 		if isMemo(cl) {
-			if first, _, _ := strings.Cut(strings.TrimSpace(cl.Text), "\n"); first != "" {
+			if first, _, _ := strings.Cut(strings.TrimSpace(library.Mask(cl.Text)), "\n"); first != "" {
 				text = first
 			}
 		}
@@ -503,7 +503,7 @@ func (a *app) waitingCard(c *ui.Context, w waitingItem, i int) {
 		cl := w.clip
 		key, text, kind = "c:"+cl.ID, cl.Label(), relTime(a.now(), cl.Created) // its icon says its kind
 		if isMemo(cl) {
-			if first, _, _ := strings.Cut(strings.TrimSpace(cl.Text), "\n"); first != "" {
+			if first, _, _ := strings.Cut(strings.TrimSpace(library.Mask(cl.Text)), "\n"); first != "" {
 				text = first // else its title or its note, as its label has it
 			}
 		} else {

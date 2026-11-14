@@ -384,18 +384,20 @@ type app struct {
 	clipPlacing   bool
 	clipPlaceErr  string
 	tagFilter     string
+	taskFilter    int // the tasks a map shows bright alone (taskFilterOpen…)
 	sidebarWidth  float32
 	panelWidth    float32
 	resizingPanel bool
 	// Folders of the sidebar are shown closed but for those opened, which
 	// the config keeps.
-	renaming   string // the map or folder renamed in the sidebar
-	renameText string
-	tagQuery   string
-	notice     string    // a passing message in the toolbar, as "已复制"
-	noticeAt   time.Time // since when it shows, for noticeTime
-	libReveal  string    // the clip the keyboard went to, to scroll to once
-	wallShown  int       // how many clips 收集's wall shows, when more than wallStep
+	renaming    string // the map or folder renamed in the sidebar
+	renameText  string
+	tagQuery    string
+	notice      string    // a passing message in the toolbar, as "已复制"
+	noticeAt    time.Time // since when it shows, for noticeTime
+	libReveal   string    // the clip the keyboard went to, to scroll to once
+	secretShown string    // the clip whose secrets its details show, asked for
+	wallShown   int       // how many clips 收集's wall shows, when more than wallStep
 	// Long work, told in cards (wait.go): how many clips the index is made
 	// of and how many are left, since when, and what to say once done.
 	embedTotal, embedLeft int
@@ -1258,12 +1260,31 @@ func (a *app) highlighted(n *model.Node) bool {
 	if a.tagFilter != "" && !n.HasTag(a.tagFilter) {
 		return false
 	}
+	switch a.taskFilter {
+	case taskFilterOpen:
+		if n.Task == nil || n.Task.Status == model.StatusDone {
+			return false
+		}
+	case taskFilterWeek: // not done, and due before next week: this week's and the late
+		if n.Task == nil || n.Task.Status == model.StatusDone || n.Task.Due == nil ||
+			!n.Task.Due.Before(weekStart(today(a.now())).AddDate(0, 0, 7)) {
+			return false
+		}
+	}
 	return n.Matches(a.search)
 }
 
 func (a *app) filtering() bool {
-	return a.tagFilter != "" || a.search != ""
+	return a.tagFilter != "" || a.search != "" || a.taskFilter != taskFilterNone
 }
+
+// Which tasks alone a map shows bright, the rest of it dimmed
+// (app.taskFilter): none, those not done, those of this week.
+const (
+	taskFilterNone = iota
+	taskFilterOpen
+	taskFilterWeek
+)
 
 // nextMatch selects the next node, after the selected one, that matches the
 // search and tag filter.

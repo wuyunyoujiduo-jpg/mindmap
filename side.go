@@ -94,6 +94,9 @@ func (a *app) todaySide(c *ui.Context) {
 				a.tasks.view, a.tasks.onMap = l.view, ""
 			}
 		}
+		if sideRow(c, "list:review", "本周回顾", "", a.tasks.view == tasksReview, sideIcon(c, "history")).Tooltip("这周做完的、拖着的、记下的").Clicked() {
+			a.tasks.view, a.tasks.onMap = tasksReview, ""
+		}
 		if n := len(a.waiting()); n > 0 || a.tasks.view == tasksWaiting {
 			if sideRow(c, "list:waiting", "等着归位", fmt.Sprint(n), a.tasks.view == tasksWaiting, sideIcon(c, "import")).Clicked() {
 				a.tasks.view = tasksWaiting
@@ -137,7 +140,7 @@ func (a *app) todaySide(c *ui.Context) {
 						a.tasks.onMap = ""
 					} else {
 						a.tasks.onMap = path
-						if a.tasks.view == tasksWaiting || a.tasks.view == tasksInbox {
+						if a.tasks.view == tasksWaiting || a.tasks.view == tasksInbox || a.tasks.view == tasksReview {
 							a.tasks.view = tasksAll
 						}
 					}

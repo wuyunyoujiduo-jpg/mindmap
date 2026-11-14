@@ -30,6 +30,7 @@ const (
 	tasksDone    // those done, the last first
 	tasksWaiting // what was written down and waits for a place
 	tasksOfMap   // not a list of the left column: how a project's tasks are grouped
+	tasksReview  // the week looked back on: what was done, what slipped, what was kept
 )
 
 // The lists of the tasks' page, as its tabs show them.
@@ -413,7 +414,8 @@ func (a *app) tasksView(c *ui.Context) {
 	rail := band && a.todayRoom(c) >= railRoom
 	// With room, the list is a table: a column for a task's project and
 	// one for its day, named once over them.
-	a.tasks.table = !calendar && a.tasks.view != tasksWaiting && a.todayRoom(c) >= tableRoom
+	plain := a.tasks.view == tasksWaiting || a.tasks.view == tasksReview // a page of its own, not a list of tasks
+	a.tasks.table = !calendar && !plain && a.todayRoom(c) >= tableRoom
 	listWidth := float32(todayWidth)
 	if rail {
 		listWidth = 920
@@ -426,7 +428,7 @@ func (a *app) tasksView(c *ui.Context) {
 			}
 			top.Children(func() {
 				a.tasksHead(c, all)
-				if a.tasks.view != tasksWaiting {
+				if !plain {
 					a.tasksAdd(c, now) // onto the day chosen; a list's, onto its own
 				}
 			})
@@ -451,6 +453,10 @@ func (a *app) tasksView(c *ui.Context) {
 					// Which list shows is chosen in the left column (todaySide).
 					if a.tasks.view == tasksWaiting {
 						a.homeWaiting(c)
+						return
+					}
+					if a.tasks.view == tasksReview {
+						a.weekReview(c, all)
 						return
 					}
 					a.taskList(c, items)
@@ -490,6 +496,8 @@ func (a *app) tasksHead(c *ui.Context, all []taskItem) {
 			switch a.tasks.view {
 			case tasksWaiting:
 				name = "等着归位"
+			case tasksReview:
+				name = "本周回顾"
 			case tasksWeek, tasksMonth, tasksDay:
 				name = "日程"
 			}
@@ -520,6 +528,9 @@ func (a *app) tasksHead(c *ui.Context, all []taskItem) {
 					}
 				}
 				figures(c, figure{open, "要做"}, figure{done, "做完"}).Margin(6, 0, 0)
+				return
+			}
+			if a.tasks.view == tasksReview { // its own figures, of the week, head its page
 				return
 			}
 			// The day in three figures: the figure in the ink, what it counts faint.
@@ -689,6 +700,7 @@ func (a *app) taskDetail(c *ui.Context, it taskItem) {
 					})
 					dateProp(c, "日期", "截止日期", task.Due, a.now(), func(d *time.Time) { a.later(func() { a.setTaskDay(it, d) }) })
 					a.repeatProp(c, it)
+					a.remindProp(c, it)
 				})
 				section(c, iconPencil, "备注", nil, func() {
 					in := area(c.Key("task-note"), &a.tasks.note).Lines(3, 14).FontSize(textBody).FillWidth().
@@ -1137,6 +1149,59 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 	})
 }
 
+// remindProp is when a task reminds of itself: a time of its day, three
+// as keys and the others under one, as how it repeats.
+func (a *app) remindProp(c *ui.Context, it taskItem) {
+	t := c.Theme()
+	task := it.node.Task
+	set := func(r string) {
+		a.later(func() { a.editTask(it, "改提醒", func(n *model.Node) { n.Task.Remind = r }) })
+	}
+	propRow(c, "提醒", func() {
+		if task.Due == nil {
+			ui.Text(c, "先定个日期，再选几点提醒").FontSize(textSmall).TextColor(faint(t))
+			return
+		}
+		chip := func(key, text, label string, on bool) bool {
+			b := ui.Box(c.Key(key)).Height(28).Padding(0, 12).Radius(radiusPill).Center().Cursor(ui.CursorPointer).Label(label).Shrink(0).
+				Background(t.Text.Alpha(0.05)).Transition(easeLook)
+			switch {
+			case on:
+				b.Background(t.Accent.Alpha(0.14))
+			case b.Hovered():
+				b.Background(t.Text.Alpha(0.09))
+			}
+			press(b, 0.96)
+			b.Children(func() {
+				txt := ui.Text(c, text).FontSize(textSmall).NoWrap().PassThrough().FontFeatures("tnum")
+				if on {
+					txt.FontWeight(700).TextColor(t.Accent.MixOklab(t.Text, 0.3))
+				}
+			})
+			return b.Clicked()
+		}
+		if chip("remind:none", "不提醒", "提醒 不提醒", task.Remind == "") {
+			set("")
+		}
+		for _, r := range remindTimes[:3] {
+			if chip("remind:"+r, strings.TrimPrefix(r, "0"), "提醒 "+r, task.Remind == r) {
+				set(r)
+			}
+		}
+		more := "更多"
+		if task.Remind != "" && !slices.Contains(remindTimes[:3], task.Remind) {
+			more = strings.TrimPrefix(task.Remind, "0")
+		}
+		dropButton(c, "remind-more", more, "提醒时间", "别的时间").Menu(func(m *ui.Menu) {
+			for _, r := range remindTimes[3:] {
+				if m.Item(strings.TrimPrefix(r, "0")).Checked(task.Remind == r).Chosen() {
+					set(r)
+				}
+			}
+		})
+	})
+}
+
 // taskKeys is the list's keys: the arrows go from a task to the next and
 // the one before, its details following; the space bar ticks off the one
 // chosen. Not while something is written in.
@@ -1269,6 +1334,9 @@ func (a *app) taskRow(c *ui.Context, it taskItem, overdue bool) {
 			label := dayLabel(*d, a.now())
 			if task.Due == nil {
 				label = "开始 " + label
+			}
+			if task.Remind != "" && task.Due != nil && !it.done() {
+				label += " " + strings.TrimPrefix(task.Remind, "0") // when it reminds
 			}
 			if task.Repeat != nil {
 				label += " ↻"

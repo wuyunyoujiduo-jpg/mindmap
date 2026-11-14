@@ -7,6 +7,7 @@ import (
 	"image/png"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -91,13 +92,13 @@ func TestKeysAndWaysBack(t *testing.T) {
 	}
 
 	// The places and the bar.
-	tt.Key(ui.Cmd, ui.Key2)
+	tt.Key(ui.Cmd|ui.Alt, ui.Key2)
 	tt.Frame()
 	tt.Frame()
 	if !tt.HasText("一张导图就是一个项目") {
 		t.Fatalf("not on 项目: %q", tt.Texts())
 	}
-	tt.Key(ui.Cmd, ui.Key3)
+	tt.Key(ui.Cmd|ui.Alt, ui.Key3)
 	tt.Frame()
 	tt.Frame()
 	if !tt.HasText("灵感和资料") {
@@ -115,7 +116,7 @@ func TestKeysAndWaysBack(t *testing.T) {
 	if a.libSel != "" {
 		t.Fatal("escape left the clip open")
 	}
-	tt.Key(ui.Cmd, ui.KeyK)
+	tt.Key(ui.Cmd, ui.KeyJ)
 	tt.Frame()
 	if !a.barOpen {
 		t.Fatal("the bar did not open")
@@ -204,4 +205,207 @@ func TestWallPicturesReadAside(t *testing.T) {
 		t.Fatalf("not small: %d×%d", w, h)
 	}
 	snapshot(t, tt, "wall-picture")
+}
+
+// A key kept with a note is in dots on its card and its title, and where
+// it goes to an AI; its details show it when asked.
+func TestSecretsAreMasked(t *testing.T) {
+	a, tt := newTestApp(t)
+	const key = "sk-abcdefghijklmnopqrstuvwxyz012345"
+	cl := &library.Clip{Kind: library.KindText, Text: "接口的密钥 " + key + " 先放这"}
+	if err := a.lib.Add(cl, a.now()); err != nil {
+		t.Fatal(err)
+	}
+	a.openList(kindAll, "")
+	tt.Frame()
+	shows := func() bool {
+		for _, s := range tt.Texts() {
+			if strings.Contains(s, key) {
+				return true
+			}
+		}
+		return false
+	}
+	if shows() || strings.Contains(cl.Label(), key) {
+		t.Fatalf("the key shows on the wall: %q", tt.Texts())
+	}
+	if p := organizePromptFor(cl, clipPromptBody); strings.Contains(p, key) || !strings.Contains(p, "先放这") {
+		t.Fatalf("the key goes to the AI: %q", p)
+	}
+	if strings.Contains(cardText(cl), key) {
+		t.Fatal("the key is on the card to share")
+	}
+	a.libSel = cl.ID
+	tt.Frame()
+	if shows() {
+		t.Fatal("the key shows in the details unasked")
+	}
+	snapshot(t, tt, "secret-masked")
+	if err := tt.Click("显示密钥"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.secretShown != cl.ID || tt.HasText("显示密钥") { // whole again, in the field it is written in
+		t.Fatalf("the key does not show when asked: %q", tt.Texts())
+	}
+	if a.lib.Find(cl.ID).Text != "接口的密钥 "+key+" 先放这" {
+		t.Fatal("the clip was changed")
+	}
+}
+
+// A task given a time reminds of itself at that time of its day, once.
+func TestTaskRemindsAtItsTime(t *testing.T) {
+	a, tt := newTestApp(t)
+	plat := a.plat.(*fakePlatform)
+	base := a.now()
+	day := today(base)
+	search := find(t, a, "搜索")
+	a.mutate("", func() { d := day; search.Task.Due = &d })
+	a.openTasks()
+	tt.Frame()
+	if err := tt.Click("任务 搜索"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if err := tt.Click("提醒 14:00"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Frame()
+	if search = find(t, a, "搜索"); search.Task.Remind != "14:00" {
+		t.Fatalf("remind %q", search.Task.Remind)
+	}
+	snapshot(t, tt, "task-remind")
+	at := func(h, m int) {
+		a.now = func() time.Time { return day.Add(time.Duration(h)*time.Hour + time.Duration(m)*time.Minute) }
+		a.tasks.read = time.Time{}
+		a.reminderCheck()
+	}
+	timed := func() int {
+		n := 0
+		for _, s := range plat.notes {
+			if strings.HasPrefix(s, "到时间了 · 14:00") && strings.Contains(s, "搜索") {
+				n++
+			}
+		}
+		return n
+	}
+	at(13, 0)
+	if timed() != 0 {
+		t.Fatalf("too early: %q", plat.notes)
+	}
+	at(14, 1)
+	at(14, 5)
+	if timed() != 1 {
+		t.Fatalf("reminded %d times: %q", timed(), plat.notes)
+	}
+}
+
+// The search of everything finds a task and ticks it off or puts it on
+// tomorrow where it is.
+func TestSearchActsOnTasks(t *testing.T) {
+	a, tt := newTestApp(t)
+	day := today(a.now())
+	search := find(t, a, "搜索")
+	a.mutate("", func() { d := day; search.Task.Due = &d })
+	a.openPalette(paletteAll)
+	a.paletteQuery = "搜索"
+	tt.Frame()
+	tt.Frame()
+	if !tt.HasText("改到明天 搜索") && !tt.HasText("任务") {
+		t.Fatalf("no task found: %q", tt.Texts())
+	}
+	snapshot(t, tt, "search-task")
+	if err := tt.Click("改到明天 搜索"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Frame()
+	if search = find(t, a, "搜索"); !search.Task.Due.Equal(day.AddDate(0, 0, 1)) || !a.paletteOpen {
+		t.Fatalf("due %v, open %v", search.Task.Due, a.paletteOpen)
+	}
+	if err := tt.Click("完成 搜索"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Frame()
+	if search = find(t, a, "搜索"); search.Task.Status != model.StatusDone {
+		t.Fatalf("status %v", search.Task.Status)
+	}
+}
+
+// The week looked back on: what was done in it, what is late, what was kept.
+func TestWeekReview(t *testing.T) {
+	a, tt := newTestApp(t)
+	day := today(a.now())
+	search, login := find(t, a, "搜索"), find(t, a, "登录")
+	a.mutate("", func() {
+		search.SetStatus(model.StatusDone, a.now())
+		late := day.AddDate(0, 0, -9)
+		login.SetStatus(model.StatusTodo, a.now())
+		login.Task.Due = &late
+	})
+	if err := a.lib.Add(&library.Clip{Kind: library.KindText, Text: "周报改成三段式"}, a.now()); err != nil {
+		t.Fatal(err)
+	}
+	a.openTasks()
+	tt.Frame()
+	if err := tt.Click("本周回顾"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Frame()
+	for _, want := range []string{"这周做完的", "任务 搜索", "拖着的", "任务 登录", "这周记下的灵感", "周报改成三段式", "顺延到今天"} {
+		if !tt.HasText(want) {
+			t.Fatalf("no %q: %q", want, tt.Texts())
+		}
+	}
+	snapshot(t, tt, "week-review")
+}
+
+// A thought that names another shows on it, and it on the thought.
+func TestClipsNameEachOther(t *testing.T) {
+	a, tt := newTestApp(t)
+	first := &library.Clip{Kind: library.KindText, Text: "换一家云服务商"}
+	if err := a.lib.Add(first, a.now()); err != nil {
+		t.Fatal(err)
+	}
+	second := &library.Clip{Kind: library.KindText, Text: "迁移成本要算进去 <clip:" + first.ID + ">"}
+	if err := a.lib.Add(second, a.now().Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	a.openList(kindAll, "")
+	a.libSel = first.ID
+	tt.Frame()
+	if !tt.HasText("提到它的") || !tt.HasText("前往 "+second.Label()) {
+		t.Fatalf("the first does not say who names it: %q", tt.Texts())
+	}
+	snapshot(t, tt, "clip-mentions")
+	if err := tt.Click("前往 " + second.Label()); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Frame()
+	if a.libSel != second.ID || !tt.HasText("它提到的") {
+		t.Fatalf("at %q: %q", a.libSel, tt.Texts())
+	}
+}
+
+// A map shows the tasks not done alone, the rest dimmed.
+func TestMapShowsOpenTasksAlone(t *testing.T) {
+	a, tt := newTestApp(t)
+	search, login := find(t, a, "搜索"), find(t, a, "登录")
+	a.mutate("", func() { login.SetStatus(model.StatusDone, a.now()) })
+	tt.Frame()
+	if err := tt.Click("筛选任务"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.ChooseMenuItem("没做完的任务"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !a.filtering() || !a.highlighted(search) || a.highlighted(login) || a.highlighted(a.doc.Root) {
+		t.Fatalf("open %v, done %v, root %v", a.highlighted(search), a.highlighted(login), a.highlighted(a.doc.Root))
+	}
+	snapshot(t, tt, "map-open-tasks")
 }

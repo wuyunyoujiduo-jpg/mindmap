@@ -444,7 +444,7 @@ func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 	row.ContextMenu(func(m *ui.Menu) { a.clipMenu(m, clip) })
 	row.Children(func() {
 		if memo {
-			text := clip.Text
+			text := library.Mask(clip.Text)
 			if r := []rune(text); len(r) > 600 {
 				text = string(r[:600]) + "…"
 			}
@@ -475,6 +475,7 @@ func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 			if sub == "" {
 				sub = clip.URL
 			}
+			sub = library.Mask(sub)
 			if label := clip.Label(); clip.Title == "" && !strings.HasSuffix(label, "…") && strings.TrimSpace(sub) == label {
 				sub = "" // the label says it all
 			}
@@ -677,6 +678,7 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 
 	// Where it is used, or where it may go.
 	a.clipPlacesSection(c, clip)
+	a.clipMentions(c, clip)
 
 	// Properties.
 	sectionCard(c, iconTag, tileBlue, "信息", nil, func() {
@@ -795,7 +797,7 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 		// A short note has no summary: one written before this was so is
 		// kept, and not shown.
 		if clip.Summary != "" && !briefClip(clip) {
-			ui.Text(c, clip.Summary).FontSize(textBody).LineHeight(1.55).Wrap().Selectable()
+			ui.Text(c, library.Mask(clip.Summary)).FontSize(textBody).LineHeight(1.55).Wrap().Selectable()
 		}
 		if clip.Analysis != "" && !briefClip(clip) {
 			markdownView(c.Key("clip-analysis"), clip.Analysis, textBody)
@@ -830,6 +832,14 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 	switch {
 	case clip.Kind == library.KindText:
 		sectionCard(c, iconText, tileOrange, "内容", nil, func() {
+			// What looks like a key or a password is in dots until asked for.
+			if clip.Secret() && a.secretShown != clip.ID {
+				ui.Text(c, library.Mask(clip.Text)).FontSize(textBody + 1).LineHeight(1.55).Wrap()
+				if ghostButton(c, "显示密钥", "这条里有看起来像密钥或密码的内容，已遮住；点一下显示并可以编辑").Margin(0, 0, 0, -8).Clicked() {
+					a.secretShown = clip.ID
+				}
+				return
+			}
 			text := clip.Text
 			if inlineArea(c.Key("clip-text"), &text, textBody+1, 3, 30, "", "资料内容").Margin(0, -8).Changed() {
 				a.setMemoText(clip, text)
@@ -854,7 +864,15 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 			label = "图中内容（AI 识别）"
 		}
 		sectionCard(c, kindTile(clip.Kind), kindColor(clip.Kind), label, nil, func() {
-			ui.Text(c, library.Excerpt(clip.Text, "", 3000)).FontSize(textSmall).LineHeight(1.5).TextColor(t.TextMuted).Wrap().Selectable()
+			text := clip.Text
+			hidden := clip.Secret() && a.secretShown != clip.ID
+			if hidden {
+				text = library.Mask(text)
+			}
+			ui.Text(c, library.Excerpt(text, "", 3000)).FontSize(textSmall).LineHeight(1.5).TextColor(t.TextMuted).Wrap().Selectable()
+			if hidden && ghostButton(c, "显示密钥", "这条里有看起来像密钥或密码的内容，已遮住").Margin(0, 0, 0, -8).Clicked() {
+				a.secretShown = clip.ID
+			}
 		})
 	}
 

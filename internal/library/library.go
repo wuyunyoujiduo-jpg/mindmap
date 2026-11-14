@@ -75,7 +75,7 @@ type Clip struct {
 // Label is the clip's title, else the start of its text, URL or name.
 func (c *Clip) Label() string {
 	for _, s := range []string{c.Title, c.Text, c.Note, c.URL, c.Name} {
-		if s = strings.TrimSpace(s); s != "" {
+		if s = strings.TrimSpace(Mask(s)); s != "" { // a secret is never a title
 			s, _, _ = strings.Cut(s, "\n")
 			if r := []rune(s); len(r) > 60 {
 				s = string(r[:60]) + "…"

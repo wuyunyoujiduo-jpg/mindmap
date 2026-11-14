@@ -473,7 +473,8 @@ func organizePromptFor(c *library.Clip, prompt string) string {
 	} else {
 		b.WriteString("\n摘要和分析是为了比读原文更快：两者加起来不要超过原文长度的一半，原文没说的不要补。\n")
 	}
-	return strings.Replace(prompt, clipPromptBody, b.String(), 1)
+	// A key or a password in it stays here: the AI is sent dots.
+	return strings.Replace(prompt, clipPromptBody, library.Mask(b.String()), 1)
 }
 
 func cmpOr(s, def string) string {

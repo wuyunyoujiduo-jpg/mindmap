@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -554,4 +555,49 @@ func (a *app) localModel() *embed.Model {
 		return nil
 	}
 	return loadLocalModel()
+}
+
+// clipMentions tells which thoughts name a clip (<clip:id> in their words)
+// and which it names: the links among what is collected, both ways, each a
+// click from the other. Nothing shows for a clip with neither.
+func (a *app) clipMentions(c *ui.Context, clip *library.Clip) {
+	t := c.Theme()
+	mark := "<" + clipScheme + clip.ID + ">"
+	var by, of []*library.Clip
+	for _, cl := range a.lib.Clips {
+		if cl.ID != clip.ID && strings.Contains(cl.Text, mark) {
+			by = append(by, cl)
+		}
+	}
+	for _, m := range clipRef.FindAllStringSubmatch(clip.Text, -1) {
+		if cl := a.lib.Find(m[1]); cl != nil && cl.ID != clip.ID && !slices.Contains(of, cl) {
+			of = append(of, cl)
+		}
+	}
+	if len(by)+len(of) == 0 {
+		return
+	}
+	rows := func(key, head string, list []*library.Clip) {
+		if len(list) == 0 {
+			return
+		}
+		ui.Text(c, head).FontSize(textCaption).TextColor(t.TextMuted)
+		for _, cl := range list {
+			id := cl.ID
+			row := ui.Row(c.Key(key + id)).Gap(6).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label("前往 " + cl.Label())
+			if row.Clicked() {
+				a.later(func() { a.libSel, a.libTagText = id, "" })
+			}
+			row.Children(func() {
+				ui.Box(c).Size(6, 6).Radius(3).Background(clipColor(cl.Kind)).Shrink(0)
+				ui.Text(c, cl.Label()).FontSize(12).TextColor(t.Accent).MaxLines(1)
+			})
+		}
+	}
+	sectionCard(c, iconLink, tileGreen, fmt.Sprintf("和 %d 条相连", len(by)+len(of)), nil, func() {
+		ui.Column(c).Gap(5).Children(func() {
+			rows("by:", "提到它的", by)
+			rows("of:", "它提到的", of)
+		})
+	})
 }

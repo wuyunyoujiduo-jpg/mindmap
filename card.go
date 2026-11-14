@@ -52,9 +52,9 @@ type cardOpts struct {
 func cardText(c *library.Clip) string {
 	switch {
 	case c.Kind == library.KindText && strings.TrimSpace(c.Text) != "":
-		return strings.TrimSpace(c.Text)
+		return strings.TrimSpace(library.Mask(c.Text))
 	case c.Note != "":
-		return strings.TrimSpace(c.Note)
+		return strings.TrimSpace(library.Mask(c.Note))
 	}
 	var parts []string
 	for _, s := range []string{c.Title, c.Desc} {
