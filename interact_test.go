@@ -696,7 +696,7 @@ func TestTodaySideProjects(t *testing.T) {
 	a.openTasks()
 	tt.Frame()
 	tt.Frame()
-	if !tt.HasText("快捷访问") || !tt.HasText("只看 常看的") {
+	if !tt.HasText("快捷访问") || !tt.HasText("打开 常看的") {
 		t.Fatalf("no 快捷访问: %q", tt.Texts())
 	}
 	if tt.HasText("只看 收件箱") {
@@ -750,5 +750,15 @@ func TestTodaySideProjects(t *testing.T) {
 	tt.Frame()
 	if mapName(a.path) != "项目0" {
 		t.Fatalf("at %q", a.path)
+	}
+	// A row of 快捷访问 goes to its map at a click.
+	a.openTasks()
+	tt.Frame()
+	if err := tt.Click("打开 常看的"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if mapName(a.path) != "常看的" || a.libOpen {
+		t.Fatalf("at %q, the page still shown %v", a.path, a.libOpen)
 	}
 }

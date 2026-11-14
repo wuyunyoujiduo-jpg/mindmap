@@ -188,7 +188,7 @@ func (a *app) todaySide(c *ui.Context) {
 		}
 		// A map's row: its dot with how far it is, its name, what is left
 		// to do, and under the pointer the key to the map itself.
-		mapRow := func(path string) {
+		mapRow := func(path string, direct bool) {
 			n := open[path]
 			col := a.mapColor(path)
 			done := float32(0)
@@ -213,7 +213,7 @@ func (a *app) todaySide(c *ui.Context) {
 				// pointer, in the count's own room, the key to its map (a
 				// phone need not be as this is, the user said).
 				th := c.Theme()
-				if !hot { // at the row's edge, as the lists' counts above
+				if !hot || direct { // at the row's edge, as the lists' counts above; a row that goes to its map needs no key to it
 					if n == 0 { // nothing to do: nothing said, its room kept
 						ui.Box(c).Size(sideCountWide, sideCountTall).Shrink(0).PassThrough()
 						return
@@ -232,7 +232,11 @@ func (a *app) todaySide(c *ui.Context) {
 				key.Children(func() { glyph(c, iconForward, 11, ink) })
 				toMap = key.Clicked()
 			})
-			row.Label("只看 " + mapName(path))
+			if direct {
+				row.Label("打开 " + mapName(path)).Tooltip("打开这张导图")
+			} else {
+				row.Label("只看 " + mapName(path))
+			}
 			// A task dropped on a project goes to it, under its center.
 			if d, over := ui.DragOver[taskDrag](row); over && d.path != path {
 				row.Background(c.Theme().Accent.Alpha(0.14))
@@ -240,7 +244,7 @@ func (a *app) todaySide(c *ui.Context) {
 			if d, ok := ui.Drop[taskDrag](row); ok && d.path != path {
 				a.later(func() { a.dropTaskOnMap(d, path) })
 			}
-			if toMap { // to its map, not to its tasks
+			if toMap || direct && row.Clicked() { // to its map, not to its tasks
 				a.later(func() { _ = a.open(path) })
 			} else if row.Clicked() {
 				if a.tasks.onMap == path {
@@ -266,7 +270,7 @@ func (a *app) todaySide(c *ui.Context) {
 			sideLine(c)
 			sideHead(c, "快捷访问")
 			for _, path := range quick {
-				mapRow(path)
+				mapRow(path, true) // a click goes to the map itself: that is what it is starred for
 			}
 		}
 		sideLine(c)
@@ -293,7 +297,7 @@ func (a *app) todaySide(c *ui.Context) {
 			if i >= shown && a.tasks.onMap != fi.Path {
 				continue
 			}
-			mapRow(fi.Path)
+			mapRow(fi.Path, false)
 		}
 		if rest := len(files) - shown; rest > 0 || a.tasks.allMaps && len(files) > sideMaps+1 {
 			word := fmt.Sprintf("全部项目 %d", len(files))
