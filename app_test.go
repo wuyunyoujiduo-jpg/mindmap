@@ -2365,7 +2365,7 @@ func TestLinks(t *testing.T) {
 		t.Fatal("did not go to the node")
 	}
 	tt.Frame()
-	if !tt.HasText("被 1 个节点链接") {
+	if !tt.HasText("被 1 处链接") {
 		t.Fatalf("no backlinks shown: %q", tt.Texts())
 	}
 	// The MCP window explains how to connect agents.

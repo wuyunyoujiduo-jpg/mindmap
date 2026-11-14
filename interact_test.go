@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/richtext"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
@@ -801,5 +802,106 @@ func TestOpenedMapShowsItsFolder(t *testing.T) {
 	tt.Frame()
 	if !a.libOpen || a.projFolder != filepath.Join(work, "上线") {
 		t.Fatalf("at %q", a.projFolder)
+	}
+}
+
+// [[ in a thought offers the topics of the maps; the one chosen is a link
+// the thought keeps, shown under its words, and the topic says in turn
+// that the thought links to it.
+func TestThoughtLinksToATopic(t *testing.T) {
+	a, tt := newTestApp(t)
+	login := find(t, a, "登录")
+	a.showLibrary()
+	a.libHome = true
+	a.barOpen = true
+	a.homeDraft = "上线前要再看一遍 [[登录"
+	tt.Frame()
+	tt.Frame()
+	if !tt.HasText("链接到 登录") {
+		t.Fatalf("the topic is not offered: %q", tt.Texts())
+	}
+	snapshot(t, tt, "link-offers")
+	if err := tt.Click("链接到 登录"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.homeDraft != "上线前要再看一遍 [[登录]] " {
+		t.Fatalf("draft %q", a.homeDraft)
+	}
+	a.saveHomeLine()
+	tt.Frame()
+	kept := a.clipsNamed("上线前", 1)
+	want := "<" + a.wholeNodeLink(a.path, login.ID) + ">"
+	if len(kept) != 1 || !strings.Contains(kept[0].Text, want) || strings.Contains(kept[0].Text, "[[") {
+		t.Fatalf("kept %+v, want the link %q", kept, want)
+	}
+	// The topic says the thought links to it.
+	back := a.backlinks(login.ID)
+	if len(back) != 1 || back[0].clip != kept[0].ID {
+		t.Fatalf("backlinks %+v", back)
+	}
+	// And a thought with such a link is not thereby placed on the map.
+	if n := len(a.clipBacklinks(kept[0].ID)); n != 0 {
+		t.Fatalf("%d uses on maps", n)
+	}
+	// Under the thought's words, the way to the topic.
+	a.openList(kindAll, "")
+	tt.Frame()
+	label := "前往链接 " + mapName(a.path) + " › 登录"
+	if _, l := a.linkLabel(a.wholeNodeLink(a.path, login.ID)); !tt.HasText("前往链接 " + l) {
+		t.Fatalf("no way to the topic (%q): %q", label, tt.Texts())
+	}
+	// From the topic, the way back to the thought.
+	a.goToBacklink(back[0])
+	tt.Frame()
+	if a.libSel != kept[0].ID {
+		t.Fatalf("at %q", a.libSel)
+	}
+}
+
+// [[ in a node's note offers what there is, and the one chosen is a link
+// of the note, which what it links to counts as a use.
+func TestNoteLinksToAClip(t *testing.T) {
+	a, tt := newTestApp(t)
+	cl := &library.Clip{Kind: library.KindText, Text: "周报改成三段式"}
+	if err := a.lib.Add(cl, a.now()); err != nil {
+		t.Fatal(err)
+	}
+	login := find(t, a, "登录")
+	a.selectNode(login.ID)
+	tt.Frame()
+	tt.Frame()
+	d := a.noteDocs["panel"]
+	if d == nil || d.id != login.ID {
+		t.Fatalf("no note editor for the node: %+v", d)
+	}
+	d.doc.SetSelection(d.doc.Text().Len(), d.doc.Text().Len())
+	d.doc.InsertText("参考 [[周报")
+	tt.Frame()
+	tt.Frame()
+	if !tt.HasText("链接到 " + refName(cl)) {
+		t.Fatalf("the clip is not offered: %q", tt.Texts())
+	}
+	snapshot(t, tt, "note-link-offers")
+	if err := tt.Click("链接到 " + refName(cl)); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Frame()
+	login = find(t, a, "登录")
+	if !strings.Contains(login.Note, "]("+clipScheme+cl.ID+")") || strings.Contains(login.Note, "[[") {
+		t.Fatalf("note %q", login.Note)
+	}
+	if back := a.clipBacklinks(cl.ID); len(back) != 1 || back[0].id != login.ID {
+		t.Fatalf("the clip does not say the topic uses it: %+v", back)
+	}
+	// Written again from the note's Markdown, the link is still a link.
+	found := false
+	text := richtext.ParseMarkdown(keepLines(login.Note))
+	for _, r := range text.Runs(0, text.Len()) {
+		found = found || r.Attributes.Link == clipScheme+cl.ID
+	}
+	if !found {
+		t.Fatalf("the link did not come back from %q", login.Note)
 	}
 }

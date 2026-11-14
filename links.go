@@ -239,6 +239,9 @@ func (a *app) removeLink(n *model.Node, link string) {
 // backlink is a node that links to another.
 type backlink struct {
 	path, sheet, id, title string
+	// clip, for a thought or a clip that links (in its words), is its ID:
+	// the rest but the title is empty then.
+	clip string
 }
 
 // backlinks are the nodes of every map linking to a node of the open map.
@@ -310,17 +313,19 @@ func (a *app) linksSection(c *ui.Context, n *model.Node) {
 				}
 			})
 			if back := a.backlinks(n.ID); len(back) > 0 {
-				ui.Text(c, fmt.Sprintf("被 %d 个节点链接", len(back))).FontSize(11).TextColor(t.TextMuted).Margin(4, 0, 0)
+				ui.Text(c, fmt.Sprintf("被 %d 处链接", len(back))).FontSize(11).TextColor(t.TextMuted).Margin(4, 0, 0)
 				for i, b := range back {
 					row := ui.Row(c.Key(fmt.Sprint("back", i))).Gap(6).Cursor(ui.CursorPointer).Label("前往 " + b.title)
 					if row.Clicked() {
 						b := b
-						a.later(func() { a.goToNode(b.path, b.sheet, b.id) })
+						a.later(func() { a.goToBacklink(b) })
 					}
 					row.Children(func() {
 						ui.Text(c, "↩").FontSize(12).TextColor(t.TextMuted)
 						title := b.title
-						if b.path != a.path {
+						if b.clip != "" {
+							title = "收集 › " + title
+						} else if b.path != a.path {
 							title = mapName(b.path) + " › " + title
 						}
 						ui.Text(c, title).FontSize(12).TextColor(t.Accent).MaxLines(1)
@@ -386,4 +391,13 @@ func (a *app) projectSection(c *ui.Context) {
 		})
 	})
 	a.codeSyncField(c)
+}
+
+// goToBacklink goes to what links: the node, or the thought or clip.
+func (a *app) goToBacklink(b backlink) {
+	if b.clip != "" {
+		a.showClip(b.clip)
+		return
+	}
+	a.goToNode(b.path, b.sheet, b.id)
 }

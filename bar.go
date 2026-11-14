@@ -162,7 +162,7 @@ func (a *app) barTask(text string) bool {
 	}
 	// A task is one plain line: what has a link, a tag, a reference, bold
 	// or lines is a note's.
-	note := linkInTitle.MatchString(text) || strings.ContainsAny(text, "\n#") || strings.Contains(text, "**") || len(a.writeRefs) > 0
+	note := linkInTitle.MatchString(text) || strings.ContainsAny(text, "\n#") || strings.Contains(text, "**") || strings.Contains(text, "[[") || len(a.writeRefs) > 0
 	return a.place() == placeToday && !note
 }
 

@@ -446,7 +446,7 @@ func (a *app) waitingLine(c *ui.Context, w waitingItem, rail bool) {
 			place, has = a.nearPlace(key, cl)
 		}
 	}
-	text, _ = titleAndSite(strings.TrimSpace(clipRef.ReplaceAllString(text, "")))
+	text, _ = titleAndSite(strings.TrimSpace(refToken.ReplaceAllString(text, "")))
 	row := ui.Row(c.Key("line:"+key)).MinHeight(36).Padding(6, 8).Gap(10).Radius(radiusRow).AlignItems(ui.Center).FillWidth().
 		Cursor(ui.CursorPointer).Label("记下的 " + text).Background(t.Text.Alpha(0)).Transition(rowMotion)
 	if row.Hovered() {
@@ -524,7 +524,7 @@ func (a *app) waitingCard(c *ui.Context, w waitingItem, i int) {
 	}
 	_ = ic
 	full := text // with what it refers to, which shows under its words
-	text = strings.TrimSpace(clipRef.ReplaceAllString(text, ""))
+	text = strings.TrimSpace(refToken.ReplaceAllString(text, ""))
 	// A card each, as a note is: when over the words, what can be done
 	// with it under the pointer, where the AI would put it under the words.
 	card := wallCard(ui.Column(c.Key("waiting:"+key)).Padding(14, 14, 18, 20).Gap(6).Radius(radiusCard).FillWidth().Label("记下的 "+text), t).

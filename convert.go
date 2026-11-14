@@ -24,7 +24,7 @@ func (a *app) clipToTask(cl *library.Clip) {
 	if isMemo(cl) {
 		title = cl.Text
 	}
-	title, _, _ = strings.Cut(strings.TrimSpace(clipRef.ReplaceAllString(title, "")), "\n")
+	title, _, _ = strings.Cut(strings.TrimSpace(refToken.ReplaceAllString(title, "")), "\n")
 	title = strings.NewReplacer("**", "", "- ", "").Replace(title)
 	if bare := strings.TrimSpace(tagInTitle.ReplaceAllString(title, "")); bare != "" {
 		title = bare // its tags are the task's own

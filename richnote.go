@@ -62,6 +62,9 @@ func (a *app) noteEditor(c *ui.Context, place string, n *model.Node, size float3
 	}
 	ed := richtext.Editor(c.Key(place+"-rich"), d.doc, richtext.EditorOptions{
 		Label: "备注内容", Placeholder: placeholder, Font: ui.Font{Size: size},
+		// A link of the note goes where the app's links go: to a topic, a
+		// map, a clip, as to a page of the web.
+		OnLink: func(url string) { a.later(func() { a.openLink(url) }) },
 	}).Clip().Height(noteHeight(d.doc.Text(), size))
 	// In the app's look, as area: a pale shade, white with the accent's
 	// line and halo while written in.
@@ -81,6 +84,7 @@ func (a *app) noteEditor(c *ui.Context, place string, n *model.Node, size float3
 	if ed.Changed() {
 		a.saveNoteDoc(d, n)
 	}
+	a.noteLinkOffers(c, place, d, n) // what a [[ begun in it offers
 	// A double click on a picture (the caret by it) shows it large.
 	// The editor takes the pointer itself (no click comes): a second press
 	// soon after the first, by the same place, is the double click.

@@ -77,7 +77,12 @@ by AI, and an AI assistant.
   - The one bar (`bar.go`, `oneBar`) is in the top row: one line until
     written in, then the card to write in with its tools (`write.go`,
     `writeCard`: a tag and a reference offered as they are written, a
-    picture, bold, lists; a reference is kept as `<clip:id>`, `noteText`),
+    picture, bold, lists; a link is begun with [[, which offers thoughts,
+    clips, maps and the topics of every map, and is kept as `<clip:id>`
+    or `<mindmap:map#id>`, `refToken`, `noteText`; a node's note has
+    the same [[, kept as a link of its Markdown, `noteLink`,
+    `noteLinkOffers`; what is linked to says so in turn, `refIndex`:
+    `wikilinks.go`),
     floating forward of the page on a deep shadow (`floated`), so that
     nothing moves. A tag on it says what the words are kept as, a thought
     or a task, and a click changes it (`barTask`: on 今天 a plain line is

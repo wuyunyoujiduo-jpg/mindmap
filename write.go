@@ -142,7 +142,7 @@ func (a *app) writeCard(c *ui.Context, w writeCard) {
 			if !w.inline {
 				ui.Box(c).Width(1).Height(16).Margin(0, 4).Background(hairline(t))
 			}
-			tool("引用", "@", 0, "引用另一条灵感或资料：会列出最近的", func() { add("@") })
+			tool("引用", "[[", 0, "链接到灵感、资料、导图或导图里的主题：写 [[ 再写几个字，从列出的里面选", func() { add("[[") })
 		}
 		reads := func() {
 			if w.reads != nil {
@@ -151,6 +151,8 @@ func (a *app) writeCard(c *ui.Context, w writeCard) {
 		}
 		_, tagging := beingWritten(*w.draft, "#")
 		_, referring := beingWritten(*w.draft, "@")
+		linkPart, linkAt, linking := linkBegun(*w.draft)
+		referring = referring || linking
 		offers := func() {
 			// While a tag or a reference is being written, those used last
 			// that begin so: a click writes one.
@@ -163,6 +165,18 @@ func (a *app) writeCard(c *ui.Context, w writeCard) {
 					}
 				}
 			}
+			// [[ begun: thoughts, clips, maps and topics to link to.
+			if linking {
+				if o, got := a.offerChips(c, linkPart); got {
+					if a.writeRefs == nil {
+						a.writeRefs = map[string]string{}
+					}
+					written := "[[" + o.name + "]]"
+					a.writeRefs[written] = "<" + o.link + ">"
+					*w.draft = (*w.draft)[:linkAt] + written + " "
+					a.writeRefocus = w.key
+				}
+			}
 			if part, ok := beingWritten(*w.draft, "@"); ok {
 				for _, cl := range a.clipsNamed(part, 5) {
 					name := refName(cl)
@@ -171,7 +185,7 @@ func (a *app) writeCard(c *ui.Context, w writeCard) {
 						if a.writeRefs == nil {
 							a.writeRefs = map[string]string{}
 						}
-						a.writeRefs["@"+name] = cl.ID
+						a.writeRefs["@"+name] = "<" + clipScheme + cl.ID + ">"
 						*w.draft = (*w.draft)[:len(*w.draft)-len(part)] + name + " "
 						a.writeRefocus = w.key
 					}
@@ -275,7 +289,7 @@ func (a *app) clipsByTime() []*library.Clip {
 // refName is the name a clip is referred to by in a note: its label,
 // short, with no space, for the name ends where a space is.
 func refName(cl *library.Clip) string {
-	name := strings.Join(strings.Fields(clipRef.ReplaceAllString(cl.Label(), "")), "")
+	name := strings.Join(strings.Fields(refToken.ReplaceAllString(cl.Label(), "")), "")
 	if r := []rune(name); len(r) > 16 {
 		name = string(r[:16])
 	}
@@ -288,8 +302,8 @@ var clipRef = regexp.MustCompile(`<clip:([^>\s]+)>`)
 // resolveRefs writes the references chosen in a draft (@name) as they are
 // kept (<clip:id>), and forgets them.
 func (a *app) resolveRefs(text string) string {
-	for name, id := range a.writeRefs {
-		text = strings.ReplaceAll(text, name, "<"+clipScheme+id+">")
+	for name, token := range a.writeRefs {
+		text = strings.ReplaceAll(text, name, token)
 	}
 	a.writeRefs = nil
 	return text
@@ -306,7 +320,7 @@ func (a *app) noteText(c *ui.Context, text string, size float32, lines int) {
 			refs = append(refs, cl)
 		}
 	}
-	body := strings.TrimSpace(clipRef.ReplaceAllString(text, ""))
+	body := strings.TrimSpace(refToken.ReplaceAllString(text, ""))
 	switch {
 	case body == "":
 	case noteMarked.MatchString(body):
@@ -329,6 +343,25 @@ func (a *app) noteText(c *ui.Context, text string, size float32, lines int) {
 		b.Children(func() {
 			ui.Text(c, "↗").FontSize(textSmall).TextColor(ink)
 			ui.Text(c, cl.Label()).FontSize(textSmall).TextColor(ink).SingleLine().Shrink(1).MinWidth(0)
+		})
+	}
+	// The topics and maps it links to, each going there.
+	for _, link := range tokenLinks(text) {
+		if !strings.HasPrefix(link, nodeScheme) {
+			continue
+		}
+		_, label := a.linkLabel(link)
+		b := ui.Row(c.Key("ref:" + link)).Gap(6).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label("前往链接 " + label).Tooltip("打开导图里的这一处")
+		ink := t.TextMuted
+		if b.Hovered() {
+			ink = t.Accent
+		}
+		if b.Clicked() {
+			a.later(func() { a.openLink(link) })
+		}
+		b.Children(func() {
+			ui.Text(c, "↗").FontSize(textSmall).TextColor(ink)
+			ui.Text(c, label).FontSize(textSmall).TextColor(ink).SingleLine().Shrink(1).MinWidth(0)
 		})
 	}
 }

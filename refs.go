@@ -32,11 +32,12 @@ type refs struct {
 
 // refIndex is the index of the links, made again as the maps change.
 func (a *app) refIndex() *refs {
-	a.mapClips() // brings mapClipsSig up to date
-	if a.refs != nil && a.refs.sig == a.mapClipsSig {
+	a.mapClips()                                         // brings mapClipsSig up to date
+	sig := fmt.Sprint(a.mapClipsSig, "|", a.lib.Version) // the thoughts link too
+	if a.refs != nil && a.refs.sig == sig {
 		return a.refs
 	}
-	r := &refs{sig: a.mapClipsSig, to: map[string][]backlink{}, nodeAt: map[string]string{}}
+	r := &refs{sig: sig, to: map[string][]backlink{}, nodeAt: map[string]string{}}
 	for _, fi := range a.files {
 		f := a.mapFile(fi.Path)
 		if f == nil {
@@ -50,6 +51,14 @@ func (a *app) refIndex() *refs {
 					for _, l := range n.Links {
 						a.addRef(r, fi.Path, d.ID, n, l)
 					}
+					// The links written in its note ([[…) are links of it too.
+					if strings.Contains(n.Note, "](") {
+						for _, m := range noteLink.FindAllStringSubmatch(n.Note, -1) {
+							if !slices.Contains(n.Links, m[1]) {
+								a.addRef(r, fi.Path, d.ID, n, m[1])
+							}
+						}
+					}
 					for _, c := range n.Children {
 						walk(c)
 					}
@@ -62,12 +71,29 @@ func (a *app) refIndex() *refs {
 			}
 		}
 	}
+	// A thought's links to topics and maps: what it links to says so. Its
+	// links to other thoughts are told by clipMentions, and are no use of
+	// a clip on a map (clipBacklinks).
+	for _, cl := range a.lib.Clips {
+		if !strings.Contains(cl.Text, "<"+nodeScheme) {
+			continue
+		}
+		for _, link := range tokenLinks(cl.Text) {
+			path, id, ok := a.nodeOfLink(link)
+			if !ok {
+				continue
+			}
+			b := backlink{title: cl.Label(), clip: cl.ID}
+			r.to["node:"+path+"#"+id] = append(r.to["node:"+path+"#"+id], b)
+			r.to["map:"+path] = append(r.to["map:"+path], b)
+		}
+	}
 	a.refs = r
 	return r
 }
 
 func (a *app) addRef(r *refs, path, sheet string, n *model.Node, link string) {
-	b := backlink{path, sheet, n.ID, n.Title}
+	b := backlink{path: path, sheet: sheet, id: n.ID, title: n.Title}
 	if id, ok := strings.CutPrefix(link, clipScheme); ok {
 		r.to[clipScheme+id] = append(r.to[clipScheme+id], b)
 		return
@@ -281,10 +307,17 @@ func (a *app) mapMaterialSection(c *ui.Context) {
 		}
 	})
 	from := map[string]bool{}
+	var thoughts []backlink // the thoughts and clips that link to it or to a topic of it
 	for _, b := range a.refIndex().to["map:"+a.path] {
+		if b.clip != "" {
+			if !slices.ContainsFunc(thoughts, func(x backlink) bool { return x.clip == b.clip }) {
+				thoughts = append(thoughts, b)
+			}
+			continue
+		}
 		from[b.path] = true
 	}
-	if len(clips)+len(maps)+len(from)+len(gone) == 0 {
+	if len(clips)+len(maps)+len(from)+len(gone)+len(thoughts) == 0 {
 		return
 	}
 	sectionCard(c, iconLibrary, tileOrange, "本图资料", nil, func() {
@@ -295,6 +328,19 @@ func (a *app) mapMaterialSection(c *ui.Context) {
 			}
 			if len(maps) > 0 {
 				line(fmt.Sprintf("链接了 %d 张别的导图", len(maps)))
+			}
+			if len(thoughts) > 0 {
+				line(fmt.Sprintf("被 %d 条灵感或资料提到", len(thoughts)))
+				for _, b := range thoughts {
+					row := ui.Row(c.Key("thought:" + b.clip)).Gap(6).Cursor(ui.CursorPointer).Label("前往 " + b.title)
+					if row.Clicked() {
+						a.later(func() { a.showClip(b.clip) })
+					}
+					row.Children(func() {
+						ui.Text(c, "↩").FontSize(12).TextColor(c.Theme().TextMuted)
+						ui.Text(c, b.title).FontSize(12).TextColor(c.Theme().Accent).MaxLines(1)
+					})
+				}
 			}
 			for path := range from {
 				path := path
