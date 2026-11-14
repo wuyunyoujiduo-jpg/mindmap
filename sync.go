@@ -64,12 +64,21 @@ func (a *app) syncNow() {
 		return run(context.Background(), dir, cfg, func(msg string) { post(func() { a.syncMsg = msg }) })
 	}, func(v any, err error) {
 		a.syncBusy, a.syncMsg = false, ""
+		byHand := a.syncByHand
+		a.syncByHand = false
 		res, _ := v.(ghsync.Result)
 		if err != nil {
-			a.syncErr = err.Error()
+			a.syncErr = err.Error() // stays said where the sync is, until it is mended
 			return
 		}
 		a.syncErr, a.syncAt, a.syncLast = "", a.now(), res
+		if byHand && len(res.Conflicts) == 0 {
+			if res.Synced() {
+				a.tell(fmt.Sprintf("已同步：下载 %d 个、上传 %d 个文件", res.Pulled, res.Pushed))
+			} else {
+				a.tell("已同步，已经是最新的")
+			}
+		}
 		if len(res.Written) > 0 {
 			// The maps and the library read what came, as they do
 			// any change made outside the app.
@@ -175,11 +184,15 @@ func (a *app) syncSettings(c *ui.Context) {
 	rowsField(c, "同步", "", func() {
 		ui.Column(c).Padding(12, 0, 10).Gap(8).FillWidth().Children(func() {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				if button(c, "检查连接").Disabled(a.syncDrafts[0] == "" || a.syncDrafts[1] == "").Clicked() {
+				// Each shows its wait on itself, its words and width as they
+				// were; what comes of it stays said under them.
+				can := a.syncDrafts[0] != "" && a.syncDrafts[1] != ""
+				if busyClicked(busyKey(c, "检查连接", "看看仓库和令牌对不对", a.syncChecking, can, false), a.syncChecking, can) {
 					saveDrafts()
-					a.syncCheck = "正在检查…"
+					a.syncChecking, a.syncCheck = true, ""
 					cfg, check := a.syncConfig(), a.syncCheckRepo
 					a.async(func() (any, error) { return check(context.Background(), cfg) }, func(v any, err error) {
+						a.syncChecking = false
 						r, _ := v.(*ghsync.Repo)
 						switch {
 						case err != nil:
@@ -191,12 +204,9 @@ func (a *app) syncSettings(c *ui.Context) {
 						}
 					})
 				}
-				label := "立即同步"
-				if a.syncBusy {
-					label = "同步中…"
-				}
-				if inkButton(c, label, !a.syncBusy && a.syncReady()).Clicked() {
+				if busyClicked(busyKey(c, "立即同步", "现在就和 GitHub 上的对一遍", a.syncBusy, a.syncReady(), true), a.syncBusy, a.syncReady()) {
 					saveDrafts()
+					a.syncByHand = true // its result is said, as it was asked for
 					a.syncNow()
 				}
 			})

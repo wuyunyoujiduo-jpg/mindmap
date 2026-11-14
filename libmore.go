@@ -70,8 +70,17 @@ func (a *app) embedLibrary() {
 	}
 	ids, texts := a.lib.Unembedded(e.Name())
 	if len(ids) == 0 {
+		// A run over: said, when it was long enough to have shown.
+		if a.embedTotal > 1 && a.now().Sub(a.embedSince) > 2*time.Second {
+			a.embedResult = fmt.Sprintf("已为 %d 条建立语义索引", a.embedTotal)
+		}
+		a.embedTotal, a.embedLeft = 0, 0
 		return
 	}
+	if a.embedTotal == 0 {
+		a.embedTotal, a.embedSince, a.embedResult = len(ids), a.now(), ""
+	}
+	a.embedLeft = len(ids)
 	const batch = 16
 	if len(ids) > batch {
 		ids, texts = ids[:batch], texts[:batch]
@@ -85,9 +94,11 @@ func (a *app) embedLibrary() {
 		a.embedBusy = false
 		if err != nil {
 			a.embedErr = err.Error()
+			a.embedTotal, a.embedLeft = 0, 0
 			return
 		}
 		if lib != a.lib {
+			a.embedTotal, a.embedLeft = 0, 0
 			return // another folder since
 		}
 		if err := lib.SetVectors(e.Name(), ids, texts, v.([][]float32)); err != nil {
@@ -440,10 +451,7 @@ func (a *app) backupSettings(c *ui.Context) {
 	// each on its own, not run together in a word under a name.
 	rowsField(c, "手动", "", func() {
 		setRow(c, "立即备份", "把导图文件夹（含收集的资料、图片和附件）打包成一个 zip", func() {
-			if a.backupBusy {
-				ui.Spinner(c)
-			}
-			if button(c, "立即备份…").Disabled(a.backupBusy).Clicked() {
+			if busyClicked(busyKey(c, "立即备份…", "选一个地方，存下一份 zip", a.backupBusy, true, false), a.backupBusy, true) {
 				a.backupNow()
 			}
 		})

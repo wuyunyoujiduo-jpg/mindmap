@@ -55,6 +55,7 @@ func (a *app) view(c *ui.Context) {
 		if a.aiOpen && !a.presenting {
 			a.aiFloat(c)
 		}
+		a.jobsView(c)
 		a.toasts(c)
 		if a.lightbox != "" && a.doc != nil {
 			a.lightboxView(c)

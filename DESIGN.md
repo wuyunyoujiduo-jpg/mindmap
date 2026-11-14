@@ -180,6 +180,29 @@ its words, where it would go, when. All that can be done with one is on
 the list 等着归位, a click away. Two kinds of thing on a page are cut
 apart so, not stacked as cards of one weight.
 
+## Waiting
+
+`wait.go`. Which sign a wait takes is by how long it is and whether it
+can be counted, never by habit:
+
+| The wait | Its sign |
+|---|---|
+| What is of this computer: a task ticked, a day changed, a clip deleted | none. It is done as it is clicked; the result is the feedback. Never a "saving" that plays a wait there is not |
+| One action, a few seconds, length unknown: a sync, a check, a backup | on its key (`busyKey`): its words and width stay, a spinner over them, a second press does nothing; then a toast says what came of it |
+| Long work that can be counted: the index, a run of clips, a download | a card at the window's top right (`jobsView`, `jobCard`): what, how far, the time left, a bar; it stays on every page, can be stopped, and turns in place into its result, which stays until put away |
+| Work that cannot be counted: the AI finding places, reading a map | its steps (`stageLines`): those done with a check, the one going on with a spinner; after ten seconds, that it takes longer than usual |
+| What the AI writes of a clip | shapes where it will be (`skeletonShapes`), in its own part, at the size of what comes; what was there before stays while the new is written |
+| The AI's answer | what it read, then its words as they come with a caret after the last; at its end 复制 and 重试 |
+| What need not be seen: saving, syncing by itself | nothing, or a quiet word in a fixed place |
+
+- Nothing that shows comes before 300ms, nor goes before 500ms more
+  (`waitShown`: every sign goes through it), so that nothing flickers.
+- One sign for a wait: not a spinner on the key and another on the page.
+- Nothing moves when what was waited for comes.
+- What failed stays said where it happened, in the danger's color, with
+  重试: a toast that goes is not enough for what must be mended.
+- A toast is at the window's foot (the top has the bar, which opens).
+
 ## Don't
 
 - Don't add a shadow, a gradient or a glow to anything on the leaf.

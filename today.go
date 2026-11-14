@@ -195,8 +195,7 @@ func (a *app) homeWaiting(c *ui.Context) {
 	tray(c, "home-waiting").Children(func() {
 		trayHead(c, "head:刚记下的", "刚记下的", "收件箱的任务，和这几天记的", func() {
 			switch {
-			case a.tasks.placing || a.clipPlacing:
-				ui.Spinner(c)
+			case a.tasks.placing || a.clipPlacing: // said under the heading, by its steps
 			case suggested > 0:
 				if ghostButton(c, "全部归位", "按 AI 的建议都放过去").Clicked() {
 					a.later(func() {
@@ -219,6 +218,26 @@ func (a *app) homeWaiting(c *ui.Context) {
 		})
 		// What was just left in 收集, and the way back: it stays said until
 		// another is left, or the page is.
+		// The AI asked where each would go: what it is doing, or why it
+		// did not, here, with the way to try again.
+		placing := a.tasks.placing || a.clipPlacing
+		if !placing {
+			stageOver("place-all")
+		}
+		switch failed := cmpOr(a.tasks.placeErr, a.clipPlaceErr); {
+		case placing:
+			stageLines(c, "place-all", []string{fmt.Sprintf("读了 %d 条等着归位的，和各导图的主题", len(items))}, "AI 正在给每条找去处…")
+		case placeFailed(failed):
+			ui.Row(c.Key("place-failed")).Padding(2, 4, 8).Gap(8).AlignItems(ui.Center).FillWidth().Children(func() {
+				ui.Text(c, failed).FontSize(textSmall).TextColor(t.Danger).Grow(1).Shrink(1).MinWidth(0).Wrap()
+				if sparkKey(c, "重试", "再让 AI 看一遍").Clicked() {
+					a.later(a.askAllPlaces)
+				}
+				if addButton(c, "知道了", "").Clicked() {
+					a.tasks.placeErr, a.clipPlaceErr = "", ""
+				}
+			})
+		}
 		a.keptLastRow(c)
 		if len(items) == 0 {
 			emptyNote(c, "这几天记下的会出现在这里。")

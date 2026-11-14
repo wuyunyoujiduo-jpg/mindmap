@@ -238,9 +238,7 @@ func (a *app) mapAnalysisSection(c *ui.Context) {
 	an := a.adoptMapMeta(a.path, a.file)
 	sectionCard(c.Key("map-analysis"), iconSparkle, tilePurple, "AI 分析", func() {
 		switch {
-		case a.mapWorking == a.path:
-			ui.Spinner(c)
-			ui.Text(c, "分析中…").FontSize(12).TextColor(t.TextMuted)
+		case a.mapWorking == a.path: // said in the card, by its steps
 		case a.mapWorking != "":
 			ui.Spinner(c)
 			ui.Text(c, "正在分析「"+mapName(a.mapWorking)+"」").FontSize(12).TextColor(t.TextMuted).SingleLine().MaxWidth(150)
@@ -255,8 +253,18 @@ func (a *app) mapAnalysisSection(c *ui.Context) {
 			}
 		}
 	}, func() {
+		if a.mapWorking == a.path {
+			stageLines(c, "map-analysis", []string{"读了这张导图的主题和备注"}, "AI 正在写说明、摘要和关键词…")
+		} else {
+			stageOver("map-analysis")
+		}
 		if a.mapErr != "" {
-			ui.Text(c, a.mapErr).FontSize(12).TextColor(t.Danger).Wrap()
+			ui.Row(c.Key("failed")).Gap(8).AlignItems(ui.Center).FillWidth().Children(func() {
+				ui.Text(c, a.mapErr).FontSize(12).TextColor(t.Danger).Grow(1).Shrink(1).MinWidth(0).Wrap()
+				if a.mapWorking == "" && providerKey(a.cfg) != "" && sparkKey(c, "重试", "再分析一次").Clicked() {
+					a.later(func() { a.analyzeMap(a.path) })
+				}
+			})
 		}
 		if providerKey(a.cfg) != "" {
 			auto := !a.cfg.MapAutoOff

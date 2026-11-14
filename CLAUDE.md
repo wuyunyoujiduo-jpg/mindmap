@@ -35,7 +35,10 @@ by AI, and an AI assistant.
   `tools/kubai/gen.mjs`), what moves takes transitions.dev's lengths
   (`motion*` in `design.go`, and no other), and every list has its empty
   state (`emptyState`), what loads its `skeleton`, what was done its
-  toast (`tell`; `tellUndo` where it can be taken back). It is flat and exact. The user's references, in turn, were
+  toast (`tell`; `tellUndo` where it can be taken back), and every wait
+  its sign by `DESIGN.md`'s table (`wait.go`: `busyKey` on the key
+  pressed, `jobsView` cards at the top right for work that can be
+  counted, `stageLines` for work that cannot, all through `waitShown`). It is flat and exact. The user's references, in turn, were
   flomo, https://library.aimran.es/ and TickTick: TickTick's is the one
   for the style (and the user found shadows, gradients and glows wanting,
   two versions of them); the structure is the app's own, thought out from

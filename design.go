@@ -888,6 +888,18 @@ var motionOff bool
 // skeleton stands for lines being read or written by the AI: pale bars
 // of the widths given (a part of the room each), which breathe.
 func skeleton(c *ui.Context, key string, widths ...float32) {
+	skeletonShapes(c, key, func(shade ui.Color) {
+		for i, w := range widths {
+			ui.Box(c.Key(i)).Height(11).WidthPercent(w * 100).Radius(6).Background(shade)
+		}
+	})
+}
+
+// skeletonShapes stands for what is being read or written, in its own
+// shape: body builds pale shapes of the shade given, where and as large
+// as what will come, and they breathe together. What comes then takes
+// their places, and nothing moves.
+func skeletonShapes(c *ui.Context, key string, body func(shade ui.Color)) ui.Element {
 	t := c.Theme()
 	col := ui.Column(c.Key("skeleton:"+key)).Gap(9).Padding(4, 0).FillWidth().Label("正在载入")
 	lit := float32(1)
@@ -900,11 +912,7 @@ func skeleton(c *ui.Context, key string, widths ...float32) {
 		c.After(beat - time.Duration(now.UnixNano())%beat)
 		lit = col.AnimateTo("breath", lit, ui.Animation{Duration: beat, NonMotion: true})
 	}
-	col.Children(func() {
-		for i, w := range widths {
-			ui.Box(c.Key(i)).Height(11).WidthPercent(w * 100).Radius(6).Background(t.Text.Alpha(0.08 * lit))
-		}
-	})
+	return col.Children(func() { body(t.Text.Alpha(0.08 * lit)) })
 }
 
 // emptyNote says, under a part's heading, that the part has nothing yet.

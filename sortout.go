@@ -243,11 +243,14 @@ func (a *app) placeBar(c *ui.Context, open int) {
 		return
 	}
 	t := c.Theme()
+	if !a.tasks.placing {
+		stageOver("place-tasks")
+	}
 	ui.Row(c.Key("place-bar")).Padding(6, 4, 2).Gap(8).AlignItems(ui.Center).FillWidth().Children(func() {
 		switch {
 		case a.tasks.placing:
-			ui.Spinner(c)
-			ui.Text(c, "AI 正在看这些任务该放到哪…").FontSize(textSmall).TextColor(t.TextMuted)
+			// What it is doing, by its steps: a wait that cannot be counted.
+			stageLines(c, "place-tasks", []string{"读了收件箱的任务和各导图的主题"}, "AI 正在给每个任务找去处…")
 		case len(a.tasks.places) > 0:
 			ui.Text(c, fmt.Sprintf("AI 建议了 %d 个任务的去处，逐个确认，或", len(a.tasks.places))).FontSize(textSmall).TextColor(t.TextMuted)
 			if ghostButton(c, "全部放过去", "按建议把这些任务移到对应的主题下").Clicked() {
@@ -257,13 +260,18 @@ func (a *app) placeBar(c *ui.Context, open int) {
 				a.tasks.places = nil
 			}
 		default:
+			again := "AI 归位"
 			if a.tasks.placeErr != "" {
-				ui.Text(c, a.tasks.placeErr).FontSize(textSmall).TextColor(t.TextMuted).Shrink(1).MinWidth(0).Wrap()
+				col := t.TextMuted
+				if placeFailed(a.tasks.placeErr) { // it failed: said here, with the way to try again
+					col, again = t.Danger, "重试"
+				}
+				ui.Text(c, a.tasks.placeErr).FontSize(textSmall).TextColor(col).Shrink(1).MinWidth(0).Wrap()
 			} else {
 				ui.Text(c, "记下的任务先在这里，再放进导图。").FontSize(textSmall).TextColor(t.TextMuted)
 			}
 			ui.Spacer(c)
-			if sparkKey(c, "AI 归位", "让 AI 建议每个任务该放到哪张导图的哪个主题下，你确认后才移动").Clicked() {
+			if sparkKey(c, again, "让 AI 建议每个任务该放到哪张导图的哪个主题下，你确认后才移动").Clicked() {
 				a.later(a.suggestPlaces)
 			}
 		}
@@ -412,11 +420,13 @@ func (a *app) clipPlaceBar(c *ui.Context) {
 	if !a.clipPlacing && len(a.clipPlaces) == 0 && a.clipPlaceErr == "" {
 		return
 	}
+	if !a.clipPlacing {
+		stageOver("place-clips")
+	}
 	ui.Row(c.Key("clip-place-bar")).Padding(4, 4).Gap(8).AlignItems(ui.Center).FillWidth().Children(func() {
 		switch {
 		case a.clipPlacing:
-			ui.Spinner(c)
-			ui.Text(c, "AI 正在看这些该放到哪…").FontSize(textSmall).TextColor(t.TextMuted)
+			stageLines(c, "place-clips", []string{"读了这些资料和各导图的主题"}, "AI 正在给每条找去处…")
 		case len(a.clipPlaces) > 0:
 			ui.Text(c, fmt.Sprintf("AI 建议了 %d 条的去处，逐条确认，或", len(a.clipPlaces))).FontSize(textSmall).TextColor(t.TextMuted)
 			if ghostButton(c, "全部放过去", "按建议在对应的主题下各加一个主题，链接到它").Clicked() {
@@ -435,7 +445,14 @@ func (a *app) clipPlaceBar(c *ui.Context) {
 				a.clipPlaces = nil
 			}
 		default:
-			ui.Text(c, a.clipPlaceErr).FontSize(textSmall).TextColor(t.TextMuted).Shrink(1).MinWidth(0).Wrap()
+			col := t.TextMuted
+			if placeFailed(a.clipPlaceErr) {
+				col = t.Danger
+			}
+			ui.Text(c, a.clipPlaceErr).FontSize(textSmall).TextColor(col).Shrink(1).MinWidth(0).Wrap()
+			if placeFailed(a.clipPlaceErr) && sparkKey(c, "重试", "再让 AI 看一遍").Clicked() {
+				a.later(a.askAllPlaces)
+			}
 			if addButton(c, "知道了", "").Clicked() {
 				a.clipPlaceErr = ""
 			}
@@ -460,4 +477,11 @@ func (a *app) clipPlaceLine(c *ui.Context, cl *library.Clip) {
 			delete(a.clipPlaces, cl.ID)
 		}
 	})
+}
+
+// placeFailed tells whether what is said of the AI's places is a failure
+// (the AI did not answer, or not as asked) and not an answer with nothing
+// to place: a failure is said in the danger's color, with 重试.
+func placeFailed(msg string) bool {
+	return strings.HasPrefix(msg, "AI 没有")
 }

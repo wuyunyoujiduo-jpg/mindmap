@@ -127,6 +127,7 @@ func (a *app) downloadPlugin() {
 		return
 	}
 	a.pluginBusy, a.pluginErr, a.pluginDone = true, "", 0
+	a.pluginSince, a.pluginResult = a.now(), ""
 	ctx, cancel := context.WithCancel(context.Background())
 	a.pluginCancel = cancel
 	get, post := a.pluginGet, a.post
@@ -190,7 +191,7 @@ func (a *app) downloadPlugin() {
 		}
 		reloadLocalModel()
 		a.embedErr, a.qvecs = "", map[string][]float32{}
-		a.tell("语义检索插件已安装")
+		a.pluginResult = "语义检索插件已装好" // the card of its download turns into this
 		a.embedLibrary()
 	})
 }
@@ -223,7 +224,7 @@ func (a *app) pluginSettings(c *ui.Context) {
 					label += fmt.Sprintf("（版本 %d）", m.Version)
 				}
 				ui.Text(c, label).FontSize(12).TextColor(t.Success).Grow(1)
-				if button(c, "检查更新").FontSize(12).Clicked() {
+				if busyClicked(busyKey(c, "检查更新", "看看有没有更新的插件", a.pluginChecking, true, false), a.pluginChecking, true) {
 					a.checkPluginUpdate()
 				}
 				if button(c, "删除").FontSize(12).Tooltip("删除后收集只按关键词搜索，可以随时再下载").Clicked() {
@@ -271,7 +272,7 @@ func (a *app) pluginProgress(c *ui.Context) {
 func (a *app) checkPluginUpdate() {
 	have := installedManifest()
 	get := a.pluginGet
-	a.pluginNote = "正在检查…"
+	a.pluginNote, a.pluginChecking = "", true
 	a.async(func() (any, error) {
 		data, err := fetchFrom(context.Background(), get, "manifest.json", "")
 		if err != nil {
@@ -280,6 +281,7 @@ func (a *app) checkPluginUpdate() {
 		var m pluginManifest
 		return &m, json.Unmarshal(data, &m)
 	}, func(v any, err error) {
+		a.pluginChecking = false
 		m, _ := v.(*pluginManifest)
 		switch {
 		case err != nil:

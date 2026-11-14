@@ -388,22 +388,36 @@ type app struct {
 	resizingPanel bool
 	// Folders of the sidebar are shown closed but for those opened, which
 	// the config keeps.
-	renaming      string // the map or folder renamed in the sidebar
-	renameText    string
-	tagQuery      string
-	notice        string    // a passing message in the toolbar, as "已复制"
-	noticeAt      time.Time // since when it shows, for noticeTime
-	wallShown     int       // how many clips 收集's wall shows, when more than wallStep
-	noticeToasted time.Time // the notice shown as a toast already
-	noticeUndo    func()    // what takes back what the notice says, if it can be
-	exportCam     *camera   // set while the canvas is drawn into an image
-	tagDraft      string    // a tag being typed in the node panel
-	tagAdding     bool      // the sidebar's new-tag field is shown
-	tagNew        string
-	tagRenaming   string // the tag renamed in the sidebar
-	tagRenameText string
-	confirmDelete bool
-	deletePath    string
+	renaming   string // the map or folder renamed in the sidebar
+	renameText string
+	tagQuery   string
+	notice     string    // a passing message in the toolbar, as "已复制"
+	noticeAt   time.Time // since when it shows, for noticeTime
+	wallShown  int       // how many clips 收集's wall shows, when more than wallStep
+	// Long work, told in cards (wait.go): how many clips the index is made
+	// of and how many are left, since when, and what to say once done.
+	embedTotal, embedLeft int
+	embedSince            time.Time
+	embedResult           string
+	orgTotal, orgDone     int // the clips of a run being organized, and those done
+	orgSince              time.Time
+	orgResult             string
+	pluginSince           time.Time
+	pluginResult          string
+	syncChecking          bool      // the sync's repository is being checked
+	syncByHand            bool      // the sync going on was asked for: its result is said
+	pluginChecking        bool      // a newer plugin is being looked for
+	noticeAct             string    // the name of the notice's key, when not 撤销
+	noticeToasted         time.Time // the notice shown as a toast already
+	noticeUndo            func()    // what takes back what the notice says, if it can be
+	exportCam             *camera   // set while the canvas is drawn into an image
+	tagDraft              string    // a tag being typed in the node panel
+	tagAdding             bool      // the sidebar's new-tag field is shown
+	tagNew                string
+	tagRenaming           string // the tag renamed in the sidebar
+	tagRenameText         string
+	confirmDelete         bool
+	deletePath            string
 }
 
 // clock is the time a new app starts with as now: the tests' own day, so
@@ -544,12 +558,18 @@ func (a *app) currentFolder() string {
 const noticeTime = 3 * time.Second
 
 // tell shows a passing message in the toolbar.
-func (a *app) tell(msg string) { a.notice, a.noticeAt, a.noticeUndo = msg, a.now(), nil }
+func (a *app) tell(msg string) {
+	a.notice, a.noticeAt, a.noticeUndo, a.noticeAct = msg, a.now(), nil, ""
+}
+
+// tellAct says what was done and offers what is next with it, under the
+// name act: to show a file made, as to take a thing back.
+func (a *app) tellAct(msg, act string, do func()) {
+	a.notice, a.noticeAt, a.noticeUndo, a.noticeAct = msg, a.now(), do, act
+}
 
 // tellUndo says what was done and offers to take it back.
-func (a *app) tellUndo(msg string, undo func()) {
-	a.notice, a.noticeAt, a.noticeUndo = msg, a.now(), undo
-}
+func (a *app) tellUndo(msg string, undo func()) { a.tellAct(msg, "撤销", undo) }
 
 // toasts shows a notice not shown yet as a toast, on whatever page: with
 // 撤销 on it when what was done can be taken back.
@@ -559,7 +579,7 @@ func (a *app) toasts(c *ui.Context) {
 	}
 	a.noticeToasted = a.noticeAt
 	if undo := a.noticeUndo; undo != nil {
-		c.ToastAction(a.notice, "撤销", func() { undo() })
+		c.ToastAction(a.notice, cmpOr(a.noticeAct, "撤销"), func() { undo() })
 		return
 	}
 	c.Toast(a.notice)

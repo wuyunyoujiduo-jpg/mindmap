@@ -1030,21 +1030,27 @@ func (a *app) aiPanel(c *ui.Context) {
 			for i := range ai.msgs {
 				a.chatBubble(c.Key(i), i)
 			}
-			if ai.busy && ai.streaming != "" {
-				markdownView(c.Key("streaming"), ai.streaming, 13)
+			if !ai.busy {
+				stageOver("ai")
 			}
-			if ai.busy {
-				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-					ui.Spinner(c)
-					status := "思考中…"
-					if ai.streaming != "" {
-						status = "正在回答…"
-					}
-					ui.Text(c, status).FontSize(12).TextColor(t.TextMuted)
-					if ui.Link(c, "停止", "").FontSize(12).Clicked() && ai.cancel != nil {
-						ai.cancel()
-					}
-				})
+			switch {
+			case ai.busy && ai.streaming != "":
+				// The answer as it is written, a caret after its last word:
+				// the words coming are the sign that it goes on.
+				markdownView(c.Key("streaming"), ai.streaming+" ▍", 13)
+				if ui.Link(c, "停止", "").FontSize(12).Clicked() && ai.cancel != nil {
+					ai.cancel()
+				}
+			case ai.busy:
+				// Before its first word: what it has read, and that it thinks.
+				read := "读了收集里相关的资料"
+				if !a.libOpen && a.path != "" {
+					read = "读了「" + mapName(a.path) + "」里" + aiScopes[ai.scope].name + "的内容"
+				}
+				stageLines(c, "ai", []string{read}, "思考中…")
+				if ui.Link(c, "停止", "").FontSize(12).Clicked() && ai.cancel != nil {
+					ai.cancel()
+				}
 			}
 		})
 		ui.Column(c).Padding(12, 16, 14).Gap(8).BorderWidth(1, 0, 0, 0).BorderColor(hairline(t)).Children(func() {
@@ -1116,7 +1122,13 @@ func (a *app) chatBubble(c *ui.Context, i int) {
 			})
 		})
 	case "error":
-		ui.Text(c, m.text).FontSize(12).TextColor(t.Danger).Wrap()
+		// What failed stays said here, with the way to ask again.
+		ui.Row(c).Gap(8).AlignItems(ui.Center).FillWidth().Children(func() {
+			ui.Text(c, m.text).FontSize(12).TextColor(t.Danger).Wrap().Grow(1).Shrink(1).MinWidth(0)
+			if a.canRetryAI(i) && button(c, "重试").FontSize(11).Padding(1, 8).Tooltip("把上一个问题再问一遍").Clicked() {
+				a.later(a.retryAI)
+			}
+		})
 	case "tool":
 		ui.Text(c, m.text).FontSize(12).TextColor(t.TextMuted).Wrap()
 	default:
@@ -1124,15 +1136,52 @@ func (a *app) chatBubble(c *ui.Context, i int) {
 			if m.text != "" {
 				markdownView(c, m.text, 13)
 				text := m.text
-				if button(c, "复制").FontSize(11).Padding(1, 8).Tooltip("复制这段回复（Markdown）").AlignSelf(ui.Start).Clicked() {
-					a.plat.CopyText(text)
-					a.tell("已复制")
-				}
+				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+					if button(c, "复制").FontSize(11).Padding(1, 8).Tooltip("复制这段回复（Markdown）").Clicked() {
+						a.plat.CopyText(text)
+						a.tell("已复制")
+					}
+					if a.canRetryAI(i) && button(c, "重试").FontSize(11).Padding(1, 8).Tooltip("把上一个问题再问一遍，换一个回答").Clicked() {
+						a.later(a.retryAI)
+					}
+				})
 			}
 			if m.proposal != nil {
 				a.proposalCard(c, i)
 			}
 		})
+	}
+}
+
+// canRetryAI tells whether the i-th message can be asked for again: the
+// last of the conversation, with a question before it and nothing going on.
+func (a *app) canRetryAI(i int) bool {
+	ai := &a.ai
+	if ai.busy || i != len(ai.msgs)-1 || ai.msgs[i].proposal != nil {
+		return false
+	}
+	for j := i - 1; j >= 0; j-- {
+		if ai.msgs[j].role == "user" {
+			return true
+		}
+	}
+	return false
+}
+
+// retryAI asks the last question again: what came after it goes, and it
+// is sent as it was, with what was attached to it.
+func (a *app) retryAI() {
+	ai := &a.ai
+	if ai.busy {
+		return
+	}
+	for j := len(ai.msgs) - 1; j >= 0; j-- {
+		if m := ai.msgs[j]; m.role == "user" {
+			ai.msgs = ai.msgs[:j]
+			ai.draft, ai.attach = m.text, m.files
+			a.aiSend()
+			return
+		}
 	}
 }
 

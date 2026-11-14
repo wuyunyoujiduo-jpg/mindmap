@@ -53,13 +53,8 @@ func (a *app) libraryColumn(c *ui.Context) {
 			}
 		}
 		pageHead(c, "lib-head", "收集", "灵感和资料", []figure{{len(l.Clips), "条"}, {memos, "条灵感"}, {len(l.Unorganized()), "条未整理"}}, func() {
-			if a.libWorking != "" {
-				ui.Spinner(c)
-				ui.Text(c, fmt.Sprintf("整理中，还有 %d 条", len(a.libQueue)+1)).FontSize(12).TextColor(t.TextMuted).NoWrap()
-			} else if a.embedBusy {
-				ui.Spinner(c)
-				ui.Text(c, "建立语义索引…").FontSize(12).TextColor(t.TextMuted).NoWrap()
-			}
+			// What is being organized and indexed is told in cards at the
+			// window's top right (jobsView), and on the clip itself.
 			if n := len(l.Broken); n > 0 {
 				ui.Text(c, fmt.Sprintf("%d 条资料的文件损坏", n)).FontSize(12).TextColor(t.Danger).NoWrap().
 					Tooltip("这些文件无法读取，已跳过：.library/clips/ 下的 " + strings.Join(l.Broken, "、"))
@@ -589,11 +584,10 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 		}
 	})
 	status, failed := a.libStatus[clip.ID], strings.Contains(a.libStatus[clip.ID], "失败")
-	if status != "" && !failed {
-		// What is being read or written stands as pale lines until it is there.
-		ui.Text(c, status).FontSize(textSmall).TextColor(t.TextMuted).Wrap()
-		skeleton(c, "clip", 0.92, 0.78, 0.5)
-	}
+	// What is being read or written shows in its own part below (AI 整理),
+	// in the shape of what will come: nothing above the title, which would
+	// push the page down and back.
+	working := status != "" && !failed
 
 	// The title and the line saying what it is, large, edited in place.
 	ui.Column(c).Gap(2).Margin(4, -6, 0).Children(func() {
@@ -688,12 +682,36 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 		if clip.Organized != nil {
 			label = "重新整理"
 		}
-		if a.libWorking == clip.ID {
-			ui.Spinner(c)
+		if a.libWorking == clip.ID { // one sign of a wait: the shapes below
 		} else if ghostButton(c, label, "让 AI 起标题、写说明和摘要、分类、打标签、生成同义词和分析").Clicked() {
 			a.organizeClip(clip.ID)
 		}
 	}, func() {
+		had := clip.Summary != "" || clip.Analysis != "" || len(clip.Synonyms) > 0
+		if waitShown(c, "organize:"+clip.ID, working) {
+			// What it is doing, then, where nothing is known yet, the
+			// shape of what it writes: two lines, three points, a line of
+			// words. What was there before stays, fainter, till the new comes.
+			ui.Row(c.Key("org-status")).Gap(8).AlignItems(ui.Center).Children(func() {
+				ui.Spinner(c).Size(12, 12)
+				ui.Text(c, cmpOr(status, "AI 整理中…")).FontSize(textSmall).TextColor(t.TextMuted)
+			})
+			if !had {
+				skeletonShapes(c, "organize", func(shade ui.Color) {
+					ui.Box(c).Height(12).WidthPercent(96).Radius(6).Background(shade)
+					ui.Box(c).Height(12).WidthPercent(72).Radius(6).Background(shade)
+					for i, w := range []float32{58, 66, 44} {
+						ui.Row(c.Key(i)).Gap(9).AlignItems(ui.Center).FillWidth().Margin(2, 0, 0).Children(func() {
+							ui.Box(c).Size(5, 5).Radius(3).Shrink(0).Background(shade)
+							ui.Box(c).Height(12).WidthPercent(w).Radius(6).Background(shade)
+						})
+					}
+					ui.Box(c).Height(10).WidthPercent(36).Radius(5).Margin(6, 0, 0).Background(shade)
+					ui.Box(c).Height(12).WidthPercent(62).Radius(6).Background(shade)
+				})
+				return
+			}
+		}
 		// What kept it from organizing, said here where it was asked for.
 		if a.libNeedKey == clip.ID && providerKey(a.cfg) == "" {
 			ui.Row(c.Key("need-key")).Padding(8, 10).Gap(8).Radius(8).AlignItems(ui.Center).

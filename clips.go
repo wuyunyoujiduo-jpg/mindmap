@@ -192,6 +192,10 @@ func (a *app) enqueueClip(id string, organize bool) {
 		}
 	}
 	a.libQueue = append(a.libQueue, clipJob{id, organize})
+	if a.orgTotal == 0 {
+		a.orgSince, a.orgDone, a.orgResult = a.now(), 0, ""
+	}
+	a.orgTotal++
 	a.nextClipJob()
 }
 
@@ -250,14 +254,23 @@ func (a *app) nextClipJob() {
 		a.libQueue = a.libQueue[1:]
 		c := a.lib.Find(job.id)
 		if c == nil {
+			a.orgDone++
 			continue
 		}
 		fetch := c.Kind == library.KindLink && c.Text == "" && c.URL != ""
 		organize := job.organize && providerKey(a.cfg) != ""
 		if !fetch && !organize {
+			a.orgDone++
 			continue
 		}
 		a.startClipJob(c, fetch, organize)
+	}
+	if a.libWorking == "" && len(a.libQueue) == 0 && a.orgTotal > 0 {
+		// The run is over: said, when it was of several and long enough.
+		if a.orgTotal > 1 && a.now().Sub(a.orgSince) > 2*time.Second {
+			a.orgResult = fmt.Sprintf("整理了 %d 条资料", a.orgTotal)
+		}
+		a.orgTotal, a.orgDone = 0, 0
 	}
 }
 
@@ -304,6 +317,7 @@ func (a *app) startClipJob(c *library.Clip, fetch, organize bool) {
 // finishClipJob keeps what a clip's page and the AI gave.
 func (a *app) finishClipJob(id string, r clipResult) {
 	a.libWorking = ""
+	a.orgDone++
 	delete(a.libStatus, id)
 	if c := a.lib.Find(id); c != nil {
 		if r.page != nil {

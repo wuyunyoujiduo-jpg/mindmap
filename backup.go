@@ -108,7 +108,7 @@ func (a *app) backupNow() {
 				a.saveErr = "备份失败：" + err.Error()
 				return
 			}
-			a.tell("已备份到 " + filepath.Base(path))
+			a.tellAct("已备份到 "+filepath.Base(path), "在 Finder 中显示", func() { a.plat.ShowInFolder(path) })
 		})
 	})
 }
