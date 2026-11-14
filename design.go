@@ -938,7 +938,7 @@ func sheet(c *ui.Context, key string, width float32, body func()) {
 func field(c *ui.Context, title string, body func()) ui.Element {
 	t := c.Theme()
 	return ui.Column(c.Key("field:" + title)).Gap(8).FillWidth().Children(func() {
-		ui.Text(c, title).FontSize(textSmall).FontWeight(700).TextColor(t.Text.MixOklab(t.TextMuted, 0.45)).Margin(0, 6)
+		ui.Text(c, title).FontSize(textCaption).FontWeight(700).LetterSpacing(0.3).TextColor(t.TextMuted).Margin(0, 6)
 		raise(ui.Column(c.Key("card")).Padding(16, 18).Gap(12).Radius(radiusCard).FillWidth(), t).Children(body)
 	})
 }

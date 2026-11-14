@@ -436,8 +436,10 @@ func (a *app) embedSettings(c *ui.Context) {
 // backupSettings is the settings' part on backups.
 func (a *app) backupSettings(c *ui.Context) {
 	t := c.Theme()
-	rowsField(c, "备份", "建议把导图文件夹放在 iCloud 云盘里同步，再定期备份到另一个地方。", func() {
-		setRow(c, "立即备份", "把导图文件夹（含收集的资料、图片和附件）打包成 zip", func() {
+	// By hand, then by itself: a row a thing, the folder and the last time
+	// each on its own, not run together in a word under a name.
+	rowsField(c, "手动", "", func() {
+		setRow(c, "立即备份", "把导图文件夹（含收集的资料、图片和附件）打包成一个 zip", func() {
 			if a.backupBusy {
 				ui.Spinner(c)
 			}
@@ -445,33 +447,42 @@ func (a *app) backupSettings(c *ui.Context) {
 				a.backupNow()
 			}
 		})
-		setLine(c)
-		sub := "每天第一次打开时备份一份，保留最近 14 份"
-		if a.cfg.BackupDir != "" {
-			sub = "每天第一次打开时备份到 " + a.cfg.BackupDir + "，保留最近 14 份"
-			if !a.cfg.BackupLast.IsZero() {
-				sub += "；上次 " + a.cfg.BackupLast.Format("2006-01-02 15:04")
-			}
-		}
-		setRow(c, "每天自动备份", sub, func() {
-			label := "每天自动备份到…"
-			if a.cfg.BackupDir != "" {
-				label = "更换自动备份文件夹…"
-			}
-			if a.cfg.BackupDir != "" && button(c, "关闭自动备份").Clicked() {
-				a.cfg.BackupDir = ""
+	})
+	pick := func() {
+		a.plat.PickFolder(func(dir string) {
+			if dir != "" {
+				a.cfg.BackupDir, a.cfg.BackupLast = dir, time.Time{}
 				a.cfg.save()
-			}
-			if button(c, label).Clicked() {
-				a.plat.PickFolder(func(dir string) {
-					if dir != "" {
-						a.cfg.BackupDir, a.cfg.BackupLast = dir, time.Time{}
-						a.cfg.save()
-						a.autoBackup()
-					}
-				})
+				a.autoBackup()
 			}
 		})
+	}
+	rowsField(c, "自动", "建议把导图文件夹放在 iCloud 云盘里同步，再定期备份到另一个地方。", func() {
+		on := a.cfg.BackupDir != ""
+		was := on
+		switchRow(c, &on, "每天自动备份", "每天第一次打开时备份一份，保留最近 14 份", func() {
+			if was { // off: the folder is forgotten
+				a.cfg.BackupDir = ""
+				a.cfg.save()
+				return
+			}
+			pick() // on: it asks where to
+		})
+		if a.cfg.BackupDir == "" {
+			return
+		}
+		setLine(c)
+		setRow(c, "备份到", a.cfg.BackupDir, func() {
+			if button(c, "更换…").Tooltip("更换自动备份的文件夹").Clicked() {
+				pick()
+			}
+		})
+		setLine(c)
+		last := "还没有备份过"
+		if !a.cfg.BackupLast.IsZero() {
+			last = relTime(a.now(), a.cfg.BackupLast) + " · " + a.cfg.BackupLast.Format("2006-01-02 15:04")
+		}
+		setRow(c, "上次备份", last, nil)
 		if a.backupErr != "" {
 			setLine(c)
 			ui.Text(c, "自动备份失败："+a.backupErr).FontSize(textSmall).TextColor(t.Danger).Wrap().Margin(10, 0)

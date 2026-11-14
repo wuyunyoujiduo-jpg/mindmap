@@ -335,6 +335,13 @@ func (a *app) linksSection(c *ui.Context, n *model.Node) {
 // that opens its files.
 func (a *app) projectSection(c *ui.Context) {
 	t := c.Theme()
+	// Which map these are of: its dot and its name.
+	col := a.mapColor(a.path)
+	ui.Row(c.Key("which-map")).Gap(8).AlignItems(ui.Center).Padding(0, 6).Children(func() {
+		mapDot(c, col, 9)
+		ui.Text(c, mapName(a.path)).FontSize(textBody).FontWeight(700).SingleLine()
+		ui.Text(c, "这里的设置只属于这张导图").FontSize(textSmall).TextColor(t.TextMuted).NoWrap()
+	})
 	rowsField(c, "代码", "", func() {
 		dir := a.file.Project
 		if dir == "" {
@@ -357,25 +364,25 @@ func (a *app) projectSection(c *ui.Context) {
 		if cur == "" {
 			cur = "vscode"
 		}
-		setRow(c, "代码文件用…打开", "", func() {
-			for _, e := range editors {
-				on := e.id == cur
-				b := ui.Box(c.Key("editor:"+e.id)).Height(30).Padding(0, 12).Radius(radiusPill).Center().Cursor(ui.CursorPointer).Label(e.name)
-				key(b, t)
-				if on {
-					b.Background(t.Accent.Alpha(0.14))
+		setRow(c, "打开代码文件", "点代码链接时用哪个程序", func() {
+			// A choice among a few, as a task's state is chosen.
+			names := make([]string, len(editors))
+			at := 0
+			for i, e := range editors {
+				names[i] = e.name
+				if e.id == "finder" {
+					names[i] = "Finder" // short enough for its part
 				}
-				if b.Clicked() {
-					a.cfg.Editor = e.id
+				if e.id == cur {
+					at = i
+				}
+			}
+			ui.Row(c).Width(400).Children(func() {
+				if i := segmented(c, "editor", "打开代码文件用", names, at); i != at {
+					a.cfg.Editor = editors[i].id
 					a.cfg.save()
 				}
-				b.Children(func() {
-					txt := ui.Text(c, e.name).FontSize(textSmall).NoWrap().PassThrough()
-					if on {
-						txt.FontWeight(700).TextColor(t.Accent.MixOklab(t.Text, 0.3))
-					}
-				})
-			}
+			})
 		})
 	})
 	a.codeSyncField(c)

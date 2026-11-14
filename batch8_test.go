@@ -413,3 +413,24 @@ func TestTaskCheckAndNotePopover(t *testing.T) {
 	}
 	snapshot(t, tt, "task-checks")
 }
+
+// The settings' 备份 and 当前导图, as they show.
+func TestSettingsBackupAndMap(t *testing.T) {
+	a, tt := newTestApp(t)
+	a.openSettings()
+	a.settingsTab = 2
+	tt.Frame()
+	if !tt.HasText("立即备份") {
+		t.Fatalf("备份 not shown: %q", tt.Texts())
+	}
+	snapshot(t, tt, "settings-backup")
+	a.cfg.BackupDir, a.cfg.BackupLast = "/Users/me/Backups/MyMind", testNow.Add(-3*time.Hour)
+	tt.Frame()
+	snapshot(t, tt, "settings-backup-on")
+	a.settingsTab = 5
+	tt.Frame()
+	if !tt.HasText("项目代码目录") {
+		t.Fatalf("当前导图 not shown: %q", tt.Texts())
+	}
+	snapshot(t, tt, "settings-map")
+}

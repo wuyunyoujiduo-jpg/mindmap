@@ -76,44 +76,44 @@ func (a *app) codeStatusOf(dir string) codeStatus {
 // since, and the button that has the AI bring the map up to date.
 func (a *app) codeSyncField(c *ui.Context) {
 	t := c.Theme()
-	field(c, "代码基线", func() {
-		ui.Column(c).Gap(6).Children(func() {
-			dir := a.projectDir()
-			repo := gitbase.IsRepo(dir)
-			bl := a.file.Baseline
-			var lines []string
-			label := "按代码更新导图"
-			ready := repo
-			switch {
-			case !repo:
-				lines = append(lines, "先选择项目代码目录（一个 git 仓库）")
-			case bl == nil:
-				lines = append(lines, "还没有：让 AI 对照代码检查一遍导图，应用后记下导图对应的 commit，之后只需看新的改动")
-				label = "用 AI 对照代码检查导图"
-			default:
-				lines = append(lines, "导图对应 "+baselineLabel(bl), "由 AI 更新于 "+bl.At.Local().Format("2006-01-02 15:04"))
-				switch st := a.codeStatusOf(dir); {
-				case st.err != "":
-					lines = append(lines, st.err)
-				case st.files == 0:
-					lines = append(lines, "✓ 代码之后没有改动，导图是最新的")
-					ready = false
-				default:
-					lines = append(lines, fmt.Sprintf("之后有 %d 个提交、%d 个文件改动还没同步到导图", st.commits, st.files))
-				}
-			}
-			for i, l := range lines {
-				col := t.TextMuted
-				if i == len(lines)-1 && bl != nil && ready {
-					col = t.Warning
-				}
-				ui.Text(c.Key(i), l).FontSize(12).TextColor(col).Wrap()
-			}
-			if button(c.Key("code-sync"), label).FontSize(12).AlignSelf(ui.Start).Disabled(!ready).
-				Tooltip("AI 读基线之后的代码改动，提出对导图的修改；你应用后才更新代码基线").Clicked() {
+	dir := a.projectDir()
+	repo := gitbase.IsRepo(dir)
+	bl := a.file.Baseline
+	label, sub, note := "按代码更新导图", "", ""
+	ready, warn := repo, false
+	switch {
+	case !repo:
+		sub = "先选择项目代码目录（一个 git 仓库）"
+	case bl == nil:
+		sub = "还没有基线：让 AI 对照代码检查一遍导图，应用后记下导图对应的 commit，之后只需看新的改动"
+		label = "用 AI 检查导图"
+	default:
+		sub = "导图对应 " + baselineLabel(bl) + " · 由 AI 更新于 " + bl.At.Local().Format("2006-01-02 15:04")
+		switch st := a.codeStatusOf(dir); {
+		case st.err != "":
+			note = st.err
+		case st.files == 0:
+			note = "✓ 代码之后没有改动，导图是最新的"
+			ready = false
+		default:
+			note, warn = fmt.Sprintf("之后有 %d 个提交、%d 个文件改动还没同步到导图", st.commits, st.files), true
+		}
+	}
+	// A row as the others: what it is, how it stands, and the key at its end.
+	rowsField(c, "代码基线", "AI 读基线之后的代码改动，提出对导图的修改；你应用后才更新基线。", func() {
+		setRow(c, "导图和代码对齐", sub, func() {
+			if button(c.Key("code-sync"), label).Disabled(!ready).Clicked() {
 				a.later(a.syncWithCode)
 			}
 		})
+		if note != "" {
+			setLine(c)
+			col := t.TextMuted
+			if warn {
+				col = t.Warning
+			}
+			ui.Text(c.Key("note"), note).FontSize(textSmall).TextColor(col).Wrap().Margin(10, 0)
+		}
 	})
 }
 
