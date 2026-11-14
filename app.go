@@ -220,11 +220,16 @@ type app struct {
 	reminded        map[string]bool // tasks reminded of on remindedDay
 	remindedDay     time.Time
 	remindedAt      time.Time
-	linkFrom        string      // the node a link to a node is being chosen for
-	relFrom         string      // the node a relation line is being drawn from
-	relTo           *[2]float32 // where the pointer draws it to, in the window
-	selRel          string      // the relation line selected
-	justFloated     bool        // a double click just made a floating topic, whose release should not end its editing
+	linkFrom        string       // the node a link to a node is being chosen for
+	relFrom         string       // the node a relation line is being drawn from
+	relTo           *[2]float32  // where the pointer draws it to, in the window
+	selRel          string       // the relation line selected
+	justFloated     bool         // a double click just made a floating topic, whose release should not end its editing
+	floatDrag       string       // the floating topic being dragged
+	floatOver       string       // the topic it would go under, let go there
+	floatMoved      [2]float32   // how far the last frame moved it, on the map
+	floatAt         *model.Point // where the clip chosen in the palette goes, as a floating topic
+	pressAt         [2]float32   // where the canvas was last pressed, in its box
 	historyList     []versions.Version
 	historySel      int
 	historyFile     *model.File           // the version chosen

@@ -177,6 +177,11 @@ by AI, and an AI assistant.
     it in a narrow window, which CI's wider fonts told); on the canvas the
     center is in the ink, the main topics on a pastel of their branch's
     color, those below on a faint tint (the scheme 明亮 of `style.go`).
+    There is no whiteboard, and is not to be (the user asked, 0.93, and
+    chose this): a fourth kind of thing would ask at every thought where
+    it goes. What a tree cannot hold is a floating topic (`annotate.go`),
+    made handy instead: dragged out of the tree and back into it, made
+    by the canvas's menu, of a clip too (`DESIGN.md`'s Hands).
   - 收集 (`libview.go`): notes and clips, a wall of cards that
     stand apart on the white page, each white with a hairline
     (`wallCard`; the user found one gray ground under them a slab); its 回顾 shows a

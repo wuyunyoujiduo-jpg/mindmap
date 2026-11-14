@@ -101,6 +101,13 @@ are 14 to 16).
   and in the menu 前往 (⌘1–5 are a map's views and ⌘K the commands,
   older than these: 0.84.0 gave the places ⌘1–3 and the bar ⌘K, which
   the menu took first).
+- **The canvas takes a topic anywhere**: a double click on the bare
+  canvas makes a floating topic there, as its menu does (`canvasMenu`,
+  which says the double click, and puts a clip of 收集 there as a topic
+  that links to it); a topic let go on the bare canvas leaves the tree
+  for that place (`floatDropped`), and a floating topic let go over a
+  topic goes under it, that topic in a dashed line of the accent
+  meanwhile (`joinFloating`); each with 撤销.
 - **The left column takes what is dropped on it**: a task on a project
   goes to that map (`dropTaskOnMap`), a clip on a tag takes it
   (`tagClipUndoably`), as a map on a folder.

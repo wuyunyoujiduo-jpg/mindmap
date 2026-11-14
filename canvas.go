@@ -470,7 +470,13 @@ func (a *app) canvasArea(c *ui.Context) {
 	}
 	if cv.DoubleClicked() && !exporting && shown == a.doc && !a.overNode() {
 		x, y := a.pointer[0], a.pointer[1]
-		a.later(func() { a.addFloatingAt(x, y) }) // a floating topic where it was double-clicked
+		a.later(func() { // a floating topic where it was double-clicked
+			a.addFloatingAt(x, y)
+			a.justFloated = true
+		})
+	}
+	if !exporting && shown == a.doc {
+		cv.ContextMenu(a.canvasMenu)
 	}
 	cv.Draw(func(p *ui.Painter, rect ui.Rect) {
 		color := func(id string) ui.Color {
@@ -592,6 +598,9 @@ func (a *app) canvasInput(ev ui.InputEvent) bool {
 	switch ev.Kind {
 	case ui.InputPointerMove:
 		a.pointer = [2]float32{ev.X, ev.Y}
+		return false
+	case ui.InputPointerDown:
+		a.pressAt = [2]float32{ev.X, ev.Y} // where the canvas's menu opens (canvasMenu)
 		return false
 	case ui.InputScroll:
 		mods := ev.Mods | a.mods
@@ -856,14 +865,39 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 				el.Cursor(ui.CursorGrab)
 			}
 		} else if n.Pos != nil && a.doc.IsFloating(n.ID) {
-			// A floating topic goes where it is dragged.
+			// A floating topic goes where it is dragged, and let go over
+			// a topic it goes under it: that topic shows it would take it.
+			// The pointer is told from the box as it was laid out last,
+			// before what the last frame moved it by.
 			if dx, dy, ok := el.Dragged(); ok {
-				a.mutate("float:"+n.ID, func() { n.Pos.X += dx / z; n.Pos.Y += dy / z })
+				if a.floatDrag != n.ID && (dx != 0 || dy != 0) {
+					a.floatDrag, a.floatMoved = n.ID, [2]float32{}
+				}
+				if a.floatDrag == n.ID { // moved: a press alone shows nothing
+					x, y, _ := el.PointerPosition()
+					a.floatOver = a.nodeAt(box.X-a.floatMoved[0]+x/z, box.Y-a.floatMoved[1]+y/z, n)
+					a.floatMoved = [2]float32{dx / z, dy / z}
+				}
+				if dx != 0 || dy != 0 {
+					a.mutate("float:"+n.ID, func() { n.Pos.X += dx / z; n.Pos.Y += dy / z })
+				}
+			}
+			if _, _, ok := el.DragEnded(); ok && a.floatDrag == n.ID && a.floatOver != "" {
+				id, to := n.ID, a.floatOver
+				a.later(func() { a.joinFloating(id, to) })
+			}
+			if _, held := el.PressedButton(); !held && a.floatDrag == n.ID {
+				a.floatDrag, a.floatOver = "", ""
 			}
 			el.Cursor(ui.CursorGrab)
 		} else {
-			// Other nodes are dropped on a node to move under it.
+			// Other nodes are dropped on a node to move under it, and on
+			// the bare canvas to stand there, out of the tree.
 			el.Drag(nodeDrag{n.ID}).Cursor(ui.CursorPointer)
+			if at, ok := el.DragMissed(); ok && !summary {
+				id := n.ID
+				a.later(func() { a.floatDropped(id, at.X, at.Y) })
+			}
 		}
 		// A node dropped on it moves under it, or, near the edge its
 		// siblings are on, before or after it; a document or a map from
@@ -876,6 +910,9 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 					el.Border(2*z, t.Accent).BorderStyle(ui.BorderDashed)
 				}
 			}
+		}
+		if a.floatOver == n.ID {
+			el.Border(2*z, t.Accent).BorderStyle(ui.BorderDashed)
 		}
 		if d, ok := ui.Drop[canvasDrop](el); ok {
 			id := n.ID

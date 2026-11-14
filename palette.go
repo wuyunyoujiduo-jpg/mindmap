@@ -123,6 +123,7 @@ func (a *app) commands() []command {
 func (a *app) openPalette(mode int) {
 	a.commitEditIfAny()
 	a.paletteOpen, a.paletteMode, a.paletteQuery, a.paletteIndex = true, mode, "", 0
+	a.floatAt = nil
 }
 
 // paletteItems are the lines the palette shows for what is typed.
@@ -202,7 +203,9 @@ func (a *app) paletteItems() []paletteItem {
 			}
 			id := h.Clip.ID
 			items = append(items, paletteItem{"资料", h.Clip.Label(), cmpOr(h.Clip.Desc, h.Clip.Category), func() {
-				if n := a.file.Node(a.linkFrom); n != nil {
+				if at := a.floatAt; at != nil { // onto the canvas, where its menu was opened
+					a.addFloatingClip(id, *at)
+				} else if n := a.file.Node(a.linkFrom); n != nil {
 					a.addLink(n, clipScheme+id)
 				}
 			}, nil})
@@ -479,6 +482,9 @@ func (a *app) paletteView(c *ui.Context) {
 			paletteClip:   "在收集里查找要链接的资料…",
 			paletteAttach: "把资料挂到哪个节点？输入关键词查找，或选择建议的节点…",
 		}[a.paletteMode]
+		if a.paletteMode == paletteClip && a.floatAt != nil {
+			placeholder = "在收集里查找要放到画布上的那一条…"
+		}
 		w, _ := c.Size()
 		ui.Column(c).Width(min(640, w-80)).Gap(8).Children(func() {
 			in := ui.TextInput(c.Key("palette-query"), &a.paletteQuery).Placeholder(placeholder).AutoFocus().FontSize(15)

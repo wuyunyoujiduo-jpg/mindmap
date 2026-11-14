@@ -63,17 +63,105 @@ func (a *app) floatingTree() map[string]*model.Node {
 // addFloatingAt adds a floating topic where the canvas was double-clicked,
 // (x, y) on the canvas, and edits its title.
 func (a *app) addFloatingAt(x, y float32) {
-	root, ok := a.boxes.Boxes[a.doc.Root.ID]
+	at, ok := a.canvasPoint(x, y)
 	if !ok {
 		return
 	}
-	cam := a.cam()
-	at := model.Point{X: (x-cam.X)/cam.Zoom - root.X, Y: (y-cam.Y)/cam.Zoom - root.Y}
 	var n *model.Node
 	a.mutate("", func() { n = a.doc.AddFloating("", at) })
 	a.selected, a.multi = n.ID, nil
 	a.startEdit(n.ID)
-	a.justFloated = true
+}
+
+// canvasPoint is where (x, y) of the canvas's box is on the map, from its
+// center's corner, as a floating topic's place is told.
+func (a *app) canvasPoint(x, y float32) (model.Point, bool) {
+	root, ok := a.boxes.Boxes[a.doc.Root.ID]
+	if !ok {
+		return model.Point{}, false
+	}
+	cam := a.cam()
+	return model.Point{X: (x-cam.X)/cam.Zoom - root.X, Y: (y-cam.Y)/cam.Zoom - root.Y}, true
+}
+
+// canvasMenu is the menu of the bare canvas, where the pointer's other key
+// was pressed: a floating topic there, new or made of what is collected.
+// The double click that makes one is said on it, being found no other way.
+func (a *app) canvasMenu(m *ui.Menu) {
+	x, y := a.pressAt[0], a.pressAt[1]
+	if m.Item("新建自由主题").Trailing("双击空白处").Chosen() {
+		a.later(func() { a.addFloatingAt(x, y) })
+	}
+	if m.Item("从收集放一条…").Disabled(a.lib == nil).Chosen() {
+		a.later(func() {
+			if at, ok := a.canvasPoint(x, y); ok {
+				a.openPalette(paletteClip)
+				a.floatAt = &at
+			}
+		})
+	}
+}
+
+// addFloatingClip puts a clip on the canvas as a floating topic that links
+// to it, at a place: what is collected stays in 收集.
+func (a *app) addFloatingClip(id string, at model.Point) {
+	cl := a.lib.Find(id)
+	if cl == nil {
+		return
+	}
+	var n *model.Node
+	a.mutate("", func() {
+		n = a.doc.AddFloating(firstSentence(cl.Label()), at)
+		n.Links = []string{clipScheme + cl.ID}
+	})
+	a.selected, a.multi = n.ID, nil
+	a.tellUndo("已放到画布上，链接着收集里的这一条", a.undo)
+}
+
+// nodeAt is the topic at a point of the map, in the layout's axes, other
+// than those of except: the smallest there, as one may lie over another.
+func (a *app) nodeAt(x, y float32, except *model.Node) string {
+	var at string
+	var area float32
+	for id, b := range a.boxes.Boxes {
+		if x < b.X || x > b.X+b.W || y < b.Y || y > b.Y+b.H || except.Contains(id) {
+			continue
+		}
+		if s := b.W * b.H; at == "" || s < area || s == area && id < at {
+			at, area = id, s
+		}
+	}
+	return at
+}
+
+// joinFloating puts a floating topic let go over a topic under it.
+func (a *app) joinFloating(id, to string) {
+	n, _ := a.doc.Find(id)
+	t, _ := a.doc.Find(to)
+	if n == nil || t == nil || !a.doc.IsFloating(id) {
+		return
+	}
+	a.moveNode(id, to)
+	a.tellUndo("已挂到「"+cmpOr(t.Title, "未命名")+"」下", a.undo)
+}
+
+// floatDropped takes a topic dragged out of the tree and let go on the
+// bare canvas, at (x, y) of the window, as a floating topic there.
+func (a *app) floatDropped(id string, x, y float32) {
+	if a.doc == nil || a.shownDoc() != a.doc {
+		return
+	}
+	x, y = x-a.vp.X, y-a.vp.Y
+	n, p := a.doc.Find(id)
+	b, ok := a.boxes.Boxes[id]
+	at, ok2 := a.canvasPoint(x, y)
+	if n == nil || p == nil || !ok || !ok2 || x < 0 || y < 0 || x > a.vp.W || y > a.vp.H {
+		return
+	}
+	at.X, at.Y = at.X-b.W/2, at.Y-b.H/2 // the pointer at its middle
+	a.mutate("", func() { _ = a.doc.Float(id, at) })
+	a.selected, a.multi = id, nil
+	a.tellUndo("已设为自由主题，拖回节点上可以挂回去", a.undo)
 }
 
 // floatNode takes a node out of the tree, as a floating topic beside where

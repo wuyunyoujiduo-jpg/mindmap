@@ -22,6 +22,7 @@ import (
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/layout"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/versions"
 )
@@ -552,7 +553,10 @@ func TestDraggingNodeDoesNotPan(t *testing.T) {
 	if cam.X != x0 {
 		t.Fatal("dragging a node moved the canvas")
 	}
-	if _, p := a.doc.Find(find(t, a, "前端").ID); p.Title != "架构" {
+	// Let go on the bare canvas, it stands there out of the tree, under
+	// no other topic (TestFloatingByHand).
+	tt.Frame()
+	if n, p := a.doc.Find(find(t, a, "前端").ID); p != nil || !a.doc.IsFloating(n.ID) {
 		t.Fatalf("dropped on nothing, moved under %q", p.Title)
 	}
 }
@@ -3815,4 +3819,113 @@ func TestSummaryStructures(t *testing.T) {
 			snapshot(t, tt, "summary-"+cmpOr(string(s), "mindmap"))
 		})
 	}
+}
+
+// A floating topic is handy: a topic dragged onto the bare canvas stands
+// there, out of the tree; dragged onto a topic, it goes under it; and the
+// canvas's menu makes one where it was opened.
+func TestFloatingByHand(t *testing.T) {
+	a, tt := newTestApp(t)
+	drag := func(fx, fy, tx, ty float32) {
+		tt.Press(fx, fy)
+		for i := 1; i <= 10; i++ {
+			f := float32(i) / 10
+			tt.Move(fx+(tx-fx)*f, fy+(ty-fy)*f)
+		}
+		tt.Release(tx, ty)
+		tt.Frame()
+		tt.Frame()
+	}
+	// Out of the tree, onto the bare canvas.
+	from, ok := tt.Find("支持导出图片")
+	if !ok {
+		t.Fatal("node not found")
+	}
+	n := find(t, a, "支持导出图片")
+	ex, ey := a.vp.X+60, a.vp.Y+a.vp.H-90
+	drag(from.X+5, from.Y+5, ex, ey)
+	if !a.doc.IsFloating(n.ID) || a.selected != n.ID {
+		t.Fatalf("not floating: %+v", a.doc.Floating)
+	}
+	if !strings.Contains(a.notice, "自由主题") || a.noticeUndo == nil {
+		t.Fatalf("notice %q", a.notice)
+	}
+	// It stands where it was let go.
+	b, cam := a.boxes.Boxes[n.ID], a.cam()
+	cx, cy := a.vp.X+cam.X+(b.X+b.W/2)*cam.Zoom, a.vp.Y+cam.Y+(b.Y+b.H/2)*cam.Zoom
+	if abs32(cx-ex) > 8 || abs32(cy-ey) > 8 {
+		t.Fatalf("at %v,%v, let go at %v,%v", cx, cy, ex, ey)
+	}
+	snapshot(t, tt, "floating-out")
+	// Back onto a topic: it goes under it.
+	to, _ := tt.Find("架构")
+	tt.Press(cx, cy)
+	for i := 1; i <= 10; i++ {
+		f := float32(i) / 10
+		tt.Move(cx+(to.X+to.W/2-cx)*f, cy+(to.Y+to.H/2-cy)*f)
+	}
+	tt.Frame()
+	if a.floatOver != find(t, a, "架构").ID {
+		t.Fatalf("over %q", a.floatOver)
+	}
+	snapshot(t, tt, "floating-over")
+	tt.Release(to.X+to.W/2, to.Y+to.H/2)
+	tt.Frame()
+	tt.Frame()
+	arch := find(t, a, "架构")
+	if a.doc.IsFloating(n.ID) || !slices.Contains(arch.Children, n) || n.Pos != nil || a.floatOver != "" {
+		t.Fatalf("not under 架构: %v, floating %v", arch.Children, a.doc.Floating)
+	}
+	// Taken back, it floats again.
+	a.noticeUndo()
+	tt.Frame()
+	if n, _ = a.doc.Find(n.ID); n == nil || !a.doc.IsFloating(n.ID) {
+		t.Fatal("not floating after the undo")
+	}
+	// The canvas's menu makes one where it was opened.
+	mx, my := a.vp.X+a.vp.W-260, a.vp.Y+a.vp.H-120
+	tt.Move(mx, my)
+	tt.RightClickAt(mx, my)
+	if err := tt.ChooseMenuItem("新建自由主题"); err != nil {
+		t.Fatalf("%v; menu %q", err, tt.Menu())
+	}
+	tt.Frame()
+	if len(a.doc.Floating) != 2 || a.editing != a.doc.Floating[1].ID {
+		t.Fatalf("floating %+v editing %q", a.doc.Floating, a.editing)
+	}
+	tt.Type("想到的")
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	nb := a.boxes.Boxes[a.doc.Floating[1].ID]
+	cam = a.cam()
+	if abs32(a.vp.X+cam.X+nb.X*cam.Zoom-mx) > 4 || abs32(a.vp.Y+cam.Y+nb.Y*cam.Zoom-my) > 4 {
+		t.Fatalf("made at %v,%v, asked at %v,%v", a.vp.X+cam.X+nb.X*cam.Zoom, a.vp.Y+cam.Y+nb.Y*cam.Zoom, mx, my)
+	}
+	// And one of what is collected, which stays in 收集: the topic links to it.
+	cl := &library.Clip{Kind: library.KindText, Text: "竞品的定价页截图要点"}
+	if err := a.lib.Add(cl, a.now()); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	mx -= 200
+	tt.Move(mx, my)
+	tt.RightClickAt(mx, my)
+	if err := tt.ChooseMenuItem("从收集放一条…"); err != nil {
+		t.Fatalf("%v; menu %q", err, tt.Menu())
+	}
+	tt.Frame()
+	if !a.paletteOpen || a.floatAt == nil {
+		t.Fatal("the palette did not open for the canvas")
+	}
+	tt.Type("定价")
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if len(a.doc.Floating) != 3 {
+		t.Fatalf("floating %+v", a.doc.Floating)
+	}
+	if f := a.doc.Floating[2]; f.Title != "竞品的定价页截图要点" || !slices.Contains(f.Links, clipScheme+cl.ID) || a.lib.Find(cl.ID) == nil {
+		t.Fatalf("topic %+v", f)
+	}
+	tt.Frame()
+	snapshot(t, tt, "floating-clip")
 }
