@@ -125,6 +125,13 @@ func (a *app) todaySide(c *ui.Context) {
 					ui.Box(c).Size(sideIconSize, 14).Center().Shrink(0).PassThrough().Children(func() { mapDot(c, col, 8) })
 				})
 				row.Label("只看 " + mapName(path))
+				// A task dropped on a project goes to it, under its center.
+				if d, over := ui.DragOver[taskDrag](row); over && d.path != path {
+					row.Background(c.Theme().Accent.Alpha(0.14))
+				}
+				if d, ok := ui.Drop[taskDrag](row); ok && d.path != path {
+					a.later(func() { a.dropTaskOnMap(d, path) })
+				}
 				if row.Clicked() {
 					if a.tasks.onMap == path {
 						a.tasks.onMap = ""
@@ -189,6 +196,13 @@ func (a *app) libSide(c *ui.Context) {
 				name := tc.name
 				row := sideRow(c, "tag:"+name, "#"+name, fmt.Sprint(tc.n), a.libTag == name, nil)
 				row.Label(fmt.Sprintf("#%s %d", name, tc.n))
+				// A clip dropped on a tag takes it.
+				if _, over := ui.DragOver[clipDrag](row); over {
+					row.Background(c.Theme().Accent.Alpha(0.14))
+				}
+				if d, ok := ui.Drop[clipDrag](row); ok {
+					a.later(func() { a.tagClipUndoably(d.id, name) })
+				}
 				if row.Clicked() {
 					a.libTag, a.libReview = toggled(a.libTag, name), reviewOff
 				}
@@ -214,4 +228,47 @@ func hasStarred(l *library.Library) bool {
 		}
 	}
 	return false
+}
+
+// A clipDrag is a clip of the wall being dragged, to a tag of the left
+// column.
+type clipDrag struct{ id string }
+
+// dropTaskOnMap moves a task dragged on a project of the left column to
+// that map, under its center, with the way back.
+func (a *app) dropTaskOnMap(d taskDrag, path string) {
+	f := a.file
+	if path != a.path {
+		f = a.indexed(path)
+	}
+	if f == nil || len(f.Sheets) == 0 || f.Sheets[0].Root == nil {
+		a.tell("没有移过去：打不开「" + mapName(path) + "」")
+		return
+	}
+	for _, it := range a.tasks.items {
+		if it.path == d.path && it.node.ID == d.id {
+			a.moveTaskUndoably(it, path, f.Sheets[0].Root.ID, mapName(path))
+			return
+		}
+	}
+}
+
+// tagClipUndoably gives a clip a tag and says so, with the way back.
+func (a *app) tagClipUndoably(id, tag string) {
+	cl := a.lib.Find(id)
+	if cl == nil {
+		return
+	}
+	if slices.Contains(cl.Tags, tag) {
+		a.tell("已经有 #" + tag + " 了")
+		return
+	}
+	cl.Tags = append(slices.Clone(cl.Tags), tag)
+	a.saveClip(cl)
+	a.tellUndo("已加上 #"+tag, func() {
+		if cl := a.lib.Find(id); cl != nil {
+			cl.Tags = slices.DeleteFunc(slices.Clone(cl.Tags), func(s string) bool { return s == tag })
+			a.saveClip(cl)
+		}
+	})
 }

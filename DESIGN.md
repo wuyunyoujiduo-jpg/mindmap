@@ -81,6 +81,22 @@ are 14 to 16).
   lines, one family (`icons.go`), in the ink. They are marks, not places,
   as on macOS.
 
+## Hands
+
+- **A way back**: what leaves where it was says so with 撤销 on the toast
+  (`tellUndo`): a task ticked off, a task or a clip put on a map
+  (`moveTaskUndoably`, `takeClipPlace`), a tag given, a clip deleted,
+  tasks put on today.
+- **Escape** puts away what opened: a task's details, a clip's, as the
+  bar, the search and the canvas's.
+- **The arrows** go through a list, its details following (`taskKeys`,
+  the wall's in `clipWall`), and the space bar ticks a task off; never
+  while something is written in (`FocusTakesText`).
+- **The places** are ⌘1, ⌘2, ⌘3 and the bar ⌘K, said on their tips.
+- **The left column takes what is dropped on it**: a task on a project
+  goes to that map (`dropTaskOnMap`), a clip on a tag takes it
+  (`tagClipUndoably`), as a map on a folder.
+
 ## Motion
 
 Only the five lengths and the one curve above (from
@@ -188,8 +204,9 @@ Built to the draft https://claude.ai/artifact/5Nw4Mn4q4ozd9rpUNGh8AP.
   dot of its color: one color on a row, not three.
 - **Under today's**: the tasks of the six days after, as 接下来 7 天, so
   that the page is not half empty and tomorrow is seen coming.
-- **A task's details**: how it repeats is one key that opens the ways
-  (`dropButton`), not six chips; 12 between its rows.
+- **A task's details**: how it repeats is three keys for the ways most
+  used (不重复, 每天, 每周) and one that opens the others (`dropButton`),
+  not six chips; 12 between its rows.
 - **A toast** (`toastLook`): a white card at the window's foot, led by a
   small tile, a green tick for what was done, a red cross for what failed;
   its key in the accent.

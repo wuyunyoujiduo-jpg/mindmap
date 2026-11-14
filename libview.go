@@ -125,6 +125,35 @@ func (a *app) clipWall(c *ui.Context, hits []library.Hit) {
 	}
 	cols := min(max(int(room/300), 1), 6)
 	shown := min(len(hits), max(a.wallShown, wallStep))
+	// The arrows go from a card to the next and the one before, its
+	// details following; not while something is written in.
+	if !a.barOpen && !c.FocusTakesText() && shown > 0 {
+		step := 0
+		switch {
+		case c.Shortcut(0, ui.KeyDown), c.Shortcut(0, ui.KeyRight):
+			step = 1
+		case c.Shortcut(0, ui.KeyUp), c.Shortcut(0, ui.KeyLeft):
+			step = -1
+		}
+		if step != 0 {
+			at := -1
+			for i, h := range hits[:shown] {
+				if h.Clip.ID == a.libSel {
+					at = i
+				}
+			}
+			switch {
+			case at < 0 && step > 0:
+				at = 0
+			case at < 0:
+				at = shown - 1
+			default:
+				at = min(max(at+step, 0), shown-1)
+			}
+			a.libSel, a.libTagText = hits[at].Clip.ID, ""
+			a.libReveal = a.libSel
+		}
+	}
 	tall := make([]float32, cols)
 	in := make([][]*library.Clip, cols)
 	for _, h := range hits[:shown] {
@@ -371,12 +400,16 @@ func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 	memo := isMemo(clip)
 	kcol := clipColor(clip.Kind)
 	row := ui.Column(c).FillWidth().Padding(16, 18).Gap(12).Radius(radiusCard).Cursor(ui.CursorPointer).
-		Label("资料 " + clip.Label())
+		Label("资料 " + clip.Label()).Drag(clipDrag{clip.ID})
 	// A white card, as all are: a note is its text, the others have their
 	// kind's icon by their title.
 	wallCard(row, t)
 	if a.libSel == clip.ID {
 		chosenCard(row, t)
+		if a.libReveal == clip.ID { // gone to by the keyboard
+			row.ScrollIntoView()
+			a.libReveal = ""
+		}
 	}
 	if row.Clicked() {
 		if a.libSel == clip.ID {
@@ -589,7 +622,7 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 			a.openCard(clip)
 		}
 		iconButton(c, iconMore, "资料菜单", "更多", 28, true).Menu(func(m *ui.Menu) { a.clipMenu(m, clip) })
-		if iconButton(c, iconClose, "关闭详情", "关闭", 28, true).Clicked() {
+		if iconButton(c, iconClose, "关闭详情", "关闭", 28, true).Clicked() || !a.barOpen && c.Shortcut(0, ui.KeyEscape) {
 			a.libSel = ""
 		}
 	})

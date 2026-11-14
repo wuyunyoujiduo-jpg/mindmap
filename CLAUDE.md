@@ -171,7 +171,10 @@ by AI, and an AI assistant.
   - Each main thing to do has its way in where it is looked for (the
     line to add a task on 今天's lists), though another way does it too.
   - What puts a thing away says so and gives the way back at once
-    (撤回), and a way back later.
+    (撤回), and a way back later. The same for what is ticked off,
+    moved or tagged (`tellUndo`; `DESIGN.md`'s Hands, with the keys:
+    Escape, the arrows, ⌘1–3, ⌘K, and what the left column takes when
+    dropped on).
   - Two kinds of thing that the user wants as one stay each in its own
     store and are joined by a link, made of each other without loss.
   - Before a page is shipped, hold its snapshot beside the reference and

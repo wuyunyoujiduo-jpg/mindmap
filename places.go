@@ -89,13 +89,24 @@ func (a *app) topBar(c *ui.Context) {
 					}
 				})
 			}
-			part(placeToday, "今天", "今天要做的，和刚记下的", func() {
+			part(placeToday, "今天", "今天要做的，和刚记下的（"+keyLabel("CmdOrCtrl+1")+"）", func() {
 				a.showLibrary()
 				a.libHome = true
 			})
-			part(placeMaps, "项目", "导图：一张就是一个项目", a.showProjects)
-			part(placeCollect, "收集", "灵感、链接、文档和图片", func() { a.openList(kindAll, "") })
+			part(placeMaps, "项目", "导图：一张就是一个项目（"+keyLabel("CmdOrCtrl+2")+"）", a.showProjects)
+			part(placeCollect, "收集", "灵感、链接、文档和图片（"+keyLabel("CmdOrCtrl+3")+"）", func() { a.openList(kindAll, "") })
 		})
+		// The places and the bar by the keyboard, from every page.
+		switch {
+		case c.Shortcut(ui.Cmd, ui.Key1):
+			a.later(func() { a.showLibrary(); a.libHome = true })
+		case c.Shortcut(ui.Cmd, ui.Key2):
+			a.later(a.showProjects)
+		case c.Shortcut(ui.Cmd, ui.Key3):
+			a.later(func() { a.openList(kindAll, "") })
+		case c.Shortcut(ui.Cmd, ui.KeyK):
+			a.barOpen, a.writeRefocus = true, "home-line"
+		}
 		a.oneBar(c)
 		// The AI's panel, from every page.
 		if kubaiKey(c, "sparkles", "AI 助手", "问 AI：问问导图和资料里的内容", a.aiOpen, false).Clicked() {

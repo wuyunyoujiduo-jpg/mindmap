@@ -393,6 +393,7 @@ type app struct {
 	tagQuery   string
 	notice     string    // a passing message in the toolbar, as "已复制"
 	noticeAt   time.Time // since when it shows, for noticeTime
+	libReveal  string    // the clip the keyboard went to, to scroll to once
 	wallShown  int       // how many clips 收集's wall shows, when more than wallStep
 	// Long work, told in cards (wait.go): how many clips the index is made
 	// of and how many are left, since when, and what to say once done.

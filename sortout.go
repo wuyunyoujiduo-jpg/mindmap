@@ -162,11 +162,39 @@ func (a *app) takePlace(it taskItem) {
 		return
 	}
 	delete(a.tasks.places, it.node.ID)
-	if err := a.moveNodeAcross(it.path, it.node.ID, p.path, p.node); err != nil {
+	a.moveTaskUndoably(it, p.path, p.node, p.label)
+}
+
+// moveTaskUndoably moves a task under a topic of a map and says so, with
+// the way to take it back: under the topic it was under before.
+func (a *app) moveTaskUndoably(it taskItem, toPath, toID, label string) {
+	was := ""
+	src := a.file
+	if it.path != a.path {
+		src = a.indexed(it.path)
+	}
+	if src != nil {
+		if d := src.SheetOf(it.node.ID); d != nil {
+			if _, parent := d.Find(it.node.ID); parent != nil {
+				was = parent.ID
+			}
+		}
+	}
+	if err := a.moveNodeAcross(it.path, it.node.ID, toPath, toID); err != nil {
 		a.tell("没有移过去：" + err.Error())
 		return
 	}
-	a.tell("已放到「" + p.label + "」下")
+	said := "已放到「" + label + "」下"
+	if was == "" {
+		a.tell(said)
+		return
+	}
+	from, id := it.path, it.node.ID
+	a.tellUndo(said, func() {
+		if err := a.moveNodeAcross(toPath, id, from, was); err != nil {
+			a.tell("没有放回去：" + err.Error())
+		}
+	})
 }
 
 // takeAllPlaces moves every task with a suggestion.
@@ -409,7 +437,21 @@ func (a *app) takeClipPlace(cl *library.Clip) bool {
 		a.tell("没有放过去：" + err.Error())
 		return false
 	}
-	a.tell("已放到「" + p.label + "」下")
+	// The way back: the topic made goes; the clip was never moved.
+	path, id := p.path, n.ID
+	a.tellUndo("已放到「"+p.label+"」下", func() {
+		err := a.editMapAt(path, "撤回放进的资料", func(f *model.File) error {
+			d := f.SheetOf(id)
+			if d == nil {
+				return errors.New("那个主题已不存在")
+			}
+			_, err := d.Delete(id)
+			return err
+		})
+		if err != nil {
+			a.tell("没有撤回：" + err.Error())
+		}
+	})
 	return true
 }
 

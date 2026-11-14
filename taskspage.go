@@ -50,6 +50,8 @@ type tasksState struct {
 	items     []taskItem
 	read      time.Time // when the items were gathered
 	edits     int       // the open map's edits then
+	// reveal is the task the keyboard went to, to scroll to once.
+	reveal string
 	// sel is the task whose details show, as path#id; onMap the map whose
 	// tasks show alone, "" for all.
 	sel, onMap string
@@ -168,9 +170,16 @@ func (a *app) setTaskDone(it taskItem, done bool) {
 	if done {
 		st = model.StatusDone
 	}
+	was := it.node.Task.Status // before the edit: the node may be the map's own
 	a.editTask(it, "完成任务", func(n *model.Node) { n.SetStatus(st, a.now()) })
-	if rep := it.node.Task.Repeat; done && rep != nil {
+	switch rep := it.node.Task.Repeat; {
+	case done && rep != nil:
 		a.tell("做完一次，下一次：" + dayLabel(rep.Next(it.node.Task.Due, a.now()), a.now()))
+	case done:
+		// Ticked off, it leaves the list: the way back is said at once.
+		a.tellUndo("已完成「"+it.node.Title+"」", func() {
+			a.editTask(it, "撤回完成", func(n *model.Node) { n.SetStatus(was, a.now()) })
+		})
 	}
 }
 
@@ -643,6 +652,10 @@ func (a *app) taskDetail(c *ui.Context, it taskItem) {
 	if a.tasks.draftOf != it.key() {
 		a.tasks.title, a.tasks.note, a.tasks.draftOf = it.node.Title, it.node.Note, it.key()
 	}
+	if !a.barOpen && c.Shortcut(0, ui.KeyEscape) { // Escape puts the details away, as everything that opens
+		a.saveTaskDrafts()
+		a.tasks.sel, a.tasks.draftOf = "", ""
+	}
 	ui.Column(c.Key("task-detail")).Grow(1).Basis(0).MinHeight(0).FillWidth().Children(func() {
 		// Its name heads the pane, in the title bar's band: the circle that
 		// ticks it off, the name to change, and the way out.
@@ -879,7 +892,7 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 		// What comes in the days after, under today's: the page is not
 		// left half empty, and tomorrow is seen coming.
 		if len(next) > 0 {
-			add("接下来 7 天", false, nil).items = next
+			add("接下来 7 天", false, at(day.AddDate(0, 0, 1))).items = next // dropped there, a task is tomorrow's
 		}
 	case tasksWeekAhead:
 		over := add("已逾期", true, at(day))
@@ -1090,6 +1103,22 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 					}
 				})
 			}
+			a.taskKeys(c, func(yield func(taskItem) bool) {
+				for _, g := range groups {
+					for _, it := range g.items {
+						if !yield(it) {
+							return
+						}
+					}
+				}
+				if a.tasks.showDone {
+					for _, it := range done {
+						if !yield(it) {
+							return
+						}
+					}
+				}
+			})
 			// The list's foot says how much it holds, as a table's does.
 			open := 0
 			for _, g := range groups {
@@ -1106,6 +1135,54 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 			}
 		})
 	})
+}
+
+// taskKeys is the list's keys: the arrows go from a task to the next and
+// the one before, its details following; the space bar ticks off the one
+// chosen. Not while something is written in.
+func (a *app) taskKeys(c *ui.Context, shown func(yield func(taskItem) bool)) {
+	if a.barOpen || c.FocusTakesText() {
+		return
+	}
+	step := 0
+	switch {
+	case c.Shortcut(0, ui.KeyDown):
+		step = 1
+	case c.Shortcut(0, ui.KeyUp):
+		step = -1
+	}
+	tick := c.Shortcut(0, ui.KeySpace)
+	if step == 0 && !tick {
+		return
+	}
+	var list []taskItem
+	at := -1
+	for it := range shown {
+		if it.key() == a.tasks.sel {
+			at = len(list)
+		}
+		list = append(list, it)
+	}
+	if len(list) == 0 {
+		return
+	}
+	if tick {
+		if at >= 0 {
+			it := list[at]
+			a.later(func() { a.setTaskDone(it, !it.done()) })
+		}
+		return
+	}
+	switch {
+	case at < 0 && step > 0:
+		at = 0
+	case at < 0:
+		at = len(list) - 1
+	default:
+		at = min(max(at+step, 0), len(list)-1)
+	}
+	it := list[at]
+	a.later(func() { a.showTask(it); a.tasks.reveal = it.key() })
 }
 
 // taskRow is a task in a list: its circle, in its priority's color, which
@@ -1129,6 +1206,10 @@ func (a *app) taskRow(c *ui.Context, it taskItem, overdue bool) {
 	if a.tasks.sel == it.key() {
 		// Chosen, it is a round block; its line goes, keeping its room.
 		row.Background(chosen(t)).Radius(radiusRow).BorderColor(t.Text.Alpha(0))
+		if a.tasks.reveal == it.key() { // gone to by the keyboard, it is brought into view
+			row.ScrollIntoView()
+			a.tasks.reveal = ""
+		}
 	}
 	row.ContextMenu(func(m *ui.Menu) { a.taskMenu(m, it) })
 	table := a.tasks.table
@@ -1761,17 +1842,24 @@ func (a *app) repeatProp(c *ui.Context, it taskItem) {
 		})
 		return b
 	}
-	// One key that says how it repeats and opens the ways to choose: six
-	// chips in two rows were the heaviest thing of the pane.
 	kinds := []string{"不重复", "每天", "工作日", "每周", "每月", "自定义"}
 	chosen := -1
+	// The three most used are a key each, one click; the others are under
+	// one key that opens them: six chips in two rows were too heavy, and
+	// all six in a menu a click more for the common ones.
 	propRow(c, "重复", func() {
-		dropButton(c, "repeat", kinds[kind], "重复方式", "这个任务怎样重复").Menu(func(m *ui.Menu) {
-			for i, name := range kinds {
-				if i == 5 {
-					m.Separator()
-				}
-				if m.Item(name).Checked(i == kind).Chosen() {
+		for _, i := range []int{0, 1, 3} {
+			if chip("repeat:"+kinds[i], kinds[i], "重复 "+kinds[i], i == kind).Clicked() {
+				chosen = i
+			}
+		}
+		more := "更多"
+		if kind == 2 || kind == 4 || kind == 5 {
+			more = kinds[kind]
+		}
+		dropButton(c, "repeat", more, "重复方式", "工作日、每月，或自己定").Menu(func(m *ui.Menu) {
+			for _, i := range []int{2, 4, 5} {
+				if m.Item(kinds[i]).Checked(i == kind).Chosen() {
 					chosen = i
 				}
 			}
