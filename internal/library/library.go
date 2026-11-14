@@ -59,8 +59,12 @@ type Clip struct {
 	Analysis  string     `json:"analysis,omitempty"`
 	Organized *time.Time `json:"organized,omitempty"`
 	Starred   bool       `json:"starred,omitempty"`
-	// Kept says the clip stays in the collection: it is not offered a
-	// place on a map again.
+	// ToPlace says the clip waits for a place on a map: the user asked
+	// that it be put on one later. What is collected is at home in the
+	// collection, and waits for nothing unless this is set.
+	ToPlace bool `json:"toPlace,omitempty"`
+	// Kept was the other way round, before 0.88: every clip of the week
+	// waited for a place unless kept from it. Read still, and of no use.
 	Kept bool `json:"kept,omitempty"`
 	// Folder is the folder of maps the clip was kept in, while the maps'
 	// list showed documents beside the maps (before 0.54): kept as it was

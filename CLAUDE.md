@@ -105,7 +105,14 @@ by AI, and an AI assistant.
     page's width, what waits for a place as a few lines (`waitingBand`,
     `waitingLine`: the user found the cards there crowding the tasks, and
     chose lines; in a wide window it is a column beside the tasks,
-    `waitingRail`, for half the window stood empty); its cards are the left column's list 等着归位
+    `waitingRail`, for half the window stood empty). What waits is the
+    inbox's tasks and the clips the user asked to place later
+    (`Clip.ToPlace`, 稍后归位 in a clip's details, 标为待归位 in its menu):
+    a clip is at home in 收集 and waits for nothing by itself. Before
+    0.88 every clip of the week waited, and the page read as a debt;
+    the user chose this: projects are kept in maps, what is collected
+    in 收集, and a link joins the two where one serves the other, not
+    everything collected flowing into a map at last. Its cards are the left column's list 等着归位
     (`homeWaiting`), each card saying a place by its words alone, with
     no AI asked (`nearPlace`, which must share a word with it,
     `sharesWord`); AI 归位 for better; what waits is cards that stand apart, white

@@ -146,10 +146,11 @@ type waitingItem struct {
 	clip *library.Clip
 }
 
-// waiting are the things written down lately: the open tasks of the
-// inbox, which wait for a map, and the notes and clips of the last week
-// that no topic links to. These leave by themselves: nothing has to be
-// done with them.
+// waiting is what waits for a place: the open tasks of the inbox, which
+// wait for a map, and the clips the user asked to place later
+// (Clip.ToPlace) that no topic links to yet. A clip waits for nothing by
+// itself: it is at home in 收集, found by its tags and the search. Before
+// 0.88 every clip of the week waited, and the page read as a debt.
 func (a *app) waiting() []waitingItem {
 	var out []waitingItem
 	for _, it := range a.taskItems() {
@@ -157,9 +158,8 @@ func (a *app) waiting() []waitingItem {
 			out = append(out, waitingItem{task: &it})
 		}
 	}
-	since := a.now().AddDate(0, 0, -7)
 	for _, cl := range a.lib.Clips {
-		if !cl.Kept && cl.Created.After(since) && len(a.clipBacklinks(cl.ID)) == 0 {
+		if cl.ToPlace && len(a.clipBacklinks(cl.ID)) == 0 {
 			out = append(out, waitingItem{clip: cl})
 		}
 	}
@@ -193,7 +193,7 @@ func (a *app) homeWaiting(c *ui.Context) {
 	items := slices.DeleteFunc(a.waiting(), func(w waitingItem) bool { return w.task != nil && listed[w.task.key()] })
 	suggested := len(a.tasks.places) + len(a.clipPlaces)
 	tray(c, "home-waiting").Children(func() {
-		trayHead(c, "head:刚记下的", "刚记下的", "收件箱的任务，和这几天记的", func() {
+		trayHead(c, "head:刚记下的", "刚记下的", "收件箱的任务，和标了待归位的资料", func() {
 			switch {
 			case a.tasks.placing || a.clipPlacing: // said under the heading, by its steps
 			case suggested > 0:
@@ -240,7 +240,7 @@ func (a *app) homeWaiting(c *ui.Context) {
 		}
 		a.keptLastRow(c)
 		if len(items) == 0 {
-			emptyNote(c, "这几天记下的会出现在这里。")
+			emptyNote(c, "收件箱里的任务，和你标了「待归位」的资料，会出现在这里。")
 			return
 		}
 		// Each thing a card of its own on the white page, as 收集's wall.
@@ -278,12 +278,12 @@ func (a *app) askAllPlaces() {
 func (a *app) keptLastRow(c *ui.Context) {
 	t := c.Theme()
 	cl := a.lib.Find(a.keptLast)
-	if cl == nil || !cl.Kept {
+	if cl == nil || cl.ToPlace {
 		return
 	}
 	ui.Row(c.Key("kept-last")).MinHeight(36).Margin(0, 0, 8).Padding(4, 12, 4, 20).Gap(8).Radius(radiusRow).AlignItems(ui.Center).FillWidth().
 		Background(blockFill(t)).Transition(rowMotion).Children(func() {
-		ui.Text(c, "已留在收集，不再出现在这里：").FontSize(textSmall).TextColor(t.TextMuted).Shrink(0)
+		ui.Text(c, "不用归位了，它还在收集里：").FontSize(textSmall).TextColor(t.TextMuted).Shrink(0)
 		ui.Text(c, refName(cl)).FontSize(textSmall).SingleLine().Grow(1).Shrink(1).MinWidth(0)
 		if ghostButton(c, "撤回", "放回「等着归位」").Clicked() {
 			a.later(func() { a.unkeep(cl) })
@@ -329,7 +329,7 @@ func (a *app) todayRoom(c *ui.Context) float32 {
 // AI's key and the way to the list where each is placed.
 func (a *app) waitingHead(c *ui.Context, n int) {
 	all := func() { a.tasks.view, a.tasks.onMap = tasksWaiting, "" }
-	trayHead(c, "head:等着归位", "等着归位", fmt.Sprintf("%d 条，这几天记下的", n), func() {
+	trayHead(c, "head:等着归位", "等着归位", fmt.Sprintf("%d 条", n), func() {
 		// The AI's key is here too: it asks, and shows the list, where
 		// each of its places is agreed to on its card.
 		switch {
@@ -370,7 +370,7 @@ func (a *app) waitingMore(c *ui.Context, more int) {
 func (a *app) waitingBand(c *ui.Context, shown []taskItem) {
 	t := c.Theme()
 	items := a.waitingOnToday(shown)
-	if cl := a.lib.Find(a.keptLast); len(items) == 0 && (cl == nil || !cl.Kept) {
+	if cl := a.lib.Find(a.keptLast); len(items) == 0 && (cl == nil || cl.ToPlace) {
 		return
 	}
 	ui.Column(c.Key("waiting-band")).FillWidth().Padding(14, 0, 28).BorderWidth(1, 0, 0, 0).BorderColor(hairline(t)).
@@ -406,7 +406,7 @@ func (a *app) waitingRail(c *ui.Context, shown []taskItem) {
 				a.waitingHead(c, len(items))
 				a.keptLastRow(c)
 				if len(items) == 0 {
-					emptyNote(c, "这几天记下的会出现在这里。")
+					emptyNote(c, "收件箱里的任务，和你标了「待归位」的资料，会出现在这里。")
 				}
 				for i, w := range items {
 					if i == railCount {
@@ -642,9 +642,9 @@ func (a *app) waitingMenu(m *ui.Menu, w waitingItem, has bool) {
 	if m.Item(place).Chosen() {
 		a.later(func() { a.placeWaiting(w) })
 	}
-	if m.Item("留在收集，不用归位").Chosen() {
+	if m.Item("不用归位了，留在收集").Chosen() {
 		a.later(func() {
-			cl.Kept = true
+			cl.ToPlace = false
 			a.saveClip(cl)
 			a.keptLast = cl.ID
 		})
@@ -684,7 +684,7 @@ func (a *app) openWaiting(w waitingItem) {
 
 // unkeep has a clip left in 收集 wait for a place again.
 func (a *app) unkeep(cl *library.Clip) {
-	cl.Kept = false
+	cl.ToPlace = true
 	a.saveClip(cl)
 	if a.keptLast == cl.ID {
 		a.keptLast = ""
@@ -768,4 +768,18 @@ func sharesWord(text, name string) bool {
 		}
 	}
 	return false
+}
+
+// markToPlace has a clip wait for a place on a map, and says so with the
+// way back.
+func (a *app) markToPlace(cl *library.Clip) {
+	cl.ToPlace = true
+	a.saveClip(cl)
+	id := cl.ID
+	a.tellUndo("已放进「等着归位」", func() {
+		if cl := a.lib.Find(id); cl != nil {
+			cl.ToPlace = false
+			a.saveClip(cl)
+		}
+	})
 }

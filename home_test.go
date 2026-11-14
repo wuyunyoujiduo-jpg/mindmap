@@ -20,6 +20,7 @@ func TestHome(t *testing.T) {
 		}
 		clip.Created = testNow.Add(-time.Duration(i) * time.Hour)
 	}
+	toPlaceAll(a)
 	a.showProjects()
 	tt.Frame()
 	if err := tt.Click("今天"); err != nil {
@@ -80,14 +81,18 @@ func TestHome(t *testing.T) {
 		t.Fatalf("no note: %d", len(a.lib.Clips))
 	}
 	snapshot(t, tt, "home-filled")
-	// What was written lately is there: the inbox's task, which waits for
-	// a map, and the notes, which need nothing; older ones leave by
-	// themselves, as those put on a map.
-	// Left in 收集, it waits no more; and comes back when that is undone.
+	// A note just written waits for nothing: it is at home in 收集.
+	if a.lib.Clips[0].ToPlace {
+		t.Fatal("a note just written waits for a place")
+	}
+	// Asked to be placed, it waits with the inbox's task; let off, it
+	// waits no more, and comes back when that is undone.
+	toPlaceAll(a)
+	tt.Frame()
 	if err := tt.RightClick("记下的 资料 0"); err != nil {
 		t.Fatal(err)
 	}
-	if err := tt.ChooseMenuItem("留在收集，不用归位"); err != nil {
+	if err := tt.ChooseMenuItem("不用归位了，留在收集"); err != nil {
 		t.Fatalf("%v: %q", err, tt.Menu())
 	}
 	tt.Frame()
@@ -110,10 +115,16 @@ func TestHome(t *testing.T) {
 	if !tt.HasText("10月10日") || !tt.HasText(weekdays[testNow.Weekday()]) {
 		t.Fatalf("the day's line: %q", tt.Texts())
 	}
-	a.lib.Clips[0].Created = testNow.AddDate(0, 0, -8)
-	if n := len(a.waiting()); n != 5 {
-		t.Fatalf("an old note stays: %d", n)
+	// However old, what was asked to be placed waits; what was not, never did.
+	a.lib.Clips[0].Created = testNow.AddDate(0, 0, -30)
+	if n := len(a.waiting()); n != 6 {
+		t.Fatalf("an old clip asked to be placed left by itself: %d", n)
 	}
+	a.lib.Clips[0].ToPlace = false
+	if n := len(a.waiting()); n != 5 {
+		t.Fatalf("a clip not to place waits: %d", n)
+	}
+	a.lib.Clips[0].ToPlace = true
 	a.lib.Clips[0].Created = testNow
 	// What can be done with a card is under the key at its corner, on the
 	// list of what waits.
@@ -287,6 +298,7 @@ func TestHomeTicksAndReads(t *testing.T) {
 	tt.Frame()
 	a.homeDraft += "**要紧**"
 	a.saveHomeLine()
+	toPlaceAll(a)
 	a.tasks.view = tasksWaiting // where a note shows whole, with what it refers to
 	tt.Frame()
 	kept := a.clipsNamed("接着上次", 1)
@@ -383,6 +395,7 @@ func TestWaitingSaysItsPlace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	toPlaceAll(a)
 	a.showLibrary()
 	a.libHome = true
 	tt.Frame()
@@ -417,6 +430,7 @@ func TestThoughtAndTask(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	toPlaceAll(a)
 	a.openTasks()
 	a.tasks.view = tasksWaiting
 	tt.Frame()
@@ -533,6 +547,7 @@ func TestTodayOnAWideWindow(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	toPlaceAll(a)
 	a.openTasks()
 	tt.SetSize(2000, 1000)
 	tt.Frame()
@@ -550,5 +565,13 @@ func TestTodayOnAWideWindow(t *testing.T) {
 	list, _ = tt.Find("任务 写周报")
 	if band.Y < list.Y+list.H {
 		t.Fatalf("narrow, what waits is not under the tasks: %v %v", band, list)
+	}
+}
+
+// toPlaceAll has every clip wait for a place, as one the user asked to
+// place later does: no clip waits by itself.
+func toPlaceAll(a *app) {
+	for _, cl := range a.lib.Clips {
+		cl.ToPlace = true
 	}
 }

@@ -615,3 +615,32 @@ func TestKindAndTagTogether(t *testing.T) {
 		t.Fatalf("not cleared: kind %d, tag %q", a.libKind, a.libTag)
 	}
 }
+
+// What is collected waits for nothing; asked to be placed later, it waits
+// on 今天 until it is on a map or let off.
+func TestPlacingIsAsked(t *testing.T) {
+	a, tt := newTestApp(t)
+	cl := &library.Clip{Kind: library.KindText, Text: "换一家云服务商"}
+	if err := a.lib.Add(cl, a.now()); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(a.waiting()); n != 0 {
+		t.Fatalf("%d wait unasked", n)
+	}
+	a.openList(kindAll, "")
+	a.libSel = cl.ID
+	tt.Frame()
+	if err := tt.Click("稍后归位"); err != nil {
+		t.Fatalf("%v: %q", err, tt.Texts())
+	}
+	tt.Frame()
+	tt.Frame()
+	if w := a.waiting(); len(w) != 1 || w[0].clip.ID != cl.ID || a.noticeUndo == nil || !tt.HasText("待归位") {
+		t.Fatalf("%d wait", len(w))
+	}
+	snapshot(t, tt, "clip-to-place")
+	a.noticeUndo()
+	if n := len(a.waiting()); n != 0 {
+		t.Fatalf("%d wait after taking it back", n)
+	}
+}

@@ -259,6 +259,16 @@ func (a *app) clipPlacesSection(c *ui.Context, clip *library.Clip) {
 		a.openPalette(paletteAttach)
 	}
 	sectionCard(c, iconMap, tileBlue, title, func() {
+		// Later, for one not placed yet: it waits on 今天 till it is.
+		switch {
+		case len(back) > 0:
+		case clip.ToPlace:
+			ui.Text(c, "待归位").FontSize(textCaption).TextColor(t.TextMuted)
+		default:
+			if ghostButton(c, "稍后归位", "先放进「等着归位」，之后再决定挂到哪").Clicked() {
+				a.later(func() { a.markToPlace(clip) })
+			}
+		}
 		if softButton(c, "放到导图…", "挂到某张导图的某个节点上").Height(28).Clicked() {
 			a.later(place)
 		}

@@ -599,8 +599,18 @@ func (a *app) clipMenu(m *ui.Menu, clip *library.Clip) {
 	if a.doc != nil && m.Item("加到当前导图").Chosen() {
 		a.clipIntoMap(clip)
 	}
-	if clip.Kept && m.Item("放回「刚记下的」").Chosen() {
-		a.later(func() { a.unkeep(clip) })
+	// To be put on a map later: it waits on 今天 till then. Not asked of
+	// every clip: one is at home here.
+	switch {
+	case clip.Kind == kindMap:
+	case clip.ToPlace:
+		if m.Item("不用归位了").Chosen() {
+			a.later(func() { clip.ToPlace = false; a.saveClip(clip) })
+		}
+	case len(a.clipBacklinks(clip.ID)) == 0:
+		if m.Item("标为待归位").Chosen() {
+			a.later(func() { a.markToPlace(clip) })
+		}
 	}
 	if m.Item("转成任务").Chosen() {
 		a.later(func() { a.clipToTask(clip) })
