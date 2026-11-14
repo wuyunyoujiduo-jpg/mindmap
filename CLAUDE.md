@@ -143,8 +143,10 @@ by AI, and an AI assistant.
     waits: that is of no one project. The projects there are the maps
     with a task to do, those starred first, then by when they were
     opened last, six and the rest under 全部项目 (`sideMaps`); never the
-    inbox, a list above; each with a ring of how far it is and, under
-    the pointer, the key to its map (`sideRowTrail`). Their counts and
+    inbox, a list above; each with a ring of how far it is and the key to
+    its map at its end, always there (`sideRowTrail`; under the pointer
+    alone at first, the user did not find it: what acts is not hidden
+    till pointed at, and a phone has no pointer). Their counts and
     the lists' are one count (`countsAsTask`); with a project chosen no
     list shows as chosen; what is late has a list of its own while
     there is any (`tasksLate`).

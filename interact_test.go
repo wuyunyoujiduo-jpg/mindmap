@@ -723,13 +723,7 @@ func TestTodaySideProjects(t *testing.T) {
 		t.Fatalf("late: %q", tt.Texts())
 	}
 	// A project's row opens its map by the key under the pointer.
-	row, ok := tt.Find("只看 项目0")
-	if !ok {
-		t.Fatal("no row")
-	}
-	tt.Move(row.X+row.W/2, row.Y+row.H/2)
-	tt.Frame()
-	tt.Frame()
+	// The key to a project's map is on its row, pointed at or not.
 	if err := tt.Click("打开导图 项目0"); err != nil {
 		t.Fatalf("%v: %q", err, tt.Texts())
 	}

@@ -194,20 +194,32 @@ func (a *app) todaySide(c *ui.Context) {
 				row := sideRowTrail(c, "map:"+path, mapName(path), "", a.tasks.onMap == path, func(bool) {
 					ui.Box(c).Size(sideIconSize, 14).Center().Shrink(0).PassThrough().Children(func() { mapDot(c, col, 8) })
 				}, func(hot bool) {
-					// Under the pointer, the way to its map; else how far it
-					// is, as a ring, and what is left to do.
-					if hot {
-						toMap = iconButton(c, iconForward, "打开导图 "+mapName(path), "打开这张导图", 22, true).Clicked()
-						return
-					}
+					// How far it is, as a ring, what is left to do, and the key
+					// to its map: always there, faint till the row is pointed
+					// at. It showed only under the pointer at first, and the
+					// user did not find it (and a phone has no pointer).
+					th := c.Theme()
 					ui.Box(c).Size(14, 14).Shrink(0).PassThrough().Draw(func(p *ui.Painter, r ui.Rect) {
 						cx, cy := r.X+r.W/2, r.Y+r.H/2
-						p.StrokePath(new(ui.Path).Circle(cx, cy, 5), 2, c.Theme().Text.Alpha(0.1))
+						p.StrokePath(new(ui.Path).Circle(cx, cy, 5), 2, th.Text.Alpha(0.1))
 						if done > 0 {
 							p.StrokePath(new(ui.Path).Circle(cx, cy, 5).Trim(0, done).Cap(ui.RoundCap), 2, col)
 						}
 					})
-					ui.Text(c, fmt.Sprint(n)).FontSize(textCaption).TextColor(faint(c.Theme())).FontFeatures("tnum").MinWidth(14).TextAlign(ui.End).PassThrough()
+					ui.Text(c, fmt.Sprint(n)).FontSize(textCaption).TextColor(faint(th)).FontFeatures("tnum").MinWidth(14).TextAlign(ui.End).PassThrough()
+					key := ui.Box(c.Key("to-map")).Size(22, 22).Radius(radiusSmall).Center().Shrink(0).Cursor(ui.CursorPointer).
+						Label("打开导图 " + mapName(path)).Tooltip("打开这张导图").Background(th.Text.Alpha(0)).Transition(easeLook)
+					ink := faint(th)
+					switch {
+					case key.Hovered():
+						key.Background(th.Accent.Alpha(0.14))
+						ink = th.Accent
+					case hot:
+						ink = ink2(th)
+					}
+					press(key, 0.9)
+					key.Children(func() { glyph(c, iconForward, 11, ink) })
+					toMap = key.Clicked()
 				})
 				row.Label("只看 " + mapName(path))
 				// A task dropped on a project goes to it, under its center.
