@@ -184,7 +184,13 @@ func (a *app) removeImage(n *model.Node) {
 // thumbnail shows a node's picture at w×h; a click shows it large.
 func (a *app) thumbnail(c *ui.Context, n *model.Node, w, h float32) ui.Element {
 	t := c.Theme()
-	b := a.bitmap(n.Image)
+	// Read away from the window's work, small (filePicture): a map of
+	// many pictures, each decoded whole as it was first drawn, held the
+	// window still when it was opened. Its room is known from the node.
+	b, loading := a.filePicture(a.imagePath(n.Image), true)
+	if b == nil && loading {
+		return ui.Box(c.Key("image")).Size(w, h).Radius(6).Background(t.Text.Alpha(0.06))
+	}
 	if b == nil {
 		return ui.Box(c.Key("image")).Size(w, h).Radius(6).Background(t.Border).Center().Children(func() {
 			ui.Text(c, "图片缺失").FontSize(min(12, h/3)).TextColor(t.TextMuted)
@@ -234,7 +240,12 @@ func (a *app) lightboxView(c *ui.Context) {
 		a.lightbox = ""
 	}
 	overlay.Children(func() {
-		if b := a.bitmap(shown); b != nil {
+		// Whole, once read; the small one of its node meanwhile.
+		b, _ := a.filePicture(a.imagePath(shown), false)
+		if b == nil {
+			b, _ = a.filePicture(a.imagePath(shown), true)
+		}
+		if b != nil {
 			img := shown
 			pic := ui.Image(c.Key("large"), b).Size(iw*k, ih*k).Fit(ui.Contain).Radius(8).Label("大图：" + n.Title)
 			pic.ContextMenu(func(m *ui.Menu) { a.imageMenu(m, img) })
