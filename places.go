@@ -60,7 +60,7 @@ func (a *app) topBar(c *ui.Context) {
 		if a.cfg.HideTree {
 			side = "显示侧栏"
 		}
-		if kubaiKey(c, "sidebar", side, side, false).Clicked() {
+		if kubaiKey(c, "sidebar", side, side, false, true).Clicked() {
 			a.cfg.HideTree = !a.cfg.HideTree
 			a.cfg.save()
 		}
@@ -98,17 +98,17 @@ func (a *app) topBar(c *ui.Context) {
 		})
 		a.oneBar(c)
 		// The AI's panel, from every page.
-		if kubaiKey(c, "sparkles", "AI 助手", "问 AI：问问导图和资料里的内容", a.aiOpen).Clicked() {
+		if kubaiKey(c, "sparkles", "AI 助手", "问 AI：问问导图和资料里的内容", a.aiOpen, false).Clicked() {
 			a.aiOpen = !a.aiOpen
 		}
 		// A screenshot is taken from any page, of any app: its key is here.
-		if kubaiKey(c, "scan", "截图", "截图：框选屏幕、标注后存到收集（"+keyLabel(a.shotKey())+"）", false).Clicked() {
+		if kubaiKey(c, "scan", "截图", "截图：框选屏幕、标注后存到收集（"+keyLabel(a.shotKey())+"）", false, true).Clicked() {
 			a.later(a.screenshot)
 		}
-		if kubaiKey(c, "search", "搜索全部", "搜索导图、主题、灵感和资料，#标签 按标签找", false).Clicked() {
+		if kubaiKey(c, "search", "搜索全部", "搜索导图、主题、灵感和资料，#标签 按标签找", false, true).Clicked() {
 			a.later(func() { a.openPalette(paletteAll) })
 		}
-		if kubaiKey(c, "settings", "设置", "设置", false).Clicked() {
+		if kubaiKey(c, "settings", "设置", "设置", false, true).Clicked() {
 			a.later(a.openSettings)
 		}
 	})
@@ -168,7 +168,7 @@ func (a *app) projectsView(c *ui.Context) {
 
 	card := func(f model.FileInfo) {
 		path, col := f.Path, a.mapColor(f.Path)
-		el := raise(ui.Column(c.Key("map:"+path)).Padding(8, 8, 12).Gap(10).Radius(radiusCard).MinWidth(0).Cursor(ui.CursorPointer).
+		el := wallCard(ui.Column(c.Key("map:"+path)).Padding(8, 8, 12).Gap(10).Radius(radiusCard).MinWidth(0).Cursor(ui.CursorPointer).
 			Label(f.Name).Drag(fileDrag{Path: path}), t)
 		// Another map dropped on a map goes under its center.
 		if d, ok := ui.Drop[fileDrag](el); ok && d.Path != path {
@@ -176,8 +176,6 @@ func (a *app) projectsView(c *ui.Context) {
 		}
 		if _, over := ui.DragOver[fileDrag](el); over {
 			chosenCard(el, t)
-		} else {
-			hoverLift(el, t)
 		}
 		if el.Clicked() && a.renaming != path { // not on a press, which may start dragging it
 			a.later(func() { _ = a.open(path) })
@@ -197,7 +195,7 @@ func (a *app) projectsView(c *ui.Context) {
 			topics = countTopics(sheet.Root) - 1
 		}
 		el.Children(func() {
-			ui.Box(c.Key("face")).Height(104).FillWidth().Radius(radiusCard - 4).Background(cardColor(t)).PassThrough().
+			ui.Box(c.Key("face")).Height(116).FillWidth().Radius(radiusCard - 4).Background(t.Text.Alpha(0.028)).PassThrough().
 				Draw(func(pt *ui.Painter, r ui.Rect) {
 					pt.Clip(r, radiusCard-4, func() { drawMapFace(pt, r, sheet, col) })
 				})
@@ -471,19 +469,20 @@ func drawMapFace(p *ui.Painter, r ui.Rect, doc *model.Document, col ui.Color) {
 	measure := func(n *model.Node, d int) (float32, float32) {
 		switch d {
 		case 0:
-			return 52, 18
+			return 46, 20
 		case 1:
-			return min(max(float32(len([]rune(n.Title)))*5.5+16, 26), 62), 12
+			return min(max(float32(len([]rune(n.Title)))*4.5+14, 24), 50), 14
 		}
-		return 16, 4
+		return 16, 6
 	}
 	o := layoutOptions(doc.Structure)
-	o.Margin, o.GapX, o.GapY = 0, 26, 7
+	o.Margin, o.GapX, o.GapY = 0, 20, 7
 	lr := layout.Compute(small, measure, o)
 	if lr.Width <= 0 || lr.Height <= 0 {
 		return
 	}
-	z := min((r.W-28)/lr.Width, (r.H-22)/lr.Height, 1.25)
+	// As large as the face takes: a map of three topics is not a thin line.
+	z := min((r.W-28)/lr.Width, (r.H-24)/lr.Height, 1.7)
 	ox := r.X + (r.W-lr.Width*z)/2
 	oy := r.Y + (r.H-lr.Height*z)/2
 	tint := func(id string) ui.Color { return ui.Hex(mapPalette[(colorIndex(col)+branch[id]+1)%len(mapPalette)]) }
@@ -554,10 +553,11 @@ func (a *app) projectsRail(c *ui.Context) {
 		Background(t.Text.Alpha(0.018)).Label("项目概况").Children(func() {
 		ui.Scroll(c.Key("rail-scroll")).Grow(1).Basis(0).MinHeight(0).Children(func() {
 			ui.Column(c).Padding(18, 20, 32).Gap(6).FillWidth().Children(func() {
-				// Four figures, a tile each: its icon, the figure, what it counts.
-				ui.Grid(c.Key("tiles")).Columns(2).Gap(8).FillWidth().Children(func() {
+				// Four figures, with no ground of their own: its icon, the
+				// figure, what it counts; a line under them all.
+				ui.Grid(c.Key("tiles")).Columns(2).Gap(4).Padding(0, 0, 10).FillWidth().BorderWidth(0, 0, 1, 0).BorderColor(hairline(t)).Children(func() {
 					tile := func(icon, name string, n int, col ui.Color) {
-						whiteCard(ui.Row(c.Key(name)).Padding(12, 12).Gap(10).Radius(radiusCard).AlignItems(ui.Center).MinWidth(0).Label(fmt.Sprintf("%d %s", n, name)), t).Children(func() {
+						ui.Row(c.Key(name)).Padding(8, 4).Gap(10).AlignItems(ui.Center).MinWidth(0).Label(fmt.Sprintf("%d %s", n, name)).Children(func() {
 							kubaiIcon(c, icon, 30, true)
 							ui.Column(c).Gap(1).MinWidth(0).Children(func() {
 								ui.Text(c, fmt.Sprint(n)).FontSize(textHeadline).FontWeight(700).LetterSpacing(-0.4).FontFeatures("tnum").TextColor(col)

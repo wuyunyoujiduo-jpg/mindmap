@@ -659,7 +659,7 @@ func (a *app) taskDetail(c *ui.Context, it taskItem) {
 		})
 		ui.Scroll(c.Key("task-detail-scroll")).Grow(1).Children(func() {
 			ui.Column(c).Padding(6, 20, 24).Gap(16).FillWidth().Children(func() {
-				ui.Column(c.Key("props")).Gap(8).FillWidth().Children(func() {
+				ui.Column(c.Key("props")).Gap(12).FillWidth().Children(func() {
 					propRow(c, "状态", func() {
 						st := slices.Index(model.Statuses, task.Status)
 						if n := segmented(c, "task-status", "状态", []string{"想法", "待做", "进行中", "完成"}, st); n != st {
@@ -859,6 +859,7 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 		}
 	case tasksToday:
 		over, todayG := add("已逾期", true, at(day)), add("今天", false, at(day))
+		var next []taskItem
 		for _, it := range items {
 			d := it.date()
 			switch {
@@ -871,7 +872,14 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 				over.items = append(over.items, it)
 			case sameDay(*d, day):
 				todayG.items = append(todayG.items, it)
+			case d.Before(day.AddDate(0, 0, 7)):
+				next = append(next, it)
 			}
+		}
+		// What comes in the days after, under today's: the page is not
+		// left half empty, and tomorrow is seen coming.
+		if len(next) > 0 {
+			add("接下来 7 天", false, nil).items = next
 		}
 	case tasksWeekAhead:
 		over := add("已逾期", true, at(day))
@@ -1247,8 +1255,13 @@ func taskPills(c *ui.Context, it taskItem) {
 	if task == nil || it.done() {
 		return
 	}
+	// A priority has its color; a state is gray with a dot of its own, so
+	// that a row has one color on it, not three.
 	pill := func(key, text string, col ui.Color, dot bool) {
 		bg, ink := tinted(t, col)
+		if dot {
+			bg, ink = t.Text.Alpha(0.06), ink2(t)
+		}
 		ui.Row(c.Key("pill:"+key)).Height(19).Padding(0, 7).Gap(4).Radius(6).AlignItems(ui.Center).Shrink(0).Background(bg).PassThrough().Children(func() {
 			if dot {
 				ui.Box(c).Size(5, 5).Radius(3).Background(col)
@@ -1748,9 +1761,23 @@ func (a *app) repeatProp(c *ui.Context, it taskItem) {
 		})
 		return b
 	}
+	// One key that says how it repeats and opens the ways to choose: six
+	// chips in two rows were the heaviest thing of the pane.
+	kinds := []string{"不重复", "每天", "工作日", "每周", "每月", "自定义"}
+	chosen := -1
 	propRow(c, "重复", func() {
-		for i, name := range []string{"不重复", "每天", "工作日", "每周", "每月", "自定义"} {
-			if !chip("repeat:"+name, name, "重复 "+name, i == kind).Clicked() {
+		dropButton(c, "repeat", kinds[kind], "重复方式", "这个任务怎样重复").Menu(func(m *ui.Menu) {
+			for i, name := range kinds {
+				if i == 5 {
+					m.Separator()
+				}
+				if m.Item(name).Checked(i == kind).Chosen() {
+					chosen = i
+				}
+			}
+		})
+		for i := range kinds {
+			if i != chosen {
 				continue
 			}
 			a.tasks.repeatOwn = ""

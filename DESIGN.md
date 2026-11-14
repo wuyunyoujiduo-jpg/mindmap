@@ -73,7 +73,10 @@ are 14 to 16).
   accent and in the pose the set gives each on hover, one fading into the
   other in `motion.fast`. Bitmaps drawn by `tools/kubai/gen.mjs` from
   `tools/kubai/names.txt`: add a name there and run it for a new one.
-  Never draw a look-alike by hand.
+  Never draw a look-alike by hand. In the top row only the AI's spark
+  has its color at rest; the other keys are the same icons in gray
+  (`kubaiGray`) till the pointer is on them: four alike in the accent
+  had no first among them.
 - **Marks on keys and tools** (＋, ×, ⋯, bold, a chevron): thin drawn
   lines, one family (`icons.go`), in the ink. They are marks, not places,
   as on macOS.
@@ -116,6 +119,12 @@ Every list and page has all of these, or does not need one:
 - **Its head** (`pageHead`): the name at 26/700, -0.7; a word beside it in
   `ink2`; under them the page in figures (`figures`), the figure at 700
   in the ink, what it counts muted. 今天, 项目 and 收集 are headed so.
+
+## 项目's cards
+
+A map's card is a card apart as the wall's (`wallCard`), its face a
+faint well at its top (`drawMapFace`), the map drawn as large as the
+well takes (to 1.7): a map of three topics is not a thin line.
 
 ## 收集's wall
 
@@ -175,6 +184,12 @@ Built to the draft https://claude.ai/artifact/5Nw4Mn4q4ozd9rpUNGh8AP.
   right. A priority is a small pill in its color, a state that is not
   plain 待做 a pill with a dot (`taskPills`). The list's foot says how
   many it holds, faint.
+- **Pills on a row**: a priority has its color; a state is gray with a
+  dot of its color: one color on a row, not three.
+- **Under today's**: the tasks of the six days after, as 接下来 7 天, so
+  that the page is not half empty and tomorrow is seen coming.
+- **A task's details**: how it repeats is one key that opens the ways
+  (`dropButton`), not six chips; 12 between its rows.
 - **A toast** (`toastLook`): a white card at the window's foot, led by a
   small tile, a green tick for what was done, a red cross for what failed;
   its key in the accent.
@@ -185,7 +200,7 @@ Built to the draft https://claude.ai/artifact/5Nw4Mn4q4ozd9rpUNGh8AP.
   the accent, on no block until pointed at.
 
 项目 in a wide window (`projRailRoom`) has a column at its right of what
-goes on in the projects (`projectsRail`): four figures as tiles, those
+goes on in the projects (`projectsRail`): four figures with no ground of their own and a line under them, those
 worked on lately with how far each is, the tasks that come next. 收集's
 wall has as many columns as the room has (`clipWall`), a card never
 stretched. Both after the dashboards the user showed (stat tiles, recent

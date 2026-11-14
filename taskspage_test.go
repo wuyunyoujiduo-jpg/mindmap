@@ -68,7 +68,7 @@ func TestTasksPage(t *testing.T) {
 
 	a.openTasks()
 	tt.Frame()
-	if !a.tasks.open || !tt.HasText("已逾期") || !tt.HasText("登录") || !tt.HasText("搜索") || tt.HasText("准备发布说明") {
+	if !a.tasks.open || !tt.HasText("已逾期") || !tt.HasText("登录") || !tt.HasText("搜索") || !tt.HasText("接下来 7 天") || !tt.HasText("准备发布说明") {
 		t.Fatalf("today: %q", tt.Texts())
 	}
 	if err := tt.Click("添加任务"); err != nil {
@@ -295,7 +295,7 @@ func TestTaskDetail(t *testing.T) {
 	if search.Children[0].Task.Status != model.StatusDone || !tt.HasText("子任务 1/1") {
 		t.Fatalf("subtask %v", search.Children[0].Task.Status)
 	}
-	if err := tt.Click("高"); err != nil {
+	if err := tt.Click("优先级 高"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
@@ -431,14 +431,17 @@ func TestTaskRepeats(t *testing.T) {
 	a.showTask(*it)
 	tt.Frame()
 	tt.Frame()
-	for _, want := range []string{"重复", "每周", "工作日", "自定义"} {
+	for _, want := range []string{"重复", "每周"} {
 		if !tt.HasText(want) {
 			t.Fatalf("no %q in the details: %q", want, tt.Texts())
 		}
 	}
 	snapshot(t, tt, "task-repeat")
 	// Made up: every 2 weeks, on the days chosen.
-	if err := tt.Click("重复 自定义"); err != nil {
+	if err := tt.Click("重复方式"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.ChooseMenuItem("自定义"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()

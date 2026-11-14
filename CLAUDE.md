@@ -118,7 +118,8 @@ by AI, and an AI assistant.
     by when (`tasksOfMap`), with the way to its map, and nothing that
     waits: that is of no one project.
   - 项目 (`projectsView`): the maps as cards, each with the map drawn
-    small as its face (`drawMapFace`) and a ring for its tasks; with the
+    small as its face (`drawMapFace`) and a ring for its tasks, white
+    with a hairline as every card of a kind (`wallCard`); with the
     left column put away, the folders are a row of pills (`projFolder`).
     A map opened has its own bar under the top row; on the canvas the
     center is in the ink, the main topics on a pastel of their branch's

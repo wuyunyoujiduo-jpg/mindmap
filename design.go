@@ -362,9 +362,14 @@ func chosenCard(el ui.Element, t *ui.Theme) ui.Element {
 // wallCard is a card of 收集's wall, which stands by itself on the page:
 // white, told by a hairline inside its edge, darker under the pointer.
 func wallCard(el ui.Element, t *ui.Theme) ui.Element {
-	el.Background(cardColor(t)).InsetShadow(0, 0, 0, 1, t.Text.Alpha(0.1))
+	// On the dark leaf a white line reads louder than a black one on white.
+	rest, hot := float32(0.1), float32(0.24)
+	if t.Dark {
+		rest, hot = 0.065, 0.16
+	}
+	el.Background(cardColor(t)).InsetShadow(0, 0, 0, 1, t.Text.Alpha(rest))
 	if el.Hovered() {
-		el.InsetShadow(0, 0, 0, 1, t.Text.Alpha(0.24))
+		el.InsetShadow(0, 0, 0, 1, t.Text.Alpha(hot))
 	}
 	return press(el.Transition(easeLook), 0.992)
 }
