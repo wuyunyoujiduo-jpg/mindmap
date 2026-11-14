@@ -571,3 +571,47 @@ func TestAppearanceIsChosen(t *testing.T) {
 		t.Fatalf("appearance %q, platform %q", a.cfg.Appearance, plat.look)
 	}
 }
+
+// A kind and a tag of the left column narrow together, the page's head
+// says both, and with nothing left the page names them and clears them.
+func TestKindAndTagTogether(t *testing.T) {
+	a, tt := newTestApp(t)
+	for i, cl := range []*library.Clip{
+		{Kind: library.KindText, Text: "一条灵感 #待识别", Tags: []string{"待识别"}},
+		{Kind: library.KindLink, URL: "https://example.com/a", Title: "一个链接", Tags: []string{"别的"}},
+	} {
+		if err := a.lib.Add(cl, a.now().Add(time.Duration(i)*time.Minute)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a.openList(kindAll, "")
+	tt.Frame()
+	if !tt.HasText("灵感和资料") {
+		t.Fatalf("head: %q", tt.Texts())
+	}
+	if err := tt.Click("#待识别 1"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if err := tt.Click("链接"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Frame()
+	if a.libKind != kindLinks || a.libTag != "待识别" {
+		t.Fatalf("kind %d, tag %q: choosing a kind dropped the tag", a.libKind, a.libTag)
+	}
+	for _, want := range []string{"链接 · #待识别", "没有符合「链接 · #待识别」的资料", "0 条符合"} {
+		if !tt.HasText(want) {
+			t.Fatalf("no %q: %q", want, tt.Texts())
+		}
+	}
+	snapshot(t, tt, "library-filters")
+	if err := tt.Click("清除筛选"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.libKind != kindAll || a.libTag != "" || len(a.libHits()) != 2 {
+		t.Fatalf("not cleared: kind %d, tag %q", a.libKind, a.libTag)
+	}
+}

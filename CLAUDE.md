@@ -57,7 +57,11 @@ by AI, and an AI assistant.
     waits for a place, and the maps to see the tasks of alone
     (`todaySide`); 项目's directory (`tree.go`, `mapTree`: folders that
     open and close and their maps, so that going from a map to another is
-    one click); 收集's kinds, ways to look back and every tag (`libSide`).
+    one click); 收集's kinds, ways to look back and every tag (`libSide`): a kind,
+    a tag and 星标, 未整理 or 含密钥 narrow together, each row chosen
+    showing so, and the page's head says them all with how many are
+    left (`libFilters`; a page that said 灵感和资料 over nothing found
+    told the user nothing of why).
   - The one bar (`bar.go`, `oneBar`) is in the top row: one line until
     written in, then the card to write in with its tools (`write.go`,
     `writeCard`: a tag and a reference offered as they are written, a

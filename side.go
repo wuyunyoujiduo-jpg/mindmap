@@ -165,10 +165,13 @@ func (a *app) libSide(c *ui.Context) {
 					n++
 				}
 			}
-			on := a.libKind == k.kind && a.libReview == reviewOff && a.libCat == "" && a.libTag == ""
+			// A kind goes with a tag and with 星标, 未整理 or 含密钥 chosen
+			// below it: each narrows what the other leaves, and each row
+			// chosen shows so. The page's head says them all (libFilters).
+			on := a.libKind == k.kind && a.libReview == reviewOff
 			row := sideRow(c, "kind:"+k.name, k.name, fmt.Sprint(n), on, sideIcon(c, k.icon))
 			if row.Clicked() {
-				a.libKind, a.libReview, a.libCat, a.libTag = k.kind, reviewOff, "", ""
+				a.libKind, a.libReview = k.kind, reviewOff
 			}
 		}
 		sideLine(c)

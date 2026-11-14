@@ -53,7 +53,13 @@ func (a *app) libraryColumn(c *ui.Context) {
 				memos++
 			}
 		}
-		pageHead(c, "lib-head", "收集", "灵感和资料", []figure{{len(l.Clips), "条"}, {memos, "条灵感"}, {len(l.Unorganized()), "条未整理"}}, func() {
+		// Its head says what is shown: all of it, in figures, or what the
+		// left column and the search narrow it to, and how many that leaves.
+		sub, figs := "灵感和资料", []figure{{len(l.Clips), "条"}, {memos, "条灵感"}, {len(l.Unorganized()), "条未整理"}}
+		if words := a.libFilters(); len(words) > 0 {
+			sub, figs = strings.Join(words, " · "), []figure{{len(a.libHits()), "条符合"}}
+		}
+		pageHead(c, "lib-head", "收集", sub, figs, func() {
 			// What is being organized and indexed is told in cards at the
 			// window's top right (jobsView), and on the clip itself.
 			if n := len(l.Broken); n > 0 {
@@ -89,13 +95,27 @@ func (a *app) libraryColumn(c *ui.Context) {
 				ui.Column(c).Grow(1).Basis(0).Padding(8, 0, 16).Children(func() {
 					icon, title := "lightbulb", "还没有资料"
 					msg := "在上面记点什么、粘贴链接，或把图片和文件拖进来。\n在任何应用里复制内容后按 " + keyLabel(a.clipKey()) + "，也能直接存到收集。"
+					var clear func()
 					if len(l.Clips) > 0 || a.libKind == kindMaps {
 						icon, title, msg = "search", "没有符合条件的资料", "换一个分类或标签，或者清掉搜索的词。"
+						if words := a.libFilters(); len(words) > 0 { // which conditions, and the way out of them
+							title = "没有符合「" + strings.Join(words, " · ") + "」的资料"
+							msg = "这几个条件是同时生效的。去掉其中一个，或者全部清除。"
+							clear = a.clearLibFilters
+						}
 					}
 					if a.libReview != reviewOff {
 						icon, title, msg = "history", "还没有可以回顾的", "一周以前的灵感会在这里，每天换几条。"
 					}
-					emptyState(c, "wall", icon, title, msg, nil)
+					var act func()
+					if clear != nil && a.libReview == reviewOff {
+						act = func() {
+							if textKey(c, "清除筛选", "清除筛选", "回到全部").Clicked() {
+								clear()
+							}
+						}
+					}
+					emptyState(c, "wall", icon, title, msg, act)
 				})
 			} else {
 				a.clipWall(c, hits)
@@ -400,6 +420,10 @@ func (a *app) clipFilters(c *ui.Context) {
 		}
 		if a.cfg.HideTree && a.libTag != "" && chip("tag-chosen", "#"+a.libTag+" ✕") { // with no left column to show it
 			a.libTag = ""
+		}
+		// More than one condition at once: the way out of them all.
+		if len(a.libFilters()) > 1 && chip("clear", "清除筛选 ✕") {
+			a.clearLibFilters()
 		}
 		if !a.libDay.IsZero() && chip("day", a.libDay.Format("1月2日")+" ✕") {
 			a.libDay = time.Time{}
@@ -917,4 +941,43 @@ func abs32(x float32) float32 {
 		return -x
 	}
 	return x
+}
+
+// libFilters are the conditions that narrow 收集 now, in words, as the
+// page's head says them: the kind, 星标, 未整理, 含密钥 or a category, the
+// tag, the day, what is searched. None when all of it shows.
+func (a *app) libFilters() []string {
+	if a.libReview != reviewOff {
+		return nil
+	}
+	var words []string
+	if name := map[int]string{kindMemos: "灵感", kindLinks: "链接", kindDocs: "文档", kindImages: "图片", kindMaps: "导图"}[a.libKind]; name != "" {
+		words = append(words, name)
+	}
+	switch a.libCat {
+	case "":
+	case "★":
+		words = append(words, "星标")
+	case "-":
+		words = append(words, "未整理")
+	case secretCat:
+		words = append(words, "含密钥")
+	default:
+		words = append(words, a.libCat)
+	}
+	if a.libTag != "" {
+		words = append(words, "#"+a.libTag)
+	}
+	if !a.libDay.IsZero() {
+		words = append(words, a.libDay.Format("1月2日"))
+	}
+	if q := strings.TrimSpace(a.libQuery); q != "" {
+		words = append(words, "搜「"+q+"」")
+	}
+	return words
+}
+
+// clearLibFilters shows all of 收集 again.
+func (a *app) clearLibFilters() {
+	a.libKind, a.libCat, a.libTag, a.libQuery, a.libDay = kindAll, "", "", "", time.Time{}
 }
