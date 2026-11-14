@@ -279,6 +279,12 @@ by AI, and an AI assistant.
   hooks (`MyMind hook start|stop`, `hook.go`, installed by the window's
   装上) give the brief as a session begins and ask for `log_session` when
   the code changed. Writers hold the folder's lock (`lock.go`).
+  The app shows the logs as AI 动态, a list of 今天's left column
+  (`agents.go`, `agentsView`): by day and project, each entry opened by a
+  click and taken back by its menu (`takeBack`, with its way back); with
+  a project chosen, that project's whole record. What came since it was
+  last looked at (`config.AgentsSeen`) is counted on its row and said in
+  a line on 今天 (`agentsLine`).
 - Sync with GitHub: `internal/ghsync` (a three-way merge over the REST API,
   state in `<maps folder>/.sync/`), wired in `sync.go`.
 - Screenshots are the app's own (`internal/screenshot`), on OneShot's way:

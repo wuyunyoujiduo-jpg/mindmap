@@ -81,6 +81,14 @@ func (f *File) AddLog(e LogEntry) LogEntry {
 	return e
 }
 
+// LogOrNil is the map's log, nil of no map.
+func (f *File) LogOrNil() []LogEntry {
+	if f == nil {
+		return nil
+	}
+	return f.Log
+}
+
 // DropLog takes the entry with the ID out of the log.
 func (f *File) DropLog(id string) {
 	f.Log = slices.DeleteFunc(f.Log, func(e LogEntry) bool { return e.ID == id })

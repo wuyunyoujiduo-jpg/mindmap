@@ -33,6 +33,7 @@ const (
 	tasksOfMap   // not a list of the left column: how a project's tasks are grouped
 	tasksReview  // the week looked back on: what was done, what slipped, what was kept
 	tasksLate    // what is late and not done, alone
+	tasksAgents  // what the AI agents reported, by day and project (agents.go)
 )
 
 // The lists of the tasks' page, as its tabs show them.
@@ -57,6 +58,14 @@ type tasksState struct {
 	// remindText what is written, remindBad that it was not understood.
 	remindOwn, remindText string
 	remindBad             bool
+	// What the agents reported, as last gathered; how far back the list
+	// looks (agentRanges); and when it was looked at before this time,
+	// what came since being marked as new.
+	agents        []agentItem
+	agentsRead    time.Time
+	agentsEdits   int
+	agentRange    int
+	agentsSeenWas time.Time
 	// allMaps has the left column show every project with tasks, not the
 	// few starred and opened last.
 	allMaps bool
@@ -483,7 +492,7 @@ func (a *app) tasksView(c *ui.Context) {
 	rail := band && a.todayRoom(c) >= railRoom
 	// With room, the list is a table: a column for a task's project and
 	// one for its day, named once over them.
-	plain := a.tasks.view == tasksWaiting || a.tasks.view == tasksReview // a page of its own, not a list of tasks
+	plain := a.tasks.view == tasksWaiting || a.tasks.view == tasksReview || a.tasks.view == tasksAgents // a page of its own, not a list of tasks
 	a.tasks.table = !calendar && !plain && a.todayRoom(c) >= tableRoom
 	listWidth := float32(todayWidth)
 	if rail {
@@ -528,6 +537,13 @@ func (a *app) tasksView(c *ui.Context) {
 						a.weekReview(c, all)
 						return
 					}
+					if a.tasks.view == tasksAgents {
+						a.agentsView(c)
+						return
+					}
+					if band { // what the agents reported since it was last looked at
+						a.agentsLine(c)
+					}
 					a.taskList(c, items)
 				})
 				if band && !rail {
@@ -569,6 +585,8 @@ func (a *app) tasksHead(c *ui.Context, all []taskItem) {
 				name = "本周回顾"
 			case tasksLate:
 				name = "已逾期"
+			case tasksAgents:
+				name = "AI 动态"
 			case tasksWeek, tasksMonth, tasksDay:
 				name = "日程"
 			}
@@ -577,10 +595,24 @@ func (a *app) tasksHead(c *ui.Context, all []taskItem) {
 			}
 			ui.Row(c).Gap(10).AlignItems(ui.End).Children(func() {
 				ui.Text(c, name).FontSize(26).FontWeight(700).LetterSpacing(-0.7).LineHeight(1.2).NoWrap()
-				if path := a.tasks.onMap; path != "" { // a project's tasks: the way to its map
-					ui.Box(c).Margin(0, 0, 2).Children(func() {
+				if path := a.tasks.onMap; path != "" { // a project's tasks: the way to its map, and to its record
+					record := a.tasks.view == tasksAgents
+					if record {
+						ui.Text(c, "项目记录").FontSize(textBody).TextColor(ink2(th)).Margin(0, 0, 4).NoWrap()
+					}
+					ui.Row(c).Gap(4).Margin(0, 0, 2).Children(func() {
 						if textLink(c, "打开导图 ›", "打开导图").Clicked() {
 							a.later(func() { _ = a.open(path) })
+						}
+						switch {
+						case record:
+							if textLink(c, "任务 ›", "看这个项目的任务").Clicked() {
+								a.tasks.view = tasksAll
+							}
+						case len(a.mapFile(path).LogOrNil()) > 0:
+							if textLink(c, "项目记录 ›", "AI 在这个项目上做过什么、定过什么").Clicked() {
+								a.later(func() { a.showAgents(path) })
+							}
 						}
 					})
 					return
@@ -598,10 +630,12 @@ func (a *app) tasksHead(c *ui.Context, all []taskItem) {
 						}
 					}
 				}
-				figures(c, figure{open, "要做"}, figure{done, "做完"}).Margin(6, 0, 0)
+				if a.tasks.view != tasksAgents { // the record's figures head its own page
+					figures(c, figure{open, "要做"}, figure{done, "做完"}).Margin(6, 0, 0)
+				}
 				return
 			}
-			if a.tasks.view == tasksReview { // its own figures, of the week, head its page
+			if a.tasks.view == tasksReview || a.tasks.view == tasksAgents { // its own figures, of the week, head its page
 				return
 			}
 			// The day in three figures: the figure in the ink, what it counts faint.

@@ -11,6 +11,9 @@ import (
 type config struct {
 	Dir  string `json:"dir"`  // the folder of mind maps shown in the sidebar
 	File string `json:"file"` // the map open last
+	// AgentsSeen is when what the AI agents reported was last looked at
+	// (agents.go): what came since is counted as new.
+	AgentsSeen time.Time `json:"agentsSeen,omitzero"`
 	// PanelOpen shows the panel of the topic chosen beside the canvas: put
 	// away at first, which leaves the canvas the room.
 	PanelOpen bool `json:"panelOpen,omitempty"`

@@ -170,6 +170,17 @@ func (a *app) todaySide(c *ui.Context) {
 		if sideRow(c, "list:review", "本周回顾", "", noMap && a.tasks.view == tasksReview, sideIcon(c, "history")).Tooltip("这周做完的、拖着的、记下的").Clicked() {
 			a.tasks.view, a.tasks.onMap = tasksReview, ""
 		}
+		// What the AI agents reported, there once any has; its count is
+		// what came since it was last looked at.
+		if items := a.agentItems(); len(items) > 0 || a.tasks.view == tasksAgents {
+			count := ""
+			if n, _ := a.agentsUnseen(); n > 0 && a.tasks.view != tasksAgents {
+				count = fmt.Sprint(n)
+			}
+			if sideRow(c, "list:agents", "AI 动态", count, noMap && a.tasks.view == tasksAgents, sideIcon(c, "sparkles")).Tooltip("AI 做了什么、定了什么、留下什么").Clicked() {
+				a.later(func() { a.showAgents("") })
+			}
+		}
 		if n := len(a.waiting()); n > 0 || a.tasks.view == tasksWaiting {
 			if sideRow(c, "list:waiting", "等着归位", fmt.Sprint(n), noMap && a.tasks.view == tasksWaiting, sideIcon(c, "import")).Clicked() {
 				a.tasks.view = tasksWaiting
