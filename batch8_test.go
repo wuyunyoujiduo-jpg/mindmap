@@ -355,7 +355,7 @@ func TestTour(t *testing.T) {
 	}
 	snapshot(t, tt, "tour")
 	tt.Click("下一步")
-	if !tt.HasText("收集：随手记下，再放到导图上") {
+	if !tt.HasText("收集：随手记下，需要时再挂到导图上") {
 		t.Fatal("step 2")
 	}
 	tt.Click("打开收集")

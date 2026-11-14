@@ -180,7 +180,11 @@ func (a *app) jobsView(c *ui.Context) {
 	if a.aiOpen {
 		right += min(392, w-32) + 12
 	}
-	ui.Column(c.Key("jobs")).Absolute().Bottom(16).Right(right).Width(min(332, w-28)).Gap(8).ZIndex(24).Children(func() {
+	foot := float32(16)
+	if !a.libOpen { // a map shows: over its canvas's bar and its sheets' row, not on them
+		foot = 104
+	}
+	ui.Column(c.Key("jobs")).Absolute().Bottom(foot).Right(right).Width(min(332, w-28)).Gap(8).ZIndex(24).Children(func() {
 		for _, j := range cards {
 			card := lifted(ui.Row(c.Key("job:"+j.key)).Padding(12, 14, 12, 12).Gap(12).Radius(16).AlignItems(ui.Center).FillWidth().
 				Background(cardColor(t)).Label(j.title), t).

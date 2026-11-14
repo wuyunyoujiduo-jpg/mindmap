@@ -56,8 +56,8 @@ func (a *app) libraryColumn(c *ui.Context) {
 		// Its head says what is shown: all of it, in figures, or what the
 		// left column and the search narrow it to, and how many that leaves.
 		sub, figs := "灵感和资料", []figure{{len(l.Clips), "条"}, {memos, "条灵感"}, {len(l.Unorganized()), "条未整理"}}
-		if words := a.libFilters(); len(words) > 0 {
-			sub, figs = strings.Join(words, " · "), []figure{{len(a.libHits()), "条符合"}}
+		if len(a.libFilters()) > 0 { // the conditions are chips under the head, each with its ✕
+			sub, figs = "", []figure{{len(a.libHits()), "条符合"}}
 		}
 		pageHead(c, "lib-head", "收集", sub, figs, func() {
 			// What is being organized and indexed is told in cards at the
@@ -98,9 +98,12 @@ func (a *app) libraryColumn(c *ui.Context) {
 					var clear func()
 					if len(l.Clips) > 0 || a.libKind == kindMaps {
 						icon, title, msg = "search", "没有符合条件的资料", "换一个分类或标签，或者清掉搜索的词。"
-						if words := a.libFilters(); len(words) > 0 { // which conditions, and the way out of them
-							title = "没有符合「" + strings.Join(words, " · ") + "」的资料"
-							msg = "这几个条件是同时生效的。去掉其中一个，或者全部清除。"
+						if fs := a.libFilters(); len(fs) > 0 { // which conditions, and the way out of them
+							title = "没有符合「" + a.libFilterWords() + "」的资料"
+							msg = "点上面某个条件的 ✕ 去掉它，或者全部清除。"
+							if len(fs) > 1 {
+								msg = "这几个条件是同时生效的。" + msg
+							}
 							clear = a.clearLibFilters
 						}
 					}
@@ -110,7 +113,7 @@ func (a *app) libraryColumn(c *ui.Context) {
 					var act func()
 					if clear != nil && a.libReview == reviewOff {
 						act = func() {
-							if textKey(c, "清除筛选", "清除筛选", "回到全部").Clicked() {
+							if textKey(c, "全部清除", "清除全部筛选", "回到全部").Clicked() {
 								clear()
 							}
 						}
@@ -418,15 +421,16 @@ func (a *app) clipFilters(c *ui.Context) {
 			}
 			return
 		}
-		if a.cfg.HideTree && a.libTag != "" && chip("tag-chosen", "#"+a.libTag+" ✕") { // with no left column to show it
-			a.libTag = ""
+		// Each condition a chip with its own ✕, which takes off that one;
+		// with more than one, the way out of them all after them.
+		fs := a.libFilters()
+		for _, f := range fs {
+			if filterChip(c, f.word) {
+				a.later(f.clear)
+			}
 		}
-		// More than one condition at once: the way out of them all.
-		if len(a.libFilters()) > 1 && chip("clear", "清除筛选 ✕") {
-			a.clearLibFilters()
-		}
-		if !a.libDay.IsZero() && chip("day", a.libDay.Format("1月2日")+" ✕") {
-			a.libDay = time.Time{}
+		if len(fs) > 1 && textLink(c, "全部清除", "清除筛选").Clicked() {
+			a.later(a.clearLibFilters)
 		}
 		ui.Spacer(c)
 		a.materialBar(c)
@@ -953,41 +957,77 @@ func abs32(x float32) float32 {
 	return x
 }
 
-// libFilters are the conditions that narrow 收集 now, in words, as the
-// page's head says them: the kind, 星标, 未整理, 含密钥 or a category, the
-// tag, the day, what is searched. None when all of it shows.
-func (a *app) libFilters() []string {
+// A libFilter is one condition that narrows 收集 now: its word, and what
+// takes it off alone.
+type libFilter struct {
+	word  string
+	clear func()
+}
+
+// libFilters are the conditions that narrow 收集 now, each with its way
+// off: the kind, 星标, 未整理, 含密钥 or a category, the tag, the day, what
+// is searched. None when all of it shows. The page says each as a chip
+// with its ✕ (clipFilters): one ✕ for them all left no way to take off
+// one, the user found.
+func (a *app) libFilters() []libFilter {
 	if a.libReview != reviewOff {
 		return nil
 	}
-	var words []string
+	var fs []libFilter
 	if name := map[int]string{kindMemos: "灵感", kindLinks: "链接", kindDocs: "文档", kindImages: "图片", kindMaps: "导图"}[a.libKind]; name != "" {
-		words = append(words, name)
+		fs = append(fs, libFilter{name, func() { a.libKind = kindAll }})
 	}
-	switch a.libCat {
-	case "":
-	case "★":
-		words = append(words, "星标")
-	case "-":
-		words = append(words, "未整理")
-	case secretCat:
-		words = append(words, "含密钥")
-	default:
-		words = append(words, a.libCat)
+	cat := map[string]string{"★": "星标", "-": "未整理", secretCat: "含密钥"}[a.libCat]
+	if cat == "" {
+		cat = a.libCat
+	}
+	if cat != "" {
+		fs = append(fs, libFilter{cat, func() { a.libCat = "" }})
 	}
 	if a.libTag != "" {
-		words = append(words, "#"+a.libTag)
+		fs = append(fs, libFilter{"#" + a.libTag, func() { a.libTag = "" }})
 	}
 	if !a.libDay.IsZero() {
-		words = append(words, a.libDay.Format("1月2日"))
+		fs = append(fs, libFilter{a.libDay.Format("1月2日"), func() { a.libDay = time.Time{} }})
 	}
 	if q := strings.TrimSpace(a.libQuery); q != "" {
-		words = append(words, "搜「"+q+"」")
+		fs = append(fs, libFilter{"搜「" + q + "」", func() { a.libQuery = "" }})
 	}
-	return words
+	return fs
+}
+
+// libFilterWords are the conditions' words, joined.
+func (a *app) libFilterWords() string {
+	var words []string
+	for _, f := range a.libFilters() {
+		words = append(words, f.word)
+	}
+	return strings.Join(words, " · ")
 }
 
 // clearLibFilters shows all of 收集 again.
 func (a *app) clearLibFilters() {
 	a.libKind, a.libCat, a.libTag, a.libQuery, a.libDay = kindAll, "", "", "", time.Time{}
+}
+
+// filterChip is a condition that narrows a page, with the ✕ that takes it
+// off: the word in the accent on its tint, the ✕ a key of its own that
+// darkens under the pointer. It reports the ✕ pressed.
+func filterChip(c *ui.Context, word string) bool {
+	t := c.Theme()
+	ink := t.Accent.MixOklab(t.Text, 0.3)
+	off := false
+	ui.Row(c.Key("filter:"+word)).Height(28).Padding(0, 4, 0, 11).Gap(3).Radius(radiusSmall).AlignItems(ui.Center).Shrink(0).
+		Background(t.Accent.Alpha(0.12)).Label("条件 " + word).Children(func() {
+		ui.Text(c, word).FontSize(textSmall).FontWeight(700).TextColor(ink).NoWrap().MaxWidth(220).SingleLine()
+		x := ui.Box(c.Key("off")).Size(20, 20).Radius(6).Center().Cursor(ui.CursorPointer).Label("去掉 " + word).Tooltip("去掉这个条件").
+			Background(t.Accent.Alpha(0)).Transition(easeLook)
+		if x.Hovered() {
+			x.Background(t.Accent.Alpha(0.2))
+		}
+		press(x, 0.9)
+		x.Children(func() { glyph(c, iconClose, 9, ink) })
+		off = x.Clicked()
+	})
+	return off
 }

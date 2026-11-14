@@ -602,15 +602,29 @@ func TestKindAndTagTogether(t *testing.T) {
 	if a.libKind != kindLinks || a.libTag != "待识别" {
 		t.Fatalf("kind %d, tag %q: choosing a kind dropped the tag", a.libKind, a.libTag)
 	}
-	for _, want := range []string{"链接 · #待识别", "没有符合「链接 · #待识别」的资料", "0 条符合"} {
+	for _, want := range []string{"条件 链接", "条件 #待识别", "没有符合「链接 · #待识别」的资料", "0 条符合", "全部清除"} {
 		if !tt.HasText(want) {
 			t.Fatalf("no %q: %q", want, tt.Texts())
 		}
 	}
 	snapshot(t, tt, "library-filters")
+	// A condition's own ✕ takes off that one, and leaves the other.
+	if err := tt.Click("去掉 链接"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Frame()
+	if a.libKind != kindAll || a.libTag != "待识别" || len(a.libHits()) != 1 || tt.HasText("全部清除") {
+		t.Fatalf("kind %d, tag %q, %d found", a.libKind, a.libTag, len(a.libHits()))
+	}
+	if err := tt.Click("链接"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
 	if err := tt.Click("清除筛选"); err != nil {
 		t.Fatal(err)
 	}
+	tt.Frame()
 	tt.Frame()
 	if a.libKind != kindAll || a.libTag != "" || len(a.libHits()) != 2 {
 		t.Fatalf("not cleared: kind %d, tag %q", a.libKind, a.libTag)

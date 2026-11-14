@@ -130,7 +130,7 @@ func (a *app) todaySide(c *ui.Context) {
 			}
 			// What is late, alone, under today's: there only when something is.
 			if l.view == tasksToday && (counts[tasksLate] != "" || a.tasks.view == tasksLate) {
-				late := sideRowTrail(c, "list:late", "已逾期", "", noMap && a.tasks.view == tasksLate, sideIcon(c, "history"), func(bool) {
+				late := sideRowTrail(c, "list:late", "已逾期", "", noMap && a.tasks.view == tasksLate, sideIcon(c, "alarm-clock"), func(bool) {
 					ui.Text(c, counts[tasksLate]).FontSize(textCaption).TextColor(c.Theme().Danger).FontFeatures("tnum").PassThrough()
 				})
 				if late.Label("已逾期 " + counts[tasksLate]).Clicked() {
