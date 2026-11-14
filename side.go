@@ -64,6 +64,37 @@ func sideRow(c *ui.Context, key, name, count string, on bool, lead func(hot bool
 	return row
 }
 
+// sideMaps is how many projects 今天's left column shows before the rest
+// are under 全部项目.
+const sideMaps = 6
+
+// sideRowTrail is sideRow with what trail builds at its end in the count's
+// place, told whether the row is pointed at: a key that shows only then.
+func sideRowTrail(c *ui.Context, key, name, count string, on bool, lead, trail func(hot bool)) ui.Element {
+	t := c.Theme()
+	row := ui.Row(c.Key(key)).Height(36).Padding(0, 10).Gap(10).Radius(radiusRow).AlignItems(ui.Center).FillWidth().
+		Cursor(ui.CursorPointer).Label(name).Background(t.Text.Alpha(0)).Transition(easeLook)
+	switch {
+	case on:
+		row.Background(t.Text.Alpha(0.07))
+	case row.Hovered():
+		row.Background(t.Text.Alpha(0.04))
+	}
+	row.Children(func() {
+		if lead != nil {
+			lead(on || row.Hovered())
+		}
+		txt := ui.Text(c, name).FontSize(textBody + 0.5).SingleLine().Grow(1).Shrink(1).MinWidth(0).PassThrough()
+		if on {
+			txt.FontWeight(700)
+		} else if !row.Hovered() {
+			txt.TextColor(ink2(t))
+		}
+		ui.Row(c).Gap(6).AlignItems(ui.Center).Shrink(0).Children(func() { trail(row.Hovered()) })
+	})
+	return row
+}
+
 // sideIconSize is the room an icon takes before a row's name, a map's dot too.
 const sideIconSize = 22
 
@@ -89,23 +120,41 @@ func (a *app) todaySide(c *ui.Context) {
 	items := all
 	counts := a.taskListCounts(items)
 	a.sidePane(c, "today-side", func() {
+		// With a project chosen below, no list shows as chosen: the page is
+		// that project's tasks, whatever list was shown before, and two
+		// rows on a shade read as a fault.
+		noMap := a.tasks.onMap == ""
 		for _, l := range taskLists {
-			if sideRow(c, "list:"+l.name, l.name, counts[l.view], a.tasks.view == l.view, sideIcon(c, l.icon)).Clicked() {
+			if sideRow(c, "list:"+l.name, l.name, counts[l.view], noMap && a.tasks.view == l.view, sideIcon(c, l.icon)).Clicked() {
 				a.tasks.view, a.tasks.onMap = l.view, ""
 			}
+			// What is late, alone, under today's: there only when something is.
+			if l.view == tasksToday && (counts[tasksLate] != "" || a.tasks.view == tasksLate) {
+				late := sideRowTrail(c, "list:late", "已逾期", "", noMap && a.tasks.view == tasksLate, sideIcon(c, "history"), func(bool) {
+					ui.Text(c, counts[tasksLate]).FontSize(textCaption).TextColor(c.Theme().Danger).FontFeatures("tnum").PassThrough()
+				})
+				if late.Label("已逾期 " + counts[tasksLate]).Clicked() {
+					a.tasks.view, a.tasks.onMap = tasksLate, ""
+				}
+			}
 		}
-		if sideRow(c, "list:review", "本周回顾", "", a.tasks.view == tasksReview, sideIcon(c, "history")).Tooltip("这周做完的、拖着的、记下的").Clicked() {
+		if sideRow(c, "list:review", "本周回顾", "", noMap && a.tasks.view == tasksReview, sideIcon(c, "history")).Tooltip("这周做完的、拖着的、记下的").Clicked() {
 			a.tasks.view, a.tasks.onMap = tasksReview, ""
 		}
 		if n := len(a.waiting()); n > 0 || a.tasks.view == tasksWaiting {
-			if sideRow(c, "list:waiting", "等着归位", fmt.Sprint(n), a.tasks.view == tasksWaiting, sideIcon(c, "import")).Clicked() {
+			if sideRow(c, "list:waiting", "等着归位", fmt.Sprint(n), noMap && a.tasks.view == tasksWaiting, sideIcon(c, "import")).Clicked() {
 				a.tasks.view = tasksWaiting
 			}
 		}
-		open := map[string]int{}
+		// A project's count is the lists' count (countsAsTask), and how far
+		// it is, of its tasks: those done among them all.
+		open, total := map[string]int{}, map[string]int{}
 		for _, it := range all {
-			if !it.done() {
+			if countsAsTask(it) {
 				open[it.path]++
+			}
+			if it.done() || countsAsTask(it) {
+				total[it.path]++
 			}
 		}
 		sideLine(c)
@@ -118,14 +167,47 @@ func (a *app) todaySide(c *ui.Context) {
 				}
 			})
 		})
-		files := slices.Clone(a.files) // those starred first
+		// Those starred first, then by when they were opened last; the
+		// inbox is a list above, not a project here. A few show, the others
+		// under 全部项目: a column of every map with a task grew long.
+		files := slices.DeleteFunc(a.recentFiles(), func(f model.FileInfo) bool {
+			return f.Path == a.inboxPath() || open[f.Path] == 0 && a.tasks.onMap != f.Path
+		})
 		slices.SortStableFunc(files, func(x, y model.FileInfo) int { return b2i(a.starred(y.Path)) - b2i(a.starred(x.Path)) })
-		for _, fi := range files {
+		shown := len(files)
+		if !a.tasks.allMaps && shown > sideMaps+1 { // one more is shown rather than hidden alone
+			shown = sideMaps
+		}
+		for i, fi := range files {
 			path := fi.Path
-			if n := open[path]; n > 0 || a.tasks.onMap == path {
+			if i >= shown && a.tasks.onMap != path {
+				continue
+			}
+			{
+				n := open[path]
 				col := a.mapColor(path)
-				row := sideRow(c, "map:"+path, mapName(path), fmt.Sprint(n), a.tasks.onMap == path, func(bool) {
+				done := float32(0)
+				if total[path] > 0 {
+					done = float32(total[path]-n) / float32(total[path])
+				}
+				toMap := false // its key under the pointer was pressed
+				row := sideRowTrail(c, "map:"+path, mapName(path), "", a.tasks.onMap == path, func(bool) {
 					ui.Box(c).Size(sideIconSize, 14).Center().Shrink(0).PassThrough().Children(func() { mapDot(c, col, 8) })
+				}, func(hot bool) {
+					// Under the pointer, the way to its map; else how far it
+					// is, as a ring, and what is left to do.
+					if hot {
+						toMap = iconButton(c, iconForward, "打开导图 "+mapName(path), "打开这张导图", 22, true).Clicked()
+						return
+					}
+					ui.Box(c).Size(14, 14).Shrink(0).PassThrough().Draw(func(p *ui.Painter, r ui.Rect) {
+						cx, cy := r.X+r.W/2, r.Y+r.H/2
+						p.StrokePath(new(ui.Path).Circle(cx, cy, 5), 2, c.Theme().Text.Alpha(0.1))
+						if done > 0 {
+							p.StrokePath(new(ui.Path).Circle(cx, cy, 5).Trim(0, done).Cap(ui.RoundCap), 2, col)
+						}
+					})
+					ui.Text(c, fmt.Sprint(n)).FontSize(textCaption).TextColor(faint(c.Theme())).FontFeatures("tnum").MinWidth(14).TextAlign(ui.End).PassThrough()
 				})
 				row.Label("只看 " + mapName(path))
 				// A task dropped on a project goes to it, under its center.
@@ -135,17 +217,30 @@ func (a *app) todaySide(c *ui.Context) {
 				if d, ok := ui.Drop[taskDrag](row); ok && d.path != path {
 					a.later(func() { a.dropTaskOnMap(d, path) })
 				}
-				if row.Clicked() {
+				if toMap { // to its map, not to its tasks
+					a.later(func() { _ = a.open(path) })
+				} else if row.Clicked() {
 					if a.tasks.onMap == path {
 						a.tasks.onMap = ""
 					} else {
 						a.tasks.onMap = path
-						if a.tasks.view == tasksWaiting || a.tasks.view == tasksInbox || a.tasks.view == tasksReview {
+						if a.tasks.view == tasksWaiting || a.tasks.view == tasksInbox || a.tasks.view == tasksReview || a.tasks.view == tasksLate {
 							a.tasks.view = tasksAll
 						}
 					}
 				}
 			}
+		}
+		if rest := len(files) - shown; rest > 0 || a.tasks.allMaps && len(files) > sideMaps+1 {
+			word := fmt.Sprintf("全部项目 %d", len(files))
+			if a.tasks.allMaps {
+				word = "收起"
+			}
+			ui.Box(c).Padding(2, 10).Children(func() {
+				if textLink(c, word, "全部项目").Clicked() {
+					a.tasks.allMaps = !a.tasks.allMaps
+				}
+			})
 		}
 	}, nil)
 }

@@ -138,7 +138,14 @@ by AI, and an AI assistant.
     in its list (`paletteItem.task`).
     A project chosen in the left column shows all of its tasks not done,
     by when (`tasksOfMap`), with the way to its map, and nothing that
-    waits: that is of no one project.
+    waits: that is of no one project. The projects there are the maps
+    with a task to do, those starred first, then by when they were
+    opened last, six and the rest under 全部项目 (`sideMaps`); never the
+    inbox, a list above; each with a ring of how far it is and, under
+    the pointer, the key to its map (`sideRowTrail`). Their counts and
+    the lists' are one count (`countsAsTask`); with a project chosen no
+    list shows as chosen; what is late has a list of its own while
+    there is any (`tasksLate`).
   - 项目 (`projectsView`): the maps as cards, each with the map drawn
     small as its face (`drawMapFace`) and a ring for its tasks, white
     with a hairline as every card of a kind (`wallCard`); with the

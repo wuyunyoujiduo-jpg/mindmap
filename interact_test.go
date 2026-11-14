@@ -7,6 +7,7 @@ import (
 	"image/png"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -642,5 +643,84 @@ func TestPlacingIsAsked(t *testing.T) {
 	a.noticeUndo()
 	if n := len(a.waiting()); n != 0 {
 		t.Fatalf("%d wait after taking it back", n)
+	}
+}
+
+// 今天's left column: the inbox is no project there, a project's count is
+// the lists' count, a project chosen leaves no list chosen, what is late
+// has its list, a project's row opens its map, and the many are folded.
+func TestTodaySideProjects(t *testing.T) {
+	a, tt := newTestApp(t)
+	day := today(a.now())
+	login := find(t, a, "登录")
+	a.mutate("", func() {
+		late := day.AddDate(0, 0, -3)
+		login.SetStatus(model.StatusTodo, a.now())
+		login.Task.Due = &late
+	})
+	a.addTask("交报销", nil) // into the inbox
+	for i := range 8 {
+		f := model.NewFile(fmt.Sprint("项目", i))
+		n := model.NewNode("一件事")
+		n.SetStatus(model.StatusTodo, a.now())
+		f.Sheets[0].Root.Children = append(f.Sheets[0].Root.Children, n)
+		if err := f.Save(filepath.Join(a.dir, model.FileName(fmt.Sprint("项目", i)))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a.refreshFiles()
+	a.openTasks()
+	tt.Frame()
+	tt.Frame()
+	if tt.HasText("只看 收件箱") {
+		t.Fatal("the inbox is listed among the projects")
+	}
+	// The projects' counts add up to no more than 全部's.
+	sum := 0
+	for _, it := range a.taskItems() {
+		if countsAsTask(it) && it.path != a.inboxPath() {
+			sum++
+		}
+	}
+	all, _ := strconv.Atoi(a.taskListCounts(a.taskItems())[tasksAll])
+	inbox, _ := strconv.Atoi(a.taskListCounts(a.taskItems())[tasksInbox])
+	if sum+inbox != all {
+		t.Fatalf("projects %d + inbox %d, 全部 %d", sum, inbox, all)
+	}
+	// Folded: a few, and the way to them all.
+	if !tt.HasText("全部项目") || tt.HasText("只看 项目7") && tt.HasText("只看 项目0") && tt.HasText("只看 项目3") && tt.HasText("只看 项目5") && tt.HasText("只看 项目1") && tt.HasText("只看 项目2") && tt.HasText("只看 项目4") && tt.HasText("只看 项目6") {
+		t.Fatalf("not folded: %q", tt.Texts())
+	}
+	snapshot(t, tt, "today-side")
+	if err := tt.Click("全部项目"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !tt.HasText("只看 项目7") || !tt.HasText("只看 项目0") {
+		t.Fatalf("not all shown: %q", tt.Texts())
+	}
+	// What is late, alone.
+	if err := tt.Click("已逾期 1"); err != nil {
+		t.Fatalf("%v: %q", err, tt.Texts())
+	}
+	tt.Frame()
+	tt.Frame()
+	if a.tasks.view != tasksLate || !tt.HasText("任务 登录") || tt.HasText("任务 交报销") {
+		t.Fatalf("late: %q", tt.Texts())
+	}
+	// A project's row opens its map by the key under the pointer.
+	row, ok := tt.Find("只看 项目0")
+	if !ok {
+		t.Fatal("no row")
+	}
+	tt.Move(row.X+row.W/2, row.Y+row.H/2)
+	tt.Frame()
+	tt.Frame()
+	if err := tt.Click("打开导图 项目0"); err != nil {
+		t.Fatalf("%v: %q", err, tt.Texts())
+	}
+	tt.Frame()
+	if mapName(a.path) != "项目0" {
+		t.Fatalf("at %q", a.path)
 	}
 }

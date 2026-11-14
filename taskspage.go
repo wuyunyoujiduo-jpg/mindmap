@@ -32,6 +32,7 @@ const (
 	tasksWaiting // what was written down and waits for a place
 	tasksOfMap   // not a list of the left column: how a project's tasks are grouped
 	tasksReview  // the week looked back on: what was done, what slipped, what was kept
+	tasksLate    // what is late and not done, alone
 )
 
 // The lists of the tasks' page, as its tabs show them.
@@ -56,6 +57,9 @@ type tasksState struct {
 	// remindText what is written, remindBad that it was not understood.
 	remindOwn, remindText string
 	remindBad             bool
+	// allMaps has the left column show every project with tasks, not the
+	// few starred and opened last.
+	allMaps bool
 	// reviewBack is how many weeks back the review looks.
 	reviewBack int
 	// reveal is the task the keyboard went to, to scroll to once.
@@ -563,6 +567,8 @@ func (a *app) tasksHead(c *ui.Context, all []taskItem) {
 				name = "等着归位"
 			case tasksReview:
 				name = "本周回顾"
+			case tasksLate:
+				name = "已逾期"
 			case tasksWeek, tasksMonth, tasksDay:
 				name = "日程"
 			}
@@ -1028,6 +1034,13 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 				over.items = append(over.items, it)
 			}
 		}
+	case tasksLate:
+		g := add("已逾期", true, at(day))
+		for _, it := range items {
+			if d := it.date(); d != nil && !it.done() && d.Before(day) {
+				g.items = append(g.items, it)
+			}
+		}
 	case tasksInbox:
 		g := add("收件箱", false, nil)
 		for _, it := range items {
@@ -1299,6 +1312,14 @@ func (a *app) remindProp(c *ui.Context, it taskItem) {
 			}
 		})
 	}
+}
+
+// countsAsTask reports whether a task not done is counted among what is
+// to do: an idea with no day is not, wherever it is counted (the lists'
+// counts and the projects' are one count: 全部 said 12 beside a project
+// of 24).
+func countsAsTask(it taskItem) bool {
+	return !it.done() && !(it.node.Task.Status == model.StatusIdea && it.date() == nil)
 }
 
 // taskKeys is the list's keys: the arrows go from a task to the next and
@@ -1885,11 +1906,14 @@ func (a *app) taskListCounts(items []taskItem) map[int]string {
 		if it.path == a.inboxPath() {
 			n[tasksInbox]++
 		}
-		if it.node.Task.Status == model.StatusIdea && it.date() == nil {
+		if !countsAsTask(it) {
 			continue
 		}
 		n[tasksAll]++
 		if d := it.date(); d != nil {
+			if d.Before(day) {
+				n[tasksLate]++
+			}
 			if d.Before(day.AddDate(0, 0, 1)) {
 				n[tasksToday]++
 			}
