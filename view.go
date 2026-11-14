@@ -259,17 +259,42 @@ func (a *app) toolbar(c *ui.Context) {
 				status = "已保存 " + a.savedAt.Format("15:04")
 			}
 			if room >= 700 || a.saveErr != "" || col == t.Accent {
-				// A click on how saving goes shows the versions kept.
-				st := ui.Box(c.Key("save-status")).Cursor(ui.CursorPointer).Label("历史版本").
-					Tooltip("自动保存，无需手动保存 · 点击查看历史版本 ⌘⇧H")
-				if st.Hovered() && col == t.TextMuted {
-					col = t.Text
-				}
-				if st.Clicked() {
-					a.later(a.openHistory)
-				}
-				st.Children(func() {
-					ui.Text(c, status).FontSize(textCaption).TextColor(col).NoWrap().MaxWidth(240).Ellipsis("…").PassThrough()
+				ui.Row(c.Key("under-name")).Gap(6).AlignItems(ui.Center).Children(func() {
+					// Where the map is kept, when in a folder: its folder, which a
+					// click shows the maps of. The directory opens to it too
+					// (app.open), but put away it says nothing.
+					if dir := filepath.Dir(a.path); room >= 700 && dir != a.dir && inside(a.path, a.dir) {
+						where := ui.Row(c.Key("map-folder")).Gap(4).AlignItems(ui.Center).Cursor(ui.CursorPointer).Shrink(1).MinWidth(0).
+							Label("所在文件夹 " + a.relDir(a.path)).Tooltip("这张导图在文件夹「" + a.relDir(a.path) + "」里：点一下看这个文件夹的导图")
+						ink := t.TextMuted
+						if where.Hovered() {
+							ink = t.Text
+						}
+						if where.Clicked() {
+							a.later(func() {
+								a.showProjects()
+								a.projFolder = dir
+							})
+						}
+						where.Children(func() {
+							glyph(c, iconFolder, 11, ink)
+							ui.Text(c, strings.ReplaceAll(a.relDir(a.path), string(filepath.Separator), " › ")).FontSize(textCaption).TextColor(ink).
+								NoWrap().MaxWidth(150).Ellipsis("…").PassThrough()
+							ui.Text(c, "·").FontSize(textCaption).TextColor(faint(t)).PassThrough()
+						})
+					}
+					// A click on how saving goes shows the versions kept.
+					st := ui.Box(c.Key("save-status")).Cursor(ui.CursorPointer).Label("历史版本").
+						Tooltip("自动保存，无需手动保存 · 点击查看历史版本 ⌘⇧H")
+					if st.Hovered() && col == t.TextMuted {
+						col = t.Text
+					}
+					if st.Clicked() {
+						a.later(a.openHistory)
+					}
+					st.Children(func() {
+						ui.Text(c, status).FontSize(textCaption).TextColor(col).NoWrap().MaxWidth(240).Ellipsis("…").PassThrough()
+					})
 				})
 			}
 		})

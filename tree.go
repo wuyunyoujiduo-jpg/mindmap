@@ -201,6 +201,10 @@ func (a *app) treeFolderRows(c *ui.Context, f model.Folder, depth int) {
 				a.sideFocus = "side" // its keys go to the directory
 			}, func(m *ui.Menu) { a.mapMenu(m, path) })
 		row.Drag(fileDrag{Path: path})
+		if a.treeReveal == path && !a.libOpen { // just opened: seen where it is kept
+			row.ScrollIntoView()
+			a.treeReveal = ""
+		}
 		// Another map dropped on a map goes under its center.
 		if d, ok := ui.Drop[fileDrag](row); ok && d.Path != path {
 			a.later(func() { a.dropOnMap(path, d) })

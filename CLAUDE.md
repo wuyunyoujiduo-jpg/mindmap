@@ -60,7 +60,10 @@ by AI, and an AI assistant.
     waits for a place, and the maps to see the tasks of alone
     (`todaySide`); 项目's directory (`tree.go`, `mapTree`: folders that
     open and close and their maps, so that going from a map to another is
-    one click); in both, the maps starred stand first in a part of their
+    one click; a map opened opens the folders it is in there and brings
+    its row into view, `app.open`, `treeReveal`, and its bar names its
+    folder under its name, a click on which shows that folder's maps:
+    opened from elsewhere, where it is kept was not to be seen); in both, the maps starred stand first in a part of their
     own, 快捷访问, whether or not they have a task (the user asked for
     it at the head, apart, on 今天 too, where a click on one opens its
     map as in the directory, not its tasks; they stay in their folders

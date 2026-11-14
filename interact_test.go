@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image"
 	"image/png"
+	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -760,5 +761,45 @@ func TestTodaySideProjects(t *testing.T) {
 	tt.Frame()
 	if mapName(a.path) != "常看的" || a.libOpen {
 		t.Fatalf("at %q, the page still shown %v", a.path, a.libOpen)
+	}
+}
+
+// A map opened shows where it is kept: the directory opens the folder it
+// is in, and its bar names the folder, a click on which shows its maps.
+func TestOpenedMapShowsItsFolder(t *testing.T) {
+	a, tt := newTestApp(t)
+	work := filepath.Join(a.dir, "工作")
+	if err := os.MkdirAll(filepath.Join(work, "上线"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	f := model.NewFile("发布计划")
+	path := filepath.Join(work, "上线", model.FileName("发布计划"))
+	if err := f.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	a.refreshFiles()
+	a.showProjects()
+	tt.Frame()
+	if a.folderOpen(work) {
+		t.Fatal("the folder is open before")
+	}
+	if err := a.open(path); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Frame()
+	if !a.folderOpen(work) || !a.folderOpen(filepath.Join(work, "上线")) {
+		t.Fatalf("the folders it is in did not open: %v", a.cfg.OpenFolders)
+	}
+	if !tt.HasText("工作 › 上线") {
+		t.Fatalf("its bar does not say its folder: %q", tt.Texts())
+	}
+	snapshot(t, tt, "map-in-folder")
+	if err := tt.Click("所在文件夹 " + a.relDir(path)); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !a.libOpen || a.projFolder != filepath.Join(work, "上线") {
+		t.Fatalf("at %q", a.projFolder)
 	}
 }

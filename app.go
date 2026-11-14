@@ -402,6 +402,7 @@ type app struct {
 	secretsOf   *library.Library // what secretCount counted, and when
 	secretsAt   int
 	secrets     int
+	treeReveal  string // the map just opened, whose row of the directory is scrolled to once
 	treeQuick   bool   // the directory's rows being drawn are 快捷访问's
 	escLeave    bool   // Escape was pressed in a field of a pane: the focus leaves it (escRest)
 	secretShown string // the clip whose secrets its details show, asked for
@@ -540,6 +541,12 @@ func (a *app) open(path string) error {
 		a.broken = ""
 	}
 	a.path, a.file = path, f
+	// The directory goes with it: the folders it is in open, and its row
+	// is brought into view (treeReveal), so that where it is kept is seen.
+	for dir := filepath.Dir(path); dir != a.dir && inside(dir, a.dir); dir = filepath.Dir(dir) {
+		a.setFolderOpen(dir, true)
+	}
+	a.treeReveal = path
 	a.nameTitle = rootTitle(f)
 	a.conflict = false
 	a.remember(path)
