@@ -25,7 +25,8 @@ func (a *app) libraryView(c *ui.Context) {
 		// list and, beside it, the clip, the page's height.
 		ui.Row(c).Grow(1).AlignItems(ui.Stretch).Children(func() {
 			ui.Column(c).Grow(1).Basis(0).MinWidth(0).Children(func() {
-				pageColumn(c, "lib-column", true).Children(func() { a.libraryColumn(c) })
+				// The wall takes the room there is: more columns in a wide window.
+				pageColumn(c, "lib-column", true).MaxWidth(100000).Children(func() { a.libraryColumn(c) })
 			})
 			if sel != nil {
 				// The clip chosen, in a column at the page's right.
@@ -112,10 +113,18 @@ const wallStep = 120
 // hole under it. The newest are at the top, read across.
 func (a *app) clipWall(c *ui.Context, hits []library.Hit) {
 	t := c.Theme()
-	cols := 3
-	if a.lib.Find(a.libSel) != nil {
-		cols = 1
+	// As many columns as the room has, each about a card wide: three in
+	// an ordinary window, five on a large screen, one or more beside a
+	// clip chosen. A card is never stretched across a wide window.
+	w, _ := c.Size()
+	room := w - 12 - 56 - 20
+	if a.sideShown() {
+		room -= sideWidthOf
 	}
+	if a.lib.Find(a.libSel) != nil {
+		room -= min(420, w*0.4)
+	}
+	cols := min(max(int(room/300), 1), 6)
 	shown := min(len(hits), max(a.wallShown, wallStep))
 	tall := make([]float32, cols)
 	in := make([][]*library.Clip, cols)

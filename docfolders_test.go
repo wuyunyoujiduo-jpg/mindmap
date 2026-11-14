@@ -1,12 +1,14 @@
 package main
 
 import (
-	"github.com/egoist/mygo/ui"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
+	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
 
@@ -251,4 +253,54 @@ func TestMapFacesFollowStructure(t *testing.T) {
 		}
 	}
 	snapshot(t, tt, "projects-faces")
+}
+
+// TestWideProjectsAndWall: in a wide window 项目 has a second column, of
+// what goes on in the projects, and 收集's wall more columns; in an
+// ordinary one neither.
+func TestWideProjectsAndWall(t *testing.T) {
+	a, tt := newTestApp(t)
+	for _, s := range model.Structures {
+		f := model.NewFile(s.Label())
+		d := f.Sheets[0]
+		d.Structure = s
+		for _, name := range []string{"目标", "范围说明", "里程碑"} {
+			if _, err := d.AddChild(d.Root.ID, name); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := f.Save(filepath.Join(a.dir, model.FileName(s.Label()))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a.refreshFiles()
+	a.addTask("今天 写周报", nil)
+	a.addTask("明天 交报销", nil)
+	for i := range 9 {
+		if _, err := a.addMemo(fmt.Sprintf("第 %d 条灵感，长短不一%s", i, strings.Repeat("，再多写一点", i%4)), "手动"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a.showProjects()
+	tt.Frame()
+	if tt.HasText("接下来的任务") {
+		t.Fatal("the rail shows in an ordinary window")
+	}
+	tt.SetSize(2000, 1000)
+	tt.Frame()
+	tt.Frame()
+	for _, want := range []string{"接下来的任务", "最近在做", "任务 写周报"} {
+		if !tt.HasText(want) {
+			t.Fatalf("no %q in a wide window: %q", want, tt.Texts())
+		}
+	}
+	snapshot(t, tt, "projects-wide")
+	a.openList(kindAll, "")
+	tt.Frame()
+	tt.Frame()
+	first, _ := tt.Find("资料 " + a.lib.Clips[0].Label())
+	if first.W > 420 {
+		t.Fatalf("a card of the wall is stretched: %v wide", first.W)
+	}
+	snapshot(t, tt, "library-wide")
 }

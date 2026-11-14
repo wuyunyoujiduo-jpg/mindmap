@@ -158,7 +158,13 @@ func (a *app) projectsView(c *ui.Context) {
 	if a.treeShown() {
 		w -= sideWidthOf // the directory's
 	}
-	cols := max(int((min(w, pageWidth+56)-56+16)/256), 1)
+	// A wide window has a second column, of what goes on in the projects
+	// (projectsRail); the cards take the rest, as many across as fit.
+	rail := w >= projRailRoom
+	if rail {
+		w -= projRailWidth
+	}
+	cols := max(int((w-56+16)/256), 1)
 
 	card := func(f model.FileInfo) {
 		path, col := f.Path, a.mapColor(f.Path)
@@ -274,8 +280,11 @@ func (a *app) projectsView(c *ui.Context) {
 		})
 	}
 
-	ui.Column(c.Key("projects")).Grow(1).Label("项目").Children(func() {
-		pageColumn(c, "projects-column", true).Children(func() {
+	ui.Row(c.Key("projects")).Grow(1).AlignItems(ui.Stretch).Label("项目").Children(func() {
+		if rail {
+			defer a.projectsRail(c)
+		}
+		pageColumn(c, "projects-column", true).MaxWidth(100000).Grow(1).Basis(0).MinWidth(0).Children(func() {
 			title, sub, shown := "项目", "一张导图就是一个项目", a.files
 			if a.projFolder != "" && a.treeShown() {
 				title, sub, shown = at.Name, "", at.AllFiles()
@@ -285,7 +294,11 @@ func (a *app) projectsView(c *ui.Context) {
 				n := counts[fi.Path]
 				open, done = open+n.total-n.done, done+n.done
 			}
-			pageHead(c, "projects-head", title, sub, []figure{{len(shown), "张导图"}, {open, "件要做"}, {done, "件做完"}}, func() {
+			figs := []figure{{len(shown), "张导图"}, {open, "件要做"}, {done, "件做完"}}
+			if rail && a.projFolder == "" {
+				figs = nil // the column beside says them, larger
+			}
+			pageHead(c, "projects-head", title, sub, figs, func() {
 				if a.cfg.HideTree {
 					if iconButton(c, iconSidebar, "显示目录", "显示目录：文件夹和导图的列表", 32, true).Clicked() {
 						a.cfg.HideTree = false
@@ -496,4 +509,151 @@ func colorIndex(col ui.Color) int {
 		}
 	}
 	return 0
+}
+
+// A wide window's second column on 项目: projRailRoom is the room the
+// page needs to have it, projRailWidth what it takes.
+const (
+	projRailRoom  = 1380
+	projRailWidth = 380
+)
+
+// projectsRail is what goes on in the projects, beside their cards in a
+// wide window: how they stand in four figures, those worked on lately with
+// how far each is, and the tasks that come next, whatever map they are of.
+// It is what the room of a large screen is for: a second thing beside the
+// first, not the first stretched.
+func (a *app) projectsRail(c *ui.Context) {
+	t := c.Theme()
+	now := a.now()
+	day := today(now)
+	type count struct{ done, total int }
+	counts := map[string]count{}
+	open, done, late := 0, 0, 0
+	var next []taskItem
+	for _, it := range a.taskItems() { // by when, those with a day first
+		n := counts[it.path]
+		n.total++
+		if it.done() {
+			n.done++
+			done++
+		} else {
+			open++
+			if d := it.date(); d != nil {
+				if d.Before(day) {
+					late++
+				}
+				if len(next) < 8 {
+					next = append(next, it)
+				}
+			}
+		}
+		counts[it.path] = n
+	}
+	ui.Column(c.Key("projects-rail")).Width(projRailWidth).Shrink(0).FillHeight().BorderWidth(0, 0, 0, 1).BorderColor(hairline(t)).
+		Background(t.Text.Alpha(0.018)).Label("项目概况").Children(func() {
+		ui.Scroll(c.Key("rail-scroll")).Grow(1).Basis(0).MinHeight(0).Children(func() {
+			ui.Column(c).Padding(18, 20, 32).Gap(6).FillWidth().Children(func() {
+				// Four figures, a tile each: its icon, the figure, what it counts.
+				ui.Grid(c.Key("tiles")).Columns(2).Gap(8).FillWidth().Children(func() {
+					tile := func(icon, name string, n int, col ui.Color) {
+						whiteCard(ui.Row(c.Key(name)).Padding(12, 12).Gap(10).Radius(radiusCard).AlignItems(ui.Center).MinWidth(0).Label(fmt.Sprintf("%d %s", n, name)), t).Children(func() {
+							kubaiIcon(c, icon, 30, true)
+							ui.Column(c).Gap(1).MinWidth(0).Children(func() {
+								ui.Text(c, fmt.Sprint(n)).FontSize(textHeadline).FontWeight(700).LetterSpacing(-0.4).FontFeatures("tnum").TextColor(col)
+								ui.Text(c, name).FontSize(textCaption).TextColor(t.TextMuted).NoWrap()
+							})
+						})
+					}
+					tile("sitemap", "张导图", len(a.files), t.Text)
+					tile("list", "件要做", open, t.Text)
+					tile("circle-check", "件做完", done, t.Text)
+					lateInk := t.Text
+					if late > 0 {
+						lateInk = t.Danger
+					}
+					tile("calendar", "件逾期", late, lateInk)
+				})
+				// Those worked on lately, each with how far it is.
+				trayHead(c, "head:最近在做", "最近在做", "", nil).Margin(12, 0, 0)
+				shown := 0
+				for _, fi := range a.recentFiles() {
+					n := counts[fi.Path]
+					if fi.Path == a.inboxPath() || shown == 5 {
+						continue
+					}
+					shown++
+					path, col := fi.Path, a.mapColor(fi.Path)
+					row := ui.Row(c.Key("recent:"+path)).MinHeight(44).Padding(6, 8).Gap(10).Radius(radiusRow).AlignItems(ui.Center).FillWidth().
+						Cursor(ui.CursorPointer).Label("打开 " + mapName(path)).Background(t.Text.Alpha(0)).Transition(easeLook)
+					if row.Hovered() {
+						row.Background(t.Text.Alpha(0.05))
+					}
+					if row.Clicked() {
+						a.later(func() { _ = a.open(path) })
+					}
+					row.Children(func() {
+						ui.Box(c).Size(15, 15).Center().Shrink(0).PassThrough().Children(func() { mapDot(c, col, 8) })
+						ui.Column(c).Gap(5).Grow(1).Shrink(1).Basis(0).MinWidth(0).PassThrough().Children(func() {
+							ui.Text(c, mapName(path)).FontSize(textBody).SingleLine()
+							if n.total > 0 {
+								ui.Box(c).Height(4).FillWidth().Radius(2).Background(t.Text.Alpha(0.08)).Children(func() {
+									ui.Box(c).Height(4).WidthPercent(max(float32(n.done)/float32(n.total), 0.02) * 100).Radius(2).Background(col)
+								})
+							}
+						})
+						word := "没有任务"
+						if n.total > 0 {
+							word = fmt.Sprintf("%d%%", n.done*100/n.total)
+						}
+						ui.Text(c, word).FontSize(textCaption).TextColor(t.TextMuted).FontFeatures("tnum").NoWrap().Shrink(0).PassThrough()
+					})
+				}
+				// The tasks that come next, of whatever map.
+				trayHead(c, "head:接下来的任务", "接下来的任务", "", func() {
+					if textLink(c, "全部 ›", "全部任务").Clicked() {
+						a.later(func() {
+							a.openTasks()
+							a.tasks.view, a.tasks.onMap = tasksAll, ""
+						})
+					}
+				}).Margin(12, 0, 0)
+				if len(next) == 0 {
+					emptyNote(c, "有日期的任务会出现在这里。")
+				}
+				for _, it := range next {
+					row := ui.Row(c.Key("next:"+it.key())).MinHeight(44).Padding(6, 8).Gap(10).Radius(radiusRow).AlignItems(ui.Center).FillWidth().
+						Cursor(ui.CursorPointer).Label("任务 " + it.node.Title).Background(t.Text.Alpha(0)).Transition(easeLook)
+					if row.Hovered() {
+						row.Background(t.Text.Alpha(0.05))
+					}
+					if row.Clicked() {
+						a.later(func() {
+							a.openTasks()
+							a.showTask(it)
+						})
+					}
+					row.Children(func() {
+						a.taskCircle(c, it, 15)
+						words, _ := titleAndSite(it.node.Title)
+						ui.Column(c).Gap(2).Grow(1).Shrink(1).Basis(0).MinWidth(0).PassThrough().Children(func() {
+							ui.Text(c, words).FontSize(textBody).SingleLine()
+							ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+								mapDot(c, a.mapColor(it.path), 6)
+								ui.Text(c, it.mapName).FontSize(textCaption).TextColor(t.TextMuted).SingleLine()
+							})
+						})
+						d := *it.date()
+						if d.Before(day) {
+							ui.Box(c).Padding(2, 8).Radius(6).Background(t.Danger.Alpha(0.1)).Shrink(0).PassThrough().Children(func() {
+								ui.Text(c, dayLabel(d, now)).FontSize(textCaption).TextColor(t.Danger).NoWrap()
+							})
+						} else {
+							ui.Text(c, dayLabel(d, now)).FontSize(textCaption).TextColor(t.TextMuted).NoWrap().Shrink(0).PassThrough()
+						}
+					})
+				}
+			})
+		})
+	})
 }

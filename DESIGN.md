@@ -173,6 +173,13 @@ Built to the draft https://claude.ai/artifact/5Nw4Mn4q4ozd9rpUNGh8AP.
 - **The AI's key by a heading** (`sparkKey`): the spark and its words in
   the accent, on no block until pointed at.
 
+项目 in a wide window (`projRailRoom`) has a column at its right of what
+goes on in the projects (`projectsRail`): four figures as tiles, those
+worked on lately with how far each is, the tasks that come next. 收集's
+wall has as many columns as the room has (`clipWall`), a card never
+stretched. Both after the dashboards the user showed (stat tiles, recent
+projects with their progress, upcoming tasks).
+
 A page uses the room a wide window has by standing a second thing
 beside the first, not by stretching one column across it nor by leaving
 half the window empty: with `railRoom` or more, what waits is a column at
