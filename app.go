@@ -402,6 +402,7 @@ type app struct {
 	secretsOf   *library.Library // what secretCount counted, and when
 	secretsAt   int
 	secrets     int
+	treeQuick   bool   // the directory's rows being drawn are 快捷访问's
 	escLeave    bool   // Escape was pressed in a field of a pane: the focus leaves it (escRest)
 	secretShown string // the clip whose secrets its details show, asked for
 	wallShown   int    // how many clips 收集's wall shows, when more than wallStep

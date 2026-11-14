@@ -968,10 +968,11 @@ func TestSidebarFoldersAndFavorites(t *testing.T) {
 	if len(a.tree.Folders) != 1 || len(a.tree.Folders[0].Files) != 1 {
 		t.Fatalf("tree %+v", a.tree)
 	}
-	// Starred maps show first.
+	// Starred maps show first, in a part of their own (快捷访问), and
+	// stay in their folder with a star.
 	a.toggleFavorite(a.path)
 	tt.Frame()
-	if tt.HasText("快捷访问") || !tt.HasText("★") || !slices.Contains(a.cfg.Favorites, a.path) {
+	if !tt.HasText("快捷访问") || !tt.HasText("★") || !slices.Contains(a.cfg.Favorites, a.path) {
 		t.Fatalf("favorites %v", a.cfg.Favorites)
 	}
 	// Renaming keeps the favorite and the open map.

@@ -23,23 +23,48 @@ func (a *app) mapTree(c *ui.Context) {
 	t := c.Theme()
 	side := ui.Column(c.Key("map-tree")).Width(sideWidthOf).Shrink(0).FillHeight().BorderWidth(0, 1, 0, 0).BorderColor(hairline(t))
 	side.Children(func() {
-		ui.Row(c.Key("tree-head")).Height(44).Padding(6, 8, 0, 18).Gap(2).AlignItems(ui.Center).Shrink(0).Children(func() {
-			ui.Text(c, "目录").FontSize(textCaption).FontWeight(700).TextColor(t.TextMuted).Grow(1).PassThrough()
-			iconButton(c, iconPlus, "目录新建", "新建导图、文件夹", 28, true).Menu(func(m *ui.Menu) {
-				if m.Item("新建导图").Chosen() {
-					a.later(func() { a.newMapIn(a.treeFolder()) })
-				}
-				if m.Item("新建文件夹").Chosen() {
-					a.later(func() { a.newFolder(a.treeFolder()) })
-				}
-			})
-		})
 		a.sideDrawn, a.sideItems = a.sideItems, nil // the keys go by the list drawn
 		ui.Scroll(c.Key("tree-scroll")).Grow(1).Children(func() {
 			// The keys on a column in the scroll, which takes the arrows first.
 			list := ui.Column(c.Key("tree-list")).Padding(0, 8, 12).Gap(1).FillWidth().Label("目录").FocusBind(&a.sideFocus, "side")
 			a.sideKeys(list)
 			list.Children(func() {
+				// 快捷访问: the maps starred, first and in a part of their own,
+				// wherever they are kept (they stay in their folders below
+				// too): what is gone to most is not looked for in a folder.
+				var quick []model.FileInfo
+				for _, f := range a.recentFiles() {
+					if a.starred(f.Path) {
+						quick = append(quick, f)
+					}
+				}
+				if len(quick) > 0 {
+					ui.Row(c.Key("quick-head")).Height(36).Padding(6, 0, 0, 10).AlignItems(ui.Center).Shrink(0).Children(func() {
+						ui.Text(c, "快捷访问").FontSize(textCaption).FontWeight(700).LetterSpacing(0.4).TextColor(faint(t)).PassThrough()
+					})
+					a.treeQuick = true
+					for _, f := range quick {
+						path := f.Path
+						a.treeRow(c.Key("quick:"+path), 0, f.Name, "", path, path == a.path && !a.libOpen, iconMap, a.mapColor(path),
+							func() {
+								_ = a.open(path)
+								a.sideFocus = "side"
+							}, func(m *ui.Menu) { a.mapMenu(m, path) })
+					}
+					a.treeQuick = false
+					sideLine(c)
+				}
+				ui.Row(c.Key("tree-head")).Height(36).Padding(2, 0, 0, 10).Gap(2).AlignItems(ui.Center).Shrink(0).Children(func() {
+					ui.Text(c, "目录").FontSize(textCaption).FontWeight(700).LetterSpacing(0.4).TextColor(faint(t)).Grow(1).PassThrough()
+					iconButton(c, iconPlus, "目录新建", "新建导图、文件夹", 28, true).Menu(func(m *ui.Menu) {
+						if m.Item("新建导图").Chosen() {
+							a.later(func() { a.newMapIn(a.treeFolder()) })
+						}
+						if m.Item("新建文件夹").Chosen() {
+							a.later(func() { a.newFolder(a.treeFolder()) })
+						}
+					})
+				})
 				if a.libOpen { // every map, as the cards' 全部
 					a.treeRow(c.Key("all"), 0, "全部导图", fmt.Sprint(len(a.files)), "", a.projFolder == "", iconLevels, t.TextMuted, func() { a.projFolder = "" }, nil)
 				}
@@ -123,11 +148,13 @@ func (a *app) treeRow(c *ui.Context, depth int, name, count, path string, on boo
 		if on {
 			txt.FontWeight(700)
 		}
-		if path != "" && a.starred(path) && !hover {
+		if path != "" && a.starred(path) && !hover && !a.treeQuick { // under 快捷访问 the star says nothing
 			ui.Text(c, "★").FontSize(11).TextColor(ui.Hex("#D4A836")).Margin(0, 6, 0, 0).PassThrough()
 		}
-		if count != "" && !(hover && menu != nil) {
-			ui.Text(c, count).FontSize(textCaption).TextColor(t.TextMuted).Margin(0, 6, 0, 0).PassThrough()
+		// Its count as every count of the left column (sideCount); none
+		// for a folder that holds nothing.
+		if count != "" && count != "0" && !(hover && menu != nil) {
+			ui.Box(c).Margin(0, 6, 0, 0).Shrink(0).PassThrough().Children(func() { sideCount(c, count, on, false) })
 		}
 		if menu != nil {
 			a.rowMore(c, hover, "目录菜单", menu)

@@ -60,7 +60,10 @@ by AI, and an AI assistant.
     waits for a place, and the maps to see the tasks of alone
     (`todaySide`); 项目's directory (`tree.go`, `mapTree`: folders that
     open and close and their maps, so that going from a map to another is
-    one click); 收集's kinds, ways to look back and every tag (`libSide`): a kind,
+    one click); in both, the maps starred stand first in a part of their
+    own, 快捷访问, whether or not they have a task (the user asked for
+    it at the head, apart, on 今天 too; they stay in their folders with
+    a star as well); 收集's kinds, ways to look back and every tag (`libSide`): a kind,
     a tag and 星标, 未整理 or 含密钥 narrow together, each row chosen
     showing so, and the page says each as a chip with a ✕ of its own
     under its head, with how many are left (`libFilters`, `filterChip`;

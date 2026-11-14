@@ -685,9 +685,20 @@ func TestTodaySideProjects(t *testing.T) {
 		}
 	}
 	a.refreshFiles()
+	// One starred, with nothing to do: it heads the column all the same.
+	quiet := model.NewFile("常看的")
+	quietPath := filepath.Join(a.dir, model.FileName("常看的"))
+	if err := quiet.Save(quietPath); err != nil {
+		t.Fatal(err)
+	}
+	a.refreshFiles()
+	a.toggleFavorite(quietPath)
 	a.openTasks()
 	tt.Frame()
 	tt.Frame()
+	if !tt.HasText("快捷访问") || !tt.HasText("只看 常看的") {
+		t.Fatalf("no 快捷访问: %q", tt.Texts())
+	}
 	if tt.HasText("只看 收件箱") {
 		t.Fatal("the inbox is listed among the projects")
 	}

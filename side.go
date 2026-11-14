@@ -186,6 +186,89 @@ func (a *app) todaySide(c *ui.Context) {
 				total[it.path]++
 			}
 		}
+		// A map's row: its dot with how far it is, its name, what is left
+		// to do, and under the pointer the key to the map itself.
+		mapRow := func(path string) {
+			n := open[path]
+			col := a.mapColor(path)
+			done := float32(0)
+			if total[path] > 0 {
+				done = float32(total[path]-n) / float32(total[path])
+			}
+			toMap := false // its key under the pointer was pressed
+			row := sideRowTrail(c, "map:"+path, mapName(path), "", a.tasks.onMap == path, func(bool) {
+				// Its dot, and round it how far it is, in its own color: one
+				// mark where a ring, a count and an arrow in a row were three
+				// (the user: not good to look at).
+				ui.Box(c).Size(sideIconSize, 18).Shrink(0).PassThrough().Draw(func(p *ui.Painter, r ui.Rect) {
+					cx, cy := r.X+r.W/2, r.Y+r.H/2
+					p.FillPath(new(ui.Path).Circle(cx, cy, 3.5), col)
+					p.StrokePath(new(ui.Path).Circle(cx, cy, 7.5), 1.75, col.Alpha(0.2))
+					if done > 0 {
+						p.StrokePath(new(ui.Path).Circle(cx, cy, 7.5).Trim(0, done).Cap(ui.RoundCap), 1.75, col)
+					}
+				})
+			}, func(hot bool) {
+				// What is left to do, as every row's count; under the
+				// pointer, in the count's own room, the key to its map (a
+				// phone need not be as this is, the user said).
+				th := c.Theme()
+				if !hot { // at the row's edge, as the lists' counts above
+					if n == 0 { // nothing to do: nothing said, its room kept
+						ui.Box(c).Size(sideCountWide, sideCountTall).Shrink(0).PassThrough()
+						return
+					}
+					sideCount(c, fmt.Sprint(n), a.tasks.onMap == path, false)
+					return
+				}
+				key := ui.Box(c.Key("to-map")).Size(sideCountWide, sideCountTall).Radius(sideCountTall / 2).Center().Shrink(0).Cursor(ui.CursorPointer).
+					Label("打开导图 " + mapName(path)).Tooltip("打开这张导图").Background(th.Text.Alpha(0)).Transition(easeLook)
+				ink := ink2(th)
+				if key.Hovered() {
+					key.Background(th.Accent.Alpha(0.14))
+					ink = th.Accent
+				}
+				press(key, 0.9)
+				key.Children(func() { glyph(c, iconForward, 11, ink) })
+				toMap = key.Clicked()
+			})
+			row.Label("只看 " + mapName(path))
+			// A task dropped on a project goes to it, under its center.
+			if d, over := ui.DragOver[taskDrag](row); over && d.path != path {
+				row.Background(c.Theme().Accent.Alpha(0.14))
+			}
+			if d, ok := ui.Drop[taskDrag](row); ok && d.path != path {
+				a.later(func() { a.dropTaskOnMap(d, path) })
+			}
+			if toMap { // to its map, not to its tasks
+				a.later(func() { _ = a.open(path) })
+			} else if row.Clicked() {
+				if a.tasks.onMap == path {
+					a.tasks.onMap = ""
+				} else {
+					a.tasks.onMap = path
+					if a.tasks.view == tasksWaiting || a.tasks.view == tasksInbox || a.tasks.view == tasksReview || a.tasks.view == tasksLate {
+						a.tasks.view = tasksAll
+					}
+				}
+			}
+		}
+		// 快捷访问: the maps starred, at the head and in a part of their
+		// own, whether or not they have a task to do, as in 项目's
+		// directory: the user asked that they stand first, apart, here too.
+		var quick []string
+		for _, f := range a.recentFiles() {
+			if a.starred(f.Path) && f.Path != a.inboxPath() {
+				quick = append(quick, f.Path)
+			}
+		}
+		if len(quick) > 0 {
+			sideLine(c)
+			sideHead(c, "快捷访问")
+			for _, path := range quick {
+				mapRow(path)
+			}
+		}
 		sideLine(c)
 		// The projects, and the key that makes another.
 		ui.Row(c.Key("head:项目")).AlignItems(ui.Center).FillWidth().Padding(0, 4, 0, 0).Children(func() {
@@ -196,83 +279,21 @@ func (a *app) todaySide(c *ui.Context) {
 				}
 			})
 		})
-		// Those starred first, then by when they were opened last; the
-		// inbox is a list above, not a project here. A few show, the others
+		// The others with a task to do, by when they were opened last; the
+		// inbox is a list above, not a project here. A few show, the rest
 		// under 全部项目: a column of every map with a task grew long.
 		files := slices.DeleteFunc(a.recentFiles(), func(f model.FileInfo) bool {
-			return f.Path == a.inboxPath() || open[f.Path] == 0 && a.tasks.onMap != f.Path
+			return f.Path == a.inboxPath() || a.starred(f.Path) || open[f.Path] == 0 && a.tasks.onMap != f.Path
 		})
-		slices.SortStableFunc(files, func(x, y model.FileInfo) int { return b2i(a.starred(y.Path)) - b2i(a.starred(x.Path)) })
 		shown := len(files)
 		if !a.tasks.allMaps && shown > sideMaps+1 { // one more is shown rather than hidden alone
 			shown = sideMaps
 		}
 		for i, fi := range files {
-			path := fi.Path
-			if i >= shown && a.tasks.onMap != path {
+			if i >= shown && a.tasks.onMap != fi.Path {
 				continue
 			}
-			{
-				n := open[path]
-				col := a.mapColor(path)
-				done := float32(0)
-				if total[path] > 0 {
-					done = float32(total[path]-n) / float32(total[path])
-				}
-				toMap := false // its key under the pointer was pressed
-				row := sideRowTrail(c, "map:"+path, mapName(path), "", a.tasks.onMap == path, func(bool) {
-					// Its dot, and round it how far it is, in its own color: one
-					// mark where a ring, a count and an arrow in a row were three
-					// (the user: not good to look at).
-					ui.Box(c).Size(sideIconSize, 18).Shrink(0).PassThrough().Draw(func(p *ui.Painter, r ui.Rect) {
-						cx, cy := r.X+r.W/2, r.Y+r.H/2
-						p.FillPath(new(ui.Path).Circle(cx, cy, 3.5), col)
-						p.StrokePath(new(ui.Path).Circle(cx, cy, 7.5), 1.75, col.Alpha(0.2))
-						if done > 0 {
-							p.StrokePath(new(ui.Path).Circle(cx, cy, 7.5).Trim(0, done).Cap(ui.RoundCap), 1.75, col)
-						}
-					})
-				}, func(hot bool) {
-					// What is left to do, as every row's count; under the
-					// pointer, in the count's own room, the key to its map (a
-					// phone need not be as this is, the user said).
-					th := c.Theme()
-					if !hot { // at the row's edge, as the lists' counts above
-						sideCount(c, fmt.Sprint(n), a.tasks.onMap == path, false)
-						return
-					}
-					key := ui.Box(c.Key("to-map")).Size(sideCountWide, sideCountTall).Radius(sideCountTall / 2).Center().Shrink(0).Cursor(ui.CursorPointer).
-						Label("打开导图 " + mapName(path)).Tooltip("打开这张导图").Background(th.Text.Alpha(0)).Transition(easeLook)
-					ink := ink2(th)
-					if key.Hovered() {
-						key.Background(th.Accent.Alpha(0.14))
-						ink = th.Accent
-					}
-					press(key, 0.9)
-					key.Children(func() { glyph(c, iconForward, 11, ink) })
-					toMap = key.Clicked()
-				})
-				row.Label("只看 " + mapName(path))
-				// A task dropped on a project goes to it, under its center.
-				if d, over := ui.DragOver[taskDrag](row); over && d.path != path {
-					row.Background(c.Theme().Accent.Alpha(0.14))
-				}
-				if d, ok := ui.Drop[taskDrag](row); ok && d.path != path {
-					a.later(func() { a.dropTaskOnMap(d, path) })
-				}
-				if toMap { // to its map, not to its tasks
-					a.later(func() { _ = a.open(path) })
-				} else if row.Clicked() {
-					if a.tasks.onMap == path {
-						a.tasks.onMap = ""
-					} else {
-						a.tasks.onMap = path
-						if a.tasks.view == tasksWaiting || a.tasks.view == tasksInbox || a.tasks.view == tasksReview || a.tasks.view == tasksLate {
-							a.tasks.view = tasksAll
-						}
-					}
-				}
-			}
+			mapRow(fi.Path)
 		}
 		if rest := len(files) - shown; rest > 0 || a.tasks.allMaps && len(files) > sideMaps+1 {
 			word := fmt.Sprintf("全部项目 %d", len(files))
