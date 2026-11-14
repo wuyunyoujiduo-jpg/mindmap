@@ -397,6 +397,9 @@ func (a *app) goToNode(path, sheet, id string) {
 			return
 		}
 	}
+	// The map may be the one open already, under a place's page: the
+	// page gives way to it, or the node is chosen where it cannot be seen.
+	a.libOpen = false
 	a.mode = viewMap
 	a.showSheet(sheet)
 	if a.focusNode() != nil && !a.focusNode().Contains(id) {

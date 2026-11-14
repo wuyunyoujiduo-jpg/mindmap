@@ -905,3 +905,17 @@ func TestNoteLinksToAClip(t *testing.T) {
 		t.Fatalf("the link did not come back from %q", login.Note)
 	}
 }
+
+// A node found from a place's page shows on its map, though that map is
+// the one open already.
+func TestNodeFoundLeavesThePlace(t *testing.T) {
+	a, tt := newTestApp(t)
+	login := find(t, a, "登录")
+	a.openLibrary()
+	tt.Frame()
+	a.goToNode(a.path, a.doc.ID, login.ID)
+	tt.Frame()
+	if a.libOpen || a.selected != login.ID || a.mode != viewMap {
+		t.Fatalf("libOpen %v selected %q mode %v", a.libOpen, a.selected, a.mode)
+	}
+}
