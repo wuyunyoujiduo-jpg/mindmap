@@ -127,7 +127,11 @@ by AI, and an AI assistant.
   - 收集 (`libview.go`): notes and clips, a wall of cards that
     stand apart on the white page, each white with a hairline
     (`wallCard`; the user found one gray ground under them a slab); its 回顾 shows a
-    few old notes in place (`memos.go`). What is collected is 收集's (the
+    few old notes in place (`memos.go`). A card's picture is read away
+    from the window's work and small (`thumbs.go`, `filePicture`): read
+    whole as the cards were first drawn, a wall of screenshots held the
+    window still the first time 收集 was opened. Nothing that reads a
+    file or decodes a picture belongs in a frame. What is collected is 收集's (the
     word of the UI, never 资料库), and is on a map by a topic's link.
   - Color is kept for small things that mean something: each map has its
     own (`mapcolor.go`), shown as a dot or as a pastel with a deep ink

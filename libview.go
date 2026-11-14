@@ -460,8 +460,12 @@ func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 				}
 			})
 			if clip.Kind == library.KindImage {
-				if b := a.fileBitmap(a.lib.FilePath(clip)); b != nil {
+				// Its picture small, read away from the window's work; a
+				// pale block in its room until it is.
+				if b, loading := a.filePicture(a.lib.FilePath(clip), true); b != nil {
 					ui.Image(c, b).Height(110).FillWidth().Fit(ui.Cover).Radius(8).PassThrough()
+				} else if loading {
+					ui.Box(c.Key("picture-loading")).Height(110).FillWidth().Radius(8).Background(blockFill(t)).PassThrough()
 				}
 			}
 			sub := cmpOr(clip.Desc, clip.Summary)
@@ -531,22 +535,6 @@ func clipColor(kind string) ui.Color {
 		return ui.Hex("#D95C8C")
 	}
 	return ui.Hex("#3DAA7D")
-}
-
-// fileBitmap is the picture of a file, decoded once.
-func (a *app) fileBitmap(path string) *ui.Bitmap {
-	if path == "" {
-		return nil
-	}
-	if b, ok := a.bitmaps[path]; ok {
-		return b
-	}
-	var b *ui.Bitmap
-	if data, err := os.ReadFile(path); err == nil {
-		b, _ = ui.DecodeBitmap(data)
-	}
-	a.bitmaps[path] = b
-	return b
 }
 
 // clipMenu is the menu of a clip.
@@ -672,7 +660,12 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 	})
 
 	if clip.Kind == library.KindImage {
-		if b := a.fileBitmap(a.lib.FilePath(clip)); b != nil {
+		// Whole, once read; the small one of its card meanwhile.
+		b, _ := a.filePicture(a.lib.FilePath(clip), false)
+		if b == nil {
+			b, _ = a.filePicture(a.lib.FilePath(clip), true)
+		}
+		if b != nil {
 			w, h := b.Size()
 			k := min(1, 420/float32(max(w, 1)), 320/float32(max(h, 1)))
 			img := ui.Image(c, b).Size(float32(w)*k, float32(h)*k).Fit(ui.Contain).Radius(10).Cursor(ui.CursorPointer).Tooltip("用默认应用打开")

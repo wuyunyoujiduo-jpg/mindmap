@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"image"
+	"image/png"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -162,4 +165,43 @@ func TestWallArrowsGoByPlace(t *testing.T) {
 	if !ok || r2.X != r1.X || r2.Y <= r1.Y {
 		t.Fatalf("below is at %v, the first at %v", r2, r1)
 	}
+}
+
+// A picture of the wall is read away from the window's work, small: its
+// card is there at once, a pale block in the picture's room until then.
+func TestWallPicturesReadAside(t *testing.T) {
+	a, tt := newTestApp(t)
+	img := image.NewRGBA(image.Rect(0, 0, 2000, 1200))
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatal(err)
+	}
+	cl, err := a.lib.AddData(buf.Bytes(), "shot.png", library.KindImage, "", a.now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var waiting []func()
+	a.async = func(work func() (any, error), done func(any, error)) {
+		waiting = append(waiting, func() { done(work()) })
+	}
+	a.openList(kindAll, "")
+	tt.Frame()
+	path := a.lib.FilePath(cl)
+	if _, read := a.bitmaps["thumb:"+path]; read || len(waiting) != 1 || !tt.HasText("资料 "+cl.Label()) {
+		t.Fatalf("read %v, waiting %d", read, len(waiting))
+	}
+	tt.Frame() // asked for once, however many frames pass
+	if len(waiting) != 1 {
+		t.Fatalf("asked for %d times", len(waiting))
+	}
+	waiting[0]()
+	tt.Frame()
+	b := a.bitmaps["thumb:"+path]
+	if b == nil {
+		t.Fatal("no picture")
+	}
+	if w, h := b.Size(); w > 2000/2 || h < thumbTall {
+		t.Fatalf("not small: %d×%d", w, h)
+	}
+	snapshot(t, tt, "wall-picture")
 }
