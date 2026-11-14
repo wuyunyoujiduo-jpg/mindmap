@@ -186,7 +186,9 @@ func (a *app) restoreVersion(f *model.File) {
 	a.keepVersion(versions.BeforeRestore)
 	a.hist.Record(a.state())
 	sheet := a.doc.ID
-	a.restore(model.State{File: f.Clone(), Sheet: sheet, Selected: a.selected})
+	f = f.Clone()
+	f.Log = a.file.Clone().Log // what agents reported since is not taken back with the map
+	a.restore(model.State{File: f, Sheet: sheet, Selected: a.selected})
 	a.dirty, a.changed = true, a.now()
 	a.historyOpen = false
 	a.tell("已恢复到所选版本，可以撤销")

@@ -268,6 +268,17 @@ by AI, and an AI assistant.
   Apple silicon alone unless the workflow is run with `all: true`, which
   builds Intel's and Windows' too: without it now and then, those stay
   at an old version (Intel's stands at 0.33.1; the user asked for the Mac's alone, 2026-11).
+- Agents (`internal/mcp`, `mcp.go`): a project has one map, found by the
+  repository an agent works in (`projectMap`: the map whose `Project` is
+  that repository, a worktree's too, or whose `Repo` is its origin, as
+  on the user's other computer; made when there is none). What agents
+  write without being told where goes under the map's 待整理 (`capture`,
+  `log_session`'s todos) and into its log (`model.File.Log`: sessions,
+  decisions, tasks, edits); a decision is whole as a clip tagged 决策
+  (`log_decision`). The map's structure stays the user's. Claude Code's
+  hooks (`MyMind hook start|stop`, `hook.go`, installed by the window's
+  装上) give the brief as a session begins and ask for `log_session` when
+  the code changed. Writers hold the folder's lock (`lock.go`).
 - Sync with GitHub: `internal/ghsync` (a three-way merge over the REST API,
   state in `<maps folder>/.sync/`), wired in `sync.go`.
 - Screenshots are the app's own (`internal/screenshot`), on OneShot's way:

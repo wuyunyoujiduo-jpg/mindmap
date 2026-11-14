@@ -32,6 +32,14 @@ type Server struct {
 	Now      func() time.Time
 	// Embedder, when set up, finds clips by meaning too.
 	Embedder library.Embedder
+	// Cwd is the folder the server runs in, the agent's project: the map
+	// of a call that names none is that project's (project.go).
+	Cwd string
+	// StateDir keeps the folder's lock and where each project's code was
+	// when its record was last written (lock.go, hook.go).
+	StateDir string
+	// Agent is the program that connected, as it named itself.
+	Agent string
 }
 
 type request struct {
@@ -91,8 +99,12 @@ func (s *Server) handle(req request) (any, *rpcError) {
 	case "initialize":
 		var p struct {
 			ProtocolVersion string `json:"protocolVersion"`
+			ClientInfo      struct {
+				Name string `json:"name"`
+			} `json:"clientInfo"`
 		}
 		_ = json.Unmarshal(req.Params, &p)
+		s.Agent = p.ClientInfo.Name
 		version := supported[0]
 		if slices.Contains(supported, p.ProtocolVersion) {
 			version = p.ProtocolVersion
@@ -124,7 +136,15 @@ func (s *Server) handle(req request) (any, *rpcError) {
 	return nil, &rpcError{-32601, "method not found: " + req.Method}
 }
 
-const instructions = `MyMind holds the user's project maps: the architecture, features, implementation notes, tasks and the next optimizations, as trees of nodes. Read the relevant map before working on a project, and keep it current as you work: mark tasks done or in progress, add notes on how things were implemented and decisions made, link nodes to the files (path:line) and PRs that implement them, and add nodes for follow-ups and optimizations you notice. Node IDs appear as {id:…} in read_map's output. Always pass a short "summary" of what you changed; the user reviews changes in the app's history. The user also keeps a library of collected notes, links, pictures and files: search it with search_library when the task may build on what they collected.
+const instructions = `MyMind is where the user keeps track of their projects: one map per project (its architecture, features, tasks), a log of what agents did and decided on it, and a library of collected notes. The user runs many agents and cannot follow each; what you record here is how they keep up. So:
+
+- A project's map is found by the repository you work in: leave "map" out and the tools use that project's map. If a tool says it cannot tell the project, pass project_dir (the repository's absolute path).
+- Before working, call project_brief: the tasks in hand and to do, recent decisions, what recent sessions did, the map's first levels.
+- As you work: update_node to mark a task doing or done; capture for a follow-up or a problem you notice (it goes to a branch the user sorts, 待整理: do not rearrange the user's map to make room for it); log_decision when you choose between real alternatives (what, why, what you did not choose) and not for the obvious.
+- Before you finish: log_session, a sentence or two on what was done, with what is left as todos.
+- Write in the user's language. Never write secrets. Node IDs appear as {id:…}. Always pass a short "summary" on the tools that take one; the user reviews changes in the app.
+
+The finer tools remain for when the user asks you to build or reshape a map: read_map, add_nodes, move_node, delete_node, create_map. The user also keeps a library of collected notes, links, pictures and files: search it with search_library when the task may build on what they collected.
 
 A map of a project's code keeps a code baseline: the commit it matches. read_map ends with it and with what changed since, file by file, with the nodes linked to each file. To bring such a map up to date, read those changes (git diff from the baseline) rather than all the code, update the nodes they touch, add nodes for new modules, and then call set_baseline. After mapping a project's code for the first time, call set_baseline (with project_dir) too.`
 
@@ -148,7 +168,8 @@ func schema(required []string, props map[string]any) map[string]any {
 func str(desc string) map[string]any { return map[string]any{"type": "string", "description": desc} }
 
 var (
-	mapProp     = str("The map: its name (as list_maps shows it) or its path relative to the maps folder.")
+	mapProp     = str("The map: its name (as list_maps shows it) or its path relative to the maps folder. Left out, the map of the project you work in.")
+	projectProp = str("The project's repository, as an absolute path. Only needed when the server does not run in it.")
 	summaryProp = str("A short description of the change, in the user's language, shown in the map's history.")
 	statusProp  = map[string]any{"type": "string", "enum": []string{"idea", "todo", "doing", "done", "none"},
 		"description": "The task status; none makes the node no longer a task."}
@@ -156,21 +177,37 @@ var (
 )
 
 var tools = []tool{
+	{"project_brief", "Brief on the project", "What to know before working on the project you are in: its tasks in hand and to do, recent decisions, what recent sessions did, the first levels of its map with their ids, and the code changed since the map was brought up to date. Call it first.",
+		schema(nil, map[string]any{"map": mapProp, "project_dir": projectProp}), readOnly},
+	{"capture", "Write down a task or a thought", "Write down, in one call, a task to do (a follow-up, a bug or an improvement you noticed) or a thought, without deciding where it belongs. A task goes to the project's map, under 待整理, where the user places it; a thought to the user's library. With no project, to the user's inbox. The project's map is made if it has none.",
+		schema([]string{"text"}, map[string]any{"text": str("What to write down. For a task, its first line is its title and the rest its note."),
+			"kind":     map[string]any{"type": "string", "enum": []string{"task", "idea"}, "description": "task (the default) or idea."},
+			"under":    str("For a task: the id of the node to put it under, when you know where it belongs."),
+			"priority": map[string]any{"type": "string", "enum": []string{"low", "medium", "high"}},
+			"due":      str("For a task: its due date as YYYY-MM-DD."), "map": mapProp, "project_dir": projectProp}), nil},
+	{"log_decision", "Record a decision", "Record a decision made on the project, so that the user, and agents after you, know why things are as they are: an approach chosen over another, a trade-off, something deliberately not done. Kept whole in the user's library, tagged 决策, and in the project's log.",
+		schema([]string{"title", "why"}, map[string]any{"title": str("What was decided, in a line."), "why": str("Why: the reasons, the constraints."),
+			"alternatives": str("What was considered and not chosen, and why not."),
+			"node_id":      str("The id of the node the decision is about, which is then linked to it."), "map": mapProp, "project_dir": projectProp}), nil},
+	{"log_session", "Record what the session did", "Record, before you finish, what this session of work did on the project, in a sentence or two the user can read at a glance, and the tasks it leaves. Shown to the user by day and project.",
+		schema([]string{"summary"}, map[string]any{"summary": str("What was done, in a sentence or two, in the user's language."),
+			"todos": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Tasks left to do, a line each; they go under 待整理."},
+			"map":   mapProp, "project_dir": projectProp}), nil},
 	{"list_maps", "List maps", "List the maps in the maps folder, with their canvases and how many tasks are open.",
 		schema(nil, map[string]any{}), readOnly},
 	{"read_map", "Read a map", "Read a map as an indented outline: every node with its {id:…}, task status as [ ] / [~] / [x] / [?] (todo, doing, done, idea), priority, dates, #tags and its note below it.",
-		schema([]string{"map"}, map[string]any{"map": mapProp, "sheet": str("A canvas's title; all canvases when left out.")}), readOnly},
+		schema(nil, map[string]any{"map": mapProp, "sheet": str("A canvas's title; all canvases when left out.")}), readOnly},
 	{"search", "Search maps", "Find nodes whose title, note or tags contain the query, in one map or all.",
 		schema([]string{"query"}, map[string]any{"query": str("Text to find, case-insensitive."), "map": mapProp}), readOnly},
 	{"list_tasks", "List tasks", "List task nodes, optionally of one map and one status, with their ids, dates and where they are.",
 		schema(nil, map[string]any{"map": mapProp, "status": map[string]any{"type": "string", "enum": []string{"idea", "todo", "doing", "done", "open"},
 			"description": "Only tasks with this status; open means not done."}}), readOnly},
 	{"add_nodes", "Add nodes", "Add nodes under a node, written as a Markdown outline: a line a node, nested by two-space indentation; '- [ ] text' makes a task to do and '- [x] text' a done one.",
-		schema([]string{"map", "parent_id", "outline", "summary"}, map[string]any{"map": mapProp,
+		schema([]string{"parent_id", "outline", "summary"}, map[string]any{"map": mapProp,
 			"parent_id": str("The id of the node to add under; use the root's id for top-level branches."),
 			"outline":   str("The nodes, as a Markdown list; links at a line's end, after a space, as <clip:id> or <mindmap:map#id>, are linked to its node."), "summary": summaryProp}), nil},
 	{"update_node", "Update a node", "Change a node: its title, note (replace or append), tags, and task status, priority and dates. Fields left out stay as they are.",
-		schema([]string{"map", "id", "summary"}, map[string]any{"map": mapProp, "id": str("The node's id."),
+		schema([]string{"id", "summary"}, map[string]any{"map": mapProp, "id": str("The node's id."),
 			"title": str("A new title."), "note": str("A new note, replacing the old one (Markdown)."),
 			"append_note": str("Text to add at the end of the note, as a new paragraph."),
 			"add_tags":    map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
@@ -183,15 +220,15 @@ var tools = []tool{
 			"start":        str("Start date as YYYY-MM-DD, or empty to clear."), "due": str("Due date as YYYY-MM-DD, or empty to clear."),
 			"summary": summaryProp}), nil},
 	{"move_node", "Move a node", "Move a node, with all below it, under another node.",
-		schema([]string{"map", "id", "parent_id", "summary"}, map[string]any{"map": mapProp, "id": str("The node to move."),
+		schema([]string{"id", "parent_id", "summary"}, map[string]any{"map": mapProp, "id": str("The node to move."),
 			"parent_id": str("The node to move it under."),
 			"index":     map[string]any{"type": "integer", "description": "Its place among the new parent's children; at the end when left out."},
 			"summary":   summaryProp}), nil},
 	{"delete_node", "Delete a node", "Delete a node and all below it. The user can restore it from the map's history.",
-		schema([]string{"map", "id", "summary"}, map[string]any{"map": mapProp, "id": str("The node to delete."), "summary": summaryProp}),
+		schema([]string{"id", "summary"}, map[string]any{"map": mapProp, "id": str("The node to delete."), "summary": summaryProp}),
 		map[string]any{"destructiveHint": true}},
 	{"set_baseline", "Set the code baseline", "Record the commit of the project's code the map is now up to date with. read_map then lists what changed since it, with the nodes linked to each changed file, so later updates read only the changes, not all the code. Call it after bringing the map up to date with the code.",
-		schema([]string{"map", "summary"}, map[string]any{"map": mapProp,
+		schema([]string{"summary"}, map[string]any{"map": mapProp,
 			"project_dir": str("The project's code repository, as an absolute path; needed when the map has no project folder yet."),
 			"commit":      str("The commit the map matches; the one checked out (HEAD) when left out."),
 			"summary":     summaryProp}), nil},
@@ -220,6 +257,18 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 		return v
 	}
 	switch name {
+	case "project_brief":
+		return s.brief(get("map"), get("project_dir"))
+	case "capture", "log_decision", "log_session", "add_nodes", "update_node", "move_node", "delete_node", "set_baseline", "create_map", "add_clip":
+		defer s.lock()()
+	}
+	switch name {
+	case "capture":
+		return s.capture(args)
+	case "log_decision":
+		return s.logDecision(args)
+	case "log_session":
+		return s.logSession(args)
 	case "list_maps":
 		return s.listMaps()
 	case "read_map":
@@ -261,6 +310,13 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 		}
 		if err != nil {
 			return "", err
+		}
+		if summary := clean(get("summary")); summary != "" && name != "set_baseline" {
+			e := model.LogEntry{}
+			if id := get("id"); id != "" && name != "delete_node" {
+				e.Nodes = []string{id}
+			}
+			s.log(f, model.LogEdit, firstLine(summary), e)
 		}
 		if err := s.write(path, before, f, get("summary")); err != nil {
 			return "", err
@@ -338,8 +394,12 @@ func (s *Server) rel(path string) string {
 
 // find reads the map a name or a path names.
 func (s *Server) find(name string) (string, *model.File, error) {
-	if strings.TrimSpace(name) == "" {
-		return "", nil, errors.New("缺少 map 参数，先用 list_maps 查看导图")
+	if strings.TrimSpace(name) == "" { // the project's
+		path, f, err := s.projectMap("", false)
+		if err == errNoProject {
+			err = errors.New("缺少 map 参数，先用 list_maps 查看导图")
+		}
+		return path, f, err
 	}
 	files, err := model.AllFilesIn(s.Dir)
 	if err != nil {

@@ -17,6 +17,10 @@ type File struct {
 	// Project is the folder of the project's code, which relative links
 	// of nodes are in.
 	Project string `json:"project,omitempty"`
+	// Repo names the project's repository by where its origin is, as
+	// "github.com/owner/repo": by it the map is the project's on another
+	// computer too, where the code is in another folder.
+	Repo string `json:"repo,omitempty"`
 	// GitHub was the repository ("owner/repo") whose issues the app made
 	// tasks of, before 0.56: kept as written.
 	GitHub string `json:"github,omitempty"`
@@ -30,6 +34,59 @@ type File struct {
 	// Measures were the numbers nodes were measured by, as hours or cost
 	// (Node.Values), which the app showed before 0.55: kept as written.
 	Measures []string `json:"measures,omitempty"`
+	// Log is what AI agents reported on the project as they worked on
+	// it: what a session did, a decision, a thing written down, a change
+	// to the map. The newest last.
+	Log []LogEntry `json:"log,omitempty"`
+}
+
+// Kinds of a log's entry.
+const (
+	LogSession  = "session"  // what a session of work did, as its agent summed it up
+	LogDecision = "decision" // a decision, kept whole as a clip of the library
+	LogTask     = "task"     // a task written down
+	LogIdea     = "idea"     // a thought written down, a clip
+	LogEdit     = "edit"     // a change to the map, as its agent described it
+)
+
+// maxLog is how many entries a map keeps, the oldest dropped.
+const maxLog = 500
+
+// LogEntry is a thing an AI agent reported on a map's project.
+type LogEntry struct {
+	ID   string    `json:"id"`
+	At   time.Time `json:"at"`
+	Kind string    `json:"kind"`
+	Text string    `json:"text"`
+	// Agent is the program that reported it, as it named itself.
+	Agent string `json:"agent,omitempty"`
+	// Clip is the clip made (a decision, an idea), Nodes the nodes made or
+	// the one it is about.
+	Clip  string   `json:"clip,omitempty"`
+	Nodes []string `json:"nodes,omitempty"`
+	// Commit and Branch are where the code was.
+	Commit string `json:"commit,omitempty"`
+	Branch string `json:"branch,omitempty"`
+}
+
+// AddLog adds an entry to the map's log, giving it an ID.
+func (f *File) AddLog(e LogEntry) LogEntry {
+	if e.ID == "" {
+		e.ID = NewID()
+	}
+	f.Log = append(f.Log, e)
+	if n := len(f.Log) - maxLog; n > 0 {
+		f.Log = slices.Clone(f.Log[n:])
+	}
+	return e
+}
+
+// DropLog takes the entry with the ID out of the log.
+func (f *File) DropLog(id string) {
+	f.Log = slices.DeleteFunc(f.Log, func(e LogEntry) bool { return e.ID == id })
+	if len(f.Log) == 0 {
+		f.Log = nil
+	}
 }
 
 // Baseline is a commit of the project's code, as of when it was set.
@@ -141,7 +198,11 @@ func (f *File) MoveSheet(from, to int) {
 // Clone returns a deep copy of the file.
 func (f *File) Clone() *File {
 	c := &File{Version: f.Version, Project: f.Project, GitHub: f.GitHub, Sheets: make([]*Document, len(f.Sheets)),
-		Measures: slices.Clone(f.Measures)}
+		Measures: slices.Clone(f.Measures), Color: f.Color, Repo: f.Repo}
+	for _, e := range f.Log {
+		e.Nodes = slices.Clone(e.Nodes)
+		c.Log = append(c.Log, e)
+	}
 	if f.Baseline != nil {
 		b := *f.Baseline
 		c.Baseline = &b

@@ -75,7 +75,7 @@ func TestServer(t *testing.T) {
 		t.Fatalf("init %v", init)
 	}
 	tools := ss.do("tools/list", nil)["tools"].([]any)
-	if len(tools) != 13 {
+	if len(tools) != 17 {
 		t.Fatalf("%d tools", len(tools))
 	}
 

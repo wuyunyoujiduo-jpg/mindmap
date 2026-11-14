@@ -254,6 +254,7 @@ func SameContent(a, b *File) bool {
 			}
 		}
 		c.Version = 0
+		c.Log = nil // what agents reported is not what the map says
 		j, _ := json.Marshal(c)
 		return j
 	}

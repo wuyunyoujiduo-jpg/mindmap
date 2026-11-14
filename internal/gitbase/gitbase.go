@@ -154,3 +154,65 @@ func Patch(dir, base string, max int) (string, error) {
 	}
 	return out, nil
 }
+
+// Main is the root of the repository dir is in, and of the repository a
+// linked worktree belongs to: agents that each work in a worktree of
+// their own work on one project.
+func Main(dir string) (string, error) {
+	if !IsRepo(dir) {
+		return "", fmt.Errorf("%s 不是 git 仓库", dir)
+	}
+	if common, err := git(dir, "rev-parse", "--path-format=absolute", "--git-common-dir"); err == nil && filepath.Base(common) == ".git" {
+		return filepath.Dir(common), nil
+	}
+	return Root(dir)
+}
+
+// State says where the code in dir is, in a few words that change when a
+// commit is made or a file is changed: the commit checked out, and what
+// is not committed.
+func State(dir string) (commit, dirty string, err error) {
+	h, err := HeadOf(dir)
+	if err != nil {
+		return "", "", err
+	}
+	dirty, err = git(dir, "status", "--porcelain")
+	return h.Commit, dirty, err
+}
+
+// Remote names the repository dir is a clone of, by where its origin is,
+// as "github.com/owner/repo": the same on every computer that has it,
+// which its folder is not. "" when it has no origin.
+func Remote(dir string) string {
+	if !IsRepo(dir) {
+		return ""
+	}
+	url, err := git(dir, "remote", "get-url", "origin")
+	if err != nil {
+		return ""
+	}
+	return NormalRemote(url)
+}
+
+// NormalRemote is a remote's URL without what differs between ways of
+// reaching one repository: the scheme, the user, the port, ".git".
+func NormalRemote(url string) string {
+	url = strings.TrimSpace(url)
+	if i := strings.Index(url, "://"); i >= 0 {
+		url = url[i+3:]
+	} else if i := strings.Index(url, ":"); i > 0 && !strings.Contains(url[:i], "/") { // git@host:owner/repo
+		url = url[:i] + "/" + url[i+1:]
+	}
+	if i := strings.LastIndex(url, "@"); i >= 0 {
+		url = url[i+1:]
+	}
+	host, path, ok := strings.Cut(url, "/")
+	if !ok || path == "" || host == "" || strings.HasPrefix(host, ".") { // a folder, not a host
+		return ""
+	}
+	if h, _, ok := strings.Cut(host, ":"); ok {
+		host = h
+	}
+	path = strings.TrimSuffix(strings.Trim(path, "/"), ".git")
+	return strings.ToLower(host + "/" + path)
+}

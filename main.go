@@ -456,6 +456,12 @@ func main() {
 		}
 		return
 	}
+	// "MyMind hook start|stop" answers Claude Code's hooks (mcp.go).
+	if len(os.Args) > 1 && os.Args[1] == "hook" {
+		hideFromDock()
+		serveHook(os.Args[2:])
+		return
+	}
 	// Updates: a window, as Sparkle's, offers a new version once a day and
 	// installs it, then restarts the app (mygo.json's updates).
 	mygo.Use(updaterui.Plugin)
