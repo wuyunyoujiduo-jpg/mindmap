@@ -90,7 +90,9 @@ are 14 to 16).
 - **Escape** puts away what opened: a task's details, a clip's, as the
   bar, the search and the canvas's.
 - **The arrows** go through a list, its details following (`taskKeys`,
-  the wall's in `clipWall`), and the space bar ticks a task off; never
+  the wall's in `clipWall`, where they go as they point: up and down a
+  column, left and right to the card beside), and the space bar ticks a
+  task off; never
   while something is written in (`FocusTakesText`).
 - **The places** are ⌘1, ⌘2, ⌘3 and the bar ⌘K, said on their tips.
 - **The left column takes what is dropped on it**: a task on a project

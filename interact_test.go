@@ -1,9 +1,11 @@
 package main
 
 import (
+	"fmt"
 	"path/filepath"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
@@ -114,5 +116,50 @@ func TestKeysAndWaysBack(t *testing.T) {
 	tt.Frame()
 	if !a.barOpen {
 		t.Fatal("the bar did not open")
+	}
+}
+
+// On the wall the arrows go where they point: right to the card beside,
+// left back to it, down its column and up again.
+func TestWallArrowsGoByPlace(t *testing.T) {
+	a, tt := newTestApp(t)
+	for i := range 9 {
+		cl := &library.Clip{Kind: library.KindText, Text: fmt.Sprint("第 ", i, " 条")}
+		if err := a.lib.Add(cl, a.now().Add(time.Duration(i)*time.Minute)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tt.SetSize(2000, 1000) // wide: several columns stay beside the details
+	a.openList(kindAll, "")
+	tt.Frame()
+	key := func(k ui.Key) string {
+		tt.Key(0, k)
+		tt.Frame()
+		tt.Frame()
+		return a.libSel
+	}
+	first := key(ui.KeyDown)
+	if first == "" {
+		t.Fatal("down chose nothing")
+	}
+	beside := key(ui.KeyRight)
+	if beside == first {
+		t.Fatal("right stayed")
+	}
+	if got := key(ui.KeyLeft); got != first {
+		t.Fatalf("left went to %q, not back to %q", got, first)
+	}
+	below := key(ui.KeyDown)
+	if below == first || below == beside {
+		t.Fatalf("down went to %q", below)
+	}
+	if got := key(ui.KeyUp); got != first {
+		t.Fatalf("up went to %q, not back to %q", got, first)
+	}
+	// The card below is the one under the first on the screen.
+	r1, _ := tt.Find("资料 " + a.lib.Find(first).Label())
+	r2, ok := tt.Find("资料 " + a.lib.Find(below).Label())
+	if !ok || r2.X != r1.X || r2.Y <= r1.Y {
+		t.Fatalf("below is at %v, the first at %v", r2, r1)
 	}
 }

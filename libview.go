@@ -125,37 +125,9 @@ func (a *app) clipWall(c *ui.Context, hits []library.Hit) {
 	}
 	cols := min(max(int(room/300), 1), 6)
 	shown := min(len(hits), max(a.wallShown, wallStep))
-	// The arrows go from a card to the next and the one before, its
-	// details following; not while something is written in.
-	if !a.barOpen && !c.FocusTakesText() && shown > 0 {
-		step := 0
-		switch {
-		case c.Shortcut(0, ui.KeyDown), c.Shortcut(0, ui.KeyRight):
-			step = 1
-		case c.Shortcut(0, ui.KeyUp), c.Shortcut(0, ui.KeyLeft):
-			step = -1
-		}
-		if step != 0 {
-			at := -1
-			for i, h := range hits[:shown] {
-				if h.Clip.ID == a.libSel {
-					at = i
-				}
-			}
-			switch {
-			case at < 0 && step > 0:
-				at = 0
-			case at < 0:
-				at = shown - 1
-			default:
-				at = min(max(at+step, 0), shown-1)
-			}
-			a.libSel, a.libTagText = hits[at].Clip.ID, ""
-			a.libReveal = a.libSel
-		}
-	}
 	tall := make([]float32, cols)
 	in := make([][]*library.Clip, cols)
+	tops := make([][]float32, cols) // where each card of a column begins, as guessed
 	for _, h := range hits[:shown] {
 		k := 0
 		for j := range tall {
@@ -164,7 +136,58 @@ func (a *app) clipWall(c *ui.Context, hits []library.Hit) {
 			}
 		}
 		in[k] = append(in[k], h.Clip)
+		tops[k] = append(tops[k], tall[k])
 		tall[k] += clipTall(h.Clip, cols) + 8
+	}
+	// The arrows go where they point on the wall: up and down its column,
+	// left and right to the card beside, the one whose top is nearest; the
+	// details follow. Not while something is written in.
+	if !a.barOpen && !c.FocusTakesText() && shown > 0 {
+		dx, dy := 0, 0
+		switch {
+		case c.Shortcut(0, ui.KeyDown):
+			dy = 1
+		case c.Shortcut(0, ui.KeyUp):
+			dy = -1
+		case c.Shortcut(0, ui.KeyRight):
+			dx = 1
+		case c.Shortcut(0, ui.KeyLeft):
+			dx = -1
+		}
+		if dx != 0 || dy != 0 {
+			col, row := -1, -1
+			for k := range in {
+				for r, cl := range in[k] {
+					if cl.ID == a.libSel {
+						col, row = k, r
+					}
+				}
+			}
+			switch {
+			case col < 0: // none chosen: the first
+				col, row = 0, 0
+			case dy != 0:
+				row = min(max(row+dy, 0), len(in[col])-1)
+			default:
+				to := col + dx
+				for to >= 0 && to < cols && len(in[to]) == 0 {
+					to += dx
+				}
+				if to >= 0 && to < cols {
+					y, near := tops[col][row], 0
+					for r, top := range tops[to] {
+						if abs32(top-y) < abs32(tops[to][near]-y) {
+							near = r
+						}
+					}
+					col, row = to, near
+				}
+			}
+			if len(in[col]) > 0 {
+				a.libSel, a.libTagText = in[col][row].ID, ""
+				a.libReveal = a.libSel
+			}
+		}
 	}
 	ui.Scroll(c.Key(fmt.Sprint("clips:", cols))).Grow(1).Basis(0).Children(func() {
 		// The cards stand apart on the page, each told by a hairline: with
@@ -867,4 +890,11 @@ func (a *app) showLibrary() {
 	a.lightbox, a.presenting = "", false
 	a.libOpen, a.libHome, a.tasks.open, a.projOpen = true, false, false, false
 	a.libReview = reviewOff
+}
+
+func abs32(x float32) float32 {
+	if x < 0 {
+		return -x
+	}
+	return x
 }
