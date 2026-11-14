@@ -57,7 +57,8 @@ func mcpServer(dir string) *mcp.Server {
 	return s
 }
 
-// serveHook answers a hook of Claude Code (internal/mcp/hook.go): "start"
+// serveHook answers a hook of Claude Code, and of Codex and Grok Build,
+// whose hooks are as its are (internal/mcp/hook.go): "start"
 // prints the brief of the project the session is in, "stop" has the agent
 // record the session before it stops when the code changed. What Claude
 // Code says of the session is JSON on stdin. A hook never fails: an agent
@@ -67,8 +68,9 @@ func serveHook(args []string) {
 		return
 	}
 	var in struct {
-		Cwd    string `json:"cwd"`
-		Active bool   `json:"stop_hook_active"`
+		Cwd     string `json:"cwd"`
+		Active  bool   `json:"stop_hook_active"`
+		Active2 bool   `json:"stopHookActive"` // as Grok Build spells it
 	}
 	if fi, err := os.Stdin.Stat(); err == nil && fi.Mode()&os.ModeCharDevice == 0 {
 		if data, err := io.ReadAll(io.LimitReader(os.Stdin, 1<<20)); err == nil {
@@ -83,7 +85,6 @@ func serveHook(args []string) {
 		return
 	}
 	s := mcpServer(dir)
-	s.Agent = "claude-code"
 	if in.Cwd == "" {
 		in.Cwd = s.Cwd
 	}
@@ -92,7 +93,7 @@ func serveHook(args []string) {
 	case "start":
 		fmt.Print(s.HookStart(in.Cwd))
 	case "stop":
-		fmt.Print(s.HookStop(in.Cwd, in.Active))
+		fmt.Print(s.HookStop(in.Cwd, in.Active || in.Active2))
 	}
 }
 
@@ -101,26 +102,31 @@ func hookCommands(exe string) map[string]string {
 	return map[string]string{"SessionStart": fmt.Sprintf("%q hook start", exe), "Stop": fmt.Sprintf("%q hook stop", exe)}
 }
 
-// hooksConfig is the hooks as Claude Code's settings.json holds them.
-func hooksConfig(exe string) string {
-	hooks := map[string]any{}
-	for event, cmd := range hookCommands(exe) {
-		hooks[event] = []any{map[string]any{"hooks": []any{map[string]any{"type": "command", "command": cmd}}}}
-	}
-	out, _ := json.MarshalIndent(map[string]any{"hooks": hooks}, "", "  ")
-	return string(out)
+// agentTool is an AI coding agent of the terminal that the app connects:
+// the command that adds the MCP server to it, and the file its hooks go
+// into. The three keep their hooks as Claude Code does (an event, groups,
+// commands), Codex in a file of hooks and Grok Build in a folder of them.
+type agentTool struct {
+	name, note string
+	cmd        string // run in a terminal, adds the MCP server
+	hooks      string // the file the hooks go into
+	hooksAt    string // that file, as the user is told
+	after      string // what is left to do once they are in
 }
 
-// claudeSettings is Claude Code's settings file of the user.
-func claudeSettings() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
+func agentTools(exe string) []agentTool {
+	home, _ := os.UserHomeDir()
+	return []agentTool{
+		{"Claude Code", "Anthropic 的编程工具", fmt.Sprintf("claude mcp add mymind --scope user -- %q mcp", exe),
+			filepath.Join(home, ".claude", "settings.json"), "~/.claude/settings.json", "新开的会话生效"},
+		{"Codex", "OpenAI（ChatGPT）的编程工具", fmt.Sprintf("codex mcp add mymind -- %q mcp", exe),
+			filepath.Join(home, ".codex", "hooks.json"), "~/.codex/hooks.json", "在 Codex 里输入 /hooks 确认信任后生效"},
+		{"Grok Build", "xAI（Grok）的编程工具", fmt.Sprintf("grok mcp add mymind -- %q mcp", exe),
+			filepath.Join(home, ".grok", "hooks", "mymind.json"), "~/.grok/hooks/mymind.json", "新开的会话生效"},
 	}
-	return filepath.Join(home, ".claude", "settings.json")
 }
 
-// installHooks adds the hooks to Claude Code's settings at path, leaving
+// installHooks adds the hooks to an agent's settings at path, leaving
 // what else is there, and replaces those of the app put there before (the
 // app may have moved). It reports whether the file changed.
 func installHooks(path, exe string) (bool, error) {
@@ -204,9 +210,7 @@ func (a *app) mcpView(c *ui.Context) {
 	t := c.Theme()
 	modal(c, "mcp", &a.mcpOpen, func() {
 		exe := executable()
-		claude := fmt.Sprintf("claude mcp add mymind --scope user -- %q mcp", exe)
 		json := fmt.Sprintf("{\n  \"mcpServers\": {\n    \"mymind\": {\n      \"command\": %q,\n      \"args\": [\"mcp\"]\n    }\n  }\n}", exe)
-		hooks := hooksConfig(exe)
 		rule := "这个项目在 MyMind 里有一张导图（通过 mymind MCP 工具访问，不用传导图名）。\n" +
 			"- 开始工作前先调 project_brief，了解在做什么、定过什么；\n" +
 			"- 开始或完成任务时用 update_node 改状态；新想到的待办和发现的问题用 capture 记下，不要自己调整导图结构；\n" +
@@ -220,7 +224,7 @@ func (a *app) mcpView(c *ui.Context) {
 					a.mcpOpen = false
 				}
 			})
-			ui.Text(c, "让 Claude Code、Cursor 等 AI 编程工具把做了什么记到 MyMind：一个项目一张导图，按它所在的代码仓库自动对上，没有就新建。动手前读简报，过程中改任务状态、记下待办和决策，收工记一笔。AI 记下的待办放在导图的「待整理」下，结构由你来定；每次修改都存进历史版本，可以对比和恢复。").
+			ui.Text(c, "让 Claude Code、Codex、Grok Build、Cursor 等 AI 编程工具把做了什么记到 MyMind：一个项目一张导图，按它所在的代码仓库自动对上，没有就新建。动手前读简报，过程中改任务状态、记下待办和决策，收工记一笔。AI 记下的待办放在导图的「待整理」下，结构由你来定；每次修改都存进历史版本，可以对比和恢复。").
 				FontSize(13).Wrap()
 			step := func(title, body, copyLabel string) {
 				ui.Column(c.Key(title)).Gap(6).Children(func() {
@@ -237,33 +241,35 @@ func (a *app) mcpView(c *ui.Context) {
 					})
 				})
 			}
-			step("1. Claude Code：在终端运行", claude, "复制命令")
-			// The hooks: what makes the record not depend on the agent's memory.
-			ui.Row(c.Key("hooks")).Gap(10).AlignItems(ui.Center).Padding(10, 12).Radius(radiusRow).Background(blockFill(t)).FillWidth().Children(func() {
-				ui.Column(c).Gap(2).Grow(1).Shrink(1).MinWidth(0).Children(func() {
-					ui.Text(c, "2. 让 Claude Code 自动读和记").FontSize(textSmall).FontWeight(700)
-					ui.Text(c, "会话开始时自动读到项目简报；改了代码要收工时，自动记下做了什么和留下的待办。不靠 AI 自己记得。").
-						FontSize(textCaption).TextColor(t.TextMuted).Wrap()
-				})
-				if textKey(c, "复制配置", "复制 hooks 配置", "自己加到 ~/.claude/settings.json").Clicked() {
-					a.plat.CopyText(hooks)
-					a.tell("已复制")
-				}
-				if accentButton(c, "装上", "加到 Claude Code 的设置（~/.claude/settings.json）里").Clicked() {
-					a.later(func() {
-						switch changed, err := installHooks(claudeSettings(), exe); {
-						case err != nil:
-							a.tell("没有装上：" + err.Error())
-						case changed:
-							a.tell("已装到 Claude Code，新开的会话生效")
-						default:
-							a.tell("已经装过了")
+			// The agents that run in a terminal: a command that connects each,
+			// and the hooks, which make the record not depend on its memory.
+			rowsField(c, "", "先在终端运行复制的命令，再点「装上」：之后每次会话开始，它自动读到项目简报；改了代码要收工时，自动记下做了什么和留下的待办。每台电脑各做一次。", func() {
+				for i, tool := range agentTools(exe) {
+					if i > 0 {
+						setLine(c)
+					}
+					setRow(c, tool.name, tool.note, func() {
+						if textKey(c, "复制命令", "复制 "+tool.name+" 的命令", tool.cmd).Clicked() {
+							a.plat.CopyText(tool.cmd)
+							a.tell("已复制，粘贴到终端运行")
+						}
+						if button(c.Key("install:"+tool.name), "装上").Label("给 " + tool.name + " 装上").Tooltip("加到 " + tool.hooksAt + " 里").Clicked() {
+							a.later(func() {
+								switch changed, err := installHooks(tool.hooks, exe); {
+								case err != nil:
+									a.tell("没有装上：" + err.Error())
+								case changed:
+									a.tell("已装到 " + tool.name + "，" + tool.after)
+								default:
+									a.tell("已经装过了")
+								}
+							})
 						}
 					})
 				}
 			})
-			step("3. Cursor / Claude Desktop 等：加到 MCP 配置文件", json, "复制配置")
-			step("4. 没有 hook 的工具：把这段加到项目的规则里", rule, "复制说明")
+			step("Cursor、Claude Desktop 等：加到它的 MCP 配置文件", json, "复制配置")
+			step("不能装上的工具：把这段加到项目的规则里（CLAUDE.md、AGENTS.md、Cursor 规则）", rule, "复制说明")
 			ui.Text(c, "导图文件夹："+a.dir).FontSize(11).TextColor(t.TextMuted).Wrap()
 		})
 	})

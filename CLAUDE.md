@@ -276,8 +276,10 @@ by AI, and an AI assistant.
   `log_session`'s todos) and into its log (`model.File.Log`: sessions,
   decisions, tasks, edits); a decision is whole as a clip tagged 决策
   (`log_decision`). The map's structure stays the user's. Claude Code's
-  hooks (`MyMind hook start|stop`, `hook.go`, installed by the window's
-  装上) give the brief as a session begins and ask for `log_session` when
+  hooks, and Codex's and Grok Build's, which are kept as its are
+  (`MyMind hook start|stop`, `hook.go`, installed by the window's 装上,
+  `agentTools`; Codex's and Grok Build's were written from what is
+  published of them, with neither tool at hand to try) give the brief as a session begins and ask for `log_session` when
   the code changed. Writers hold the folder's lock (`lock.go`).
   The app shows the logs as AI 动态, a list of 今天's left column
   (`agents.go`, `agentsView`): by day and project, each entry opened by a
