@@ -280,7 +280,6 @@ func (a *app) toolbar(c *ui.Context) {
 			a.searchField(c, searchWidth(room))
 		}
 		if a.mode == viewMap && room >= 560 {
-			a.taskFilterKey(c)
 			a.structurePicker(c, room < 900)
 		}
 		if room >= 450 && iconButton(c, iconPlay, "开始演说", "开始演说 ⌘↩", 30, true).Clicked() {

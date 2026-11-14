@@ -130,8 +130,10 @@ by AI, and an AI assistant.
     small as its face (`drawMapFace`) and a ring for its tasks, white
     with a hairline as every card of a kind (`wallCard`); with the
     left column put away, the folders are a row of pills (`projFolder`).
-    A map opened has its own bar under the top row, with the key that
-    shows some tasks alone, the rest dimmed (`taskFilterKey`); on the canvas the
+    A map opened has its own bar under the top row; the canvas's bar at
+    its foot has the key that shows some tasks alone, the rest dimmed
+    (`taskFilterKey`, in the menu 视图 too: the top bar had no room for
+    it in a narrow window, which CI's wider fonts told); on the canvas the
     center is in the ink, the main topics on a pastel of their branch's
     color, those below on a faint tint (the scheme 明亮 of `style.go`).
   - 收集 (`libview.go`): notes and clips, a wall of cards that
@@ -219,7 +221,7 @@ by AI, and an AI assistant.
   image each; each updates from its own manifest. A release builds
   Apple silicon alone unless the workflow is run with `all: true`, which
   builds Intel's and Windows' too: without it now and then, those stay
-  at an old version (Intel's stood at 0.33.1 until 0.85.0).
+  at an old version (Intel's stands at 0.33.1; the user asked for the Mac's alone, 2026-11).
 - Sync with GitHub: `internal/ghsync` (a three-way merge over the REST API,
   state in `<maps folder>/.sync/`), wired in `sync.go`.
 - Screenshots are the app's own (`internal/screenshot`), on OneShot's way:

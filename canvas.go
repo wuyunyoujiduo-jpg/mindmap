@@ -553,6 +553,7 @@ func (a *app) canvasArea(c *ui.Context) {
 				a.recenter()
 			}
 			iconButton(c, iconLevels, "层级", "折叠 / 展开到第几层", 28, true).Menu(a.levelMenu)
+			a.taskFilterKey(c)
 			iconButton(c, iconDownload, "导出", "导出图片、Markdown、XMind…", 28, true).Menu(a.exportMenu)
 		})
 	})
@@ -1870,31 +1871,22 @@ func drawStructureIcon(p *ui.Painter, r ui.Rect, s model.Structure, col ui.Color
 	}
 }
 
-// taskFilterKey is the key of a map's bar that shows some tasks alone,
-// bright, the rest of the map dimmed as a tag's filter does: those not
-// done, or those of this week (and the late). In the accent while it
-// narrows, so that a dimmed map is never a riddle.
+// taskFilterKey is the key of the canvas's bar, by its levels, that shows
+// some tasks alone, bright, the rest of the map dimmed as a tag's filter
+// does: those not done, or those of this week (and the late). On the
+// accent while it narrows, so that a dimmed map is never a riddle. (The
+// map's bar at the top has no room for one more key in a narrow window.)
 func (a *app) taskFilterKey(c *ui.Context) {
 	t := c.Theme()
 	names := []string{"全部主题", "没做完的任务", "本周的任务"}
-	on := a.taskFilter != taskFilterNone
-	label := "筛选"
-	if on {
-		label = names[a.taskFilter]
+	tip := "只让一部分任务亮着，其余变淡"
+	if a.taskFilter != taskFilterNone {
+		tip = "现在只亮着" + names[a.taskFilter] + "：点这里换回全部"
 	}
-	b := key(ui.Row(c.Key("task-filter")).Height(keyHeight).Padding(0, 11, 0, 12).Gap(6).Radius(radiusPill).AlignItems(ui.Center).
-		Cursor(ui.CursorPointer).Label("筛选任务").Tooltip("只让一部分任务亮着，其余变淡").Shrink(0), t)
-	if on {
-		b.Background(t.Accent.Alpha(0.14))
+	b := iconButton(c, iconFilter, "筛选任务", tip, 28, true)
+	if a.taskFilter != taskFilterNone {
+		b.Background(t.Accent.Alpha(0.18))
 	}
-	b.Children(func() {
-		col := t.Text
-		if on {
-			col = t.Accent.MixOklab(t.Text, 0.3)
-		}
-		ui.Text(c, label).FontSize(textBody).TextColor(col).NoWrap().PassThrough()
-		chevron(c, t.TextMuted)
-	})
 	b.Menu(func(m *ui.Menu) {
 		for i, name := range names {
 			if m.Item(name).Checked(a.taskFilter == i).Chosen() {

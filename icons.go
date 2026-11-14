@@ -50,6 +50,7 @@ const (
 	iconBack     // back: a chevron to the left
 	iconForward  // on: a chevron to the right
 	iconGear     // settings: a wheel with teeth
+	iconFilter   // what shows is narrowed: three lines, each shorter
 )
 
 // glyph is an icon drawn in a box of the given side, as a piece of text.
@@ -178,6 +179,11 @@ func drawIcon(p *ui.Painter, r ui.Rect, s float32, ic icon, col ui.Color) {
 		p.StrokePath(roundedRect(cx-h*0.85, cy-h*0.65, h*1.7, h*1.3, h*0.2), w, col)
 		p.StrokePath(new(ui.Path).MoveTo(cx-h*0.85, cy+h*0.1).LineTo(cx-h*0.35, cy+h*0.1).LineTo(cx-h*0.2, cy+h*0.35).
 			LineTo(cx+h*0.2, cy+h*0.35).LineTo(cx+h*0.35, cy+h*0.1).LineTo(cx+h*0.85, cy+h*0.1), w, col)
+	case iconFilter: // three lines, each shorter, about one middle
+		for i, dy := range []float32{-0.6, 0, 0.6} {
+			half := h * (0.85 - 0.3*float32(i))
+			p.Line(cx-half, cy+dy*h, cx+half, cy+dy*h, w, col)
+		}
 	case iconLevels: // an outline, each row further in
 		for i, dy := range []float32{-0.6, 0, 0.6} {
 			x := cx - h*0.8 + float32(i)*h*0.4
