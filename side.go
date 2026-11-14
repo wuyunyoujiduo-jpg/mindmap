@@ -192,30 +192,32 @@ func (a *app) todaySide(c *ui.Context) {
 				}
 				toMap := false // its key under the pointer was pressed
 				row := sideRowTrail(c, "map:"+path, mapName(path), "", a.tasks.onMap == path, func(bool) {
-					ui.Box(c).Size(sideIconSize, 14).Center().Shrink(0).PassThrough().Children(func() { mapDot(c, col, 8) })
-				}, func(hot bool) {
-					// How far it is, as a ring, what is left to do, and the key
-					// to its map: always there, faint till the row is pointed
-					// at. It showed only under the pointer at first, and the
-					// user did not find it (and a phone has no pointer).
-					th := c.Theme()
-					ui.Box(c).Size(14, 14).Shrink(0).PassThrough().Draw(func(p *ui.Painter, r ui.Rect) {
+					// Its dot, and round it how far it is, in its own color: one
+					// mark where a ring, a count and an arrow in a row were three
+					// (the user: not good to look at).
+					ui.Box(c).Size(sideIconSize, 18).Shrink(0).PassThrough().Draw(func(p *ui.Painter, r ui.Rect) {
 						cx, cy := r.X+r.W/2, r.Y+r.H/2
-						p.StrokePath(new(ui.Path).Circle(cx, cy, 5), 2, th.Text.Alpha(0.1))
+						p.FillPath(new(ui.Path).Circle(cx, cy, 3.5), col)
+						p.StrokePath(new(ui.Path).Circle(cx, cy, 7.5), 1.75, col.Alpha(0.2))
 						if done > 0 {
-							p.StrokePath(new(ui.Path).Circle(cx, cy, 5).Trim(0, done).Cap(ui.RoundCap), 2, col)
+							p.StrokePath(new(ui.Path).Circle(cx, cy, 7.5).Trim(0, done).Cap(ui.RoundCap), 1.75, col)
 						}
 					})
-					ui.Text(c, fmt.Sprint(n)).FontSize(textCaption).TextColor(faint(th)).FontFeatures("tnum").MinWidth(14).TextAlign(ui.End).PassThrough()
-					key := ui.Box(c.Key("to-map")).Size(22, 22).Radius(radiusSmall).Center().Shrink(0).Cursor(ui.CursorPointer).
+				}, func(hot bool) {
+					// What is left to do, as every row's count; under the
+					// pointer, in the count's own room, the key to its map (a
+					// phone need not be as this is, the user said).
+					th := c.Theme()
+					if !hot { // at the row's edge, as the lists' counts above
+						ui.Text(c, fmt.Sprint(n)).FontSize(textCaption).TextColor(faint(th)).FontFeatures("tnum").MinWidth(22).TextAlign(ui.End).PassThrough()
+						return
+					}
+					key := ui.Box(c.Key("to-map")).Size(22, 22).Radius(radiusSmall).Center().Shrink(0).Margin(0, -4, 0, 0).Cursor(ui.CursorPointer).
 						Label("打开导图 " + mapName(path)).Tooltip("打开这张导图").Background(th.Text.Alpha(0)).Transition(easeLook)
-					ink := faint(th)
-					switch {
-					case key.Hovered():
+					ink := ink2(th)
+					if key.Hovered() {
 						key.Background(th.Accent.Alpha(0.14))
 						ink = th.Accent
-					case hot:
-						ink = ink2(th)
 					}
 					press(key, 0.9)
 					key.Children(func() { glyph(c, iconForward, 11, ink) })

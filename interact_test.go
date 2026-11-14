@@ -673,6 +673,8 @@ func TestTodaySideProjects(t *testing.T) {
 		login.Task.Due = &late
 	})
 	a.addTask("交报销", nil) // into the inbox
+	search := find(t, a, "搜索")
+	a.mutate("", func() { search.SetStatus(model.StatusDone, a.now()) }) // so that a ring shows how far
 	for i := range 8 {
 		f := model.NewFile(fmt.Sprint("项目", i))
 		n := model.NewNode("一件事")
@@ -723,7 +725,14 @@ func TestTodaySideProjects(t *testing.T) {
 		t.Fatalf("late: %q", tt.Texts())
 	}
 	// A project's row opens its map by the key under the pointer.
-	// The key to a project's map is on its row, pointed at or not.
+	// Under the pointer, a project's count gives way to the key to its map.
+	row, ok := tt.Find("只看 项目0")
+	if !ok {
+		t.Fatal("no row")
+	}
+	tt.Move(row.X+row.W/2, row.Y+row.H/2)
+	tt.Frame()
+	tt.Frame()
 	if err := tt.Click("打开导图 项目0"); err != nil {
 		t.Fatalf("%v: %q", err, tt.Texts())
 	}
