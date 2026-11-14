@@ -75,14 +75,18 @@ func kubaiIconOf(c *ui.Context, name string, size float32, on, quiet bool) ui.El
 	box := ui.Box(c.Key("kubai:"+name)).Size(size, size).Shrink(0).PassThrough()
 	k := box.AnimateTo("on", b2f(on), ui.Animation{Duration: motionFast, Ease: easeDetent, NonMotion: true})
 	rest, lit := kubaiBitmap(name), kubaiBitmap(name+"-on")
+	dim := float32(1)
 	if quiet {
 		rest = kubaiGray(name)
+		if c.Theme().Dark {
+			dim = 0.6 // gray on the dark row is nearly white: held back
+		}
 	}
 	return box.Draw(func(p *ui.Painter, r ui.Rect) {
 		for _, l := range []struct {
 			b *ui.Bitmap
 			a float32
-		}{{rest, 1 - k}, {lit, k}} {
+		}{{rest, (1 - k) * dim}, {lit, k}} {
 			if l.b == nil || l.a <= 0.01 {
 				continue
 			}

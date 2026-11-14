@@ -1055,3 +1055,15 @@ func jewel(b ui.Element, t *ui.Theme, enabled bool) ui.Element {
 	}
 	return b.Background(t.Accent)
 }
+
+// escRest is where the focus goes when Escape is pressed while a field of
+// a pane is written in (app.escLeave): the field is left, and the next
+// Escape puts the pane away. MyGo takes the focus off a field only by
+// giving it to another thing.
+func (a *app) escRest(c *ui.Context) {
+	rest := ui.Box(c.Key("esc-rest")).Size(0, 0).Focusable().FocusRing(false).Label("详情")
+	if a.escLeave {
+		a.escLeave = false
+		rest.Focus()
+	}
+}

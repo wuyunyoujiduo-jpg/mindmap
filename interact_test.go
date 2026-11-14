@@ -409,3 +409,136 @@ func TestMapShowsOpenTasksAlone(t *testing.T) {
 	}
 	snapshot(t, tt, "map-open-tasks")
 }
+
+func TestParseRemind(t *testing.T) {
+	for _, c := range []struct{ in, rest, remind string }{
+		{"明天 9点 写周报", "明天 写周报", "09:00"},
+		{"明天9点半 写周报", "明天 写周报", "09:30"},
+		{"下午3点 开会", "开会", "15:00"},
+		{"今晚 8点 跑步", "今晚 跑步", "20:00"},
+		{"周五 15:30 评审", "周五 评审", "15:30"},
+		{"晚上8点15 吃药", "吃药", "20:15"},
+		{"写3点总结", "写3点总结", ""},
+		{"写周报", "写周报", ""},
+		{"准备 3点建议", "准备 3点建议", ""},
+		{"25点 不存在", "25点 不存在", ""},
+	} {
+		rest, remind := parseRemind(c.in)
+		if strings.Join(strings.Fields(rest), " ") != c.rest || remind != c.remind {
+			t.Errorf("%q → %q, %q; want %q, %q", c.in, rest, remind, c.rest, c.remind)
+		}
+	}
+}
+
+// A time written with a task is when it reminds; the week's review goes
+// back a week and is copied as a report; the clips with a key have their
+// list; Escape leaves a field before it closes the pane.
+func TestSmallWaysIn(t *testing.T) {
+	a, tt := newTestApp(t)
+	plat := a.plat.(*fakePlatform)
+	a.addTask("明天 9点半 交报销", nil)
+	tt.Frame()
+	var got *taskItem
+	for _, it := range a.taskItems() {
+		if it.node.Title == "交报销" {
+			got = &it
+		}
+	}
+	if got == nil || got.node.Task.Remind != "09:30" || !got.node.Task.Due.Equal(today(a.now()).AddDate(0, 0, 1)) {
+		t.Fatalf("task %+v", got)
+	}
+
+	search := find(t, a, "搜索")
+	a.mutate("", func() { search.SetStatus(model.StatusDone, a.now()) })
+	a.openTasks()
+	a.tasks.view = tasksReview
+	tt.Frame()
+	if err := tt.Click("复制成周报"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(plat.copied, "## 做完的（1）") || !strings.Contains(plat.copied, "- 搜索") {
+		t.Fatalf("report %q", plat.copied)
+	}
+	if err := tt.Click("上一周"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.tasks.reviewBack != 1 || !tt.HasText("这周还没有可以回顾的") {
+		t.Fatalf("back %d: %q", a.tasks.reviewBack, tt.Texts())
+	}
+
+	cl := &library.Clip{Kind: library.KindText, Text: "TOKEN=abcdefgh12345678"}
+	if err := a.lib.Add(cl, a.now()); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.lib.Add(&library.Clip{Kind: library.KindText, Text: "没有密钥的一条"}, a.now()); err != nil {
+		t.Fatal(err)
+	}
+	a.openList(kindAll, "")
+	tt.Frame()
+	if err := tt.Click("含密钥 1"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if hits := a.libHits(); len(hits) != 1 || hits[0].Clip.ID != cl.ID {
+		t.Fatalf("%d clips with a key", len(hits))
+	}
+	snapshot(t, tt, "secrets-list")
+
+	// In a field of the details, Escape leaves the field; again, it closes.
+	a.libSel, a.secretShown = cl.ID, cl.ID
+	tt.Frame()
+	if err := tt.Click("资料内容"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Key(0, ui.KeyEscape)
+	tt.Frame()
+	tt.Frame()
+	if a.libSel != cl.ID {
+		t.Fatal("escape closed the details from a field")
+	}
+	tt.Key(0, ui.KeyEscape)
+	tt.Frame()
+	if a.libSel != "" {
+		t.Fatal("the second escape did not close the details")
+	}
+}
+
+// A task moved to a project and taken back is where it was among the
+// others, not after them all.
+func TestMoveBackKeepsItsPlace(t *testing.T) {
+	a, tt := newTestApp(t)
+	search := find(t, a, "搜索")
+	d := a.file.SheetOf(search.ID)
+	_, parent := d.Find(search.ID)
+	if len(parent.Children) < 2 {
+		a.mutate("", func() { parent.Children = append(parent.Children, model.NewNode("别的")) })
+	}
+	a.mutate("", func() { // the first of its parent
+		i := slices.IndexFunc(parent.Children, func(n *model.Node) bool { return n.ID == search.ID })
+		parent.Children[0], parent.Children[i] = parent.Children[i], parent.Children[0]
+		day := today(a.now())
+		search.Task.Due = &day
+	})
+	other := model.NewFile("发布计划")
+	otherPath := filepath.Join(a.dir, model.FileName("发布计划"))
+	if err := other.Save(otherPath); err != nil {
+		t.Fatal(err)
+	}
+	a.refreshFiles()
+	a.openTasks()
+	tt.Frame()
+	id, pid := search.ID, parent.ID
+	a.dropTaskOnMap(taskDrag{a.path, id}, otherPath)
+	tt.Frame()
+	if a.noticeUndo == nil || a.file.Node(id) != nil {
+		t.Fatal("not moved")
+	}
+	a.noticeUndo()
+	tt.Frame()
+	p := a.file.Node(pid)
+	if p == nil || len(p.Children) == 0 || p.Children[0].ID != id {
+		t.Fatalf("not back at the head of its parent: %v", p)
+	}
+}

@@ -88,7 +88,10 @@ are 14 to 16).
   (`moveTaskUndoably`, `takeClipPlace`), a tag given, a clip deleted,
   tasks put on today.
 - **Escape** puts away what opened: a task's details, a clip's, as the
-  bar, the search and the canvas's.
+  bar, the search and the canvas's. Pressed in a field of the pane, it
+  first leaves the field (`escRest`), and the next puts the pane away.
+  All the keys are in the cheat sheet (`shortcuts`), which a new one is
+  added to.
 - **The arrows** go through a list, its details following (`taskKeys`,
   the wall's in `clipWall`, where they go as they point: up and down a
   column, left and right to the card beside), and the space bar ticks a
@@ -250,7 +253,7 @@ can be counted, never by habit:
 |---|---|
 | What is of this computer: a task ticked, a day changed, a clip deleted | none. It is done as it is clicked; the result is the feedback. Never a "saving" that plays a wait there is not |
 | One action, a few seconds, length unknown: a sync, a check, a backup | on its key (`busyKey`): its words and width stay, a spinner over them, a second press does nothing; then a toast says what came of it |
-| Long work that can be counted: the index, a run of clips, a download | a card at the window's top right (`jobsView`, `jobCard`): what, how far, the time left, a bar; it stays on every page, can be stopped, and turns in place into its result, which stays until put away |
+| Long work that can be counted: the index, a run of clips, a download | a card at the window's foot on the right (`jobsView`, `jobCard`): what, how far, the time left, a bar; it stays on every page, can be stopped, and turns in place into its result, which stays until put away |
 | Work that cannot be counted: the AI finding places, reading a map | its steps (`stageLines`): those done with a check, the one going on with a spinner; after ten seconds, that it takes longer than usual |
 | What the AI writes of a clip | shapes where it will be (`skeletonShapes`), in its own part, at the size of what comes; what was there before stays while the new is written |
 | The AI's answer | what it read, then its words as they come with a caret after the last; at its end 复制 and 重试 |

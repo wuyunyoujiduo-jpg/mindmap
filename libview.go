@@ -334,6 +334,10 @@ func (a *app) searchClips() []library.Hit {
 			return false
 		case a.libCat == "★" && !c.Starred:
 			return false
+		case a.libCat == secretCat:
+			if c.Kind == kindMap || !c.Secret() {
+				return false
+			}
 		case a.libCat != "" && a.libCat != "-" && a.libCat != "★" && c.Category != a.libCat:
 			return false
 		case a.libTag != "" && !slices.Contains(c.Tags, a.libTag):
@@ -634,7 +638,12 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 			a.openCard(clip)
 		}
 		iconButton(c, iconMore, "资料菜单", "更多", 28, true).Menu(func(m *ui.Menu) { a.clipMenu(m, clip) })
-		if iconButton(c, iconClose, "关闭详情", "关闭", 28, true).Clicked() || !a.barOpen && c.Shortcut(0, ui.KeyEscape) {
+		esc := !a.barOpen && c.Shortcut(0, ui.KeyEscape)
+		if esc && c.FocusTakesText() { // out of the field first; the next closes
+			esc, a.escLeave = false, true
+		}
+		a.escRest(c)
+		if iconButton(c, iconClose, "关闭详情", "关闭", 28, true).Clicked() || esc {
 			a.libSel = ""
 		}
 	})

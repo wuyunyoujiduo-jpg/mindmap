@@ -37,7 +37,8 @@ by AI, and an AI assistant.
   state (`emptyState`), what loads its `skeleton`, what was done its
   toast (`tell`; `tellUndo` where it can be taken back), and every wait
   its sign by `DESIGN.md`'s table (`wait.go`: `busyKey` on the key
-  pressed, `jobsView` cards at the top right for work that can be
+  pressed, `jobsView` cards at the window's foot on the right (under the top row
+  they lay over a page's keys) for work that can be
   counted, `stageLines` for work that cannot, all through `waitShown`). It is flat and exact. The user's references, in turn, were
   flomo, https://library.aimran.es/ and TickTick: TickTick's is the one
   for the style (and the user found shadows, gradients and glows wanting,
@@ -114,10 +115,12 @@ by AI, and an AI assistant.
     on their days, and those that repeat (`model.Repeat`, `repeatProp`,
     `parseRepeat`) faint on the days they come again (`taskGhost`). A
     task's state, priority and day are set with `segmented` and `dateProp`.
-    A task may have a time of its day to remind at (`Task.Remind`,
+    A task may have a time of its day to remind at, chosen or written,
+    in its line too (明天 9点 写周报, `parseRemind`; `Task.Remind`,
     `remindProp`, `reminders.go`: a notification of its own, and one a
     day of what is due and late in every map). 本周回顾 (`review.go`)
-    is the week looked back on: done, late, kept, with no AI asked.
+    is the week looked back on, and those before it: done, late, kept,
+    with no AI asked, and copied as a report (`weekReport`).
     The search of everything finds tasks, ticked off and put on tomorrow
     in its list (`paletteItem.task`).
     A project chosen in the left column shows all of its tasks not done,
@@ -143,7 +146,8 @@ by AI, and an AI assistant.
     What looks like a key or a password in what is kept (`library.Mask`,
     `Clip.Secret`) is in dots on cards, lines, titles and cards to share,
     and in what goes to an AI; a clip's details show it when asked
-    (`secretShown`). The thoughts that name a clip and those it names
+    (`secretShown`), and the left column lists the clips that hold one
+    (含密钥, `secretCat`). The thoughts that name a clip and those it names
     are in its details (`clipMentions`). What is collected is 收集's (the
     word of the UI, never 资料库), and is on a map by a topic's link.
   - Color is kept for small things that mean something: each map has its

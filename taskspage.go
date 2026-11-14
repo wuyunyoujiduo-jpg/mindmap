@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
@@ -51,6 +52,12 @@ type tasksState struct {
 	items     []taskItem
 	read      time.Time // when the items were gathered
 	edits     int       // the open map's edits then
+	// remindOwn is the task whose time to remind at is being written,
+	// remindText what is written, remindBad that it was not understood.
+	remindOwn, remindText string
+	remindBad             bool
+	// reviewBack is how many weeks back the review looks.
+	reviewBack int
 	// reveal is the task the keyboard went to, to scroll to once.
 	reveal string
 	// sel is the task whose details show, as path#id; onMap the map whose
@@ -242,10 +249,15 @@ func (a *app) postponeToToday(items []taskItem) {
 // addTask adds a task written in a line, with its day in words, to the
 // inbox; day, when not nil, is the day it goes on when the line says none.
 func (a *app) addTask(line string, day *time.Time) {
+	line, remind := parseRemind(line)
 	line, rep, first := parseRepeat(line, a.now())
 	title, due, prio := parseTaskLine(line, a.now())
 	if title == "" {
 		return
+	}
+	if remind != "" && due == nil && first == nil && day == nil {
+		d := today(a.now()) // a time with no day is today's
+		due = &d
 	}
 	if due == nil {
 		due = first // the first day what repeats falls on
@@ -255,7 +267,7 @@ func (a *app) addTask(line string, day *time.Time) {
 	}
 	n := model.NewNode(title)
 	n.SetStatus(model.StatusTodo, a.now())
-	n.Task.Due, n.Task.Priority, n.Task.Repeat = due, prio, rep
+	n.Task.Due, n.Task.Priority, n.Task.Repeat, n.Task.Remind = due, prio, rep, remind
 	path := a.inboxPath()
 	if err := a.ensureInbox(); err != nil {
 		a.tell("没有加上：" + err.Error())
@@ -275,8 +287,61 @@ func (a *app) addTask(line string, day *time.Time) {
 	if rep != nil {
 		when += "，" + rep.Label()
 	}
+	if remind != "" {
+		when += "，" + strings.TrimPrefix(remind, "0") + " 提醒"
+	}
 	a.tell("已加到收件箱：" + title + "（" + when + "）")
 	a.tasks.read = time.Time{}
+}
+
+// remindWord is a time of day written in a task's line: 9点, 9点半, 下午3点,
+// 晚上8点15, 15:30.
+var remindWord = regexp.MustCompile(`(上午|早上|中午|下午|晚上)?\s*(\d{1,2})(?:[:：](\d{2})|[点时](半|\d{1,2})?分?)`)
+
+// parseRemind takes the time to be reminded at out of a task's line: the
+// line without it, and the time as 15:04, or none. A time is one that
+// stands by itself or after a day's word (明天9点), not a number of things
+// (写3点总结).
+func parseRemind(line string) (rest, remind string) {
+	for _, m := range remindWord.FindAllStringSubmatchIndex(line, -1) {
+		part := func(i int) string {
+			if m[2*i] < 0 {
+				return ""
+			}
+			return line[m[2*i]:m[2*i+1]]
+		}
+		before, after := []rune(line[:m[0]]), []rune(line[m[1]:])
+		period := part(1)
+		spaced := unicode.IsSpace([]rune(line[m[0]:])[0]) // the space before it is in what was found
+		if n := len(before); n > 0 && period == "" && !spaced && !unicode.IsSpace(before[n-1]) && !strings.ContainsRune("天晚早午上", before[n-1]) {
+			continue
+		}
+		clock := part(3) != "" // 15:30
+		if !clock && period == "" && part(4) == "" && len(after) > 0 && !unicode.IsSpace(after[0]) {
+			continue // 3点建议: three things, not three o'clock
+		}
+		h, _ := strconv.Atoi(part(2))
+		min := 0
+		switch {
+		case clock:
+			min, _ = strconv.Atoi(part(3))
+		case part(4) == "半":
+			min = 30
+		case part(4) != "":
+			min, _ = strconv.Atoi(part(4))
+		}
+		if (period == "下午" || period == "晚上" || period == "" && strings.Contains(line[:m[0]], "今晚")) && h < 12 {
+			h += 12
+		}
+		if period == "中午" && h < 11 {
+			h += 12
+		}
+		if h > 23 || min > 59 {
+			continue
+		}
+		return strings.TrimSpace(line[:m[0]] + " " + line[m[1]:]), fmt.Sprintf("%02d:%02d", h, min)
+	}
+	return line, ""
 }
 
 var (
@@ -663,10 +728,17 @@ func (a *app) taskDetail(c *ui.Context, it taskItem) {
 	if a.tasks.draftOf != it.key() {
 		a.tasks.title, a.tasks.note, a.tasks.draftOf = it.node.Title, it.node.Note, it.key()
 	}
-	if !a.barOpen && c.Shortcut(0, ui.KeyEscape) { // Escape puts the details away, as everything that opens
-		a.saveTaskDrafts()
-		a.tasks.sel, a.tasks.draftOf = "", ""
+	// Escape puts the details away, as everything that opens; while
+	// something is written in it, it first leaves the field (escRest).
+	if !a.barOpen && c.Shortcut(0, ui.KeyEscape) {
+		if c.FocusTakesText() {
+			a.escLeave = true
+		} else {
+			a.saveTaskDrafts()
+			a.tasks.sel, a.tasks.draftOf = "", ""
+		}
 	}
+	a.escRest(c)
 	ui.Column(c.Key("task-detail")).Grow(1).Basis(0).MinHeight(0).FillWidth().Children(func() {
 		// Its name heads the pane, in the title bar's band: the circle that
 		// ticks it off, the name to change, and the way out.
@@ -1198,8 +1270,35 @@ func (a *app) remindProp(c *ui.Context, it taskItem) {
 					set(r)
 				}
 			}
+			m.Separator()
+			if m.Item("自定义…").Chosen() {
+				a.tasks.remindOwn, a.tasks.remindText = it.key(), strings.TrimPrefix(task.Remind, "0")
+			}
 		})
 	})
+	// A time of one's own, written: 15:30, 下午3点半.
+	if a.tasks.remindOwn == it.key() && task.Due != nil {
+		ui.Row(c.Key("remind-own")).Padding(0, 0, 0, 52).Gap(8).AlignItems(ui.Center).FillWidth().Children(func() {
+			in := ui.TextInputBase(c.Key("remind-text"), &a.tasks.remindText).Placeholder("如 15:30").Label("自定义提醒时间").AutoFocus().
+				FontSize(textSmall).Width(96).Padding(5, 8).Radius(radiusSmall).Background(blockFill(t))
+			if in.Submitted() {
+				if _, r := parseRemind(strings.TrimSpace(a.tasks.remindText)); r != "" {
+					set(r)
+					a.tasks.remindOwn = ""
+				} else {
+					a.tasks.remindBad = true
+				}
+			}
+			if in.Changed() {
+				a.tasks.remindBad = false
+			}
+			if a.tasks.remindBad {
+				ui.Text(c, "没看懂这个时间，写成 15:30 这样").FontSize(textCaption).TextColor(t.Danger)
+			} else {
+				ui.Text(c, "写好后记下").FontSize(textCaption).TextColor(faint(t))
+			}
+		})
+	}
 }
 
 // taskKeys is the list's keys: the arrows go from a task to the next and

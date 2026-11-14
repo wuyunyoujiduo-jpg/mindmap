@@ -173,11 +173,18 @@ func (a *app) jobsView(c *ui.Context) {
 		return
 	}
 	w, _ := c.Size()
-	ui.Column(c.Key("jobs")).Absolute().Top(toolbarHeight + 6).Right(14).Width(min(332, w-28)).Gap(8).ZIndex(24).Children(func() {
+	// At the window's foot on the right, where nothing of a page is
+	// pressed: under the top row they lay over a page's own keys. Beside
+	// the AI's window when that is open there.
+	right := float32(14)
+	if a.aiOpen {
+		right += min(392, w-32) + 12
+	}
+	ui.Column(c.Key("jobs")).Absolute().Bottom(16).Right(right).Width(min(332, w-28)).Gap(8).ZIndex(24).Children(func() {
 		for _, j := range cards {
 			card := lifted(ui.Row(c.Key("job:"+j.key)).Padding(12, 14, 12, 12).Gap(12).Radius(16).AlignItems(ui.Center).FillWidth().
 				Background(cardColor(t)).Label(j.title), t).
-				Transition(ui.ElementTransition{Duration: motionSlow, Ease: easeDetent, Enter: &ui.Motion{Y: -24, Scale: 0.96},
+				Transition(ui.ElementTransition{Duration: motionSlow, Ease: easeDetent, Enter: &ui.Motion{Y: 24, Scale: 0.96},
 					Exit: &ui.Motion{Scale: 0.96}, ExitDuration: motionQuick})
 			hover := card.Hovered()
 			if j.open != nil {

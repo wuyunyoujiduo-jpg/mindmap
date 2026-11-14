@@ -177,6 +177,12 @@ func (a *app) libSide(c *ui.Context) {
 				a.libCat, a.libReview = toggled(a.libCat, "★"), reviewOff
 			}
 		}
+		if k := a.secretCount(); k > 0 || a.libCat == secretCat {
+			if sideRow(c, "cat:secret", "含密钥", fmt.Sprint(k), a.libCat == secretCat, sideIcon(c, "key-round")).
+				Tooltip("里面有看起来像密钥或密码的内容：已遮住，在这里集中清理").Label(fmt.Sprintf("含密钥 %d", k)).Clicked() {
+				a.libCat, a.libReview = toggled(a.libCat, secretCat), reviewOff
+			}
+		}
 		if k := len(l.Unorganized()); k > 0 {
 			if sideRow(c, "cat:-", "未整理", fmt.Sprint(k), a.libCat == "-", sideIcon(c, "archive")).Label(fmt.Sprintf("未整理 %d", k)).Clicked() {
 				a.libCat, a.libReview = toggled(a.libCat, "-"), reviewOff
@@ -274,4 +280,23 @@ func (a *app) tagClipUndoably(id, tag string) {
 			a.saveClip(cl)
 		}
 	})
+}
+
+// secretCat is the choice of the left column that shows the clips holding
+// what looks like a key or a password (app.libCat).
+const secretCat = "\x00secret"
+
+// secretCount is how many clips hold what looks like a secret, counted
+// once for a state of the library.
+func (a *app) secretCount() int {
+	if a.secretsOf != a.lib || a.secretsAt != a.lib.Version {
+		n := 0
+		for _, cl := range a.lib.Clips {
+			if cl.Secret() {
+				n++
+			}
+		}
+		a.secretsOf, a.secretsAt, a.secrets = a.lib, a.lib.Version, n
+	}
+	return a.secrets
 }

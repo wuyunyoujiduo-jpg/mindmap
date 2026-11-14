@@ -18,7 +18,8 @@ func (a *app) weekReview(c *ui.Context, all []taskItem) {
 	t := c.Theme()
 	now := a.now()
 	day := today(now)
-	from := weekStart(day)
+	back := a.tasks.reviewBack
+	from := weekStart(day).AddDate(0, 0, -7*back)
 	to := from.AddDate(0, 0, 7)
 	var done, late []taskItem
 	for _, it := range all {
@@ -28,7 +29,7 @@ func (a *app) weekReview(c *ui.Context, all []taskItem) {
 			if at := task.DoneAt; at != nil && !at.Before(from) && at.Before(to) {
 				done = append(done, it)
 			}
-		case task.Due != nil && task.Due.Before(day):
+		case back == 0 && task.Due != nil && task.Due.Before(day): // what is late is late now, of no past week
 			late = append(late, it)
 		}
 	}
@@ -40,10 +41,35 @@ func (a *app) weekReview(c *ui.Context, all []taskItem) {
 		}
 	}
 	slices.SortStableFunc(kept, func(x, y *library.Clip) int { return y.Created.Compare(x.Created) })
-	waiting := len(a.waiting())
+	waiting := 0
+	if back == 0 {
+		waiting = len(a.waiting())
+	}
 
 	last := to.AddDate(0, 0, -1)
-	ui.Text(c, fmt.Sprintf("这一周：%d月%d日 – %d月%d日", from.Month(), from.Day(), last.Month(), last.Day())).FontSize(textSmall).TextColor(t.TextMuted)
+	which := "这一周"
+	switch {
+	case back == 1:
+		which = "上一周"
+	case back > 1:
+		which = fmt.Sprintf("%d 周前", back)
+	}
+	// Which week, the way to the one before and back, and the week as a
+	// report to paste elsewhere.
+	ui.Row(c.Key("review-week")).Gap(4).AlignItems(ui.Center).FillWidth().Children(func() {
+		if iconButton(c, iconBack, "上一周", "往前一周", 24, true).Clicked() {
+			a.tasks.reviewBack++
+		}
+		if iconButton(c, iconForward, "下一周", "往后一周", 24, back > 0).Clicked() && back > 0 {
+			a.tasks.reviewBack--
+		}
+		ui.Text(c, fmt.Sprintf("%s：%d月%d日 – %d月%d日", which, from.Month(), from.Day(), last.Month(), last.Day())).FontSize(textSmall).TextColor(t.TextMuted).Margin(0, 0, 0, 4)
+		ui.Spacer(c)
+		if len(done)+len(late)+len(kept) > 0 && textLink(c, "复制成周报", "把这一周复制成一段 Markdown").Clicked() {
+			a.plat.CopyText(weekReport(which, from, last, done, late, kept))
+			a.tell("周报已复制，可以粘贴到别处")
+		}
+	})
 	figures(c, figure{len(done), "件做完"}, figure{len(late), "件拖着"}, figure{len(kept), "条灵感"}, figure{waiting, "条等着归位"})
 	if len(done)+len(late)+len(kept) == 0 {
 		emptyState(c, "review", "history", "这周还没有可以回顾的", "做完的任务、逾期没做的任务和这周记下的灵感，会汇总在这里。", nil)
@@ -116,4 +142,42 @@ func reviewDay(at, now time.Time) string {
 		return "今天"
 	}
 	return weekdayName(at)
+}
+
+// weekReport is a week as a report in Markdown: what was done, by map,
+// what is late, the thoughts kept.
+func weekReport(which string, from, last time.Time, done, late []taskItem, kept []*library.Clip) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "# 周报（%d月%d日 – %d月%d日）\n", from.Month(), from.Day(), last.Month(), last.Day())
+	if len(done) > 0 {
+		fmt.Fprintf(&b, "\n## 做完的（%d）\n", len(done))
+		var maps []string
+		by := map[string][]taskItem{}
+		for _, it := range done {
+			if _, ok := by[it.mapName]; !ok {
+				maps = append(maps, it.mapName)
+			}
+			by[it.mapName] = append(by[it.mapName], it)
+		}
+		for _, m := range maps {
+			fmt.Fprintf(&b, "\n**%s**\n", m)
+			for _, it := range by[m] {
+				fmt.Fprintf(&b, "- %s\n", it.node.Title)
+			}
+		}
+	}
+	if len(late) > 0 {
+		fmt.Fprintf(&b, "\n## 拖着的（%d）\n\n", len(late))
+		for _, it := range late {
+			fmt.Fprintf(&b, "- %s（%s，原定 %d月%d日）\n", it.node.Title, it.mapName, it.node.Task.Due.Month(), it.node.Task.Due.Day())
+		}
+	}
+	if len(kept) > 0 {
+		fmt.Fprintf(&b, "\n## 记下的灵感（%d）\n\n", len(kept))
+		for _, cl := range kept {
+			text, _, _ := strings.Cut(strings.TrimSpace(library.Mask(cl.Text)), "\n")
+			fmt.Fprintf(&b, "- %s\n", text)
+		}
+	}
+	return b.String()
 }

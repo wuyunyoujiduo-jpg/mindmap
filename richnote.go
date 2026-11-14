@@ -23,6 +23,7 @@ import (
 type noteDoc struct {
 	id, src string
 	doc     *richtext.Document
+	waiting bool // some of its pictures were still being read when it was made
 	// pressed, lastPress and lastCaret make a double click of two presses.
 	pressed   bool
 	lastPress time.Time
@@ -52,9 +53,10 @@ func (a *app) noteEditor(c *ui.Context, place string, n *model.Node, size float3
 		a.noteDocs = map[string]*noteDoc{}
 	}
 	d := a.noteDocs[place]
-	if d == nil || d.id != n.ID || d.src != n.Note {
-		text := a.notePictures(richtext.ParseMarkdown(keepLines(n.Note)))
-		d = &noteDoc{id: n.ID, src: n.Note, doc: richtext.NewDocument(text)}
+	// Made again too once its pictures, read aside, are there.
+	if d == nil || d.id != n.ID || d.src != n.Note || d.waiting && len(a.pictureBusy) == 0 {
+		text, waiting := a.notePictures(richtext.ParseMarkdown(keepLines(n.Note)))
+		d = &noteDoc{id: n.ID, src: n.Note, doc: richtext.NewDocument(text), waiting: waiting}
 		d.doc.SetSelection(text.Len(), text.Len()) // typing goes on at the end
 		a.noteDocs[place] = d
 	}
@@ -188,17 +190,21 @@ func notePicture(name string, b *ui.Bitmap) *richtext.Attachment {
 
 // notePictures gives the pictures of a note read from Markdown their
 // images, from the map's assets.
-func (a *app) notePictures(text richtext.Text) richtext.Text {
+func (a *app) notePictures(text richtext.Text) (out richtext.Text, waiting bool) {
 	for _, run := range text.Runs(0, text.Len()) {
 		att := run.Attributes.Attachment
 		if att == nil || !strings.HasPrefix(att.URL, assetScheme) {
 			continue
 		}
-		if b := a.bitmap(&model.Image{File: strings.TrimPrefix(att.URL, assetScheme)}); b != nil {
+		// Small and read aside, as the canvas's (filePicture): a note shows
+		// a picture no wider than notePictureWidth.
+		b, loading := a.filePicture(a.imagePath(&model.Image{File: strings.TrimPrefix(att.URL, assetScheme)}), true)
+		if b != nil {
 			*att = *notePicture(strings.TrimPrefix(att.URL, assetScheme), b)
 		}
+		waiting = waiting || loading
 	}
-	return text
+	return text, waiting
 }
 
 // blockStart is a line Markdown starts a block of its own with.

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/anthropics/anthropic-sdk-go"
@@ -168,7 +169,7 @@ func (a *app) takePlace(it taskItem) {
 // moveTaskUndoably moves a task under a topic of a map and says so, with
 // the way to take it back: under the topic it was under before.
 func (a *app) moveTaskUndoably(it taskItem, toPath, toID, label string) {
-	was := ""
+	was, at := "", -1
 	src := a.file
 	if it.path != a.path {
 		src = a.indexed(it.path)
@@ -177,6 +178,7 @@ func (a *app) moveTaskUndoably(it taskItem, toPath, toID, label string) {
 		if d := src.SheetOf(it.node.ID); d != nil {
 			if _, parent := d.Find(it.node.ID); parent != nil {
 				was = parent.ID
+				at = slices.IndexFunc(parent.Children, func(n *model.Node) bool { return n.ID == it.node.ID })
 			}
 		}
 	}
@@ -193,7 +195,23 @@ func (a *app) moveTaskUndoably(it taskItem, toPath, toID, label string) {
 	a.tellUndo(said, func() {
 		if err := a.moveNodeAcross(toPath, id, from, was); err != nil {
 			a.tell("没有放回去：" + err.Error())
+			return
 		}
+		// Back where it was among the others, not after them all.
+		_ = a.editMapAt(from, "放回原位", func(f *model.File) error {
+			d := f.SheetOf(was)
+			if d == nil {
+				return nil
+			}
+			parent, _ := d.Find(was)
+			i := slices.IndexFunc(parent.Children, func(n *model.Node) bool { return n.ID == id })
+			if i < 0 || at < 0 || at >= len(parent.Children) || i == at {
+				return nil
+			}
+			n := parent.Children[i]
+			parent.Children = slices.Insert(slices.Delete(parent.Children, i, i+1), at, n)
+			return nil
+		})
 	})
 }
 

@@ -393,11 +393,15 @@ type app struct {
 	renaming    string // the map or folder renamed in the sidebar
 	renameText  string
 	tagQuery    string
-	notice      string    // a passing message in the toolbar, as "已复制"
-	noticeAt    time.Time // since when it shows, for noticeTime
-	libReveal   string    // the clip the keyboard went to, to scroll to once
-	secretShown string    // the clip whose secrets its details show, asked for
-	wallShown   int       // how many clips 收集's wall shows, when more than wallStep
+	notice      string           // a passing message in the toolbar, as "已复制"
+	noticeAt    time.Time        // since when it shows, for noticeTime
+	libReveal   string           // the clip the keyboard went to, to scroll to once
+	secretsOf   *library.Library // what secretCount counted, and when
+	secretsAt   int
+	secrets     int
+	escLeave    bool   // Escape was pressed in a field of a pane: the focus leaves it (escRest)
+	secretShown string // the clip whose secrets its details show, asked for
+	wallShown   int    // how many clips 收集's wall shows, when more than wallStep
 	// Long work, told in cards (wait.go): how many clips the index is made
 	// of and how many are left, since when, and what to say once done.
 	embedTotal, embedLeft int
