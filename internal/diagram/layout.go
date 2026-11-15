@@ -211,6 +211,33 @@ func topo(g *Graph, fwd []bool) []string {
 	return order
 }
 
+// TitleRunes is how many characters of a title a box of a flow holds on
+// a line; DiamondRunes, a question's diamond. A longer one takes two.
+const (
+	TitleRunes   = 9
+	DiamondRunes = 7
+)
+
+// FlowBoxHeight is how tall a node of a flow is drawn: taller with a
+// second line under its title, or a title of two lines.
+func FlowBoxHeight(n *Node) float32 {
+	long := len([]rune(n.Title))
+	if n.Kind == KindDecision {
+		if long > DiamondRunes {
+			return flowDiaH + 14
+		}
+		return flowDiaH
+	}
+	h := float32(flowBoxH)
+	if n.Sub != "" {
+		h = flowTallH
+	}
+	if long > TitleRunes {
+		h += 14
+	}
+	return h
+}
+
 // LayoutFlow places a flow: a column a lane, and down the rows as it
 // goes. A step in the lane of the one before it is on the next row; one
 // in another lane stays on its row while the way there is free, so that a
@@ -280,13 +307,7 @@ func (g *Graph) layoutFlow(apart bool) Layout {
 				break
 			}
 		}
-		h := float32(flowBoxH)
-		switch {
-		case n.Kind == KindDecision:
-			h = flowDiaH
-		case n.Sub != "":
-			h = flowTallH
-		}
+		h := FlowBoxHeight(n)
 		gr.put(id, cell{col, r}, flowBoxW, h)
 		rows = max(rows, r+1)
 	}
@@ -592,7 +613,7 @@ func routes(g *Graph, gr *grid) []Route {
 	}
 	for i := range out {
 		seg := out[i].Anchor
-		out[i].LabelAt, out[i].Anchor = labelPlace(out[i].Points, seg, shifted[i] < 0)
+		out[i].LabelAt, out[i].Anchor = labelPlace(out[i].Points, seg, shifted[i] < 0, len([]rune(g.Edges[out[i].Edge].Label)))
 	}
 	return out
 }
@@ -679,10 +700,11 @@ func shift(pts []Point, d float32) {
 	}
 }
 
-// labelPlace is where a label goes by a run of a line: over a level run,
-// beside an upright one (on its left when left is set), at its middle
-// when it is short and near its beginning when long.
-func labelPlace(pts []Point, seg int, left bool) (Point, int) {
+// labelPlace is where a label of so many characters goes by a run of a
+// line: over a level run, beside an upright one (on its left when left
+// is set), at its middle when it is short and near its beginning when
+// long.
+func labelPlace(pts []Point, seg int, left bool, runes int) (Point, int) {
 	if seg+1 >= len(pts) {
 		seg = 0
 	}
@@ -692,6 +714,21 @@ func labelPlace(pts []Point, seg int, left bool) (Point, int) {
 		dir := float32(1)
 		if b.X < a.X {
 			dir = -1
+		}
+		if length(a, b) < 64 && runes > 1 {
+			// Too short to hold it: over where it begins, clear of the two
+			// it joins (under, for the one of two that runs lower).
+			y := a.Y - 30
+			if left {
+				y = a.Y + 40
+			}
+			if dir > 0 {
+				return Point{a.X - 6, y}, AnchorStart
+			}
+			return Point{a.X + 6, y}, AnchorEnd
+		}
+		if left { // of two side by side, the one under
+			return Point{(a.X + b.X) / 2, a.Y + 18}, AnchorMiddle
 		}
 		if long {
 			if dir > 0 {

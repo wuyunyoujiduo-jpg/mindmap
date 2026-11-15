@@ -101,6 +101,7 @@ func (a *app) commands() []command {
 		{"复制当前画布为 Markdown", "⌘⇧C", a.copyMarkdown, hasDoc},
 		{"导入 XMind", "⌘⇧I", a.askImportXMind, nil},
 		{"导入 Markdown / OPML", "", a.askImportOutline, nil},
+		{"导入文件夹里的文档（每篇一个画布）", "", a.askImportFolder, nil},
 		{"导出为 OPML", "", a.askExportOPML, hasDoc},
 		{"导出任务到日历（.ics）", "", a.askExportICS, hasDoc},
 		{"导出演说为 PDF", "", a.askExportSlides, hasDoc},
@@ -602,7 +603,7 @@ var shortcuts = []struct {
 		{"双指捏合 / ⌘ + 滚轮", "缩放"},
 	}},
 	{"图解", [][2]string{
-		{"← →", "讲一遍时：上一步 / 下一步"}, {"Esc", "退出讲一遍、走例子或考我；再按取消选中；再按回到导图"},
+		{"← → ↑ ↓", "在方框、表格的行、名词之间移动；讲一遍时是上一步 / 下一步"}, {"Esc", "退出讲一遍、走例子或考我；再按取消选中；再按回到导图"},
 	}},
 	{"导入导出", [][2]string{
 		{"⌘⇧E", "导出为图片"}, {"⌘⇧C", "复制当前画布为 Markdown"}, {"⌘⇧I", "导入 XMind"},

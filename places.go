@@ -338,6 +338,9 @@ func (a *app) projectsView(c *ui.Context) {
 					if m.Item("导入 Markdown / OPML…").Chosen() {
 						a.askImportOutline()
 					}
+					if m.Item("导入文件夹里的文档…").Chosen() {
+						a.askImportFolder()
+					}
 				})
 			})
 			// The folders, where the directory is put away: those of the top,

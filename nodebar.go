@@ -3,10 +3,18 @@ package main
 import (
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/layout"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
 
-// nodeBarWidth is the width of the bar by the node selected.
-const nodeBarWidth = 5*30 + 2*4 + 9
+// nodeBarWidth is the width of the bar by the node selected: its five
+// keys, and a sixth for a topic that has, or may have, a 图解.
+func (a *app) nodeBarWidth(n *model.Node) float32 {
+	w := float32(5*30 + 2*4 + 9)
+	if a.diaOf(n.ID) != nil || diaWorth(n) {
+		w += 30
+	}
+	return w
+}
 
 // nodeBar is the small bar of the node selected, over the canvas's top:
 // a child, its style and markers, a task, and the rest of its
@@ -17,13 +25,14 @@ func (a *app) nodeBar(c *ui.Context, r layout.Result, depth int) {
 	if n == nil || a.editing != "" || len(a.multi) > 0 {
 		return
 	}
-	if _, ok := r.Boxes[n.ID]; !ok || a.vp.W < nodeBarWidth+2*190 {
+	wide := a.nodeBarWidth(n)
+	if _, ok := r.Boxes[n.ID]; !ok || a.vp.W < wide+2*190 {
 		return // not shown, or no room beside the corners' buttons
 	}
 	t := c.Theme()
 	// At the top of the canvas, in the middle: by the node it would hide
 	// the nodes around it, which are clicked as often.
-	x, y := (a.vp.W-nodeBarWidth)/2, float32(12)
+	x, y := (a.vp.W-wide)/2, float32(12)
 	bar := lifted(ui.Row(c.Key("node-bar")).Absolute().Left(x).Top(y).Height(38).Padding(0, 5).Gap(0).AlignItems(ui.Center).
 		Radius(radiusPill).Background(cardColor(t)), t).Label("主题操作")
 	bar.Children(func() {
@@ -55,6 +64,19 @@ func (a *app) nodeBar(c *ui.Context, r layout.Result, depth int) {
 		}
 		if tb.Clicked() {
 			a.later(func() { a.toggleTask(n) })
+		}
+		// Its 图解: drawn when there is none yet, opened when there is.
+		if f := a.diaOf(n.ID); f != nil {
+			db := iconButton(c, iconDiagram, "看图解", "看这一支的图解：流程、状态、判定表、名词", 30, true)
+			db.Background(t.Accent.Alpha(0.12))
+			if db.Clicked() {
+				a.later(func() { a.openDia(n.ID, "") })
+			}
+		} else if diaWorth(n) {
+			busy := a.diaBusy == n.ID
+			if iconButton(c, iconDiagram, "画成图解", "让 AI 把这一支画成流程、状态、判定表和名词，帮你看懂、记住", 30, !busy).Clicked() && !busy {
+				a.later(func() { a.drawDia(n.ID, "") })
+			}
 		}
 		iconButton(c, iconMore, "更多操作", "概要、关联线、复制…", 30, true).Menu(func(m *ui.Menu) {
 			a.nodeMenu(m, n, depth)

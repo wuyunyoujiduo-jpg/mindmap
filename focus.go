@@ -288,9 +288,16 @@ func (a *app) copyNodes(cut bool) {
 			return
 		}
 	}
-	a.clip = nil
+	a.clip, a.clipCut = nil, nil
 	for _, n := range nodes {
-		a.clip = append(a.clip, n.Copy())
+		c := n.Copy()
+		a.clip = append(a.clip, c)
+		if cut {
+			if a.clipCut == nil {
+				a.clipCut = map[string]string{}
+			}
+			pairIDs(a.clipCut, c, n) // the clipboard's ID to the one it had
+		}
 	}
 	a.clipAssets = model.AssetsDir(a.path)
 	a.clipText = model.MarkdownNodes(nodes)
@@ -315,10 +322,24 @@ func (a *app) paste() bool {
 	var nodes []*model.Node
 	switch {
 	case a.clip != nil && text == a.clipText:
+		ids := map[string]string{} // of topics cut: the ID each had to the one it has now
 		for _, n := range a.clip {
 			c := n.Copy()
 			copyAssets(c, a.clipAssets, model.AssetsDir(a.path))
 			nodes = append(nodes, c)
+			if a.clipCut != nil {
+				now := map[string]string{}
+				pairIDs(now, n, c)
+				for clip, to := range now {
+					if from, ok := a.clipCut[clip]; ok {
+						ids[from] = to
+					}
+				}
+			}
+		}
+		if len(ids) > 0 { // moved once: pasted again, they are copies
+			a.clipCut = nil
+			defer a.carryDias(ids)
 		}
 	case a.pasteImage():
 		return true

@@ -52,6 +52,68 @@ func (a *app) importOutline(path string) {
 	_ = a.open(dest)
 }
 
+// askImportFolder asks for a folder of documents and makes one map of
+// them, a canvas a document: a project's rules or designs, kept as files,
+// are then one map to turn the pages of, and a noun is looked for on all
+// of them.
+func (a *app) askImportFolder() {
+	a.plat.PickFolder(func(dir string) {
+		if dir != "" {
+			a.importFolder(dir)
+		}
+	})
+}
+
+// maxImportDocs is how many documents of a folder become canvases.
+const maxImportDocs = 24
+
+func (a *app) importFolder(dir string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		a.saveErr = "导入失败: " + err.Error()
+		return
+	}
+	f := &model.File{Version: model.FormatVersion}
+	more := 0
+	for _, e := range entries {
+		ext := strings.ToLower(filepath.Ext(e.Name()))
+		if e.IsDir() || ext != ".md" && ext != ".markdown" {
+			continue
+		}
+		if len(f.Sheets) == maxImportDocs {
+			more++
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil || strings.TrimSpace(string(data)) == "" {
+			continue
+		}
+		name := strings.TrimSuffix(e.Name(), filepath.Ext(e.Name()))
+		d := formats.ParseMarkdown(string(data), name).Sheets[0]
+		d.Title = name
+		if t := strings.TrimSpace(d.Root.Title); t != "" && len([]rune(t)) <= 16 {
+			d.Title = t // named as the document names itself, when shortly
+		}
+		f.Sheets = append(f.Sheets, d)
+	}
+	if len(f.Sheets) == 0 {
+		a.tell("这个文件夹里没有 Markdown 文档")
+		return
+	}
+	dest := freeMapPath(a.currentFolder(), filepath.Base(dir))
+	if err := f.Save(dest); err != nil {
+		a.saveErr = "导入失败: " + err.Error()
+		return
+	}
+	a.refreshFiles()
+	_ = a.open(dest)
+	msg := fmt.Sprintf("导入了 %d 篇文档，每篇一个画布", len(f.Sheets))
+	if more > 0 {
+		msg += fmt.Sprintf("；还有 %d 篇没导入", more)
+	}
+	a.tell(msg)
+}
+
 func (a *app) askExportOPML() {
 	a.exportTo("opml", func(path string) error {
 		data, err := formats.OPML(a.file, mapName(a.path))

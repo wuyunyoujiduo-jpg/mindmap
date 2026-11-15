@@ -34,7 +34,10 @@ type Set struct {
 	// its ID: by it the set tells what the map says otherwise now.
 	Seen map[string]string `json:"seen,omitempty"`
 	// Told is what the user asked of the drawing, kept for the next.
-	Told    string   `json:"told,omitempty"`
+	Told string `json:"told,omitempty"`
+	// Partial tells that the branch was too long to be given whole: what
+	// was drawn is of its beginning.
+	Partial bool     `json:"partial,omitempty"`
 	Flow    *Graph   `json:"flow,omitempty"`
 	State   *Graph   `json:"state,omitempty"`
 	Table   *Table   `json:"table,omitempty"`
@@ -577,4 +580,199 @@ func tidy(key string, v any) any {
 		return s == "true" || s == "1"
 	}
 	return v
+}
+
+// Renamed gives the set with its topics renamed: ids gives the new ID of
+// each that has one, as when its branch was cut and pasted elsewhere.
+func (s Set) Renamed(ids map[string]string) Set {
+	re := func(in []string) []string {
+		out := make([]string, len(in))
+		for i, id := range in {
+			out[i] = id
+			if to, ok := ids[id]; ok {
+				out[i] = to
+			}
+		}
+		return out
+	}
+	graph := func(g *Graph) *Graph {
+		if g == nil {
+			return nil
+		}
+		c := *g
+		c.Nodes = slices.Clone(g.Nodes)
+		for i := range c.Nodes {
+			c.Nodes[i].Src = re(c.Nodes[i].Src)
+		}
+		return &c
+	}
+	if to, ok := ids[s.Node]; ok {
+		s.Node = to
+	}
+	seen := map[string]string{}
+	for id, h := range s.Seen {
+		if to, ok := ids[id]; ok {
+			id = to
+		}
+		// What is under what is in it, by the parent's ID.
+		if parent, rest, ok := strings.Cut(h, "/"); ok {
+			if to, renamed := ids[parent]; renamed {
+				h = to + "/" + rest
+			}
+		}
+		seen[id] = h
+	}
+	s.Seen = seen
+	s.Flow, s.State = graph(s.Flow), graph(s.State)
+	if s.Table != nil {
+		t := *s.Table
+		t.Rows, t.Notes = slices.Clone(t.Rows), slices.Clone(t.Notes)
+		for i := range t.Rows {
+			t.Rows[i].Src = re(t.Rows[i].Src)
+		}
+		for i := range t.Notes {
+			t.Notes[i].Src = re(t.Notes[i].Src)
+		}
+		s.Table = &t
+	}
+	s.Gaps = slices.Clone(s.Gaps)
+	for i := range s.Gaps {
+		s.Gaps[i].Src = re(s.Gaps[i].Src)
+	}
+	return s
+}
+
+// Markdown writes the set out to be kept elsewhere: the flow and the
+// states as Mermaid, which most places that take Markdown draw, the table
+// as a table, the nouns and what is unsaid as lists.
+func (s *Set) Markdown() string {
+	var b strings.Builder
+	esc := func(t string) string { return strings.NewReplacer(`"`, "'", "\n", " ", "|", "/").Replace(t) }
+	if s.Title != "" {
+		b.WriteString("# " + s.Title + "\n\n")
+	}
+	if g := s.Flow; g != nil {
+		b.WriteString("## 流程\n\n```mermaid\nflowchart TD\n")
+		name := func(n Node) string {
+			t := esc(n.Title)
+			if n.Sub != "" {
+				t += "<br/>" + esc(n.Sub)
+			}
+			return t
+		}
+		draw := func(n Node) {
+			switch n.Kind {
+			case KindDecision:
+				b.WriteString("    " + mid(n.ID) + "{\"" + name(n) + "\"}\n")
+			case KindStart, KindEnd, KindOK, KindBad:
+				b.WriteString("    " + mid(n.ID) + "([\"" + name(n) + "\"])\n")
+			default:
+				b.WriteString("    " + mid(n.ID) + "[\"" + name(n) + "\"]\n")
+			}
+		}
+		if len(g.Lanes) > 1 {
+			for i, lane := range g.Lanes {
+				b.WriteString("  subgraph L" + strconv.Itoa(i) + "[\"" + esc(lane) + "\"]\n")
+				for _, n := range g.Nodes {
+					if n.Lane == i {
+						draw(n)
+					}
+				}
+				b.WriteString("  end\n")
+			}
+		} else {
+			for _, n := range g.Nodes {
+				draw(n)
+			}
+		}
+		for _, e := range g.Edges {
+			if e.Label != "" {
+				b.WriteString("    " + mid(e.From) + " -->|\"" + esc(e.Label) + "\"| " + mid(e.To) + "\n")
+			} else {
+				b.WriteString("    " + mid(e.From) + " --> " + mid(e.To) + "\n")
+			}
+		}
+		b.WriteString("```\n\n")
+	}
+	if g := s.State; g != nil {
+		b.WriteString("## 状态\n\n```mermaid\nstateDiagram-v2\n")
+		at := func(id string) string {
+			if n := g.Node(id); n != nil && n.Kind == KindStart {
+				return "[*]"
+			}
+			return mid(id)
+		}
+		for _, n := range g.Nodes {
+			if n.Kind != KindStart {
+				b.WriteString("    " + mid(n.ID) + ": " + esc(n.Title) + "\n")
+			}
+		}
+		for _, e := range g.Edges {
+			b.WriteString("    " + at(e.From) + " --> " + at(e.To))
+			if e.Label != "" {
+				b.WriteString(": " + esc(e.Label))
+			}
+			b.WriteString("\n")
+		}
+		b.WriteString("```\n\n")
+	}
+	if t := s.Table; t != nil {
+		head := append(slices.Clone(t.Conds), t.Results...)
+		for i, h := range head {
+			head[i] = esc(h)
+		}
+		b.WriteString("## 判定表\n\n| " + strings.Join(head, " | ") + " |\n|" + strings.Repeat("---|", len(head)) + "\n")
+		for _, r := range t.Rows {
+			cells := append(slices.Clone(r.When), r.Then...)
+			for i, c := range cells {
+				cells[i] = esc(c)
+				if c == "" {
+					cells[i] = "—"
+				}
+			}
+			if r.Gap {
+				cells[len(r.When)] = "没说清：" + esc(r.Why)
+			}
+			b.WriteString("| " + strings.Join(cells, " | ") + " |\n")
+		}
+		for _, n := range t.Notes {
+			b.WriteString("\n- " + n.Text)
+		}
+		b.WriteString("\n\n")
+	}
+	if len(s.Objects) > 0 {
+		b.WriteString("## 名词\n\n")
+		for _, o := range s.Objects {
+			b.WriteString("- **" + o.Name + "**")
+			if o.Kind != "" {
+				b.WriteString("（" + o.Kind + "）")
+			}
+			if o.What != "" {
+				b.WriteString("：" + o.What)
+			}
+			b.WriteString("\n")
+		}
+		b.WriteString("\n")
+	}
+	if len(s.Gaps) > 0 {
+		b.WriteString("## 没说清的地方\n\n")
+		for _, g := range s.Gaps {
+			b.WriteString("- " + g.Say + "\n")
+		}
+	}
+	return strings.TrimSpace(b.String()) + "\n"
+}
+
+// mid is a node's ID as Mermaid takes one: letters, digits and _.
+func mid(id string) string {
+	var b strings.Builder
+	b.WriteString("n")
+	for _, r := range id {
+		if r < 128 && (r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z') {
+			b.WriteRune(r)
+		} else {
+			b.WriteString("_" + strconv.Itoa(int(r)))
+		}
+	}
+	return b.String()
 }

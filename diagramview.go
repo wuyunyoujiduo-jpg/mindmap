@@ -48,6 +48,8 @@ func (a *app) diaLight(f *diaFile) *diaLit {
 		return m
 	}
 	switch {
+	case a.dia.way == diaRead && a.dia.noun >= 1 && a.dia.noun <= len(f.Objects) && a.dia.kind != "objects":
+		return a.nounLight(f, f.Objects[a.dia.noun-1], a.dia.kind)
 	case a.dia.way == diaTell && a.dia.kind == "flow" && f.Flow != nil && len(f.Flow.Tell) > 0:
 		step := min(a.dia.step, len(f.Flow.Tell)-1)
 		l := &diaLit{nodes: map[string]bool{}, cur: set(f.Flow.Tell[step].Nodes), edges: map[int]bool{}, hot: map[int]bool{}}
@@ -115,6 +117,12 @@ func (a *app) diagramView(c *ui.Context) {
 	stage.Children(func() {
 		a.diaHead(c, f)
 		a.diaStaleBar(c, f)
+		if !a.panelShown(c) && a.dia.pick != "" {
+			a.diaSourceStrip(c, f)
+		}
+		if a.diaBusy != f.Node {
+			a.nounChip(c, f, a.diaLight(f))
+		}
 		switch {
 		case a.diaBusy == f.Node:
 			ui.Column(c.Key("dia-busy")).Grow(1).Basis(0).Center().Children(func() {
@@ -153,23 +161,107 @@ func (a *app) diaKey(ev ui.InputEvent) bool {
 			a.dia.way = diaRead
 		case a.dia.pick != "":
 			a.dia.pick = ""
+		case a.dia.noun != 0:
+			a.dia.noun = 0
 		default:
 			a.later(a.closeDia)
 		}
-	case ui.KeyRight, ui.KeyDown, ui.KeySpace, ui.KeyEnter:
+	case ui.KeyRight, ui.KeyDown, ui.KeyLeft, ui.KeyUp:
+		by := 1
+		if ev.Key == ui.KeyLeft || ev.Key == ui.KeyUp {
+			by = -1
+		}
+		switch a.dia.way {
+		case diaTell:
+			a.tellStep(f, by)
+		case diaRead:
+			a.diaMove(f, ev.Key)
+		default:
+			return false
+		}
+	case ui.KeySpace, ui.KeyEnter:
 		if a.dia.way != diaTell {
 			return false
 		}
 		a.tellStep(f, 1)
-	case ui.KeyLeft, ui.KeyUp:
-		if a.dia.way != diaTell {
-			return false
-		}
-		a.tellStep(f, -1)
 	default:
 		return false
 	}
 	return true
+}
+
+// diaMove takes what is chosen to the next by an arrow: on a graph, the
+// box nearest that way; in the table and the nouns, the row above or
+// below.
+func (a *app) diaMove(f *diaFile, key ui.Key) {
+	step := func(prefix string, n int) {
+		at, _ := strconv.Atoi(strings.TrimPrefix(a.dia.pick, prefix))
+		if !strings.HasPrefix(a.dia.pick, prefix) {
+			at = 0
+		}
+		switch key {
+		case ui.KeyDown:
+			at++
+		case ui.KeyUp:
+			at--
+		default:
+			return
+		}
+		if at >= 1 && at <= n {
+			a.dia.pick = prefix + strconv.Itoa(at)
+		}
+	}
+	g := a.diaGraphOf(f)
+	switch {
+	case a.dia.kind == "table" && f.Table != nil:
+		step("row:", len(f.Table.Rows))
+		return
+	case a.dia.kind == "objects":
+		step("obj:", len(f.Objects))
+		return
+	case g == nil:
+		return
+	}
+	l := diaLayout(g, a.dia.kind == "flow")
+	cur, ok := l.Boxes[a.dia.pick]
+	if !ok || g.Node(a.dia.pick) == nil { // none chosen: where it begins
+		for _, n := range g.Nodes {
+			if n.Kind != diagram.KindStart || a.dia.kind == "flow" {
+				a.dia.pick, a.diaReveal = n.ID, n.ID
+				return
+			}
+		}
+		return
+	}
+	dx, dy := float32(0), float32(0)
+	switch key {
+	case ui.KeyRight:
+		dx = 1
+	case ui.KeyLeft:
+		dx = -1
+	case ui.KeyDown:
+		dy = 1
+	default:
+		dy = -1
+	}
+	best, bestAt := "", float32(0)
+	for _, n := range g.Nodes {
+		b := l.Boxes[n.ID]
+		if n.ID == a.dia.pick || n.Kind == diagram.KindStart && a.dia.kind == "state" {
+			continue
+		}
+		ox, oy := b.X+b.W/2-(cur.X+cur.W/2), b.Y+b.H/2-(cur.Y+cur.H/2)
+		along, across := ox*dx+oy*dy, abs32(ox*dy)+abs32(oy*dx)
+		if along <= 1 {
+			continue
+		}
+		if d := along + 2*across; best == "" || d < bestAt { // that way first, then near
+			best, bestAt = n.ID, d
+		}
+	}
+	if best != "" {
+		a.dia.pick, a.diaReveal = best, best
+	}
 }
 
 // tellStep goes a step on or back in the telling; past its end, it is
@@ -183,6 +275,7 @@ func (a *app) tellStep(f *diaFile, by int) {
 		a.dia.way = diaRead
 	case n >= 0:
 		a.dia.step = n
+		a.diaReveal = f.Flow.Tell[n].Nodes[0]
 	}
 }
 
@@ -230,6 +323,10 @@ func (a *app) diaHead(c *ui.Context, f *diaFile) {
 		iconButton(c, iconMore, "图解的更多操作", "更多", 30, true).Menu(func(m *ui.Menu) {
 			if m.Item("回到导图").Chosen() {
 				a.later(a.closeDia)
+			}
+			if m.Item("复制成 Markdown").Chosen() {
+				a.plat.CopyText(f.Markdown())
+				a.tell("已复制：流程和状态是 Mermaid，贴到能画它的地方就是图")
 			}
 			m.Separator()
 			if m.Item("删掉这组图解").Chosen() {
@@ -282,26 +379,37 @@ func (a *app) diaStages(c *ui.Context, node string) {
 	stageLines(c, "diagram", []string{read}, "AI 正在找出先后、条件和状态，排成图…")
 }
 
+// diaBlue is the color of a diagram's steps and states: one calm blue on
+// every map. In its topic's own color a step read, on a map whose color
+// is near red or green, as an end refused or an end reached.
+var diaBlue = ui.Hex("#3B8FE0")
+
+// diaLayout places the graph shown.
+func diaLayout(g *diagram.Graph, flow bool) diagram.Layout {
+	if flow {
+		return g.LayoutFlow()
+	}
+	return g.LayoutState()
+}
+
 // diaGraph draws a flow or the states: the lanes and the arrows painted,
-// each node a box to choose.
+// each node a box to choose. It fits the page's width, and is made
+// larger or smaller by the bar at its corner.
 func (a *app) diaGraph(c *ui.Context, f *diaFile, g *diagram.Graph, flow bool) {
 	t := c.Theme()
-	var l diagram.Layout
-	if flow {
-		l = g.LayoutFlow()
-	} else {
-		l = g.LayoutState()
-	}
+	l := diaLayout(g, flow)
 	lit := a.diaLight(f)
 	changed := a.diaChanges(f).changed
-	col := a.branchColor(f.Node)
-	// It fits the page's width, but no smaller than reads.
-	z := float32(1)
 	const pad = 20
+	fit := float32(1)
 	if room := a.diaBody.Bounds(c).W - 2*pad; room > 0 {
-		z = max(min(room/l.Width, 1), 0.72)
+		fit = max(min(room/l.Width, 1), 0.72) // no smaller than reads
 	} else {
 		c.Invalidate() // once more, with the page's width
+	}
+	z := fit
+	if a.diaZoom > 0 {
+		z = a.diaZoom
 	}
 	w, h := l.Width*z, l.Height*z
 	left := max((a.diaBody.Bounds(c).W-w)/2, pad)
@@ -313,103 +421,164 @@ func (a *app) diaGraph(c *ui.Context, f *diaFile, g *diagram.Graph, flow bool) {
 	}
 	nodeLit := func(id string) bool { return lit == nil || lit.nodes == nil || lit.nodes[id] }
 	edgeLit := func(i int) bool { return lit == nil || lit.edges == nil || lit.edges[i] }
+	// The steps of the case walked, numbered as it takes them.
+	order := map[string]int{}
+	if a.dia.way == diaCase && flow && a.dia.cas < len(f.Cases) {
+		for _, id := range f.Cases[a.dia.cas].Flow {
+			if _, seen := order[id]; !seen {
+				order[id] = len(order) + 1
+			}
+		}
+	}
 	hover := a.diaHover
 	a.diaHover = ""
-	ui.ScrollBoth(c.Key("dia-graph:" + a.dia.kind)).Grow(1).Basis(0).MinHeight(0).Bind(&a.diaBody).Children(func() {
-		cv := ui.Box(c.Key("dia-canvas")).Size(w, h).Margin(6, pad, pad, left).Shrink(0).Label("图")
-		if cv.Clicked() {
-			a.dia.pick = ""
-		}
-		cv.Draw(func(p *ui.Painter, r ui.Rect) {
-			x := func(v float32) float32 { return r.X + v*z }
-			y := func(v float32) float32 { return r.Y + v*z }
-			for i, lane := range l.Lanes {
-				if i > 0 {
-					p.Line(x(lane.X), y(6), x(lane.X), y(l.Height-6), 1, hairline(t))
-				}
+	ui.Column(c.Key("dia-graph-room")).Grow(1).Basis(0).MinHeight(0).Children(func() {
+		ui.ScrollBoth(c.Key("dia-graph:" + a.dia.kind)).Grow(1).Basis(0).MinHeight(0).Bind(&a.diaBody).Children(func() {
+			cv := ui.Box(c.Key("dia-canvas")).Size(w, h).Margin(6, pad, pad, left).Shrink(0).Label("图")
+			if cv.Clicked() {
+				a.dia.pick = ""
 			}
-			if l.Head > 0 {
-				p.Line(x(0), y(l.Head), x(l.Width), y(l.Head), 1, hairline(t))
-			}
-			for _, rt := range l.Routes {
-				ink := faint(t)
-				if lit != nil && lit.hot[rt.Edge] {
-					ink = t.Accent
+			cv.Draw(func(p *ui.Painter, r ui.Rect) {
+				x := func(v float32) float32 { return r.X + v*z }
+				y := func(v float32) float32 { return r.Y + v*z }
+				for i, lane := range l.Lanes {
+					if i > 0 {
+						p.Line(x(lane.X), y(6), x(lane.X), y(l.Height-6), 1, hairline(t))
+					}
 				}
-				ink = ink.Alpha(dim(edgeLit(rt.Edge)))
-				pts := make([][2]float32, len(rt.Points))
-				for i, q := range rt.Points {
-					pts[i] = [2]float32{x(q.X), y(q.Y)}
+				if l.Head > 0 {
+					p.Line(x(0), y(l.Head), x(l.Width), y(l.Head), 1, hairline(t))
 				}
-				p.StrokePolyline(pts, max(1.4*z, 1), ink)
-				// Its arrow, along its last run.
-				n := len(pts)
-				ex, ey := pts[n-1][0], pts[n-1][1]
-				dx, dy := ex-pts[n-2][0], ey-pts[n-2][1]
-				if d := abs32(dx) + abs32(dy); d > 0 {
-					dx, dy = dx/d, dy/d
-					s := 7 * z
-					p.FillPath(new(ui.Path).MoveTo(ex, ey).LineTo(ex-dx*s-dy*s/2, ey-dy*s+dx*s/2).LineTo(ex-dx*s+dy*s/2, ey-dy*s-dx*s/2).Close(), ink)
+				for _, rt := range l.Routes {
+					ink := faint(t)
+					e := g.Edges[rt.Edge]
+					if lit != nil && lit.hot[rt.Edge] || lit == nil && a.dia.pick != "" && (e.From == a.dia.pick || e.To == a.dia.pick) {
+						ink = t.Accent // taken by what is told or walked, or of the box chosen: followed among many
+					}
+					ink = ink.Alpha(dim(edgeLit(rt.Edge)))
+					pts := make([][2]float32, len(rt.Points))
+					for i, q := range rt.Points {
+						pts[i] = [2]float32{x(q.X), y(q.Y)}
+					}
+					p.StrokePolyline(pts, max(1.4*z, 1), ink)
+					// Its arrow, along its last run.
+					n := len(pts)
+					ex, ey := pts[n-1][0], pts[n-1][1]
+					dx, dy := ex-pts[n-2][0], ey-pts[n-2][1]
+					if d := abs32(dx) + abs32(dy); d > 0 {
+						dx, dy = dx/d, dy/d
+						s := 7 * z
+						p.FillPath(new(ui.Path).MoveTo(ex, ey).LineTo(ex-dx*s-dy*s/2, ey-dy*s+dx*s/2).LineTo(ex-dx*s+dy*s/2, ey-dy*s-dx*s/2).Close(), ink)
+					}
 				}
-			}
-			// A question is a diamond, which no box is.
-			for _, n := range g.Nodes {
-				if n.Kind != diagram.KindDecision {
-					continue
+				// A question is a diamond, which no box is.
+				for _, n := range g.Nodes {
+					if n.Kind != diagram.KindDecision {
+						continue
+					}
+					b := l.Boxes[n.ID]
+					dia := new(ui.Path).MoveTo(x(b.X), y(b.Y+b.H/2)).LineTo(x(b.X+b.W/2), y(b.Y)).LineTo(x(b.X+b.W), y(b.Y+b.H/2)).LineTo(x(b.X+b.W/2), y(b.Y+b.H)).Close()
+					o := dim(nodeLit(n.ID))
+					fill := t.Background
+					if hover == n.ID {
+						fill = diaBlue.Alpha(0.09)
+					}
+					p.FillPath(dia, fill)
+					line, lw := diaBlue.Alpha(0.6*o), max(1.5*z, 1)
+					switch {
+					case lit != nil && lit.miss == n.ID:
+						line, lw = t.Warning, 2
+					case a.dia.pick == n.ID || lit != nil && lit.cur[n.ID]:
+						line, lw = t.Accent, 2
+					}
+					p.StrokePath(dia, lw, line)
 				}
-				b := l.Boxes[n.ID]
-				dia := new(ui.Path).MoveTo(x(b.X), y(b.Y+b.H/2)).LineTo(x(b.X+b.W/2), y(b.Y)).LineTo(x(b.X+b.W), y(b.Y+b.H/2)).LineTo(x(b.X+b.W/2), y(b.Y+b.H)).Close()
-				o := dim(nodeLit(n.ID))
-				fill := t.Background
-				if hover == n.ID {
-					fill = col.Alpha(0.09)
+			})
+			cv.Children(func() {
+				for i, name := range g.Lanes {
+					ui.Box(c.Key(fmt.Sprint("lane", i))).Absolute().Left(l.Lanes[i].X*z).Top(0).Size(l.Lanes[i].W*z, l.Head*z).Center().PassThrough().Children(func() {
+						ui.Text(c, name).FontSize(12 * z).FontWeight(700).LetterSpacing(0.4).TextColor(t.TextMuted).NoWrap().PassThrough()
+					})
 				}
-				p.FillPath(dia, fill)
-				line, lw := col.Alpha(0.55*o), max(1.5*z, 1)
-				switch {
-				case lit != nil && lit.miss == n.ID:
-					line, lw = t.Warning, 2
-				case a.dia.pick == n.ID || lit != nil && lit.cur[n.ID]:
-					line, lw = t.Accent, 2
+				for _, rt := range l.Routes {
+					if e := g.Edges[rt.Edge]; e.Label != "" {
+						a.diaEdgeLabel(c, rt, e.Label, z, dim(edgeLit(rt.Edge)),
+							lit != nil && lit.hot[rt.Edge] || lit == nil && a.dia.pick != "" && (e.From == a.dia.pick || e.To == a.dia.pick))
+					}
 				}
-				p.StrokePath(dia, lw, line)
-			}
+				for _, n := range g.Nodes {
+					b := l.Boxes[n.ID]
+					if !flow && n.Kind == diagram.KindStart { // the dot the states begin at
+						ui.Box(c.Key(n.ID)).Absolute().Left(b.X*z).Top(b.Y*z).Size(b.W*z, b.H*z).Radius(b.W * z).Background(t.Text).
+							Opacity(dim(nodeLit(n.ID))).Transition(easeLook).PassThrough()
+						continue
+					}
+					a.diaNode(c, n, b, z, flow, lit, dim(nodeLit(n.ID)), slices.ContainsFunc(n.Src, func(id string) bool { return changed[id] }), order[n.ID])
+				}
+			})
 		})
-		cv.Children(func() {
-			for i, name := range g.Lanes {
-				ui.Box(c.Key(fmt.Sprint("lane", i))).Absolute().Left(l.Lanes[i].X*z).Top(0).Size(l.Lanes[i].W*z, l.Head*z).Center().PassThrough().Children(func() {
-					ui.Text(c, name).FontSize(12 * z).FontWeight(700).LetterSpacing(0.4).TextColor(t.TextMuted).NoWrap().PassThrough()
-				})
+		// Larger and smaller, over the diagram's corner as over the canvas's.
+		lifted(ui.Row(c.Key("dia-zoom")).Absolute().Right(14).Bottom(8).Gap(0).Padding(3, 5).Radius(radiusPill).AlignItems(ui.Center).
+			Background(cardColor(t)), t).Children(func() {
+			if iconButton(c, iconMinus, "缩小图解", "缩小", 28, z > 0.5).Clicked() {
+				a.diaZoom = max(float32(int(z*10+0.5)-1)/10, 0.5)
 			}
-			for _, rt := range l.Routes {
-				if e := g.Edges[rt.Edge]; e.Label != "" {
-					a.diaEdgeLabel(c, rt, e.Label, z, dim(edgeLit(rt.Edge)), lit != nil && lit.hot[rt.Edge])
-				}
+			fits := ui.Box(c.Key("dia-fit")).Height(28).MinWidth(48).Padding(0, 8).Radius(6).Center().Cursor(ui.CursorPointer).
+				Label("图解的大小").Tooltip("适合页面的宽度")
+			if fits.Hovered() {
+				fits.Background(t.SurfaceHover)
 			}
-			for _, n := range g.Nodes {
-				b := l.Boxes[n.ID]
-				if !flow && n.Kind == diagram.KindStart { // the dot the states begin at
-					ui.Box(c.Key(n.ID)).Absolute().Left(b.X*z).Top(b.Y*z).Size(b.W*z, b.H*z).Radius(b.W * z).Background(t.Text).
-						Opacity(dim(nodeLit(n.ID))).Transition(easeLook).PassThrough()
-					continue
-				}
-				a.diaNode(c, n, b, z, col, flow, lit, dim(nodeLit(n.ID)), slices.ContainsFunc(n.Src, func(id string) bool { return changed[id] }))
+			if fits.Clicked() {
+				a.diaZoom = 0
+			}
+			fits.Children(func() {
+				ui.Text(c, fmt.Sprintf("%d%%", int(z*100+0.5))).FontSize(11).TextColor(t.TextMuted).PassThrough()
+			})
+			if iconButton(c, iconPlus, "放大图解", "放大", 28, z < 1.6).Clicked() {
+				a.diaZoom = min(float32(int(z*10+0.5)+1)/10, 1.6)
 			}
 		})
 	})
 }
 
+// nounChip says, over a diagram, the noun it is lit for, with the way out
+// of it.
+func (a *app) nounChip(c *ui.Context, f *diaFile, lit *diaLit) {
+	if a.dia.way != diaRead || a.dia.noun < 1 || a.dia.noun > len(f.Objects) || a.dia.kind == "objects" {
+		return
+	}
+	t := c.Theme()
+	text := "只亮提到「" + f.Objects[a.dia.noun-1].Name + "」的"
+	if lit != nil && len(lit.nodes) == 0 && len(lit.rows) == 0 {
+		text = "这张图上没有提到「" + f.Objects[a.dia.noun-1].Name + "」"
+	}
+	chip := ui.Row(c.Key("noun-chip")).Margin(0, 16, 6).Height(28).Padding(0, 8, 0, 10).Gap(6).Radius(radiusPill).AlignItems(ui.Center).
+		AlignSelf(ui.Start).Shrink(0).Background(t.Accent.Alpha(0.12)).Cursor(ui.CursorPointer).Label("不只亮这个名词了").Tooltip("亮回全部")
+	if chip.Clicked() {
+		a.dia.noun = 0
+	}
+	chip.Children(func() {
+		ui.Text(c, text).FontSize(textCaption).FontWeight(700).TextColor(t.Accent).NoWrap().PassThrough()
+		glyph(c, iconClose, 10, t.Accent)
+	})
+}
+
 // diaNode is a box of a graph: a step, an end, a state; of a question,
-// what is written in its diamond.
-func (a *app) diaNode(c *ui.Context, n diagram.Node, b diagram.Rect, z float32, col ui.Color, flow bool, lit *diaLit, opacity float32, stale bool) {
+// what is written in its diamond. ord, from 1, is its place in the case
+// walked.
+func (a *app) diaNode(c *ui.Context, n diagram.Node, b diagram.Rect, z float32, flow bool, lit *diaLit, opacity float32, stale bool, ord int) {
 	t := c.Theme()
 	el := ui.Column(c.Key(n.ID)).Absolute().Left(b.X*z).Top(b.Y*z).Size(b.W*z, b.H*z).Center().Gap(1 * z).Radius(radiusPill * z).
 		Cursor(ui.CursorPointer).Label(n.Title).Opacity(opacity).Transition(easeLook)
+	if a.diaReveal == n.ID { // told or walked to, and maybe off the page
+		a.diaReveal = ""
+		el.ScrollIntoView()
+	}
 	hovered := el.Hovered()
 	if hovered {
 		a.diaHover = n.ID
 	}
-	tint := float32(0.15)
+	tint := float32(0.14)
 	if t.Dark {
 		tint = 0.24
 	}
@@ -424,14 +593,14 @@ func (a *app) diaNode(c *ui.Context, n diagram.Node, b diagram.Rect, z float32, 
 		el.Background(t.Text)
 		ink, sub, bold = t.Background, t.Background.Alpha(0.7), true
 	case diagram.KindEnd:
-		el.Background(t.Text.Alpha(0.045 + (tint-0.15)/2))
+		el.Background(t.Text.Alpha(0.045 + (tint-0.14)/2))
 		ink = ink2(t)
 	case diagram.KindOK:
-		el.Background(t.Success.Alpha(tint + 0.03))
+		el.Background(t.Success.Alpha(tint + 0.04))
 	case diagram.KindBad:
-		el.Background(t.Danger.Alpha(tint - 0.02))
+		el.Background(t.Danger.Alpha(tint - 0.01))
 	default:
-		el.Background(col.Alpha(tint))
+		el.Background(diaBlue.Alpha(tint))
 	}
 	if n.Kind != diagram.KindDecision {
 		switch {
@@ -443,7 +612,16 @@ func (a *app) diaNode(c *ui.Context, n diagram.Node, b diagram.Rect, z float32, 
 			el.Border(2, t.Text.Alpha(0))
 		}
 	}
-	if len([]rune(n.Title)) > 9 || len([]rune(n.Sub)) > 12 {
+	// What a line of it holds; a longer title takes two.
+	line := diagram.TitleRunes
+	switch {
+	case n.Kind == diagram.KindDecision:
+		line = diagram.DiamondRunes
+	case !flow:
+		line = 6
+	}
+	long := len([]rune(n.Title)) > line
+	if len([]rune(n.Title)) > 2*line || len([]rune(n.Sub)) > 12 {
 		el.Tooltip(strings.TrimSpace(n.Title + "\n" + n.Sub))
 	}
 	if el.Clicked() {
@@ -468,7 +646,16 @@ func (a *app) diaNode(c *ui.Context, n diagram.Node, b diagram.Rect, z float32, 
 		if n.Kind == diagram.KindDecision {
 			wide = (b.W - 44) * z // within the diamond
 		}
-		title := ui.Text(c, n.Title).FontSize(14 * z).TextColor(ink).NoWrap().MaxWidth(wide).Ellipsis("…").PassThrough()
+		size := 14 * z
+		if !flow && long {
+			size = 13 * z
+		}
+		title := ui.Text(c, n.Title).FontSize(size).TextColor(ink).MaxWidth(wide).PassThrough()
+		if long {
+			title.Wrap().MaxLines(2).LineHeight(1.2).TextAlign(ui.Center)
+		} else {
+			title.NoWrap().Ellipsis("…")
+		}
 		if bold {
 			title.FontWeight(700)
 		}
@@ -477,6 +664,11 @@ func (a *app) diaNode(c *ui.Context, n diagram.Node, b diagram.Rect, z float32, 
 		}
 		if stale { // what it was drawn from has changed
 			ui.Box(c.Key("stale")).Absolute().Right(-3).Top(-3).Size(10, 10).Radius(5).Background(t.Warning).Border(2, t.Background).PassThrough()
+		}
+		if ord > 0 { // which step of the case it is
+			ui.Box(c.Key("ord")).Absolute().Left(-7).Top(-7).Size(18, 18).Radius(9).Background(t.Accent).Border(2, t.Background).Center().PassThrough().Children(func() {
+				ui.Text(c, strconv.Itoa(ord)).FontSize(10).FontWeight(700).TextColor(t.AccentText).FontFeatures("tnum").PassThrough()
+			})
 		}
 	})
 }
@@ -528,7 +720,7 @@ func (a *app) diaTable(c *ui.Context, f *diaFile) {
 	}
 	ui.Scroll(c.Key("dia-table")).Grow(1).Basis(0).MinHeight(0).Bind(&a.diaBody).Children(func() {
 		ui.Column(c.Key("table")).MaxWidth(860).FillWidth().Padding(4, 20, 20).AlignSelf(ui.Center).Children(func() {
-			ui.Row(c.Key("groups")).Padding(4, 0, 0).FillWidth().Children(func() {
+			ui.Row(c.Key("groups")).Padding(4, 0, 0, 22).FillWidth().Children(func() {
 				ui.Box(c).Grow(float32(len(tb.Conds))).Basis(0).Padding(0, 8).Children(func() {
 					ui.Text(c, "什么情况").FontSize(textCaption).FontWeight(700).LetterSpacing(0.4).TextColor(t.TextMuted)
 				})
@@ -536,7 +728,7 @@ func (a *app) diaTable(c *ui.Context, f *diaFile) {
 					ui.Text(c, "怎么办").FontSize(textCaption).FontWeight(700).LetterSpacing(0.4).TextColor(t.TextMuted)
 				})
 			})
-			ui.Row(c.Key("heads")).Padding(6, 0, 8).FillWidth().BorderWidth(0, 0, 1, 0).BorderColor(hairline(t)).Children(func() {
+			ui.Row(c.Key("heads")).Padding(6, 0, 8, 22).FillWidth().BorderWidth(0, 0, 1, 0).BorderColor(hairline(t)).Children(func() {
 				for i, s := range tb.Conds {
 					cell(fmt.Sprint("c", i), s, true)
 				}
@@ -578,6 +770,7 @@ func (a *app) diaTable(c *ui.Context, f *diaFile) {
 					}
 				}
 				row.Children(func() {
+					ui.Text(c, strconv.Itoa(no)).FontSize(textCaption).TextColor(faint(t)).FontFeatures("tnum").Width(22).Shrink(0).TextAlign(ui.Center).PassThrough()
 					for k, s := range r.When {
 						b := cell(fmt.Sprint("w", k), s, false)
 						if k == 0 && slices.ContainsFunc(r.Src, func(id string) bool { return changed[id] }) {
@@ -723,7 +916,11 @@ func (a *app) diaWays(c *ui.Context, f *diaFile) {
 		})
 		return press(b, 0.97)
 	}
-	ui.Row(c.Key(fmt.Sprint("dia-ways", a.dia.way))).MinHeight(52).Padding(6, 16).Gap(8).AlignItems(ui.Center).Justify(ui.Center).Shrink(0).Children(func() {
+	row := ui.Row(c.Key(fmt.Sprint("dia-ways", a.dia.way))).MinHeight(48).Margin(0, 16, 6).Padding(4, 12).Gap(8).Radius(radiusCard).AlignItems(ui.Center).Justify(ui.Center).Shrink(0)
+	if a.dia.way != diaRead {
+		row.Background(blockFill(t))
+	}
+	row.Children(func() {
 		switch a.dia.way {
 		case diaTell:
 			if !canTell {
@@ -752,6 +949,7 @@ func (a *app) diaWays(c *ui.Context, f *diaFile) {
 			for i, cs := range f.Cases {
 				if chip(fmt.Sprint("case", i), cs.Title, i == a.dia.cas).Clicked() {
 					a.dia.cas, a.dia.pick = i, ""
+					a.revealCase(f)
 				}
 			}
 			off()
@@ -1021,29 +1219,12 @@ func (a *app) diaSetPanel(c *ui.Context, f *diaFile, head func(over, title strin
 	}
 	ui.Text(c, from+" · "+whenLabel(f.Drawn, a.now())).FontSize(textCaption).TextColor(t.TextMuted).Wrap().Margin(-8, 0, 0)
 
-	ui.Column(c.Key("kinds")).FillWidth().Children(func() {
-		trayHead(c, "kinds-head", "这组图", "", nil)
-		for _, k := range f.Kinds() {
-			sub := ""
-			switch k {
-			case "flow":
-				sub = fmt.Sprintf("%d 步", len(f.Flow.Nodes))
-				if len(f.Flow.Lanes) > 1 {
-					sub += fmt.Sprintf(" · %d 个角色", len(f.Flow.Lanes))
-				}
-			case "state":
-				sub = fmt.Sprintf("%d 个状态", len(f.State.Nodes)-1)
-			case "table":
-				sub = fmt.Sprintf("%d 条规则", len(f.Table.Rows))
-			case "objects":
-				sub = fmt.Sprintf("%d 个", len(f.Objects))
-			}
-			row := diaRow(c, "kind:"+k, diaKinds[k], sub, a.dia.kind == k)
-			if row.Clicked() {
-				a.dia.kind, a.dia.pick = k, ""
-			}
-		}
-	})
+	if f.Partial {
+		ui.Row(c.Key("partial")).FillWidth().Padding(8, 10).Gap(8).Radius(radiusPill).Background(blockFill(t)).Children(func() {
+			ui.Box(c).Size(8, 8).Radius(4).Background(t.Warning).Shrink(0).Margin(5, 0, 0)
+			ui.Text(c, "这一支太长，AI 只读了前面一部分。选它下面小一些的分支来画，会更全、更准。").FontSize(textSmall).TextColor(ink2(t)).Wrap().LineHeight(1.5).Grow(1).Shrink(1).MinWidth(0)
+		})
+	}
 	if len(f.Gaps) > 0 {
 		ui.Column(c.Key("gaps")).FillWidth().Children(func() {
 			trayHead(c, "gaps-head", "AI 看出来的", fmt.Sprintf("%d 处没说清", len(f.Gaps)), nil)
@@ -1064,6 +1245,22 @@ func (a *app) diaSetPanel(c *ui.Context, f *diaFile, head func(over, title strin
 					ui.Box(c).Size(8, 8).Radius(4).Background(t.Warning).Shrink(0).Margin(6, 0, 0).PassThrough()
 					ui.Text(c, g.Say).FontSize(textSmall + 0.5).Grow(1).Shrink(1).MinWidth(0).Wrap().LineHeight(1.5).PassThrough()
 				})
+			}
+		})
+	}
+	if len(f.Cases) > 0 {
+		ui.Column(c.Key("cases")).FillWidth().Children(func() {
+			trayHead(c, "cases-head", "拿例子走一遍", "", nil)
+			for i, cs := range f.Cases {
+				sub := ""
+				if cs.Gap {
+					sub = "走不通"
+				}
+				if diaRow(c, fmt.Sprint("case:", i), cs.Title, sub, false).Label("例子 " + cs.Title).Clicked() {
+					a.setDiaWay(diaCase)
+					a.dia.cas = i
+					a.revealCase(f)
+				}
 			}
 		})
 	}
@@ -1173,6 +1370,33 @@ func (a *app) diaObjectPanel(c *ui.Context, o diagram.Object, head func(over, ti
 	say(o.What)
 	if len(o.Aliases) > 0 {
 		ui.Text(c, "也叫："+strings.Join(o.Aliases, "、")).FontSize(textCaption).TextColor(t.TextMuted).Wrap()
+	}
+	if f := a.diaOf(a.dia.node); f != nil {
+		idx := slices.IndexFunc(f.Objects, func(p diagram.Object) bool { return p.Name == o.Name }) + 1
+		type place struct {
+			kind string
+			n    int
+		}
+		var places []place
+		for _, k := range f.Kinds() {
+			if l := a.nounLight(f, o, k); k != "objects" && len(l.nodes)+len(l.rows) > 0 {
+				places = append(places, place{k, len(l.nodes) + len(l.rows)})
+			}
+		}
+		if len(places) > 0 && idx > 0 {
+			ui.Column(c.Key("on-diagrams")).FillWidth().Children(func() {
+				trayHead(c, "on-diagrams-head", "在图上", "", nil)
+				for _, p := range places {
+					unit := "处"
+					if p.kind == "table" {
+						unit = "行"
+					}
+					if diaRow(c, "on:"+p.kind, "在"+diaKinds[p.kind]+"里看", fmt.Sprintf("%d %s", p.n, unit), false).Clicked() {
+						a.dia.kind, a.dia.pick, a.dia.noun = p.kind, "", idx
+					}
+				}
+			})
+		}
 	}
 	ms := a.mentions(o)
 	if len(ms) == 0 {
@@ -1335,5 +1559,99 @@ func (a *app) diaMark(c *ui.Context, f *diaFile, z float32) {
 		p.Fill(ui.Rect{X: r.X + 3.5*u, Y: r.Y + 4*u, W: 4 * u, H: 2.6 * u}, ink, 0.8*u)
 		p.Fill(ui.Rect{X: r.X + 7.5*u, Y: r.Y + 8.4*u, W: 4 * u, H: 2.6 * u}, ink, 0.8*u)
 		p.StrokePolyline([][2]float32{{r.X + 5.5*u, r.Y + 6.6*u}, {r.X + 5.5*u, r.Y + 9.7*u}, {r.X + 7.5*u, r.Y + 9.7*u}}, max(u, 0.8), ink)
+	})
+}
+
+// nounLight is what of a kind speaks of a noun: the boxes and the rows
+// that name it, or were drawn from a topic that does.
+func (a *app) nounLight(f *diaFile, o diagram.Object, kind string) *diaLit {
+	var names []string
+	for _, s := range append([]string{o.Name}, o.Aliases...) {
+		if len([]rune(s)) >= minNoun {
+			names = append(names, strings.ToLower(s))
+		}
+	}
+	from := map[string]bool{}
+	for _, m := range a.mentions(o) {
+		from[m.node.ID] = true
+	}
+	speaks := func(src []string, texts ...string) bool {
+		text := strings.ToLower(strings.Join(texts, "\n"))
+		return slices.ContainsFunc(names, func(s string) bool { return strings.Contains(text, s) }) ||
+			slices.ContainsFunc(src, func(id string) bool { return from[id] })
+	}
+	l := &diaLit{nodes: map[string]bool{}, edges: map[int]bool{}, hot: map[int]bool{}, rows: map[int]bool{}}
+	graph := func(g *diagram.Graph) {
+		for _, n := range g.Nodes {
+			if n.Kind != diagram.KindStart || kind == "flow" {
+				l.nodes[n.ID] = speaks(n.Src, n.Title, n.Sub)
+			}
+			if !l.nodes[n.ID] {
+				delete(l.nodes, n.ID)
+			}
+		}
+		for i, e := range g.Edges {
+			if l.nodes[e.From] && l.nodes[e.To] {
+				l.edges[i] = true
+			}
+		}
+	}
+	switch {
+	case kind == "flow" && f.Flow != nil:
+		graph(f.Flow)
+	case kind == "state" && f.State != nil:
+		graph(f.State)
+	case kind == "table" && f.Table != nil:
+		for i, r := range f.Table.Rows {
+			if speaks(r.Src, append(slices.Clone(r.When), r.Then...)...) {
+				l.rows[i+1] = true
+			}
+		}
+	}
+	return l
+}
+
+// revealCase brings into view where the case walked begins.
+func (a *app) revealCase(f *diaFile) {
+	if a.dia.cas < len(f.Cases) && a.dia.kind == "flow" && len(f.Cases[a.dia.cas].Flow) > 0 {
+		a.diaReveal = f.Cases[a.dia.cas].Flow[0]
+	}
+}
+
+// diaSourceStrip says where what is chosen comes from in a window too
+// narrow for the right column: the first topic, and how many more.
+func (a *app) diaSourceStrip(c *ui.Context, f *diaFile) {
+	var src []string
+	switch g := a.diaGraphOf(f); {
+	case g != nil && g.Node(a.dia.pick) != nil:
+		src = g.Node(a.dia.pick).Src
+	case strings.HasPrefix(a.dia.pick, "row:") && f.Table != nil:
+		if n, _ := strconv.Atoi(strings.TrimPrefix(a.dia.pick, "row:")); n >= 1 && n <= len(f.Table.Rows) {
+			src = f.Table.Rows[n-1].Src
+		}
+	}
+	var first *model.Node
+	for _, id := range src {
+		if first = a.file.Node(id); first != nil {
+			break
+		}
+	}
+	if first == nil {
+		return
+	}
+	t := c.Theme()
+	text := "出自「" + first.Title + "」"
+	if len(src) > 1 {
+		text += fmt.Sprintf("等 %d 个主题", len(src))
+	}
+	row := ui.Row(c.Key("dia-source-strip")).Margin(0, 16, 8).Padding(8, 12).Gap(8).Radius(radiusPill).AlignItems(ui.Center).Shrink(0).
+		Background(t.Accent.Alpha(0.08)).Cursor(ui.CursorPointer).Label("回到导图里的出处")
+	if row.Clicked() {
+		id := first.ID
+		a.later(func() { a.diaSource(id) })
+	}
+	row.Children(func() {
+		ui.Text(c, text).FontSize(textSmall).Grow(1).Shrink(1).MinWidth(0).SingleLine().PassThrough()
+		ui.Text(c, "在导图里看 ›").FontSize(textSmall).TextColor(t.Accent).NoWrap().PassThrough()
 	})
 }

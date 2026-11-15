@@ -161,6 +161,9 @@ type app struct {
 	clip       []*model.Node
 	clipAssets string
 	clipText   string
+	// clipCut is, of topics cut, the ID each had by its ID on the
+	// clipboard: pasted, what was drawn of them follows them (carryDias).
+	clipCut map[string]string
 
 	// The canvas: where each canvas of the file is looked at from.
 	cams    map[string]*camera
@@ -272,9 +275,11 @@ type app struct {
 	diaBusy       string // the topic being drawn
 	diaSince      time.Time
 	diaErr        string
-	diaErrFor     string // the topic whose drawing failed
-	diaHover      string // the node of a graph under the pointer
-	diaFocus      bool   // the diagram takes the keys, just opened
+	diaErrFor     string  // the topic whose drawing failed
+	diaHover      string  // the node of a graph under the pointer
+	diaZoom       float32 // of the diagram shown; 0 fits the page's width
+	diaReveal     string  // the node of a graph to bring into view
+	diaFocus      bool    // the diagram takes the keys, just opened
 	diaStage      ui.Handle
 	diaBody       ui.Handle
 	mentionOf     map[string][]mention

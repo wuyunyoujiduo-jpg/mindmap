@@ -51,6 +51,7 @@ const (
 	iconForward  // on: a chevron to the right
 	iconGear     // settings: a wheel with teeth
 	iconFilter   // what shows is narrowed: three lines, each shorter
+	iconDiagram  // a topic's 图解: a step and the next, joined
 )
 
 // glyph is an icon drawn in a box of the given side, as a piece of text.
@@ -179,6 +180,10 @@ func drawIcon(p *ui.Painter, r ui.Rect, s float32, ic icon, col ui.Color) {
 		p.StrokePath(roundedRect(cx-h*0.85, cy-h*0.65, h*1.7, h*1.3, h*0.2), w, col)
 		p.StrokePath(new(ui.Path).MoveTo(cx-h*0.85, cy+h*0.1).LineTo(cx-h*0.35, cy+h*0.1).LineTo(cx-h*0.2, cy+h*0.35).
 			LineTo(cx+h*0.2, cy+h*0.35).LineTo(cx+h*0.35, cy+h*0.1).LineTo(cx+h*0.85, cy+h*0.1), w, col)
+	case iconDiagram: // two boxes, the second lower and further on, a line from one to the other
+		p.StrokePath(roundedRect(cx-h*0.85, cy-h*0.75, h*0.9, h*0.62, h*0.14), w, col)
+		p.StrokePath(roundedRect(cx-h*0.05, cy+h*0.13, h*0.9, h*0.62, h*0.14), w, col)
+		p.StrokePath(new(ui.Path).MoveTo(cx-h*0.4, cy-h*0.13).LineTo(cx-h*0.4, cy+h*0.44).LineTo(cx-h*0.05, cy+h*0.44), w, col)
 	case iconFilter: // three lines, each shorter, about one middle
 		for i, dy := range []float32{-0.6, 0, 0.6} {
 			half := h * (0.85 - 0.3*float32(i))

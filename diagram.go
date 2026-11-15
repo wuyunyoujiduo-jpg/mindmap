@@ -65,6 +65,9 @@ type diaState struct {
 	got  map[int]bool // those answered, and whether rightly
 	cur  int          // the row asked about
 	told string       // the line to the AI
+	// noun is the noun looked for in the diagrams (from 1): what speaks of
+	// it is lit, the rest dimmed.
+	noun int
 }
 
 func (a *app) diaDir() string { return filepath.Join(a.dir, ".library", "diagrams") }
@@ -245,7 +248,12 @@ func (a *app) dropDiasOf(path string) {
 // is (under what, and which of its children), its title and its note; and
 // one of the lines drawn between its topics. A flow follows the order of
 // the topics, so a topic moved counts as changed.
-func branchSeen(d *model.Document, root *model.Node) map[string]string {
+//
+// A topic's is written "parent/index/hash of its words", so that a branch
+// cut and pasted, whose topics have new IDs, is known for the same
+// (Set.Renamed). Sets drawn by 0.96.0 have one hash of all four, which
+// old gives, to compare them by.
+func branchSeen(d *model.Document, root *model.Node, old bool) map[string]string {
 	seen := map[string]string{}
 	sum := func(parts ...string) string {
 		h := sha1.Sum([]byte(strings.Join(parts, "\x00")))
@@ -253,7 +261,11 @@ func branchSeen(d *model.Document, root *model.Node) map[string]string {
 	}
 	var walk func(n *model.Node, parent string, i int)
 	walk = func(n *model.Node, parent string, i int) {
-		seen[n.ID] = sum(parent, strconv.Itoa(i), n.Title, n.Note)
+		if old {
+			seen[n.ID] = sum(parent, strconv.Itoa(i), n.Title, n.Note)
+		} else {
+			seen[n.ID] = parent + "/" + strconv.Itoa(i) + "/" + sum(n.Title, n.Note)
+		}
 		for k, c := range n.Children {
 			walk(c, n.ID, k)
 		}
@@ -265,8 +277,15 @@ func branchSeen(d *model.Document, root *model.Node) map[string]string {
 	var rels []string
 	if d != nil {
 		for _, r := range d.Relations {
-			if seen[r.From] != "" && seen[r.To] != "" {
+			if seen[r.From] == "" || seen[r.To] == "" {
+				continue
+			}
+			from, _ := d.Find(r.From)
+			to, _ := d.Find(r.To)
+			if old || from == nil || to == nil {
 				rels = append(rels, r.From+">"+r.To+":"+r.Label)
+			} else { // by what they say, which a paste keeps
+				rels = append(rels, from.Title+">"+to.Title+":"+r.Label)
 			}
 		}
 	}
@@ -292,7 +311,8 @@ func (a *app) diaChanges(f *diaFile) diaChange {
 	}
 	ch := diaChange{changed: map[string]bool{}}
 	if n := a.file.Node(f.Node); n != nil && len(f.Seen) > 0 {
-		now := branchSeen(a.file.SheetOf(f.Node), n)
+		now := branchSeen(a.file.SheetOf(f.Node), n, false)
+		var was map[string]string // as 0.96.0 wrote them, for a set it drew
 		name := func(id string) string {
 			if m := a.file.Node(id); m != nil {
 				return m.Title
@@ -300,7 +320,14 @@ func (a *app) diaChanges(f *diaFile) diaChange {
 			return ""
 		}
 		for id, h := range f.Seen {
-			if now[id] != h {
+			same := now[id] == h
+			if !strings.Contains(h, "/") {
+				if was == nil {
+					was = branchSeen(a.file.SheetOf(f.Node), n, true)
+				}
+				same = was[id] == h
+			}
+			if !same {
 				ch.changed[id] = true
 				ch.n++
 				if t := name(id); ch.first == "" && t != "" {
@@ -327,14 +354,15 @@ var linkToken = regexp.MustCompile(`<(clip|mindmap):[^>\s]*>`)
 // diaOutline is a branch as the AI is given it: a line a topic, led by a
 // number the answer names it by, its note under it. What looks like a key
 // or a password in it is sent as dots.
-func diaOutline(root *model.Node) (string, map[string]string) {
-	alias := map[string]string{}
+func diaOutline(root *model.Node) (text string, alias map[string]string, cut bool) {
+	alias = map[string]string{}
 	var b strings.Builder
 	i := 0
 	flat := func(s string) string { return strings.Join(strings.Fields(linkToken.ReplaceAllString(s, "")), " ") }
 	var walk func(n *model.Node, depth int)
 	walk = func(n *model.Node, depth int) {
-		if b.Len() > 30000 {
+		if b.Len() > diaOutlineMax { // too long to be read whole: its beginning
+			cut = true
 			return
 		}
 		i++
@@ -361,8 +389,12 @@ func diaOutline(root *model.Node) (string, map[string]string) {
 		}
 	}
 	walk(root, 0)
-	return library.Mask(b.String()), alias
+	return library.Mask(b.String()), alias, cut
 }
+
+// diaOutlineMax is how long a branch is given to the AI at most, in
+// bytes: some fifteen thousand characters.
+const diaOutlineMax = 45000
 
 const diaSystem = `你把思维导图里的一支内容画成帮人理解的图解。只根据给你的内容画，原文没说的不要补；发现没说清、或互相矛盾的地方，写进 gaps，不要替用户决定。
 只回答一个 JSON 对象，不要任何别的文字。`
@@ -379,7 +411,7 @@ s0 是开始之前的圆点。kind：空是普通状态，ok 是圆满结束，b
 
 3. table：判定表。内容里有“什么情况下怎么办”的规则时才画。
 {"conds":["条件名"],"results":["结果名"],"rows":[{"when":["每个条件的取值"],"then":["每个结果"],"src":[3],"gap":false,"why":""}],"notes":[{"text":"表里放不下的规则","src":[4]}]}
-conds 最多 4 个，results 最多 2 个，rows 最多 10 行；每格不超过 12 个字。不限的条件写“不限”。只列结果不同的组合，用“不限”把结果相同的并成一行，不必列出每一种排列。导图没说怎么办、而又确实会遇到的组合也列出来，gap 设为 true，then 留空，why 用一句话说哪里没说清。条件放不进 4 个的规则写进 notes。
+conds 最多 4 个，results 最多 2 个，rows 最多 10 行；每格不超过 12 个字。不限的条件写“不限”。只列结果不同的组合，用“不限”把结果相同的并成一行，不必列出每一种排列。导图没说怎么办、而又确实会遇到的组合也列出来，gap 设为 true，then 留空，why 用一句话说哪里没说清。某个结果在这一行没有意义（比如被拒绝的查询没有“加什么条件”）就写“—”。条件放不进 4 个的规则写进 notes。
 
 4. objects：这一支里的名词：角色、单据、状态、系统、关键的量。
 [{"name":"名词","kind":"角色","what":"一句话：它是什么，在这里起什么作用","aliases":["导图里对它的其他叫法"]}]
@@ -396,15 +428,15 @@ row 是命中 table 的第几行，从 1 数，没有就写 0；没画 state 时
 src 是这个节点、这一行依据的主题的编号（上面方括号里的数字），只能用出现过的编号。`
 
 // diaPrompt is what the AI is given to draw a branch from.
-func (a *app) diaPrompt(n *model.Node, told string) (string, map[string]string) {
-	text, alias := diaOutline(n)
+func (a *app) diaPrompt(n *model.Node, told string) (string, map[string]string, bool) {
+	text, alias, cut := diaOutline(n)
 	var b strings.Builder
 	fmt.Fprintf(&b, "下面是导图「%s」里「%s」这一支。每行开头方括号里的数字是这个主题的编号，备注跟在主题下面。\n\n%s\n", mapName(a.path), n.Title, text)
 	if told = strings.TrimSpace(told); told != "" {
 		b.WriteString("用户对这次画法的要求：" + told + "\n\n")
 	}
 	b.WriteString(diaAsk)
-	return b.String(), alias
+	return b.String(), alias, cut
 }
 
 // askLongJSON asks the provider chosen for a long answer that is a JSON
@@ -477,8 +509,8 @@ func (a *app) drawDia(node, told string) {
 		return
 	}
 	doc := a.file.SheetOf(node)
-	prompt, alias := a.diaPrompt(n, told)
-	seen := branchSeen(doc, n)
+	prompt, alias, partial := a.diaPrompt(n, told)
+	seen := branchSeen(doc, n, false)
 	key, title := a.mapKey(a.path), n.Title
 	dir, path := a.dir, a.path
 	a.diaBusy, a.diaSince, a.diaErr, a.diaErrFor = node, a.now(), "", node
@@ -513,6 +545,7 @@ func (a *app) drawDia(node, told string) {
 			return
 		}
 		set.Node, set.Title, set.Drawn, set.Seen, set.Told = node, title, a.now(), seen, strings.TrimSpace(told)
+		set.Partial = partial
 		f := &diaFile{Path: key, Set: *set}
 		if err := a.writeDia(f); err != nil {
 			a.diaErr = "保存图解失败：" + err.Error()
@@ -603,9 +636,54 @@ func (a *app) diaSource(id string) {
 		a.tell("这个主题已经不在导图里了")
 		return
 	}
+	was := a.dia
 	a.dia = diaState{}
 	a.goToNode(a.path, d.ID, id)
 	a.reveal = true
+	if n := a.file.Node(was.node); n != nil && was.node != "" {
+		// The way back to where it was looked from, as it was.
+		path := a.path
+		a.tellAct("到了导图里的这个主题", "回到图解", func() {
+			if a.path != path || a.diaOf(was.node) == nil {
+				return
+			}
+			a.openDia(was.node, was.kind)
+			a.dia.pick, a.dia.way, a.dia.step, a.dia.cas, a.dia.noun = was.pick, was.way, was.step, was.cas, was.noun
+			if was.way == diaQuiz {
+				a.dia.way = diaRead
+			}
+		})
+	}
+}
+
+// carryDias has the sets of topics cut and pasted follow them: ids gives
+// each cut topic's ID where it was pasted.
+func (a *app) carryDias(ids map[string]string) {
+	a.loadDias()
+	key := a.mapKey(a.path)
+	for from := range ids {
+		f := a.dias[from]
+		if f == nil {
+			continue
+		}
+		moved := diaFile{Path: key, Set: f.Set.Renamed(ids)}
+		a.dropDia(from)
+		_ = a.writeDia(&moved)
+	}
+}
+
+// pairIDs notes, for two trees of one shape, the ID in the second of each
+// node of the first.
+func pairIDs(ids map[string]string, from, to *model.Node) {
+	ids[from.ID] = to.ID
+	for i, c := range from.Children {
+		if i < len(to.Children) {
+			pairIDs(ids, c, to.Children[i])
+		}
+	}
+	if s, t := from.SummaryTopic(), to.SummaryTopic(); s != nil && t != nil {
+		pairIDs(ids, s, t)
+	}
 }
 
 // setDiaWay turns to a way of reading the set shown.
@@ -614,7 +692,7 @@ func (a *app) setDiaWay(way int) {
 	if f == nil {
 		return
 	}
-	a.dia.way, a.dia.pick, a.dia.step = way, "", 0
+	a.dia.way, a.dia.pick, a.dia.step, a.dia.noun = way, "", 0, 0
 	switch way {
 	case diaTell:
 		a.dia.kind = "flow"

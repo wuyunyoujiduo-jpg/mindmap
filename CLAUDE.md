@@ -203,9 +203,20 @@ by AI, and an AI assistant.
     they are to work); a noun's places are looked up as it is shown, on
     every canvas (`mentions`). The layout is the app's own
     (`internal/diagram/layout.go`: a grid, routes round the boxes, and a
-    row a step when one would cross a box, `Crossed`). Its draft is
-    https://claude.ai/artifact/QMRCCAAu3tW9ni6CcVkRaL. Checks across maps
-    are not built: the user put them off.
+    row a step when one would cross a box, `Crossed`; a flow with no
+    lanes has its longest way as its first column, `sideLanes`). Its
+    steps are one calm blue on every map (`diaBlue`): in the topic's own
+    color a step read as an end refused or reached. A noun is looked at
+    on the diagrams too, what speaks of it lit (`nounLight`); with nothing
+    chosen the right column says what to look at next, what is unsaid and
+    the cases, not the tabs again; a jump to a topic leaves the way back
+    on its toast; a branch cut and pasted keeps its set (`carryDias`);
+    the arrows go from box to box (`diaMove`). It was tried on a real
+    project's rules (ERGORA's), which is where a document in Markdown
+    came to be imported as one, and a folder of them as one map, a canvas
+    a document (`internal/formats/document.go`, `importFolder`). Its draft
+    is https://claude.ai/artifact/QMRCCAAu3tW9ni6CcVkRaL. Checks across
+    maps are not built: the user put them off.
   - 收集 (`libview.go`): notes and clips, a wall of cards that
     stand apart on the white page, each white with a hairline
     (`wallCard`; the user found one gray ground under them a slab); its 回顾 shows a

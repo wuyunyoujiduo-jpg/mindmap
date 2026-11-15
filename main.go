@@ -565,6 +565,7 @@ func main() {
 				mygo.Separator(),
 				item("导入 XMind…", "CmdOrCtrl+Shift+I", a.askImportXMind),
 				item("导入 Markdown / OPML…", "", a.askImportOutline),
+				item("导入文件夹里的文档…", "", a.askImportFolder),
 				mygo.Separator(),
 				item("导出为图片…", "CmdOrCtrl+Shift+E", a.askExportImage),
 				item("导出为 Markdown…", "", a.askExportMarkdown),

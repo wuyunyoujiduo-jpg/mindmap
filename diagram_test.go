@@ -420,3 +420,182 @@ func TestDiagramFails(t *testing.T) {
 		t.Fatal("offered for a topic with nothing under it")
 	}
 }
+
+// What was added to the page since: a noun lights what speaks of it on
+// every kind, the arrows go from box to box, a set follows its branch cut
+// and pasted, and is written out as Markdown.
+func TestDiagramHands(t *testing.T) {
+	a, tt := newTestApp(t)
+	fake := &fakeClaude{replies: []string{claudeText(refundSet)}}
+	a.sendAI = fake.send
+	a.cfg.AIKey = "sk-ant-test"
+	root := refundBranch(t, a)
+	a.selectNode(root.ID)
+	tt.Frame()
+	// The bar over the canvas has its key, which draws and then opens.
+	if err := tt.Click("画成图解"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	f := a.diaOf(root.ID)
+	if f == nil || a.mode != viewDiagram {
+		t.Fatalf("not drawn from the bar: %q", a.diaErr)
+	}
+
+	// The arrows: from nothing to where it begins, then box to box.
+	tt.Key(0, ui.KeyDown)
+	if a.dia.pick != "A" {
+		t.Fatalf("first %q", a.dia.pick)
+	}
+	tt.Key(0, ui.KeyDown)
+	tt.Key(0, ui.KeyRight)
+	tt.Key(0, ui.KeyDown)
+	if a.dia.pick != "D" {
+		t.Fatalf("arrows led to %q", a.dia.pick)
+	}
+	tt.Key(0, ui.KeyEscape)
+
+	// A noun: where it is on the diagrams, and the flow lit for it.
+	a.dia.kind = "objects"
+	tt.Frame()
+	if err := tt.Click("名词 主管"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !tt.HasText("在流程里看") || !tt.HasText("在判定表里看") {
+		t.Fatalf("no places on the diagrams: %q", tt.Texts())
+	}
+	if err := tt.Click("在流程里看"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	lit := a.diaLight(f)
+	if a.dia.kind != "flow" || a.dia.noun == 0 || !lit.nodes["D"] || lit.nodes["P"] || !tt.HasText("只亮提到「主管」的") {
+		t.Fatalf("noun's light %+v: %q", lit, tt.Texts())
+	}
+	snapshot(t, tt, "diagram-noun-flow")
+	a.dia.kind = "table"
+	tt.Frame()
+	if lit := a.diaLight(f); !lit.rows[2] || lit.rows[1] {
+		t.Fatalf("noun's rows %+v", lit.rows)
+	}
+	snapshot(t, tt, "diagram-noun-table")
+	if err := tt.Click("不只亮这个名词了"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.dia.noun != 0 || a.diaLight(f) != nil {
+		t.Fatal("the noun's light stayed")
+	}
+
+	// From the set's own page: a case is walked by its row.
+	a.dia.kind = "flow"
+	tt.Frame()
+	if err := tt.Click("例子 到货破损"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.dia.way != diaCase || a.dia.cas != 1 {
+		t.Fatalf("case not walked: way %d case %d", a.dia.way, a.dia.cas)
+	}
+	a.dia.way = diaRead
+
+	// Written out: Mermaid for the flow and the states, a table, the nouns.
+	md := f.Markdown()
+	for _, want := range []string{"flowchart TD", `subgraph L1["业务员 · 主管"]`, `nB{"符合申请条件？"}`, `nC -->|"是，免审"| nP`, "stateDiagram-v2", "[*] --> ns1: 提交申请",
+		"| 签收后 | 商品 | 原因 | 金额 | 能不能退 | 谁来审 |", "没说清：超过 7 天不能申请", "- **退货单**（单据）"} {
+		if !strings.Contains(md, want) {
+			t.Errorf("Markdown lacks %q in\n%s", want, md)
+		}
+	}
+
+	// Going to a source leaves the way back, as it was.
+	a.dia.pick = "D"
+	a.diaSource(find(t, a, "500 元以内业务员审").ID)
+	tt.Frame()
+	if a.mode != viewMap || a.noticeUndo == nil {
+		t.Fatal("no way back from the map")
+	}
+	a.noticeUndo()
+	tt.Frame()
+	if a.mode != viewDiagram || a.dia.pick != "D" {
+		t.Fatalf("not back as it was: mode %d pick %q", a.mode, a.dia.pick)
+	}
+
+	// A set drawn by 0.96.0, whose record of the branch was one hash a
+	// topic, is not taken for changed; a topic changed since is told.
+	was := *f
+	f.Seen = branchSeen(a.doc, root, true)
+	if err := a.writeDia(f); err != nil {
+		t.Fatal(err)
+	}
+	if n := a.diaChanges(a.diaOf(root.ID)).n; n != 0 {
+		t.Fatalf("an older set reads as changed in %d places", n)
+	}
+	leaf := find(t, a, "门店自己送回")
+	a.mutate("", func() { leaf.Title = "门店自己送回仓库" })
+	if ch := a.diaChanges(a.diaOf(root.ID)); ch.n != 1 || !ch.changed[leaf.ID] {
+		t.Fatalf("changes of an older set %+v", ch)
+	}
+	a.mutate("", func() { leaf.Title = "门店自己送回" })
+	if err := a.writeDia(&was); err != nil {
+		t.Fatal(err)
+	}
+
+	// Cut and pasted elsewhere, the branch keeps its set, by its new IDs.
+	a.closeDia()
+	a.selectNode(root.ID)
+	a.copyNodes(true)
+	if a.file.Node(root.ID) != nil {
+		t.Fatal("not cut")
+	}
+	a.selectNode(find(t, a, "架构").ID)
+	if !a.paste() {
+		t.Fatal("not pasted")
+	}
+	tt.Frame()
+	moved := find(t, a, "退货退款")
+	g := a.diaOf(moved.ID)
+	if moved.ID == root.ID || g == nil || a.diaOf(root.ID) != nil {
+		t.Fatalf("the set did not follow: %+v", g)
+	}
+	if src := g.Flow.Node("D").Src; len(src) != 2 || src[1] != find(t, a, "超过 500 元主管审").ID || a.diaChanges(g).n != 0 {
+		t.Fatalf("sources %v, changes %+v", src, a.diaChanges(g))
+	}
+	a.selectNode(find(t, a, "功能").ID)
+	a.paste() // again: a copy, with no set of its own
+	if n := len(a.mapDias()); n != 1 {
+		t.Fatalf("%d sets after a second paste", n)
+	}
+}
+
+// A folder of documents is one map, a canvas a document.
+func TestImportFolder(t *testing.T) {
+	a, tt := newTestApp(t)
+	dir := filepath.Join(t.TempDir(), "rules")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, text := range map[string]string{
+		"permission.md": "# 数据权限规则\n\n谁能看到哪些记录。\n\n## 决策表\n\n| 编号 | 规则 |\n|---|---|\n| R-1 | **全局一个开关** |\n",
+		"time.md":       "# 时间\n\n- 本周\n- 上月\n",
+		"notes.txt":     "不是文档",
+		"empty.md":      "",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a.importFolder(dir)
+	tt.Frame()
+	if mapName(a.path) != "rules" || len(a.file.Sheets) != 2 || a.file.Sheets[0].Title != "数据权限规则" || a.file.Sheets[1].Title != "时间" {
+		t.Fatalf("map %q sheets %d", mapName(a.path), len(a.file.Sheets))
+	}
+	if r := a.file.Sheets[0].Root; !strings.Contains(r.Note, "谁能看到") || r.Children[0].Children[0].Title != "R-1 全局一个开关" {
+		t.Fatalf("first canvas %+v", r)
+	}
+	if !strings.Contains(a.notice, "导入了 2 篇文档") {
+		t.Fatalf("notice %q", a.notice)
+	}
+	snapshot(t, tt, "import-folder")
+}
