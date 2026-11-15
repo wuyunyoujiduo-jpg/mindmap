@@ -3929,3 +3929,89 @@ func TestFloatingByHand(t *testing.T) {
 	tt.Frame()
 	snapshot(t, tt, "floating-clip")
 }
+
+// The views' tabs stay where they are as the view is changed: a tab under
+// the pointer does not move on its click.
+func TestViewTabsStay(t *testing.T) {
+	for _, width := range []int{760, 900, 1000, 1100, 1280, 1500, 2000} {
+		for _, shape := range []string{"", "topic", "nopanel", "noside"} {
+			a, tt := newTestApp(t)
+			tt.SetSize(width, 900)
+			switch shape {
+			case "topic":
+				a.selectNode(a.doc.Root.Children[0].ID)
+			case "nopanel":
+				a.panelOff = true
+			case "noside":
+				a.cfg.HideTree = true
+			}
+			tt.Frame()
+			tt.Frame()
+			at, ok := tt.Find("图解")
+			play, _ := tt.Find("开始演说")
+			if !ok {
+				continue // too narrow a bar for the tabs' words
+			}
+			for _, tab := range []string{"大纲", "看板", "图解", "导图", "大纲", "导图"} {
+				tt.Click(tab)
+				tt.Frame()
+				tt.Frame()
+				now, _ := tt.Find("图解")
+				key, _ := tt.Find("开始演说")
+				if now.X != at.X || now.W != at.W || key.X != play.X {
+					t.Fatalf("%d wide %s, on %s: the tab at %v (was %v), the key at %v (was %v)", width, shape, tab, now, at, key, play)
+				}
+			}
+			for _, mode := range []int{viewTimeline, viewMap} {
+				a.showView(mode)
+				tt.Frame()
+				tt.Frame()
+				now, _ := tt.Find("图解")
+				if now.X != at.X || now.W != at.W {
+					t.Fatalf("%d wide %s, view %d: the tab at %v (was %v)", width, shape, mode, now, at)
+				}
+			}
+			// The right column put away and shown: the tabs stay.
+			for range 2 {
+				a.togglePanel()
+				tt.Frame()
+				tt.Frame()
+				if now, _ := tt.Find("图解"); now.X != at.X {
+					t.Fatalf("%d wide %s, the panel off %v: the tab at %v (was %v)", width, shape, a.panelOff, now, at)
+				}
+			}
+		}
+	}
+}
+
+// TestViewTabsStayWithASet: a set drawn shows the right column though it
+// is put away, and the tabs are where they were all the same.
+func TestViewTabsStayWithASet(t *testing.T) {
+	for _, width := range []int{1280, 1600} {
+		a, tt := newTestApp(t)
+		tt.SetSize(width, 900)
+		fake := &fakeClaude{replies: []string{claudeText(refundSet)}}
+		a.sendAI = fake.send
+		a.cfg.AIKey = "sk-ant-test"
+		root := refundBranch(t, a)
+		a.drawDia(root.ID, "")
+		a.showView(viewMap)
+		a.selectNode(root.ID)
+		a.panelOff = true
+		tt.Frame()
+		tt.Frame()
+		if a.diaOf(root.ID) == nil {
+			t.Fatal("no set")
+		}
+		at, _ := tt.Find("大纲")
+		for _, tab := range []string{"图解", "大纲", "图解", "导图"} {
+			tt.Click(tab)
+			tt.Frame()
+			tt.Frame()
+			now, _ := tt.Find("大纲")
+			if now.X != at.X {
+				t.Fatalf("%d wide, on %s (view %d): the tab at %v, was %v", width, tab, a.mode, now, at)
+			}
+		}
+	}
+}

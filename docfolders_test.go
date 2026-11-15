@@ -304,3 +304,41 @@ func TestWideProjectsAndWall(t *testing.T) {
 	}
 	snapshot(t, tt, "library-wide")
 }
+
+// TestInboxStaysTheInbox: the inbox is the map of its name at the top of
+// the folder, so it is neither renamed nor put in a folder, and its menu
+// says what it is.
+func TestInboxStaysTheInbox(t *testing.T) {
+	a, tt := newTestApp(t)
+	a.addTask("买墨水", nil)
+	dir := filepath.Join(a.dir, "杂")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	a.refreshFiles()
+	a.showProjects()
+	tt.Frame()
+	if err := tt.RightClick(inboxName); err != nil {
+		t.Fatal(err)
+	}
+	menu := strings.Join(tt.Menu(), "|")
+	if strings.Contains(menu, "重命名") || strings.Contains(menu, "移动到") || !strings.Contains(menu, "默认的收件箱") {
+		t.Fatalf("the inbox's menu: %q", menu)
+	}
+	if err := tt.ChooseMenuItem("移到废纸篓…"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !tt.HasText("里面还没归位的 1 个任务会一起移走，可以在废纸篓中找回。下次有任务没说放哪，会再建一个空的收件箱。") {
+		t.Fatalf("what deleting it does is not said: %q", tt.Texts())
+	}
+	a.confirmDelete = false
+	a.rename(a.inboxPath(), "杂事")
+	a.moveMap(a.inboxPath(), dir)
+	if _, err := os.Stat(a.inboxPath()); err != nil {
+		t.Fatalf("the inbox went: %v", err)
+	}
+	if !strings.Contains(a.notice, "收件箱") {
+		t.Fatalf("not told why: %q", a.notice)
+	}
+}

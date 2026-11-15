@@ -104,6 +104,21 @@ func (a *app) deleteFolder(dir string) {
 
 // mapMenu is what can be done with a map of the list.
 func (a *app) mapMenu(m *ui.Menu, path string) {
+	if path == a.inboxPath() {
+		// The inbox is the map of that name at the top of the folder: under
+		// another name or in a folder it is a map as any other, and the next
+		// task with no place makes a new one. So its menu says what it is and
+		// offers neither: the user asked whether it could be renamed at all.
+		m.Item("默认的收件箱：没说放哪的任务先到这里").Disabled(true)
+		m.Separator()
+		if m.Item("在 Finder 中显示").Chosen() {
+			a.plat.ShowInFolder(path)
+		}
+		if m.Item("移到废纸篓…").Chosen() {
+			a.deletePath, a.confirmDelete = path, true
+		}
+		return
+	}
 	label := "加星标（排在前面）"
 	if a.starred(path) {
 		label = "取消星标"
@@ -162,6 +177,10 @@ func (a *app) rename(path, name string) {
 	if to == path {
 		return
 	}
+	if path == a.inboxPath() {
+		a.tell("收件箱是默认的导图，改了名就不是收件箱了")
+		return
+	}
 	if _, err := os.Stat(to); err == nil {
 		a.saveErr = "已有同名的「" + name + "」"
 		return
@@ -180,6 +199,10 @@ func (a *app) rename(path, name string) {
 // moveMap moves a map file into the folder dir.
 func (a *app) moveMap(path, dir string) {
 	if filepath.Dir(path) == dir {
+		return
+	}
+	if path == a.inboxPath() {
+		a.tell("收件箱是默认的导图，留在最外面：放进文件夹就不是收件箱了")
 		return
 	}
 	if path == a.path {

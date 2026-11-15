@@ -232,94 +232,135 @@ func (a *app) toolbar(c *ui.Context) {
 			ui.Spacer(c)
 			return
 		}
-		ui.Column(c).Gap(1).Shrink(1).MinWidth(40).Children(func() {
-			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				// The map's color, which a click changes.
-				dot := ui.Box(c.Key("map-color")).Size(14, 14).Radius(5).Background(a.mapColor(a.path)).Shrink(0).
-					Cursor(ui.CursorPointer).Label("导图颜色").Tooltip("这张导图的颜色：它的任务、从它来的东西都带这个颜色")
-				dot.Menu(a.mapColorMenu)
-				// The map's name switches maps: those opened last, the list,
-				// a new one.
-				name := ui.Row(c.Key("map-switch")).Gap(4).AlignItems(ui.Center).Radius(6).Padding(1, 4).Margin(0, 0, 0, -4).
-					Cursor(ui.CursorPointer).Label("切换导图").Tooltip("切换到其他导图")
-				if name.Hovered() {
-					name.Background(t.Text.Alpha(0.06))
-				}
-				name.Menu(a.mapSwitchMenu)
-				name.Children(func() {
-					ui.Text(c, mapName(a.path)).FontWeight(700).LetterSpacing(-0.3).FontSize(textTitle).NoWrap().MaxWidth(220).Ellipsis("…").PassThrough()
-					chevron(c, t.TextMuted)
-				})
-			})
-			status, col := "已自动保存", t.TextMuted
-			switch {
-			case a.saveErr != "":
-				status, col = a.saveErr, t.Danger
-			case a.dirty:
-				status = "编辑中…"
-			case !a.savedAt.IsZero():
-				status = "已保存 " + a.savedAt.Format("15:04")
+		// The views' tabs are in the bar's middle whatever stands at its
+		// two ends: with the room, each end takes half of what the tabs
+		// leave. Laid one after another, the tabs moved as the view was
+		// changed, the map's own keys at the right coming and going: the
+		// user saw them jump on a click of one, which a thing under the
+		// pointer must not do.
+		ends := float32(230) // the right end at its widest: the structure, the two keys
+		if a.searchOpen || a.search != "" {
+			ends += searchWidth(room) + gap
+		}
+		centered := room >= 360+2*(ends+gap)
+		// The right column put away, the bar is longer by it at its right:
+		// that length is the right end's to begin with, so that the tabs
+		// are where they are with the column shown. A set of 图解 shows
+		// the column though it is put away, and the tabs moved by half of
+		// it on the click.
+		var away float32
+		if w-a.sideWidth()-a.panelWidth >= panelMinCanvas && !a.panelShown(c) {
+			away = a.panelWidth + 1 // and its line
+		}
+		end := func(k string) ui.Element {
+			r := ui.Row(c.Key(k)).Gap(gap).AlignItems(ui.Center)
+			if centered {
+				return r.Grow(1).Basis(0).MinWidth(0)
 			}
-			if room >= 700 || a.saveErr != "" || col == t.Accent {
-				ui.Row(c.Key("under-name")).Gap(6).AlignItems(ui.Center).Children(func() {
-					// Where the map is kept, when in a folder: its folder, which a
-					// click shows the maps of. The directory opens to it too
-					// (app.open), but put away it says nothing.
-					if dir := filepath.Dir(a.path); room >= 700 && dir != a.dir && inside(a.path, a.dir) {
-						where := ui.Row(c.Key("map-folder")).Gap(4).AlignItems(ui.Center).Cursor(ui.CursorPointer).Shrink(1).MinWidth(0).
-							Label("所在文件夹 " + a.relDir(a.path)).Tooltip("这张导图在文件夹「" + a.relDir(a.path) + "」里：点一下看这个文件夹的导图")
-						ink := t.TextMuted
-						if where.Hovered() {
-							ink = t.Text
-						}
-						if where.Clicked() {
-							a.later(func() {
-								a.showProjects()
-								a.projFolder = dir
-							})
-						}
-						where.Children(func() {
-							glyph(c, iconFolder, 11, ink)
-							ui.Text(c, strings.ReplaceAll(a.relDir(a.path), string(filepath.Separator), " › ")).FontSize(textCaption).TextColor(ink).
-								NoWrap().MaxWidth(150).Ellipsis("…").PassThrough()
-							ui.Text(c, "·").FontSize(textCaption).TextColor(faint(t)).PassThrough()
-						})
+			return r.Shrink(1).MinWidth(40)
+		}
+		end("bar-left").Children(func() {
+			ui.Column(c).Gap(1).Shrink(1).MinWidth(40).Children(func() {
+				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+					// The map's color, which a click changes.
+					dot := ui.Box(c.Key("map-color")).Size(14, 14).Radius(5).Background(a.mapColor(a.path)).Shrink(0).
+						Cursor(ui.CursorPointer).Label("导图颜色").Tooltip("这张导图的颜色：它的任务、从它来的东西都带这个颜色")
+					dot.Menu(a.mapColorMenu)
+					// The map's name switches maps: those opened last, the list,
+					// a new one.
+					name := ui.Row(c.Key("map-switch")).Gap(4).AlignItems(ui.Center).Radius(6).Padding(1, 4).Margin(0, 0, 0, -4).
+						Cursor(ui.CursorPointer).Label("切换导图").Tooltip("切换到其他导图")
+					if name.Hovered() {
+						name.Background(t.Text.Alpha(0.06))
 					}
-					// A click on how saving goes shows the versions kept.
-					st := ui.Box(c.Key("save-status")).Cursor(ui.CursorPointer).Label("历史版本").
-						Tooltip("自动保存，无需手动保存 · 点击查看历史版本 ⌘⇧H")
-					if st.Hovered() && col == t.TextMuted {
-						col = t.Text
-					}
-					if st.Clicked() {
-						a.later(a.openHistory)
-					}
-					st.Children(func() {
-						ui.Text(c, status).FontSize(textCaption).TextColor(col).NoWrap().MaxWidth(240).Ellipsis("…").PassThrough()
+					name.Menu(a.mapSwitchMenu)
+					name.Children(func() {
+						ui.Text(c, mapName(a.path)).FontWeight(700).LetterSpacing(-0.3).FontSize(textTitle).NoWrap().MaxWidth(220).Ellipsis("…").PassThrough()
+						chevron(c, t.TextMuted)
 					})
 				})
+				status, col := "已自动保存", t.TextMuted
+				switch {
+				case a.saveErr != "":
+					status, col = a.saveErr, t.Danger
+				case a.dirty:
+					status = "编辑中…"
+				case !a.savedAt.IsZero():
+					status = "已保存 " + a.savedAt.Format("15:04")
+				}
+				if room >= 700 || a.saveErr != "" || col == t.Accent {
+					ui.Row(c.Key("under-name")).Gap(6).AlignItems(ui.Center).Children(func() {
+						// Where the map is kept, when in a folder: its folder, which a
+						// click shows the maps of. The directory opens to it too
+						// (app.open), but put away it says nothing.
+						if dir := filepath.Dir(a.path); room >= 700 && dir != a.dir && inside(a.path, a.dir) {
+							where := ui.Row(c.Key("map-folder")).Gap(4).AlignItems(ui.Center).Cursor(ui.CursorPointer).Shrink(1).MinWidth(0).
+								Label("所在文件夹 " + a.relDir(a.path)).Tooltip("这张导图在文件夹「" + a.relDir(a.path) + "」里：点一下看这个文件夹的导图")
+							ink := t.TextMuted
+							if where.Hovered() {
+								ink = t.Text
+							}
+							if where.Clicked() {
+								a.later(func() {
+									a.showProjects()
+									a.projFolder = dir
+								})
+							}
+							where.Children(func() {
+								glyph(c, iconFolder, 11, ink)
+								ui.Text(c, strings.ReplaceAll(a.relDir(a.path), string(filepath.Separator), " › ")).FontSize(textCaption).TextColor(ink).
+									NoWrap().MaxWidth(150).Ellipsis("…").PassThrough()
+								ui.Text(c, "·").FontSize(textCaption).TextColor(faint(t)).PassThrough()
+							})
+						}
+						// A click on how saving goes shows the versions kept.
+						st := ui.Box(c.Key("save-status")).Cursor(ui.CursorPointer).Label("历史版本").
+							Tooltip("自动保存，无需手动保存 · 点击查看历史版本 ⌘⇧H")
+						if st.Hovered() && col == t.TextMuted {
+							col = t.Text
+						}
+						if st.Clicked() {
+							a.later(a.openHistory)
+						}
+						st.Children(func() {
+							ui.Text(c, status).FontSize(textCaption).TextColor(col).NoWrap().MaxWidth(240).Ellipsis("…").PassThrough()
+						})
+					})
+				}
+			})
+		})
+		if !centered {
+			ui.Spacer(c)
+		}
+		a.viewTabs(c, room)
+		if !centered {
+			ui.Spacer(c).Basis(away).Shrink(0)
+		}
+		right := end("bar-right").Shrink(0)
+		if centered {
+			right.Basis(away).Justify(ui.End)
+		}
+		right.Children(func() {
+			if a.searchOpen || a.search != "" {
+				a.searchField(c, searchWidth(room))
+			}
+			if a.mode == viewMap && room >= 560 {
+				a.structurePicker(c, room < 900)
+			} else if room >= 560 {
+				a.structureRoom(c, room < 900)
+			}
+			if room >= 450 && iconButton(c, iconPlay, "开始演说", "开始演说 ⌘↩", 30, true).Clicked() {
+				a.later(func() { a.startPresenting("") })
+			}
+			// The panel of the topic chosen, put away or shown.
+			tip := "显示主题面板：备注、任务、标签、链接 ⌘⌥I"
+			if !a.panelOff {
+				tip = "收起主题面板 ⌘⌥I"
+			}
+			if iconButton(c, iconPanel, "主题面板", tip, 30, true).Clicked() {
+				a.togglePanel()
 			}
 		})
-		ui.Spacer(c)
-		a.viewTabs(c, room)
-		ui.Spacer(c)
-		if a.searchOpen || a.search != "" {
-			a.searchField(c, searchWidth(room))
-		}
-		if a.mode == viewMap && room >= 560 {
-			a.structurePicker(c, room < 900)
-		}
-		if room >= 450 && iconButton(c, iconPlay, "开始演说", "开始演说 ⌘↩", 30, true).Clicked() {
-			a.later(func() { a.startPresenting("") })
-		}
-		// The panel of the topic chosen, put away or shown.
-		tip := "显示主题面板：备注、任务、标签、链接 ⌘⌥I"
-		if !a.panelOff {
-			tip = "收起主题面板 ⌘⌥I"
-		}
-		if iconButton(c, iconPanel, "主题面板", tip, 30, true).Clicked() {
-			a.togglePanel()
-		}
 	})
 }
 
@@ -403,7 +444,9 @@ func (a *app) viewTabs(c *ui.Context, room float32) {
 			}
 		}
 		opens = true
-		tab("more", more, on).Label("更多视图").Menu(func(m *ui.Menu) {
+		// As wide whichever of its views it names, so that the tabs before
+		// it stay where they are.
+		tab("more", more, on).MinWidth(88).Justify(ui.Center).Label("更多视图").Menu(func(m *ui.Menu) {
 			for _, v := range moreViews {
 				if m.Item(v.name).Checked(a.mode == v.mode).Chosen() {
 					a.mode = v.mode

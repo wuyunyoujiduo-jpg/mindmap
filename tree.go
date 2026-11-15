@@ -240,6 +240,10 @@ func (a *app) sideKeys(list ui.Element) {
 		open(at - 1)
 	case at < 0:
 	case list.Shortcut(0, ui.KeyEnter):
+		if items[at] == a.inboxPath() {
+			a.tell("收件箱是默认的导图，改了名就不是收件箱了")
+			break
+		}
 		a.renaming, a.renameText = items[at], mapName(items[at])
 	case list.Shortcut(0, ui.KeyBackspace), list.Shortcut(ui.Cmd, ui.KeyBackspace), list.Shortcut(0, ui.KeyDelete):
 		a.deletePath, a.confirmDelete = items[at], true

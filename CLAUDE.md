@@ -311,6 +311,15 @@ by AI, and an AI assistant.
     one chosen on the accent's tint.
   - A page of a map has its way in among the map's tabs, where its
     views are looked for; a small key among a topic's is not found.
+  - A row of tabs stays where it is whichever of them is chosen: what
+    one view alone has beside them keeps its room in the others
+    (`structureRoom`), the tabs are in the bar's middle with an end at
+    each side (`toolbar`), and a column that comes and goes at the bar's
+    end leaves them be (`away`). They jumped on a click of 图解 and of
+    大纲, which the user saw at once (`TestViewTabsStay`).
+  - What the app finds by its name and place (the inbox, `inboxPath`)
+    says so in its menu and is neither renamed nor moved there: the user
+    asked whether it could be, seeing that it could.
 - The app's icon is drawn by `tools/icon/`; `resources/icon.png` is the
   desk (`tools/icon/desk.py`: a white note on the app's violet-blue, three lines
   each led by a dot of a map's color, the last ticked, the AI's spark), and
