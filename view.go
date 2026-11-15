@@ -345,9 +345,9 @@ func (a *app) toolbar(c *ui.Context) {
 				a.searchField(c, searchWidth(room))
 			}
 			if a.mode == viewMap && room >= 560 {
-				a.structurePicker(c, room < 900)
+				a.structurePicker(c, room)
 			} else if room >= 560 {
-				a.structureRoom(c, room < 900)
+				a.structureRoom(c, room)
 			}
 			if room >= 450 && iconButton(c, iconPlay, "开始演说", "开始演说 ⌘↩", 30, true).Clicked() {
 				a.later(func() { a.startPresenting("") })
@@ -406,9 +406,13 @@ func (a *app) viewTabs(c *ui.Context, room float32) {
 	}
 	well(ui.Row(c.Key("view-tabs")).Padding(2).Gap(2).Radius(radiusPill).Shrink(0), t).Children(func() {
 		opens := false // the tab being built opens a menu: it ends in a chevron
+		pad := float32(14)
+		if room < 700 { // a narrow bar: the tabs closer, that its keys stay in it
+			pad = 9
+		}
 		tab := func(key, name string, on bool) ui.Element {
 			more := opens
-			b := ui.Row(c.Key("view:"+key)).Height(28).Padding(0, 14).Gap(5).Radius(radiusPill).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(name).
+			b := ui.Row(c.Key("view:"+key)).Height(28).Padding(0, pad).Gap(5).Radius(radiusPill).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(name).
 				Background(t.Text.Alpha(0)).Transition(easeLook)
 			if !on && b.Hovered() {
 				b.Background(t.Text.Alpha(0.05))
@@ -445,8 +449,14 @@ func (a *app) viewTabs(c *ui.Context, room float32) {
 		}
 		opens = true
 		// As wide whichever of its views it names, so that the tabs before
-		// it stay where they are.
-		tab("more", more, on).MinWidth(88).Justify(ui.Center).Label("更多视图").Menu(func(m *ui.Menu) {
+		// it stay where they are: as its longest name in bold, measured,
+		// for a width in figures is one font's.
+		var widest float32
+		for _, v := range moreViews {
+			w, _ := a.measureText(c, 0, ui.Span{Text: v.name, Size: textSmall, Weight: 700})
+			widest = max(widest, w)
+		}
+		tab("more", more, on).MinWidth(2*pad + widest + 5 + 10).Justify(ui.Center).Label("更多视图").Menu(func(m *ui.Menu) {
 			for _, v := range moreViews {
 				if m.Item(v.name).Checked(a.mode == v.mode).Chosen() {
 					a.mode = v.mode

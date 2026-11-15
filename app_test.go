@@ -1310,7 +1310,7 @@ func TestAINeedsKey(t *testing.T) {
 
 func TestToolbarFitsNarrowWindow(t *testing.T) {
 	a, tt := newTestApp(t)
-	for _, w := range []int{1280, 1100, 1000, 920} {
+	for _, w := range []int{1280, 1160, 1100, 1088, 1000, 920} {
 		tt.SetSize(w, 760)
 		tt.Frame()
 		redo, ok := tt.Find("开始演说") // the last of the map's bar before the panel's key
@@ -1327,12 +1327,22 @@ func TestToolbarFitsNarrowWindow(t *testing.T) {
 		if redo.X+redo.W > right {
 			t.Fatalf("width %d: redo ends at %v, past the toolbar's %v", w, redo.X+redo.W, right)
 		}
+		// The bar's last key, the panel's, is in the bar too, with room to
+		// spare: 更多 at one width for all its views once pushed it over
+		// the panel on CI's wider fonts, where this test told of the key
+		// before it alone.
+		if last, ok := tt.Find("主题面板"); ok && last.X+last.W > right-15 {
+			t.Fatalf("width %d: the bar's last key ends at %v, the bar at %v", w, last.X+last.W, right)
+		}
 		// With room to spare between the views and the search, for fonts
 		// elsewhere, as on CI, are a little wider.
 		if last, ok := tt.Find("更多视图"); ok {
-			play, _ := tt.Find("开始演说")
-			if spare := play.X - (last.X + last.W); spare < 10 {
-				t.Fatalf("width %d: %v spare between the views and the buttons", w, spare)
+			next, ok := tt.Find("结构")
+			if !ok {
+				next, _ = tt.Find("开始演说")
+			}
+			if spare := next.X - (last.X + last.W); spare < 16 {
+				t.Fatalf("width %d: %v spare between the views and the keys", w, spare)
 			}
 		}
 		if w == 920 {

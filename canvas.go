@@ -1801,9 +1801,6 @@ func drawLineEdges(p *ui.Painter, r layout.Result, fishbone bool, ox, oy, z, wid
 	}
 }
 
-// structurePicker is the toolbar's button that chooses the canvas's
-// structure, from pictures of each, and its colors; short, it says the
-// structure alone.
 // structureLabel is what the structure's key says: the structure, and
 // with room its colors.
 func (a *app) structureLabel(short bool) string {
@@ -1813,18 +1810,27 @@ func (a *app) structureLabel(short bool) string {
 	return a.doc.Structure.Label() + " · " + schemeOf(a.doc.Style.Scheme).name + "配色"
 }
 
+// structureBare tells whether the structure's key is its drawing alone:
+// in a bar with no room for its name beside the views' tabs.
+func structureBare(room float32) bool { return room < 700 }
+
 // structureRoom keeps the structure's key its room in the views that have
 // none: unseen, and as wide. Without it the bar's other keys, and at a
 // narrower window the views' tabs, moved as the view was changed.
-func (a *app) structureRoom(c *ui.Context, short bool) {
+func (a *app) structureRoom(c *ui.Context, room float32) {
 	ui.Row(c.Key("structure-room")).Height(30).Padding(0, 10, 0, 9).Gap(7).AlignItems(ui.Center).Shrink(0).Opacity(0).PassThrough().Children(func() {
 		ui.Box(c).Size(22, 14).Shrink(0).PassThrough()
-		ui.Text(c, a.structureLabel(short)).FontSize(textSmall).NoWrap().PassThrough()
+		if !structureBare(room) {
+			ui.Text(c, a.structureLabel(room < 900)).FontSize(textSmall).NoWrap().PassThrough()
+		}
 		chevron(c, c.Theme().TextMuted)
 	})
 }
 
-func (a *app) structurePicker(c *ui.Context, short bool) {
+// structurePicker is the toolbar's button that chooses the canvas's
+// structure, from pictures of each, and its colors; in less room it says
+// the structure alone, and in less yet only draws it.
+func (a *app) structurePicker(c *ui.Context, room float32) {
 	t := c.Theme()
 	// A key as the others of the bar: the structure drawn small, its name,
 	// and the chevron of what opens.
@@ -1837,10 +1843,11 @@ func (a *app) structurePicker(c *ui.Context, short bool) {
 		a.structureOpen = !a.structureOpen
 	}
 	btn.Children(func() {
-		label := a.structureLabel(short)
 		s := a.doc.Structure
 		ui.Box(c).Size(22, 14).Shrink(0).PassThrough().Draw(func(p *ui.Painter, r ui.Rect) { drawStructureIcon(p, r, s, t.TextMuted) })
-		ui.Text(c, label).FontSize(textSmall).NoWrap().PassThrough()
+		if !structureBare(room) {
+			ui.Text(c, a.structureLabel(room < 900)).FontSize(textSmall).NoWrap().PassThrough()
+		}
 		chevron(c, t.TextMuted)
 	})
 	ui.Popover(c, btn, &a.structureOpen, func() {

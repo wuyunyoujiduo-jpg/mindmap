@@ -316,7 +316,9 @@ by AI, and an AI assistant.
     (`structureRoom`), the tabs are in the bar's middle with an end at
     each side (`toolbar`), and a column that comes and goes at the bar's
     end leaves them be (`away`). They jumped on a click of 图解 and of
-    大纲, which the user saw at once (`TestViewTabsStay`).
+    大纲, which the user saw at once (`TestViewTabsStay`). A width to
+    keep a thing in place is measured, not a figure: one font's figure
+    pushed the bar's keys out of it on CI's (`TestToolbarFitsNarrowWindow`).
   - What the app finds by its name and place (the inbox, `inboxPath`)
     says so in its menu and is neither renamed nor moved there: the user
     asked whether it could be, seeing that it could.
