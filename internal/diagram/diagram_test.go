@@ -328,6 +328,28 @@ func TestSteps(t *testing.T) {
 	if tangled < 2 {
 		t.Fatalf("tangled %d", tangled)
 	}
+	// A way back from a question off the main way is a way back, and counted.
+	q := &Graph{Nodes: []Node{{ID: "a", Kind: KindStart, Title: "a"}, {ID: "b", Title: "b"}, {ID: "c", Title: "c"}, {ID: "d", Title: "d"},
+		{ID: "f", Title: "f"}, {ID: "h", Title: "h"}, {ID: "q", Title: "q"}, {ID: "e", Title: "e"}},
+		Edges: []Edge{{"a", "b", ""}, {"b", "c", ""}, {"c", "d", ""}, {"d", "f", ""}, {"f", "h", ""}, {"c", "q", "有疑问"}, {"q", "a", "重来"}, {"q", "e", "放弃"}}}
+	steps, tangled = q.Steps()
+	if x := steps[2].Exits[0]; len(x.More) != 2 || x.More[0].To != 1 || !x.More[0].Back || tangled != 1 {
+		t.Fatalf("a way back off the main way %+v, tangled %d", x, tangled)
+	}
+	// The main way is the longest, not the first edge's.
+	long := &Graph{Nodes: []Node{{ID: "a", Kind: KindStart, Title: "a"}, {ID: "b", Title: "b"}, {ID: "c", Title: "c"}, {ID: "d", Title: "d"}},
+		Edges: []Edge{{"a", "c", "直接"}, {"a", "b", ""}, {"b", "c", ""}, {"c", "d", ""}}}
+	steps, _ = long.Steps()
+	if len(steps) != 4 || steps[1].Node != "b" || len(steps[0].Exits) != 1 || steps[0].Exits[0].To != 3 {
+		t.Fatalf("main way %+v", steps)
+	}
+	// What the main way does not reach is told after it, with its own ways out.
+	two := &Graph{Nodes: []Node{{ID: "s1", Kind: KindStart, Title: "一"}, {ID: "x", Title: "x"}, {ID: "s2", Title: "二"}, {ID: "y", Title: "y"}},
+		Edges: []Edge{{"s1", "x", ""}, {"s2", "y", "另一头"}, {"y", "x", ""}}}
+	steps, _ = two.Steps()
+	if len(steps) != 3 || steps[2].Node != "s2" || len(steps[2].Exits) != 1 || steps[2].Exits[0].Pass[0] != "y" || steps[2].Exits[0].To != 2 {
+		t.Fatalf("a second beginning %+v", steps)
+	}
 	// Every edge is told once, of any graph; none is lost and none loops.
 	seed := uint32(11)
 	rnd := func(n int) int { seed = seed*1664525 + 1013904223; return int(seed>>16) % n }
@@ -346,6 +368,11 @@ func TestSteps(t *testing.T) {
 		steps, _ := g.Steps()
 		told := map[int]int{}
 		nodes := map[string]bool{}
+		for _, s := range steps {
+			if s.NextEdge >= 0 {
+				told[s.NextEdge]++
+			}
+		}
 		var count func(xs []Exit)
 		count = func(xs []Exit) {
 			for _, x := range xs {
@@ -366,9 +393,9 @@ func TestSteps(t *testing.T) {
 		if len(nodes) != n {
 			t.Fatalf("%d of %d nodes told: %+v", len(nodes), n, g)
 		}
-		for k, c := range told {
-			if c > 1 {
-				t.Fatalf("edge %d told %d times: %+v", k, c, g)
+		for k := range g.Edges {
+			if told[k] != 1 {
+				t.Fatalf("edge %d told %d times: %+v", k, told[k], g)
 			}
 		}
 	}

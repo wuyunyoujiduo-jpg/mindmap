@@ -326,6 +326,29 @@ func (g *Graph) layoutFlow(apart bool) Layout {
 // longest way from its beginning the first, and a node off it one column
 // further than what leads to it, three columns at most.
 func sideLanes(g *Graph, fwd []bool) map[string]int {
+	lanes := map[string]int{}
+	for _, id := range mainWay(g, fwd) {
+		lanes[id] = 0
+	}
+	for _, id := range topo(g, fwd) {
+		if _, main := lanes[id]; main {
+			continue
+		}
+		c := -1
+		for i, e := range g.Edges {
+			if p, ok := lanes[e.From]; ok && fwd[i] && e.To == id && (c < 0 || p+1 < c) {
+				c = p + 1
+			}
+		}
+		lanes[id] = min(max(c, 1), 2)
+	}
+	return lanes
+}
+
+// mainWay is a flow's longest way from its beginning, in the order
+// taken: from its start, each time on to the node with the longest way
+// after it.
+func mainWay(g *Graph, fwd []bool) []string {
 	next := func(id string) []string {
 		var out []string
 		for i, e := range g.Edges {
@@ -349,8 +372,6 @@ func sideLanes(g *Graph, fwd []bool) map[string]int {
 		depth[id] = d
 		return d
 	}
-	lanes := map[string]int{}
-	order := topo(g, fwd)
 	at := ""
 	for _, n := range g.Nodes {
 		if n.Kind == KindStart {
@@ -358,12 +379,14 @@ func sideLanes(g *Graph, fwd []bool) map[string]int {
 			break
 		}
 	}
-	if at == "" && len(order) > 0 {
+	if order := topo(g, fwd); at == "" && len(order) > 0 {
 		at = order[0]
 	}
+	var way []string
 	main := map[string]bool{}
 	for at != "" {
 		main[at] = true
+		way = append(way, at)
 		best := ""
 		for _, to := range next(at) {
 			if !main[to] && (best == "" || deep(to) > deep(best)) {
@@ -372,20 +395,7 @@ func sideLanes(g *Graph, fwd []bool) map[string]int {
 		}
 		at = best
 	}
-	for _, id := range order {
-		if main[id] {
-			lanes[id] = 0
-			continue
-		}
-		c := -1
-		for i, e := range g.Edges {
-			if p, ok := lanes[e.From]; ok && fwd[i] && e.To == id && (c < 0 || p+1 < c) {
-				c = p + 1
-			}
-		}
-		lanes[id] = min(max(c, 1), 2)
-	}
-	return lanes
+	return way
 }
 
 // LayoutState places the states of a thing: the longest way from the
@@ -761,9 +771,13 @@ func labelPlace(pts []Point, seg int, left bool, runes int) (Point, int) {
 
 // StepLine is a step of a flow's main way, and the other ways out of it.
 type StepLine struct {
-	Node  string
-	Next  string // the label of the way on to the next step, when it has one
-	Exits []Exit
+	Node string
+	// Next is the label of the way on to the next step, " " when it has
+	// one with nothing said on it, "" when it has none; NextEdge is that
+	// edge, -1 for none.
+	Next     string
+	NextEdge int
+	Exits    []Exit
 }
 
 // Exit is a way out of a step other than on to the next: by which edge,
@@ -773,8 +787,8 @@ type Exit struct {
 	Label string // what is asked of it, as the edge says
 	Chain []int  // the edges passed after it, off the main way
 	Pass  []string
-	// To is the step of the main way it comes to (from 1), 0 when it ends
-	// off it; Back tells that the step is this one or an earlier.
+	// To is the step it comes to (from 1), 0 when it ends off the steps;
+	// Back tells that the step is the one it left or an earlier.
 	To   int
 	Back bool
 	// Join is a node off the main way that another way out already told,
@@ -787,44 +801,29 @@ type Exit struct {
 
 // Steps tells a flow as steps, and how tangled it is as a drawing: how
 // many of its ways go back or leap over a step, which are those whose
-// lines cross the others.
+// lines cross the others. Every node is a step or passed on a way out,
+// once; every edge is told once. What the main way does not reach is
+// told after it, each a step with its own ways out.
 func (g *Graph) Steps() (steps []StepLine, tangled int) {
 	fwd := forward(g)
-	lanes := sideLanes(g, fwd)
 	at := map[string]int{} // a node's step, from 1
-	order := topo(g, fwd)
-	// The main way again, in its order: the nodes sideLanes put first.
-	start := ""
-	for _, n := range g.Nodes {
-		if n.Kind == KindStart {
-			start = n.ID
-			break
-		}
-	}
-	if start == "" && len(order) > 0 {
-		start = order[0]
-	}
-	onMain := func(id string) bool { return lanes[id] == 0 }
-	for id := start; id != ""; {
-		steps = append(steps, StepLine{Node: id})
+	for _, id := range mainWay(g, fwd) {
+		steps = append(steps, StepLine{Node: id, NextEdge: -1})
 		at[id] = len(steps)
-		next := ""
-		for i, e := range g.Edges {
-			if fwd[i] && e.From == id && onMain(e.To) && at[e.To] == 0 && next == "" {
-				next = e.To
-			}
-		}
-		id = next
 	}
+	main := len(steps)
 	used := map[int]bool{}
-	seen := map[string]bool{} // the nodes off the main way told already
-	var exit func(i int) Exit
-	exit = func(i int) Exit {
+	seen := map[string]bool{} // the nodes off the steps told already
+	var exit func(i, from int) Exit
+	exit = func(i, from int) Exit {
 		used[i] = true
 		x := Exit{Edge: i, Label: g.Edges[i].Label}
 		for to := g.Edges[i].To; ; {
 			if n := at[to]; n > 0 {
-				x.To = n
+				x.To, x.Back = n, n <= from
+				if x.Back || n > from+1 {
+					tangled++
+				}
 				return x
 			}
 			if seen[to] { // told by another way out, or round and round
@@ -848,55 +847,41 @@ func (g *Graph) Steps() (steps []StepLine, tangled int) {
 				to = g.Edges[out[0]].To
 			default:
 				for _, k := range out {
-					x.More = append(x.More, exit(k))
+					x.More = append(x.More, exit(k, from))
 				}
 				return x
 			}
 		}
 	}
-	for s := range steps {
+	for s := 0; ; s++ {
+		if s == len(steps) { // the next that nothing told yet, if any
+			found := false
+			for _, n := range g.Nodes {
+				if at[n.ID] == 0 && !seen[n.ID] {
+					steps = append(steps, StepLine{Node: n.ID, NextEdge: -1})
+					at[n.ID] = len(steps)
+					found = true
+					break
+				}
+			}
+			if !found {
+				break
+			}
+		}
 		id := steps[s].Node
 		for i, e := range g.Edges {
 			if e.From != id || used[i] {
 				continue
 			}
-			if s+1 < len(steps) && e.To == steps[s+1].Node && steps[s].Next == "" && !used[i] {
+			if s+1 < main && e.To == steps[s+1].Node && steps[s].NextEdge < 0 {
 				used[i] = true
-				steps[s].Next = e.Label
+				steps[s].Next, steps[s].NextEdge = e.Label, i
 				if e.Label == "" {
 					steps[s].Next = " " // it has one, with nothing said on it
 				}
 				continue
 			}
-			x := exit(i)
-			x.Back = x.To > 0 && x.To <= s+1
-			if x.To > 0 && (x.Back || x.To > s+2) {
-				tangled++
-			}
-			steps[s].Exits = append(steps[s].Exits, x)
-		}
-	}
-	// What no way from the main way reaches is told after it, each a step.
-	for _, n := range g.Nodes {
-		if at[n.ID] > 0 {
-			continue
-		}
-		reached := false
-		for _, st := range steps {
-			var has func(xs []Exit) bool
-			has = func(xs []Exit) bool {
-				for _, x := range xs {
-					if slices.Contains(x.Pass, n.ID) || has(x.More) {
-						return true
-					}
-				}
-				return false
-			}
-			reached = reached || has(st.Exits)
-		}
-		if !reached {
-			steps = append(steps, StepLine{Node: n.ID})
-			at[n.ID] = len(steps)
+			steps[s].Exits = append(steps[s].Exits, exit(i, s+1))
 		}
 	}
 	return steps, tangled

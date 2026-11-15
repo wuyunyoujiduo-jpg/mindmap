@@ -567,6 +567,28 @@ func TestDiagramHands(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// A line drawn between two topics of the branch is part of its record,
+	// and a set drawn with it does not read as changed.
+	a.doc.Relations = append(a.doc.Relations, model.Relation{ID: "r1", From: find(t, a, "审核").ID, To: find(t, a, "退款").ID, Label: "通过后"})
+	a.edits++
+	if n := a.diaChanges(a.diaOf(root.ID)).n; n != 1 {
+		t.Fatalf("a line added reads as %d changes", n)
+	}
+	fake.replies = []string{claudeText(refundSet)}
+	a.drawDia(root.ID, "")
+	tt.Frame()
+	if f = a.diaOf(root.ID); a.diaChanges(f).n != 0 || !strings.HasPrefix(f.Seen["~relations"], "r/") {
+		t.Fatalf("just drawn with a line, it reads as changed: %+v", a.diaChanges(f))
+	}
+	a.doc.Relations = nil // a cut would take the line with it, which is a change of its own
+	a.edits++
+	fake.replies = []string{claudeText(refundSet)}
+	a.drawDia(root.ID, "")
+	tt.Frame()
+	if f = a.diaOf(root.ID); a.diaChanges(f).n != 0 {
+		t.Fatalf("drawn again without the line: %+v", a.diaChanges(f))
+	}
+
 	// Cut and pasted elsewhere, the branch keeps its set, by its new IDs.
 	a.closeDia()
 	a.selectNode(root.ID)
@@ -586,6 +608,18 @@ func TestDiagramHands(t *testing.T) {
 	}
 	if src := g.Flow.Node("D").Src; len(src) != 2 || src[1] != find(t, a, "超过 500 元主管审").ID || a.diaChanges(g).n != 0 {
 		t.Fatalf("sources %v, changes %+v", src, a.diaChanges(g))
+	}
+	// The paste and the cut undone, the branch is back by the ID it had,
+	// and its set with it; done again, the pasted one has its own.
+	a.undo()
+	a.undo()
+	if a.file.Node(root.ID) == nil || a.diaOf(root.ID) == nil {
+		t.Fatal("undone, the branch came back without its set")
+	}
+	a.redo()
+	a.redo()
+	if a.diaOf(moved.ID) == nil {
+		t.Fatal("done again, the pasted branch lost its set")
 	}
 	a.selectNode(find(t, a, "功能").ID)
 	a.paste() // again: a copy, with no set of its own

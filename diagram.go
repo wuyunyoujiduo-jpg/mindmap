@@ -318,6 +318,9 @@ func branchSeen(d *model.Document, root *model.Node, old bool) map[string]string
 	if len(rels) > 0 {
 		sort.Strings(rels)
 		seen["~relations"] = sum(rels...)
+		if !old { // marked as the topics' are: it was taken for 0.96.0's, and read as changed
+			seen["~relations"] = "r/" + seen["~relations"]
+		}
 	}
 	return seen
 }
@@ -692,8 +695,9 @@ func (a *app) carryDias(ids map[string]string) {
 		if f == nil {
 			continue
 		}
+		// The set stays under the ID the branch had as well: undone, the
+		// cut brings the branch back by that ID, and its set is there.
 		moved := diaFile{Path: key, Set: f.Set.Renamed(ids)}
-		a.dropDia(from)
 		_ = a.writeDia(&moved)
 	}
 }
@@ -788,17 +792,23 @@ func (a *app) quizDue(f *diaFile) bool {
 // longest due first.
 func (a *app) diasDue() []*diaFile {
 	a.loadDias()
-	key := fmt.Sprint(a.diaVersion, a.dir, len(a.files), today(a.now()).Unix())
+	key := fmt.Sprint(a.diaVersion, a.dir, len(a.files), today(a.now()).Unix(), a.edits)
 	if key == a.diaDueKey {
 		return a.diaDue
 	}
-	maps := map[string]bool{} // the maps there are, by their key
+	maps := map[string]string{} // the maps there are, by their key
 	for _, m := range a.files {
-		maps[a.mapKey(m.Path)] = true
+		maps[a.mapKey(m.Path)] = m.Path
 	}
 	var out []*diaFile
 	for _, f := range a.dias {
-		if a.quizDue(f) && maps[f.Path] {
+		path, ok := maps[f.Path]
+		if !ok || !a.quizDue(f) {
+			continue
+		}
+		// Of a topic that is there: a set stays where its branch was cut
+		// from (carryDias), and asks nothing.
+		if m := a.mapFile(path); m != nil && m.Node(f.Node) != nil {
 			out = append(out, f)
 		}
 	}

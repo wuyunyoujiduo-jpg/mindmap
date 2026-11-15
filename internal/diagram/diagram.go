@@ -615,9 +615,13 @@ func (s Set) Renamed(ids map[string]string) Set {
 			id = to
 		}
 		// What is under what is in it, by the parent's ID.
-		if parent, rest, ok := strings.Cut(h, "/"); ok {
-			if to, renamed := ids[parent]; renamed {
-				h = to + "/" + rest
+		// "parent/index/hash": read from its end, an ID from elsewhere
+		// having what it will in it.
+		if i := strings.LastIndex(h, "/"); i > 0 {
+			if j := strings.LastIndex(h[:i], "/"); j >= 0 {
+				if to, renamed := ids[h[:j]]; renamed {
+					h = to + h[j:]
+				}
 			}
 		}
 		seen[id] = h
@@ -771,7 +775,7 @@ func mid(id string) string {
 		if r < 128 && (r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z') {
 			b.WriteRune(r)
 		} else {
-			b.WriteString("_" + strconv.Itoa(int(r)))
+			b.WriteString("_" + strconv.Itoa(int(r)) + "_") // closed, so that no two IDs make one
 		}
 	}
 	return b.String()
