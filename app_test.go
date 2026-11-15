@@ -1309,44 +1309,52 @@ func TestAINeedsKey(t *testing.T) {
 }
 
 func TestToolbarFitsNarrowWindow(t *testing.T) {
-	a, tt := newTestApp(t)
-	for _, w := range []int{1280, 1160, 1100, 1088, 1000, 920} {
-		tt.SetSize(w, 760)
-		tt.Frame()
-		redo, ok := tt.Find("开始演说") // the last of the map's bar before the panel's key
-		if !ok {
-			redo, ok = tt.Find("更多视图") // a narrow bar has no key to present
+	// With the map's own name, and with a long one, which is cut short for
+	// the tabs and the keys and neither lies over them nor pushes them out.
+	for _, long := range []bool{false, true} {
+		a, tt := newTestApp(t)
+		if long {
+			a.rename(a.path, "一个名字很长很长的项目导图二零二六")
 		}
-		if !ok {
-			continue // so narrow that the views are a menu: nothing to run past
-		}
-		right := float32(w) // the panel hides in a narrow window
-		if float32(w)-a.sideWidth()-a.panelWidth >= panelMinCanvas {
-			right -= a.panelWidth
-		}
-		if redo.X+redo.W > right {
-			t.Fatalf("width %d: redo ends at %v, past the toolbar's %v", w, redo.X+redo.W, right)
-		}
-		// The bar's last key, the panel's, is in the bar too, with room to
-		// spare: 更多 at one width for all its views once pushed it over
-		// the panel on CI's wider fonts, where this test told of the key
-		// before it alone.
-		if last, ok := tt.Find("主题面板"); ok && last.X+last.W > right-15 {
-			t.Fatalf("width %d: the bar's last key ends at %v, the bar at %v", w, last.X+last.W, right)
-		}
-		// With room to spare between the views and the search, for fonts
-		// elsewhere, as on CI, are a little wider.
-		if last, ok := tt.Find("更多视图"); ok {
-			next, ok := tt.Find("结构")
+		for _, w := range []int{1400, 1280, 1160, 1100, 1088, 1000, 920} {
+			tt.SetSize(w, 760)
+			tt.Frame()
+			tt.Frame()
+			last, ok := tt.Find("主题面板") // the bar's last key
 			if !ok {
-				next, _ = tt.Find("开始演说")
+				t.Fatalf("width %d: no key of the panel", w)
 			}
-			if spare := next.X - (last.X + last.W); spare < 16 {
-				t.Fatalf("width %d: %v spare between the views and the keys", w, spare)
+			right := float32(w) // the panel hides in a narrow window
+			if float32(w)-a.sideWidth()-a.panelWidth >= panelMinCanvas {
+				right -= a.panelWidth
 			}
-		}
-		if w == 920 {
-			snapshot(t, tt, "toolbar-narrow")
+			// In the bar, its padding kept: 更多 at one width for all its
+			// views once pushed it over the panel on CI's wider fonts,
+			// where this test looked at the key before it alone.
+			if last.X+last.W > right-15 {
+				t.Fatalf("width %d, long %v: the bar's last key ends at %v, the bar at %v", w, long, last.X+last.W, right)
+			}
+			// The name ends before the tabs begin, and the tabs before the
+			// keys.
+			name, _ := tt.Find("切换导图")
+			if tabs, ok := tt.Find("导图"); ok && name.X+name.W > tabs.X {
+				t.Fatalf("width %d, long %v: the name to %v over the tabs at %v", w, long, name.X+name.W, tabs.X)
+			}
+			if more, ok := tt.Find("更多视图"); ok {
+				next, ok := tt.Find("结构")
+				if !ok {
+					next, _ = tt.Find("开始演说")
+				}
+				if spare := next.X - (more.X + more.W); spare < 4 {
+					t.Fatalf("width %d, long %v: %v between the views and the keys", w, long, spare)
+				}
+			}
+			if w == 920 && !long {
+				snapshot(t, tt, "toolbar-narrow")
+			}
+			if w == 1100 && long {
+				snapshot(t, tt, "toolbar-long-name")
+			}
 		}
 	}
 }

@@ -95,7 +95,10 @@ func (a *app) pageView(c *ui.Context) {
 				}
 				return
 			}
-			ui.Column(c).Grow(1).Children(func() {
+			// No wider than its share of the leaf, whatever is on it: a bar
+			// of a long name is to cut the name short, not to push its keys
+			// over the right column.
+			ui.Column(c).Grow(1).MinWidth(0).Children(func() {
 				a.toolbar(c)
 				if a.doc == nil || a.mode != viewMap && a.mode != viewOutline && a.mode != viewDiagram {
 					ui.Divider(c) // the map and the outline are the page itself
@@ -260,22 +263,25 @@ func (a *app) toolbar(c *ui.Context) {
 			return r.Shrink(1).MinWidth(40)
 		}
 		end("bar-left").Children(func() {
+			// The name gives way to the tabs and the keys, cut short with
+			// an ellipsis: unshrinking, a long one lay over the tabs in a
+			// narrow bar and pushed the keys out of it.
 			ui.Column(c).Gap(1).Shrink(1).MinWidth(40).Children(func() {
-				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+				ui.Row(c).Gap(8).AlignItems(ui.Center).Shrink(1).MinWidth(0).Children(func() {
 					// The map's color, which a click changes.
 					dot := ui.Box(c.Key("map-color")).Size(14, 14).Radius(5).Background(a.mapColor(a.path)).Shrink(0).
 						Cursor(ui.CursorPointer).Label("导图颜色").Tooltip("这张导图的颜色：它的任务、从它来的东西都带这个颜色")
 					dot.Menu(a.mapColorMenu)
 					// The map's name switches maps: those opened last, the list,
 					// a new one.
-					name := ui.Row(c.Key("map-switch")).Gap(4).AlignItems(ui.Center).Radius(6).Padding(1, 4).Margin(0, 0, 0, -4).
+					name := ui.Row(c.Key("map-switch")).Gap(4).AlignItems(ui.Center).Radius(6).Padding(1, 4).Margin(0, 0, 0, -4).Shrink(1).MinWidth(0).
 						Cursor(ui.CursorPointer).Label("切换导图").Tooltip("切换到其他导图")
 					if name.Hovered() {
 						name.Background(t.Text.Alpha(0.06))
 					}
 					name.Menu(a.mapSwitchMenu)
 					name.Children(func() {
-						ui.Text(c, mapName(a.path)).FontWeight(700).LetterSpacing(-0.3).FontSize(textTitle).NoWrap().MaxWidth(220).Ellipsis("…").PassThrough()
+						ui.Text(c, mapName(a.path)).FontWeight(700).LetterSpacing(-0.3).FontSize(textTitle).SingleLine().MaxWidth(220).Shrink(1).MinWidth(0).PassThrough()
 						chevron(c, t.TextMuted)
 					})
 				})
