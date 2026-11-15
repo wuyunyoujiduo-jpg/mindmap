@@ -275,8 +275,12 @@ type app struct {
 	diaBusy       string // the topic being drawn
 	diaSince      time.Time
 	diaErr        string
-	diaErrFor     string  // the topic whose drawing failed
-	diaHover      string  // the node of a graph under the pointer
+	diaErrFor     string             // the topic whose drawing failed
+	diaHover      string             // the node of a graph under the pointer
+	diaBare       bool               // a kind is drawn as a figure: no scrolling room, bar or margin (diaFigure)
+	figNat        map[string]float32 // a figure's own height, once drawn, by what it is of
+	figLast       string             // the figure drawn in the frame before
+	figHandle     ui.Handle
 	diaZoom       float32 // of the diagram shown; 0 fits the page's width
 	diaReveal     string  // the node of a graph to bring into view
 	diaFocus      bool    // the diagram takes the keys, just opened

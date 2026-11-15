@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"image/png"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -723,4 +726,95 @@ func TestDiagramTab(t *testing.T) {
 	a.dia.cas = 1
 	tt.Frame()
 	snapshot(t, tt, "diagram-steps-case")
+}
+
+// A kind of a set is saved as a picture, and its diagrams go among the
+// slides of its canvas.
+func TestDiagramPictureAndSlides(t *testing.T) {
+	a, tt := newTestApp(t)
+	fake := &fakeClaude{replies: []string{claudeText(refundSet)}}
+	a.sendAI = fake.send
+	a.cfg.AIKey = "sk-ant-test"
+	root := refundBranch(t, a)
+	a.selectNode(root.ID)
+	a.drawDia(root.ID, "")
+	tt.Frame()
+	f := a.diaOf(root.ID)
+	if f == nil {
+		t.Fatal(a.diaErr)
+	}
+	// As pictures: the flow as its drawing and as its steps, the table.
+	dir := os.Getenv("MINDMAP_SNAPSHOTS")
+	for name, of := range map[string]struct {
+		kind string
+		as   int
+	}{"flow": {"flow", flowAsGraph}, "steps": {"flow", flowAsSteps}, "state": {"state", 0}, "table": {"table", 0}} {
+		data, err := a.diaImage(f, of.kind, of.as)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		cfg, err := png.DecodeConfig(bytes.NewReader(data))
+		if err != nil || cfg.Height < 400 || cfg.Width < 1200 {
+			t.Fatalf("%s: %dx%d %v", name, cfg.Width, cfg.Height, err)
+		}
+		if name == "flow" && cfg.Width != (700+56)*2 {
+			t.Fatalf("the flow's picture is %d wide", cfg.Width)
+		}
+		if dir != "" {
+			if err := os.WriteFile(filepath.Join(dir, "diagram-picture-"+name+".png"), data, 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	// By its menu's key, to where it is asked.
+	a.plat.(*fakePlatform).savePath = filepath.Join(t.TempDir(), "flow")
+	a.askExportDia(f, "flow", flowAsSuits)
+	if _, err := os.Stat(a.plat.(*fakePlatform).savePath + ".png"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Among the slides: after its topic's, a slide a kind drawn, not the nouns.
+	before := len(a.slidesFor(a.doc))
+	a.presentDia(f, true)
+	slides := a.slidesFor(a.doc)
+	at := slices.IndexFunc(slides, func(s slide) bool { return s.kind == slideDiagram })
+	if len(slides) != before+3 || at < 1 || slides[at-1].node.ID != root.ID || slides[at].diaOf != "flow" || slides[at+2].diaOf != "table" {
+		t.Fatalf("%d slides (%d before), the first diagram at %d", len(slides), before, at)
+	}
+	a.startPresenting(root.ID)
+	if a.slides[a.slideIndex].node.ID != root.ID {
+		t.Fatal("not begun at the topic")
+	}
+	a.nextSlide()
+	for range 4 {
+		tt.Frame()
+	}
+	if a.slides[a.slideIndex].kind != slideDiagram || !tt.HasText("符合申请条件？") || !tt.HasText("流程") {
+		t.Fatalf("the flow's slide: %q", tt.Texts())
+	}
+	snapshot(t, tt, "diagram-slide-flow")
+	// A press on the slide goes on, though the diagram is under it.
+	tt.ClickAt(640, 400)
+	for range 4 {
+		tt.Frame()
+	}
+	if a.slides[a.slideIndex].diaOf != "state" {
+		t.Fatalf("a press on the diagram did not go on: slide %d", a.slideIndex)
+	}
+	a.nextSlide()
+	for range 4 {
+		tt.Frame()
+	}
+	snapshot(t, tt, "diagram-slide-table")
+	a.stopPresenting()
+	// The slides' PDF has them.
+	var buf bytes.Buffer
+	if err := a.slidesPDF(&buf); err != nil || buf.Len() == 0 {
+		t.Fatal(err)
+	}
+	// Taken out again.
+	a.presentDia(f, false)
+	if len(a.slidesFor(a.doc)) != before {
+		t.Fatal("not taken out of the slides")
+	}
 }

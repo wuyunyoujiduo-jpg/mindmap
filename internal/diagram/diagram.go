@@ -37,7 +37,10 @@ type Set struct {
 	Told string `json:"told,omitempty"`
 	// Partial tells that the branch was too long to be given whole: what
 	// was drawn is of its beginning.
-	Partial bool     `json:"partial,omitempty"`
+	Partial bool `json:"partial,omitempty"`
+	// Present has the set's diagrams among the slides of its canvas, after
+	// its topic's.
+	Present bool     `json:"present,omitempty"`
 	Flow    *Graph   `json:"flow,omitempty"`
 	State   *Graph   `json:"state,omitempty"`
 	Table   *Table   `json:"table,omitempty"`

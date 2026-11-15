@@ -122,7 +122,10 @@ by AI, and an AI assistant.
     page's width, what waits for a place as a few lines (`waitingBand`,
     `waitingLine`: the user found the cards there crowding the tasks, and
     chose lines; in a wide window it is a column beside the tasks,
-    `waitingRail`, for half the window stood empty). What waits is the
+    `waitingRail`, for half the window stood empty; with a task of the
+    list chosen it is under the tasks again and the list takes the room
+    up to the details: the user found it wrong as a column between a
+    task and its details, and then a blank there). What waits is the
     inbox's tasks and the clips the user asked to place later
     (`Clip.ToPlace`, 稍后归位 in a clip's details, 标为待归位 in its menu):
     a clip is at home in 收集 and waits for nothing by itself. Before
@@ -228,7 +231,11 @@ by AI, and an AI assistant.
     the form, for a drawing says every "then" with a line and it is the
     ways back that cross them; as steps the order says "then" for
     nothing. A flow with two or more ways back or leaps shows so by
-    itself (`stepsSuit`), and either by a key at its corner. Its draft
+    itself (`stepsSuit`), and either by a key at its corner. A kind is
+    saved as a picture, and a set put among its canvas's slides, a slide
+    a kind after its topic's (`diaFigure`, which draws a kind bare, with
+    nothing to press, scaled to what holds it; `diaImage`, `slidesFor`,
+    `Set.Present`). Its draft
     is https://claude.ai/artifact/QMRCCAAu3tW9ni6CcVkRaL. Checks across
     maps are not built: the user put them off.
   - 收集 (`libview.go`): notes and clips, a wall of cards that

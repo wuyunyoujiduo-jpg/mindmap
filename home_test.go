@@ -571,6 +571,10 @@ func TestTodayOnAWideWindow(t *testing.T) {
 	if !ok || under.Y < list2.Y+list2.H || under.X >= sheet.X || list2.X != list.X {
 		t.Fatalf("with a task chosen: waiting %v, the task %v (was %v), its details %v", under, list2, list, sheet)
 	}
+	// The list takes the room up to the details: no blank column between.
+	if gap := sheet.X - (list2.X + list2.W); gap > 80 {
+		t.Fatalf("a blank of %v between the task %v and its details %v", gap, list2, sheet)
+	}
 	snapshot(t, tt, "today-wide-detail")
 	// Chosen from what waits beside the tasks, the column stays, its
 	// details beside it.

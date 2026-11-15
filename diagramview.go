@@ -1,7 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"image/png"
+	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -376,9 +380,17 @@ func (a *app) diaHead(c *ui.Context, f *diaFile) {
 			if m.Item("回到导图").Chosen() {
 				a.later(a.closeDia)
 			}
+			if m.Item("导出成图片…").Chosen() {
+				kind, as := a.dia.kind, a.dia.as
+				a.later(func() { a.askExportDia(f, kind, as) })
+			}
 			if m.Item("复制成 Markdown").Chosen() {
 				a.plat.CopyText(f.Markdown())
 				a.tell("已复制：流程和状态是 Mermaid，贴到能画它的地方就是图")
+			}
+			m.Separator()
+			if m.Item("放进演说").Checked(f.Present).Chosen() {
+				a.later(func() { a.presentDia(f, !f.Present) })
 			}
 			m.Separator()
 			if m.Item("删掉这组图解").Chosen() {
@@ -521,6 +533,9 @@ func (a *app) diaGraph(c *ui.Context, f *diaFile, g *diagram.Graph, flow bool) {
 	if a.diaZoom > 0 {
 		z = a.diaZoom
 	}
+	if a.diaBare { // a figure: as large as it is, scaled by what holds it
+		z = 1
+	}
 	w, h := l.Width*z, l.Height*z
 	left := max((a.diaBody.Bounds(c).W-w)/2, pad)
 	dim := func(on bool) float32 {
@@ -542,9 +557,12 @@ func (a *app) diaGraph(c *ui.Context, f *diaFile, g *diagram.Graph, flow bool) {
 	}
 	hover := a.diaHover
 	a.diaHover = ""
-	ui.Column(c.Key("dia-graph-room")).Grow(1).Basis(0).MinHeight(0).Children(func() {
-		ui.ScrollBoth(c.Key("dia-graph:" + a.dia.kind)).Grow(1).Basis(0).MinHeight(0).Bind(&a.diaBody).Children(func() {
-			cv := ui.Box(c.Key("dia-canvas")).Size(w, h).Margin(6, pad, pad, left).Shrink(0).Label("图")
+	a.diaRoom(c, "dia-graph-room", false).Children(func() {
+		a.diaRoom(c, "dia-graph:"+a.dia.kind, true).Children(func() {
+			cv := ui.Box(c.Key("dia-canvas")).Size(w, h).Shrink(0).Label("图")
+			if !a.diaBare {
+				cv.Margin(6, pad, pad, left)
+			}
 			if cv.Clicked() {
 				a.dia.pick = ""
 			}
@@ -627,6 +645,9 @@ func (a *app) diaGraph(c *ui.Context, f *diaFile, g *diagram.Graph, flow bool) {
 				}
 			})
 		})
+		if a.diaBare {
+			return
+		}
 		// Larger and smaller, over the diagram's corner as over the canvas's;
 		// and, of a flow, whether it is this drawing or its steps.
 		lifted(ui.Row(c.Key("dia-zoom")).Absolute().Right(14).Bottom(8).Gap(0).Padding(3, 5).Radius(radiusPill).AlignItems(ui.Center).
@@ -833,7 +854,7 @@ func (a *app) diaTable(c *ui.Context, f *diaFile) {
 		})
 		return b
 	}
-	ui.Scroll(c.Key("dia-table")).Grow(1).Basis(0).MinHeight(0).Bind(&a.diaBody).Children(func() {
+	a.diaRoom(c, "dia-table", true).Children(func() {
 		ui.Column(c.Key("table")).MaxWidth(860).FillWidth().Padding(4, 20, 20).AlignSelf(ui.Center).Children(func() {
 			ui.Row(c.Key("groups")).Padding(4, 0, 0, 22).FillWidth().Children(func() {
 				ui.Box(c).Grow(float32(len(tb.Conds))).Basis(0).Padding(0, 8).Children(func() {
@@ -956,7 +977,7 @@ func (a *app) diaObjects(c *ui.Context, f *diaFile) {
 			kinds = append(kinds, k)
 		}
 	}
-	ui.Scroll(c.Key("dia-objects")).Grow(1).Basis(0).MinHeight(0).Bind(&a.diaBody).Children(func() {
+	a.diaRoom(c, "dia-objects", true).Children(func() {
 		ui.Column(c.Key("objects")).MaxWidth(700).FillWidth().Padding(0, 20, 20).AlignSelf(ui.Center).Children(func() {
 			for _, k := range kinds {
 				n := 0
@@ -1920,9 +1941,9 @@ func (a *app) diaSteps(c *ui.Context, f *diaFile) {
 			exits(fmt.Sprint(k, i, "-"), x.More, depth+1)
 		}
 	}
-	ui.Column(c.Key("dia-steps-room")).Grow(1).Basis(0).MinHeight(0).Children(func() {
-		ui.Scroll(c.Key("dia-steps")).Grow(1).Basis(0).MinHeight(0).Bind(&a.diaBody).Children(func() {
-			ui.Column(c.Key("steps")).MaxWidth(820).FillWidth().Padding(4, 20, 56).AlignSelf(ui.Center).Children(func() {
+	a.diaRoom(c, "dia-steps-room", false).Children(func() {
+		a.diaRoom(c, "dia-steps", true).Children(func() {
+			ui.Column(c.Key("steps")).MaxWidth(820).FillWidth().Padding(4, 20, 20+36*b2f(!a.diaBare)).AlignSelf(ui.Center).Children(func() {
 				lane := -1
 				for i, s := range steps {
 					n := g.Node(s.Node)
@@ -1981,8 +2002,10 @@ func (a *app) diaSteps(c *ui.Context, f *diaFile) {
 				}
 			})
 		})
-		lifted(ui.Row(c.Key("dia-as")).Absolute().Right(14).Bottom(8).Gap(0).Padding(3, 5).Radius(radiusPill).AlignItems(ui.Center).
-			Background(cardColor(t)), t).Children(func() { a.flowAsKeys(c, f) })
+		if !a.diaBare {
+			lifted(ui.Row(c.Key("dia-as")).Absolute().Right(14).Bottom(8).Gap(0).Padding(3, 5).Radius(radiusPill).AlignItems(ui.Center).
+				Background(cardColor(t)), t).Children(func() { a.flowAsKeys(c, f) })
+		}
 	})
 }
 
@@ -2055,4 +2078,167 @@ func (a *app) diaStepBox(c *ui.Context, n diagram.Node, lit *diaLit, opacity flo
 			ui.Box(c.Key("stale")).Absolute().Right(-3).Top(-3).Size(10, 10).Radius(5).Background(t.Warning).Border(2, t.Background).PassThrough()
 		}
 	})
+}
+
+// diaRoom is the room a kind is drawn in: one that fills the page and,
+// where scroll is set, scrolls; or, drawn bare as a figure (diaFigure), a
+// plain column as tall as what is in it.
+func (a *app) diaRoom(c *ui.Context, key string, scroll bool) ui.Element {
+	if a.diaBare {
+		return ui.Column(c.Key(key)).FillWidth()
+	}
+	if !scroll {
+		return ui.Column(c.Key(key)).Grow(1).Basis(0).MinHeight(0)
+	}
+	if strings.HasPrefix(key, "dia-graph:") {
+		return ui.ScrollBoth(c.Key(key)).Grow(1).Basis(0).MinHeight(0).Bind(&a.diaBody)
+	}
+	return ui.Scroll(c.Key(key)).Grow(1).Basis(0).MinHeight(0).Bind(&a.diaBody)
+}
+
+// figWidth is how wide a kind is as a figure, at its own size: a drawing
+// as its layout is, the rest a column to read.
+func (a *app) figWidth(f *diaFile, kind string, as int) float32 {
+	steps := kind == "flow" && f.Flow != nil && (as == flowAsSteps || as == flowAsSuits && stepsSuit(f.Flow))
+	switch {
+	case kind == "flow" && f.Flow != nil && !steps:
+		return f.Flow.LayoutFlow().Width
+	case kind == "state" && f.State != nil:
+		return f.State.LayoutState().Width
+	}
+	return 760
+}
+
+// diaFigure draws a kind of a set as a figure, with nothing to press: at
+// its own size while that fits in maxW by maxH, else scaled down to (and
+// on a large slide, a little up). What it measures is known a frame after
+// it is first drawn, which it then is, unseen.
+func (a *app) diaFigure(c *ui.Context, f *diaFile, kind string, as int, maxW, maxH float32) {
+	was, bare := a.dia, a.diaBare
+	a.dia, a.diaBare = diaState{node: f.Node, kind: kind, as: as}, true
+	defer func() { a.dia, a.diaBare = was, bare }()
+	natW := a.figWidth(f, kind, as)
+	key := fmt.Sprint(f.Node, kind, as, f.Updated.UnixNano())
+	if a.figNat == nil || len(a.figNat) > 64 {
+		a.figNat = map[string]float32{}
+	}
+	natH := a.figNat[key]
+	if natH == 0 && a.figLast == key { // drawn in the frame before: as tall as it came out
+		if b := a.figHandle.Bounds(c); b.H > 0 {
+			natH = b.H
+			a.figNat[key] = natH
+		}
+	}
+	a.figLast = key
+	s := float32(1)
+	if natH > 0 {
+		s = min(maxW/natW, maxH/natH, 1.6)
+	}
+	box := ui.Box(c.Key("figure:"+key)).Size(natW*s, max(natH, 1)*s).Shrink(0)
+	box.Children(func() {
+		in := ui.Column(c.Key("own")).Absolute().Left(0).Top(0).Width(natW).Bind(&a.figHandle).TransformOrigin(0, 0).Scale(s, s)
+		if natH == 0 {
+			in.Opacity(0)
+			c.Invalidate()
+		}
+		in.Children(func() {
+			switch {
+			case a.flowSteps(f):
+				a.diaSteps(c, f)
+			case kind == "flow" && f.Flow != nil:
+				a.diaGraph(c, f, f.Flow, true)
+			case kind == "state" && f.State != nil:
+				a.diaGraph(c, f, f.State, false)
+			case kind == "table" && f.Table != nil:
+				a.diaTable(c, f)
+			case kind == "objects":
+				a.diaObjects(c, f)
+			}
+		})
+		// Over it, so that nothing of it is pressed: a press on a slide's
+		// figure goes on to the next slide, as one beside it does.
+		if still := ui.Box(c.Key("still")).Absolute().Left(0).Top(0).Size(natW*s, max(natH, 1)*s).Label("图"); still.Clicked() && a.presenting {
+			a.later(a.nextSlide)
+		}
+	})
+}
+
+// presentDia puts a set's diagrams among its canvas's slides, or takes
+// them out.
+func (a *app) presentDia(f *diaFile, on bool) {
+	f.Present = on
+	if err := a.writeDia(f); err != nil {
+		a.saveErr = "保存图解失败：" + err.Error()
+		return
+	}
+	if on {
+		a.tellAct("放进演说了：在这个主题的那一页后面，每种图一页", "开始演说", func() { a.startPresenting(f.Node) })
+	} else {
+		a.tell("从演说里拿掉了")
+	}
+}
+
+// askExportDia asks where to save the picture of a kind of a set, as it
+// shows.
+func (a *app) askExportDia(f *diaFile, kind string, as int) {
+	name := cmpOr(f.Title, "图解") + " - " + diaKinds[kind]
+	a.plat.SaveFile(name+".png", "png", func(path string) {
+		if path == "" {
+			return
+		}
+		if !strings.EqualFold(filepath.Ext(path), ".png") {
+			path += ".png"
+		}
+		data, err := a.diaImage(f, kind, as)
+		if err == nil {
+			err = os.WriteFile(path, data, 0o644)
+		}
+		if err != nil {
+			a.saveErr = "导出失败: " + err.Error()
+			return
+		}
+		a.plat.ShowInFolder(path)
+	})
+}
+
+// diaImage draws a kind of a set into a PNG: at its own size, on white,
+// with what it is of over it, at twice its size for sharp text.
+func (a *app) diaImage(f *diaFile, kind string, as int) (data []byte, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("%v", r)
+		}
+	}()
+	const margin, head = 28, 44
+	w := a.figWidth(f, kind, as)
+	last, handle := a.figLast, a.figHandle // the window's own figure is not this one's
+	defer func() { a.figLast, a.figHandle = last, handle }()
+	a.figLast = ""
+	tt := ui.NewTester(func(c *ui.Context) {
+		t := quietTheme(c.Theme())
+		c.SetTheme(t)
+		ui.Column(c).Fill().Background(t.Background).Padding(margin).Gap(14).Children(func() {
+			ui.Row(c).Height(head - 14).Gap(8).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, cmpOr(f.Title, "图解")).FontSize(textTitle + 2).FontWeight(700).NoWrap()
+				ui.Text(c, diaKinds[kind]).FontSize(textBody).TextColor(t.TextMuted).NoWrap()
+			})
+			a.diaFigure(c, f, kind, as, w, 100000)
+		})
+	}, int(w)+2*margin, 600)
+	tt.Frame() // drawn unseen, to be measured
+	tt.Frame() // measured
+	key := fmt.Sprint(f.Node, kind, as, f.Updated.UnixNano())
+	h := a.figNat[key]
+	if h <= 0 {
+		return nil, fmt.Errorf("没有可导出的图")
+	}
+	tt.SetSize(int(w)+2*margin, int(h+0.5)+2*margin+head)
+	tt.SetScale(exportScale)
+	tt.Frame()
+	tt.Frame()
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, tt.Image()); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }

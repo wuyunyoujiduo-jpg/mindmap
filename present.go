@@ -11,9 +11,10 @@ import (
 
 // The kinds of slides.
 const (
-	slideTitle = iota // the root, alone
-	slideList         // a topic and its subtopics
-	slideTopic        // a topic without subtopics and its note
+	slideTitle   = iota // the root, alone
+	slideList           // a topic and its subtopics
+	slideTopic          // a topic without subtopics and its note
+	slideDiagram        // a kind of what was drawn of a topic (图解), put among the slides
 )
 
 // slide is one page of a presentation of a canvas.
@@ -23,6 +24,40 @@ type slide struct {
 	items  []*model.Node // a list slide's subtopics
 	path   []string      // the titles above the node
 	branch int           // the index of the main branch it is on
+	dia    *diaFile      // a diagram slide's set, and which kind of it
+	diaOf  string
+}
+
+// slidesFor are a canvas's slides, with, after the slide of each topic
+// whose 图解 was put among them, a slide for each kind drawn of it: its
+// flow, its states, its table.
+func (a *app) slidesFor(d *model.Document) []slide {
+	slides := slidesOf(d)
+	if d != a.doc {
+		return slides
+	}
+	var out []slide
+	put := map[string]bool{}
+	add := func(s slide, f *diaFile) {
+		put[f.Node] = true
+		for _, k := range f.Kinds() {
+			if k != "objects" {
+				out = append(out, slide{kind: slideDiagram, node: s.node, path: s.path, branch: s.branch, dia: f, diaOf: k})
+			}
+		}
+	}
+	for _, s := range slides {
+		out = append(out, s)
+		if f := a.diaOf(s.node.ID); f != nil && f.Present && !put[f.Node] && s.kind != slideTitle {
+			add(s, f)
+		}
+	}
+	for _, f := range a.mapDias() { // of a topic with no slide of its own: at the end
+		if n, _ := d.Find(f.Node); n != nil && f.Present && !put[f.Node] {
+			add(slide{node: n}, f)
+		}
+	}
+	return out
 }
 
 // steps is how many times Next stays on the slide, revealing an item.
@@ -92,6 +127,20 @@ func (a *app) slideView(c *ui.Context, d *model.Document, s slide, index, count 
 	box := ui.Column(c).Size(w, h).Background(col.bg).Clip().Font(font).TextColor(col.text)
 	box.Children(func() {
 		switch s.kind {
+		case slideDiagram:
+			// What it is of over it, and the diagram on a sheet of the app's
+			// own ground, as large as the slide has room for.
+			ui.Column(c).Grow(1).Padding(44*k, 64*k, 8*k).Gap(10 * k).Children(func() {
+				ui.Row(c).Gap(14 * k).AlignItems(ui.Baseline).Children(func() {
+					ui.Text(c, s.node.Title).FontSize(36 * k).Bold().SingleLine().Shrink(1).MinWidth(0)
+					ui.Text(c, diaKinds[s.diaOf]).FontSize(22 * k).TextColor(col.muted).NoWrap()
+				})
+				ui.Box(c).Size(64*k, 6*k).Radius(3*k).Background(col.accent).Margin(2*k, 0, 10*k)
+				t := c.Theme()
+				ui.Column(c).Grow(1).Basis(0).MinHeight(0).Center().Radius(14 * k).Background(t.Background).Children(func() {
+					a.diaFigure(c, s.dia, s.diaOf, flowAsSuits, w-128*k-48*k, h-(44+8+36+6+12+20+40+48)*k)
+				})
+			})
 		case slideTitle:
 			ui.Column(c).Grow(1).Center().Gap(24 * k).Padding(60 * k).Children(func() {
 				ui.Box(c).Size(80*k, 8*k).Radius(4 * k).Background(col.accent)
@@ -183,7 +232,7 @@ func (a *app) startPresenting(from string) {
 		return
 	}
 	a.commitEditIfAny()
-	a.slides = slidesOf(a.doc)
+	a.slides = a.slidesFor(a.doc)
 	a.slideIndex, a.slideStep = 0, 0
 	for i, s := range a.slides {
 		if from != "" && s.node.ID == from && s.kind != slideTitle {

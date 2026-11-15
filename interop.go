@@ -145,7 +145,7 @@ func (a *app) askExportSlides() {
 }
 
 func (a *app) slidesPDF(buf *bytes.Buffer) (err error) {
-	slides := slidesOf(a.doc)
+	slides := a.slidesFor(a.doc)
 	if len(slides) == 0 {
 		return errors.New("这个画布没有可生成的幻灯片")
 	}
@@ -169,6 +169,10 @@ func (a *app) slidesPDF(buf *bytes.Buffer) (err error) {
 		}, int(w), int(h))
 		tt.SetScale(2)
 		tt.Frame()
+		if s.kind == slideDiagram { // its figure is measured in a frame, and drawn to it in the next
+			tt.Frame()
+			tt.Frame()
+		}
 		pages = append(pages, tt.Image())
 	}
 	return formats.PDF(buf, pages, float64(w)*0.75) // points: 3/4 of a pixel

@@ -504,7 +504,13 @@ func (a *app) tasksView(c *ui.Context) {
 	plain := a.tasks.view == tasksWaiting || a.tasks.view == tasksReview || a.tasks.view == tasksAgents // a page of its own, not a list of tasks
 	a.tasks.table = !calendar && !plain && a.todayRoom(c) >= tableRoom
 	listWidth := float32(todayWidth)
-	if roomy { // as wide with a task chosen as without: its row does not move
+	switch {
+	case a.tasks.sel != "" && !rail && !calendar:
+		// With a task chosen the list takes all the room up to its
+		// details, as TickTick's does: capped, on a large screen it left a
+		// blank column between the two, which the user asked about.
+		listWidth = 4000
+	case roomy:
 		listWidth = 920
 	}
 	ui.Row(c.Key("tasks")).Grow(1).AlignItems(ui.Stretch).Label("任务").Children(func() {
