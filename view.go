@@ -97,7 +97,7 @@ func (a *app) pageView(c *ui.Context) {
 			}
 			ui.Column(c).Grow(1).Children(func() {
 				a.toolbar(c)
-				if a.doc == nil || a.mode != viewMap && a.mode != viewOutline {
+				if a.doc == nil || a.mode != viewMap && a.mode != viewOutline && a.mode != viewDiagram {
 					ui.Divider(c) // the map and the outline are the page itself
 				}
 				a.conflictBar(c)
@@ -116,6 +116,8 @@ func (a *app) pageView(c *ui.Context) {
 					a.timelineView(c)
 				case a.mode == viewOverview:
 					a.overviewView(c)
+				case a.mode == viewDiagram:
+					a.diagramView(c)
 				default:
 					a.canvasView(c)
 				}
@@ -455,5 +457,10 @@ func (a *app) aiBeside(c *ui.Context) bool { return false }
 // and with room for the map, unless the AI is asked.
 func (a *app) panelShown(c *ui.Context) bool {
 	w, _ := c.Size()
+	if a.mode == viewDiagram && !a.libOpen && a.doc != nil {
+		// A diagram says in it where what is chosen comes from: it shows
+		// though put away, while there is room.
+		return w-a.sideWidth()-a.panelWidth >= panelMinCanvas
+	}
 	return !a.panelOff && w-a.sideWidth()-a.panelWidth >= panelMinCanvas
 }

@@ -86,6 +86,7 @@ func (a *app) deleteFolder(dir string) {
 	}
 	for _, f := range maps {
 		a.removeMapMeta(f.Path)
+		a.dropDiasOf(f.Path)
 	}
 	gone := func(p string) bool { return inside(p, dir) }
 	a.cfg.Favorites = slices.DeleteFunc(a.cfg.Favorites, gone)
@@ -211,6 +212,7 @@ func (a *app) moved(from, to string) {
 		}
 	}
 	a.moveMapMetas(follow) // and their analyses
+	a.moveDias(follow)     // and what was drawn of their topics
 	a.path = follow(a.path)
 	a.renameViews(follow)
 	if a.path != "" {

@@ -72,6 +72,9 @@ func (a *app) rememberView() {
 	}
 	a.cam().selected = a.selected
 	v := &fileView{Sheet: a.doc.ID, Mode: a.mode, Cams: map[string]camState{}}
+	if v.Mode == viewDiagram { // a diagram is come back from, to the map
+		v.Mode = viewMap
+	}
 	for id, c := range a.cams {
 		if c.placed {
 			v.Cams[id] = camState{X: c.X, Y: c.Y, Zoom: c.Zoom, Selected: c.selected}

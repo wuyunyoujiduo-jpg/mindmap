@@ -401,4 +401,15 @@ func TestNewerMapAnalysis(t *testing.T) {
 	if !ok || !newer {
 		t.Fatalf("newer %v ok %v", newer, ok)
 	}
+	// What was drawn of a map's topics, the same.
+	p = ".library/diagrams/abc123.json"
+	if err := os.MkdirAll(filepath.Join(dir, ".library", "diagrams"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, filepath.FromSlash(p)), []byte(`{"path":"a.mindmap.json","updated":"2026-10-03T00:00:00Z","node":"abc123"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if newer, ok := newerClip(dir, p, []byte(`{"path":"a.mindmap.json","updated":"2026-10-02T00:00:00Z","node":"abc123"}`)); !ok || newer {
+		t.Fatalf("diagram: newer %v ok %v", newer, ok)
+	}
 }

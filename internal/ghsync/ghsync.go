@@ -524,8 +524,10 @@ func unchanged(dir, p, sha string) bool {
 // version, data, was edited after the local one; ok is false for other
 // files.
 func newerClip(dir, p string, data []byte) (newer, ok bool) {
-	// The maps' analyses, of the same form, are taken as clips.
-	if !strings.HasPrefix(p, ".library/clips/") && !strings.HasPrefix(p, ".library/maps/") || path.Ext(p) != ".json" {
+	// The maps' analyses and what was drawn of their topics, of the same
+	// form, are taken as clips.
+	if !strings.HasPrefix(p, ".library/clips/") && !strings.HasPrefix(p, ".library/maps/") &&
+		!strings.HasPrefix(p, ".library/diagrams/") || path.Ext(p) != ".json" {
 		return false, false
 	}
 	var theirs, ours struct {

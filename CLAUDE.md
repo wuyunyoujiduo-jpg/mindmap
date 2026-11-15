@@ -182,6 +182,30 @@ by AI, and an AI assistant.
     it goes. What a tree cannot hold is a floating topic (`annotate.go`),
     made handy instead: dragged out of the tree and back into it, made
     by the canvas's menu, of a clip too (`DESIGN.md`'s Hands).
+  - 图解 (`diagram.go`, `diagramview.go`, `internal/diagram`): a topic's
+    branch drawn by the AI to be understood by, in the canvas's place
+    (`viewDiagram`): a flow in lanes, the states of a thing, a table of
+    what is decided when, and the nouns of the matter (名词), read three
+    ways under the diagram (`diaWays`): 讲一遍, told a step a sentence;
+    拿例子走一遍, a case the AI chose lighting the same way on each kind;
+    考我, the table's results covered, and what was missed asked back
+    from 今天 three days on (`diaLine`). The user asked for it (0.96): a
+    tree says what is under what, and not what comes after what, turns
+    into what, or is decided when. A set is a view of the map, not a
+    fourth kind of thing (as the whiteboard would have been): drawn from
+    a topic, each box saying in the right column the topics it came from,
+    a click going back to them; telling when they changed since
+    (`branchSeen`, `diaChanges`); drawn again, never edited by hand (the
+    line 让 AI 改图 tells the AI how). What the map leaves unsaid the AI
+    marks and does not decide (`Gap`). Kept beside the library, in
+    `.library/diagrams/`, a file a topic by the topic's ID, on whichever
+    canvas of the map it is (the user: a map has several canvases, and
+    they are to work); a noun's places are looked up as it is shown, on
+    every canvas (`mentions`). The layout is the app's own
+    (`internal/diagram/layout.go`: a grid, routes round the boxes, and a
+    row a step when one would cross a box, `Crossed`). Its draft is
+    https://claude.ai/artifact/QMRCCAAu3tW9ni6CcVkRaL. Checks across maps
+    are not built: the user put them off.
   - 收集 (`libview.go`): notes and clips, a wall of cards that
     stand apart on the white page, each white with a hairline
     (`wallCard`; the user found one gray ground under them a slab); its 回顾 shows a

@@ -28,7 +28,15 @@ func (a *app) panel(c *ui.Context) {
 	t := c.Theme()
 	// The topic's page. The AI is not here: it floats over the window
 	// (aiFloat), and takes no room from any page.
-	ui.Column(c).Width(a.panelWidth).FillHeight().Background(t.Background).Children(func() { a.inspector(c) })
+	ui.Column(c).Width(a.panelWidth).FillHeight().Background(t.Background).Children(func() {
+		if a.mode == viewDiagram && a.doc != nil && a.diaOf(a.dia.node) != nil {
+			// A diagram's column: where what is chosen in it comes from.
+			ui.Row(c.Key("panel-head")).Height(20).Shrink(0).DragWindow()
+			ui.Scroll(c.Key("panel-diagram")).Grow(1).Children(func() { a.diaPanel(c) })
+			return
+		}
+		a.inspector(c)
+	})
 }
 
 // inspector is the panel's tabs: the node, its style and markers, the
@@ -81,6 +89,7 @@ func (a *app) inspector(c *ui.Context) {
 				ui.Column(c).Padding(16, 16, 0).Gap(12).Children(func() {
 					a.mapAnalysisSection(c)
 					a.mapMaterialSection(c)
+					a.mapDiasSection(c)
 					a.tagList(c) // the map's tags, which filter its nodes
 				})
 				a.canvasPanel(c)
@@ -200,6 +209,10 @@ func (a *app) nodePanel(c *ui.Context) {
 				if !files {
 					add("＋ 附件", "把文件附在主题上（也可以拖到主题上）", "files")
 				}
+				if diaWorth(n) && a.diaOf(n.ID) == nil && a.diaBusy != n.ID &&
+					addButton(c, "＋ 图解", "让 AI 把这一支画成流程、状态、判定表和名词，帮你看懂、记住").Clicked() {
+					a.later(func() { a.drawDia(n.ID, "") })
+				}
 				if n.Task != nil && n.Task.Start == nil && !a.panelShow[n.ID+":plan"] {
 					add("＋ 开始日期", "这个任务从哪天开始：时间线上显示成一段", "plan")
 				}
@@ -209,6 +222,7 @@ func (a *app) nodePanel(c *ui.Context) {
 			})
 
 			a.nodeFigures(c, n)
+			a.diaSection(c, n)
 		})
 	}()
 }

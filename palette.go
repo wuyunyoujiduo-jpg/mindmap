@@ -78,6 +78,16 @@ func (a *app) commands() []command {
 		{"复制节点", "⌘C", func() { a.copyNodes(false) }, hasDoc},
 		{"粘贴为子节点", "⌘V", func() { a.paste() }, hasDoc},
 		{"聚焦所选分支", "⌥↩", func() { a.focusOn(a.selected) }, hasDoc},
+		{"图解：把所选主题这一支画成流程、状态、判定表和名词", "", func() {
+			if a.diaOf(a.selected) != nil {
+				a.openDia(a.selected, "")
+			} else {
+				a.drawDia(a.selected, "")
+			}
+		}, func() bool {
+			n, _ := a.selectedNode()
+			return hasDoc() && !a.libOpen && (a.diaOf(a.selected) != nil || diaWorth(n))
+		}},
 		{"退出聚焦", "Esc", func() { a.focusOn("") }, func() bool { return a.focusNode() != nil }},
 		{"全部折叠（只看中心主题）", "", a.foldAll, hasDoc},
 		{"全部展开", "⌥0", func() { a.expandTo(0) }, hasDoc},
@@ -590,6 +600,9 @@ var shortcuts = []struct {
 		{"← → ↑ ↓", "在节点间移动"}, {"⌥↩", "聚焦所选分支"}, {"Esc", "取消多选 / 退出聚焦"},
 		{"⌥1–9 / ⌥0", "展开到第 N 层 / 全部展开"}, {"⌘= / ⌘- / ⌘0", "放大 / 缩小 / 实际大小"}, {"⌘⇧0", "回到中心"},
 		{"双指捏合 / ⌘ + 滚轮", "缩放"},
+	}},
+	{"图解", [][2]string{
+		{"← →", "讲一遍时：上一步 / 下一步"}, {"Esc", "退出讲一遍、走例子或考我；再按取消选中；再按回到导图"},
 	}},
 	{"导入导出", [][2]string{
 		{"⌘⇧E", "导出为图片"}, {"⌘⇧C", "复制当前画布为 Markdown"}, {"⌘⇧I", "导入 XMind"},

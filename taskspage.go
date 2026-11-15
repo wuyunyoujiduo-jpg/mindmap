@@ -543,6 +543,7 @@ func (a *app) tasksView(c *ui.Context) {
 					}
 					if band { // what the agents reported since it was last looked at
 						a.agentsLine(c)
+						a.diaLine(c)
 					}
 					a.taskList(c, items)
 				})

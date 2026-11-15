@@ -1104,6 +1104,9 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 		if a.noteEditing == n.ID && !exportingNow(a) {
 			a.notePopover(c, el, n)
 		}
+		if f := a.diaOf(n.ID); f != nil && !exportingNow(a) {
+			a.diaMark(c, f, z)
+		}
 		if m := filesMark(n); m != "" {
 			var names []string
 			for _, f := range n.Files {
@@ -1223,6 +1226,13 @@ func (a *app) nodeMenu(m *ui.Menu, n *model.Node, depth int) {
 	}
 	if m.Item("AI 拆解成任务").Chosen() {
 		a.later(a.aiBreakDown)
+	}
+	if a.diaOf(n.ID) != nil {
+		if m.Item("看图解").Chosen() {
+			a.later(func() { a.openDia(n.ID, "") })
+		}
+	} else if diaWorth(n) && m.Item("AI 画成图解").Chosen() {
+		a.later(func() { a.drawDia(n.ID, "") })
 	}
 	if depth > 0 && m.Item("移到其他导图…").Chosen() {
 		a.later(func() { a.openPalette(paletteMove) })

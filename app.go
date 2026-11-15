@@ -97,6 +97,9 @@ const (
 	viewTimeline
 	viewOverview
 	viewTable // no more a view either: it was the measures' sheet
+	// viewDiagram is a topic's 图解, in the canvas's place (diagram.go). It
+	// is left for the map, and never kept as the view a map was left on.
+	viewDiagram
 )
 
 // autosaveDelay is how long after the last change the map is saved.
@@ -251,16 +254,37 @@ type app struct {
 	mapMetaMod     time.Time
 	mapMetaFor     string
 	mapMetaVersion int
-	mapWorking     string
-	mapAuto        bool                 // the analysis running was started by itself
-	mapAutoAt      time.Time            // when the last one by itself started
-	mapAutoFailed  string               // the provider and key with which one failed: no more until they change
-	mapAutoSkip    map[string]time.Time // maps looked at, by path: their file's time then
-	mapErr         string
-	mapClipsSig    string
-	mapClipsList   []*library.Clip
-	mapIndex       *library.Index
-	outlineFocus   string // the node whose line the outline focuses
+
+	// The 图解 of topics (diagram.go): the sets of every map, by their
+	// topic's ID, and what of one shows.
+	dias          map[string]*diaFile
+	diaMod        time.Time
+	diaFor        string
+	diaVersion    int
+	diaIDsKey     string
+	diaIDsOf      map[string]*diaFile
+	diaChangeKey  string
+	diaChanged    diaChange
+	dia           diaState
+	diaBusy       string // the topic being drawn
+	diaSince      time.Time
+	diaErr        string
+	diaErrFor     string // the topic whose drawing failed
+	diaHover      string // the node of a graph under the pointer
+	diaFocus      bool   // the diagram takes the keys, just opened
+	diaStage      ui.Handle
+	diaBody       ui.Handle
+	mentionOf     map[string][]mention
+	mapWorking    string
+	mapAuto       bool                 // the analysis running was started by itself
+	mapAutoAt     time.Time            // when the last one by itself started
+	mapAutoFailed string               // the provider and key with which one failed: no more until they change
+	mapAutoSkip   map[string]time.Time // maps looked at, by path: their file's time then
+	mapErr        string
+	mapClipsSig   string
+	mapClipsList  []*library.Clip
+	mapIndex      *library.Index
+	outlineFocus  string // the node whose line the outline focuses
 	// The outline's lines selected whole, to copy, cut or delete: from
 	// outlineAnchor to outlineEnd, by dragging across lines or Shift+arrows.
 	outlineBlock              bool
@@ -546,6 +570,9 @@ func (a *app) open(path string) error {
 		a.broken = ""
 	}
 	a.path, a.file = path, f
+	if a.dia = (diaState{}); a.mode == viewDiagram { // a diagram is of the map left
+		a.mode = viewMap
+	}
 	// The directory goes with it: the folders it is in open, and its row
 	// is brought into view (treeReveal), so that where it is kept is seen.
 	for dir := filepath.Dir(path); dir != a.dir && inside(dir, a.dir); dir = filepath.Dir(dir) {
@@ -561,6 +588,7 @@ func (a *app) open(path string) error {
 	a.dirty, a.saveErr, a.lastEdit = false, "", ""
 	a.savedAt = time.Time{}
 	a.restoreView(f)
+	a.adoptDias()
 	a.cfg.File = path
 	a.cfg.save()
 	return nil
@@ -646,6 +674,7 @@ func (a *app) deleteMap(path string) {
 		return
 	}
 	a.removeMapMeta(path)
+	a.dropDiasOf(path)
 	if _, err := os.Stat(model.AssetsDir(path)); err == nil {
 		_ = a.plat.Trash(model.AssetsDir(path)) // its pictures go with it
 	}
