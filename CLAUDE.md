@@ -214,7 +214,21 @@ by AI, and an AI assistant.
     the arrows go from box to box (`diaMove`). It was tried on a real
     project's rules (ERGORA's), which is where a document in Markdown
     came to be imported as one, and a folder of them as one map, a canvas
-    a document (`internal/formats/document.go`, `importFolder`). Its draft
+    a document (`internal/formats/document.go`, `importFolder`). Its way
+    in is a tab of the map, with 导图, 大纲 and 看板 (`mainViews`,
+    `showView`): a key among the topic's was not seen, the user found;
+    with no set to show it is its own first page (`diaHome`), which draws
+    the topic chosen and lists the map's sets. Under the map's tabs its
+    head is one quiet row (`diaHead`): the topic, the kinds as words, the
+    one shown on the accent's tint. A flow shows as a drawing or as steps
+    (`diaSteps`, `Graph.Steps`): its main way a step a line, numbered, and
+    the other ways out of a step said by it in words, a way back a number
+    to go to and not a line to follow. The user asked whether a drawing
+    whose arrows crossed could be mended or was the wrong form: it was
+    the form, for a drawing says every "then" with a line and it is the
+    ways back that cross them; as steps the order says "then" for
+    nothing. A flow with two or more ways back or leaps shows so by
+    itself (`stepsSuit`), and either by a key at its corner. Its draft
     is https://claude.ai/artifact/QMRCCAAu3tW9ni6CcVkRaL. Checks across
     maps are not built: the user put them off.
   - 收集 (`libview.go`): notes and clips, a wall of cards that
@@ -284,6 +298,12 @@ by AI, and an AI assistant.
   - Before a page is shipped, hold its snapshot beside the reference and
     go part by part: the ground, the card, the type's weight, the color
     of the small keys. The user does, and sees it at once.
+  - A second level of tabs is not a second track with a pill under the
+    first: the two read as one thing said twice, and were ugly, the user
+    found of 图解's page. The level under is quiet words at the left, the
+    one chosen on the accent's tint.
+  - A page of a map has its way in among the map's tabs, where its
+    views are looked for; a small key among a topic's is not found.
 - The app's icon is drawn by `tools/icon/`; `resources/icon.png` is the
   desk (`tools/icon/desk.py`: a white note on the app's violet-blue, three lines
   each led by a dot of a map's color, the last ticked, the AI's spark), and

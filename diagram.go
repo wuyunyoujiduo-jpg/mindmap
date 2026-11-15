@@ -68,6 +68,32 @@ type diaState struct {
 	// noun is the noun looked for in the diagrams (from 1): what speaks of
 	// it is lit, the rest dimmed.
 	noun int
+	// as is how the flow shows: as a drawing of boxes and arrows, or as
+	// steps (flowAsSteps); 0 is as suits it (stepsSuit).
+	as int
+}
+
+// How a flow shows.
+const (
+	flowAsSuits = iota
+	flowAsGraph
+	flowAsSteps
+)
+
+// stepsSuit tells whether a flow reads better as steps than as a drawing:
+// when two or more of its ways go back or leap over a step, whose lines
+// are those that cross the others.
+func stepsSuit(g *diagram.Graph) bool {
+	_, tangled := g.Steps()
+	return tangled >= 2
+}
+
+// flowSteps tells whether the flow of the set shown is shown as steps.
+func (a *app) flowSteps(f *diaFile) bool {
+	if a.dia.kind != "flow" || f.Flow == nil {
+		return false
+	}
+	return a.dia.as == flowAsSteps || a.dia.as == flowAsSuits && stepsSuit(f.Flow)
 }
 
 func (a *app) diaDir() string { return filepath.Join(a.dir, ".library", "diagrams") }
@@ -555,7 +581,7 @@ func (a *app) drawDia(node, told string) {
 		// or on its topic with nothing being written. Turned elsewhere
 		// meanwhile, they are told, and go when they will.
 		here := a.path == path && !a.libOpen && (a.mode == viewDiagram && a.dia.node == node ||
-			a.mode == viewMap && a.selected == node && a.editing == "")
+			(a.mode == viewMap || a.mode == viewDiagram && a.dia.node == "") && a.selected == node && a.editing == "")
 		switch {
 		case here && prev != nil:
 			a.openDia(node, "")
@@ -648,7 +674,7 @@ func (a *app) diaSource(id string) {
 				return
 			}
 			a.openDia(was.node, was.kind)
-			a.dia.pick, a.dia.way, a.dia.step, a.dia.cas, a.dia.noun = was.pick, was.way, was.step, was.cas, was.noun
+			a.dia.pick, a.dia.way, a.dia.step, a.dia.cas, a.dia.noun, a.dia.as = was.pick, was.way, was.step, was.cas, was.noun, was.as
 			if was.way == diaQuiz {
 				a.dia.way = diaRead
 			}

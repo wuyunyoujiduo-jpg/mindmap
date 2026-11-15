@@ -603,6 +603,7 @@ func main() {
 				item("看板", "CmdOrCtrl+3", func() { a.mode = viewBoard }),
 				item("时间线", "CmdOrCtrl+4", func() { a.mode = viewTimeline }),
 				item("总览", "CmdOrCtrl+5", func() { a.mode = viewOverview }),
+				item("图解", "CmdOrCtrl+6", func() { a.showView(viewDiagram) }),
 				mygo.Separator(),
 				item("在导图中查找", "CmdOrCtrl+F", func() { a.searchOpen = true; a.mode = viewMap }),
 				mygo.Separator(),

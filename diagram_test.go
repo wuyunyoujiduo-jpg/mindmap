@@ -171,7 +171,7 @@ func TestDiagram(t *testing.T) {
 		t.Fatalf("states: %q", tt.Texts())
 	}
 	snapshot(t, tt, "diagram-state")
-	if err := tt.Click("图解 判定表"); err != nil {
+	if err := tt.Click("图解的判定表"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
@@ -185,7 +185,7 @@ func TestDiagram(t *testing.T) {
 	snapshot(t, tt, "diagram-table")
 
 	// The nouns: where the map speaks of one, on every canvas.
-	if err := tt.Click("图解 名词"); err != nil {
+	if err := tt.Click("图解的名词"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
@@ -355,10 +355,35 @@ func TestDiagram(t *testing.T) {
 	// Another canvas turned to leaves the diagram; a map renamed keeps its sets.
 	a.showSheet(a.file.Sheets[1].ID)
 	tt.Frame()
-	if a.mode != viewMap {
-		t.Fatal("the diagram stayed over another canvas")
+	if a.dia.node != "" || !tt.HasText("这张导图画过的") {
+		t.Fatalf("the diagram stayed over another canvas: %q", tt.Texts())
 	}
-	a.showSheet(a.file.Sheets[0].ID)
+	// 图解's first page lists the map's sets, of every canvas, and opens one.
+	snapshot(t, tt, "diagram-home")
+	if err := tt.Click("打开图解 退货退款"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.dia.node != root.ID || a.doc != a.file.Sheets[0] {
+		t.Fatal("not opened from the first page, on its canvas")
+	}
+	// The map's tabs: 导图 leaves it, 图解 comes back to the topic's set.
+	if err := tt.Click("导图"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.mode != viewMap {
+		t.Fatal("the tab 导图 did not leave the diagram")
+	}
+	a.selectNode(root.ID)
+	if err := tt.Click("图解"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.mode != viewDiagram || a.dia.node != root.ID {
+		t.Fatal("the tab 图解 did not open the topic's set")
+	}
+	a.closeDia()
 	a.rename(a.path, "订单规则")
 	tt.Frame()
 	if f = a.diaOf(root.ID); f == nil || f.Path != a.mapKey(a.path) {
@@ -598,4 +623,70 @@ func TestImportFolder(t *testing.T) {
 		t.Fatalf("notice %q", a.notice)
 	}
 	snapshot(t, tt, "import-folder")
+}
+
+// The tab 图解 is the way in: with no set yet, its first page says what it
+// is and draws the topic chosen.
+func TestDiagramTab(t *testing.T) {
+	a, tt := newTestApp(t)
+	fake := &fakeClaude{replies: []string{claudeText(refundSet)}}
+	a.sendAI = fake.send
+	a.cfg.AIKey = "sk-ant-test"
+	root := refundBranch(t, a)
+	a.selectNode(root.ID)
+	tt.Frame()
+	if err := tt.Click("图解"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.mode != viewDiagram || a.dia.node != "" || !tt.HasText("「退货退款」这一支") || tt.HasText("这张导图画过的") {
+		t.Fatalf("first page: %q", tt.Texts())
+	}
+	snapshot(t, tt, "diagram-home-empty")
+	if err := tt.Click("画成图解"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.diaOf(root.ID) == nil || a.dia.node != root.ID {
+		t.Fatalf("not drawn from the first page: %q", a.diaErr)
+	}
+	// Its head: the kinds as words, and the map's sets under its name.
+	if err := tt.Click("图解的判定表"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.dia.kind != "table" {
+		t.Fatalf("kind %q", a.dia.kind)
+	}
+	snapshot(t, tt, "diagram-head")
+	// A flow whose ways go back and across shows as steps; a plain one as a
+	// drawing; either by its key.
+	f := a.diaOf(root.ID)
+	a.dia.kind = "flow"
+	if a.flowSteps(f) {
+		t.Fatal("a plain flow shown as steps")
+	}
+	if err := func() error { tt.Frame(); return tt.Click("流程显示成步骤") }(); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !a.flowSteps(f) || !tt.HasText("↳ 是，免审") || !tt.HasText("到此结束") {
+		t.Fatalf("steps: %q", tt.Texts())
+	}
+	snapshot(t, tt, "diagram-steps")
+	if err := tt.Click("跳到第 6 步"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.dia.pick != "P" {
+		t.Fatalf("the leap led to %q", a.dia.pick)
+	}
+	tt.Key(0, ui.KeyDown)
+	if a.dia.pick != "V" {
+		t.Fatalf("the arrow led to %q", a.dia.pick)
+	}
+	a.setDiaWay(diaCase)
+	a.dia.cas = 1
+	tt.Frame()
+	snapshot(t, tt, "diagram-steps-case")
 }

@@ -1,6 +1,8 @@
 package diagram
 
 import (
+	"slices"
+	"strings"
 	"testing"
 )
 
@@ -287,5 +289,87 @@ func TestParse(t *testing.T) {
 	twice := &Graph{Nodes: []Node{{ID: "a", Title: "x"}, {ID: "a", Title: "y"}, {ID: "c", Title: "z"}}, Edges: []Edge{{"a", "c", ""}}}
 	if l := twice.LayoutFlow(); len(l.Routes) != 1 {
 		t.Fatalf("layout %+v", l)
+	}
+}
+
+// A flow told as steps: its main way in order, the other ways out of a
+// step in words, every edge once.
+func TestSteps(t *testing.T) {
+	g := refund()
+	steps, tangled := g.Steps()
+	var ids []string
+	for _, s := range steps {
+		ids = append(ids, s.Node)
+	}
+	if strings.Join(ids, " ") != "A B C D G P V M" {
+		t.Fatalf("main way %v", ids)
+	}
+	// 符合申请条件？: on by 是, out by 否 to 不受理, where it ends.
+	b := steps[1]
+	if b.Next != "是" || len(b.Exits) != 1 || b.Exits[0].Label != "否" || len(b.Exits[0].Pass) != 1 || b.Exits[0].Pass[0] != "X" || b.Exits[0].To != 0 {
+		t.Fatalf("B %+v", b)
+	}
+	// 质量问题？: 是，免审 leaps on to 取货, the sixth step.
+	if c := steps[2]; c.Next != "否" || len(c.Exits) != 1 || c.Exits[0].To != 6 || c.Exits[0].Back || len(c.Exits[0].Pass) != 0 {
+		t.Fatalf("C %+v", c)
+	}
+	if tangled != 1 {
+		t.Fatalf("tangled %d", tangled)
+	}
+	// A way back, and a question off the main way.
+	g.Edges = append(g.Edges, Edge{"R", "A", "改后重提"}, Edge{"X", "A", "补齐资料"}, Edge{"X", "M", "特批"})
+	steps, tangled = g.Steps()
+	if x := steps[4].Exits[0]; x.Label != "否" || len(x.Pass) != 1 || x.Pass[0] != "R" || x.To != 1 || !x.Back {
+		t.Fatalf("G's way back %+v", x)
+	}
+	if x := steps[1].Exits[0]; len(x.More) != 2 || x.More[0].To != 1 || x.More[1].To != 8 {
+		t.Fatalf("B's question off the way %+v", x)
+	}
+	if tangled < 2 {
+		t.Fatalf("tangled %d", tangled)
+	}
+	// Every edge is told once, of any graph; none is lost and none loops.
+	seed := uint32(11)
+	rnd := func(n int) int { seed = seed*1664525 + 1013904223; return int(seed>>16) % n }
+	for range 300 {
+		n := 2 + rnd(12)
+		g := &Graph{}
+		for i := range n {
+			g.Nodes = append(g.Nodes, Node{ID: string(rune('a' + i)), Title: "x"})
+		}
+		for range n + rnd(n) {
+			a, b := rnd(n), rnd(n)
+			if a != b && !slices.ContainsFunc(g.Edges, func(e Edge) bool { return e.From == g.Nodes[a].ID && e.To == g.Nodes[b].ID }) {
+				g.Edges = append(g.Edges, Edge{From: g.Nodes[a].ID, To: g.Nodes[b].ID})
+			}
+		}
+		steps, _ := g.Steps()
+		told := map[int]int{}
+		nodes := map[string]bool{}
+		var count func(xs []Exit)
+		count = func(xs []Exit) {
+			for _, x := range xs {
+				told[x.Edge]++
+				for _, k := range x.Chain {
+					told[k]++
+				}
+				for _, id := range x.Pass {
+					nodes[id] = true
+				}
+				count(x.More)
+			}
+		}
+		for _, s := range steps {
+			nodes[s.Node] = true
+			count(s.Exits)
+		}
+		if len(nodes) != n {
+			t.Fatalf("%d of %d nodes told: %+v", len(nodes), n, g)
+		}
+		for k, c := range told {
+			if c > 1 {
+				t.Fatalf("edge %d told %d times: %+v", k, c, g)
+			}
+		}
 	}
 }

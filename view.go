@@ -336,7 +336,7 @@ var (
 	mainViews = []struct {
 		mode int
 		name string
-	}{{viewMap, "导图"}, {viewOutline, "大纲"}, {viewBoard, "看板"}}
+	}{{viewMap, "导图"}, {viewOutline, "大纲"}, {viewBoard, "看板"}, {viewDiagram, "图解"}}
 	moreViews = []struct {
 		mode int
 		name string
@@ -357,7 +357,7 @@ func (a *app) viewTabs(c *ui.Context, room float32) {
 		ui.MenuButton(c, name, func(m *ui.Menu) {
 			for _, v := range append(slices.Clone(mainViews), moreViews...) {
 				if m.Item(v.name).Checked(a.mode == v.mode).Chosen() {
-					a.mode = v.mode
+					a.showView(v.mode)
 				}
 			}
 		}).Label("视图").Shrink(0)
@@ -393,7 +393,7 @@ func (a *app) viewTabs(c *ui.Context, room float32) {
 		}
 		for _, v := range mainViews {
 			if tab(v.name, v.name, a.mode == v.mode).Clicked() {
-				a.mode = v.mode
+				a.showView(v.mode)
 			}
 		}
 		more, on := "更多", false
@@ -457,10 +457,29 @@ func (a *app) aiBeside(c *ui.Context) bool { return false }
 // and with room for the map, unless the AI is asked.
 func (a *app) panelShown(c *ui.Context) bool {
 	w, _ := c.Size()
-	if a.mode == viewDiagram && !a.libOpen && a.doc != nil {
+	if a.mode == viewDiagram && !a.libOpen && a.doc != nil && a.diaOf(a.dia.node) != nil {
 		// A diagram says in it where what is chosen comes from: it shows
 		// though put away, while there is room.
 		return w-a.sideWidth()-a.panelWidth >= panelMinCanvas
 	}
 	return !a.panelOff && w-a.sideWidth()-a.panelWidth >= panelMinCanvas
+}
+
+// showView turns the map to a view. 图解 opens what was drawn of the topic
+// chosen when there is a set of it; else its own first page, which lists
+// the map's sets and draws one of the topic chosen.
+func (a *app) showView(mode int) {
+	if mode != viewDiagram {
+		a.mode = mode
+		return
+	}
+	if a.mode == viewDiagram {
+		return
+	}
+	if a.diaOf(a.selected) != nil {
+		a.openDia(a.selected, "")
+		return
+	}
+	a.commitEditIfAny()
+	a.mode, a.dia = viewDiagram, diaState{}
 }
