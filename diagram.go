@@ -72,6 +72,12 @@ func (a *app) diaDir() string { return filepath.Join(a.dir, ".library", "diagram
 // loadDias reads the sets again when their folder changed: when one was
 // written, or the sync brought some.
 func (a *app) loadDias() {
+	// Looked at once a second, not at every topic of every frame: what
+	// the app writes itself it knows of at once (writeDia).
+	if a.dias != nil && a.diaFor == a.dir && time.Since(a.diaLooked) < time.Second {
+		return
+	}
+	a.diaLooked = time.Now()
 	dir := a.diaDir()
 	mt := modTime(dir)
 	if a.dias != nil && mt.Equal(a.diaMod) && a.diaFor == a.dir {
@@ -89,12 +95,31 @@ func (a *app) loadDias() {
 			continue
 		}
 		var f diaFile
-		if json.Unmarshal(data, &f) == nil && f.Node != "" && f.Path != "" && !f.Empty() {
+		if json.Unmarshal(data, &f) != nil || f.Node == "" || f.Path == "" {
+			continue
+		}
+		// As an answer is: a file the sync brought, or of another
+		// version, is not drawn as it is.
+		f.Clean(func(id string) (string, bool) { return id, id != "" })
+		if !f.Empty() {
 			a.dias[f.Node] = &f
 		}
 	}
 	a.diaVersion++
 }
+
+// diaName is the file of a topic's set: named by the topic's ID, which is
+// a few letters and digits; one of a map written elsewhere that is not,
+// by a hash of it, so that no ID names a file outside the folder.
+func diaName(node string) string {
+	if safeID.MatchString(node) {
+		return node + ".json"
+	}
+	h := sha1.Sum([]byte(node))
+	return "x" + hex.EncodeToString(h[:10]) + ".json"
+}
+
+var safeID = regexp.MustCompile(`^[0-9A-Za-z_-]{1,64}$`)
 
 // writeDia keeps a topic's set.
 func (a *app) writeDia(f *diaFile) error {
@@ -107,7 +132,7 @@ func (a *app) writeDia(f *diaFile) error {
 	if err != nil {
 		return err
 	}
-	file := filepath.Join(dir, f.Node+".json")
+	file := filepath.Join(dir, diaName(f.Node))
 	if err := os.WriteFile(file+".tmp", data, 0o644); err != nil {
 		return err
 	}
@@ -124,7 +149,7 @@ func (a *app) writeDia(f *diaFile) error {
 
 // dropDia forgets a topic's set.
 func (a *app) dropDia(node string) {
-	if err := os.Remove(filepath.Join(a.diaDir(), node+".json")); err == nil {
+	if err := os.Remove(filepath.Join(a.diaDir(), diaName(node))); err == nil {
 		a.loadDias()
 		delete(a.dias, node)
 		a.diaMod = modTime(a.diaDir())
@@ -261,7 +286,7 @@ type diaChange struct {
 
 // diaChanges tells what of a set's branch changed since it was drawn.
 func (a *app) diaChanges(f *diaFile) diaChange {
-	key := fmt.Sprintf("%p %d %s", f, a.edits, a.path) // a set drawn again is another
+	key := fmt.Sprintf("%q %d %d %q", f.Node, a.diaVersion, a.edits, a.path) // a set drawn again is another
 	if key == a.diaChangeKey {
 		return a.diaChanged
 	}
@@ -323,8 +348,8 @@ func diaOutline(root *model.Node) (string, map[string]string) {
 		}
 		b.WriteString("\n")
 		if note := flat(n.Note); note != "" {
-			if r := []rune(note); len(r) > 400 {
-				note = string(r[:400]) + "…"
+			if r := []rune(note); len(r) > 1500 {
+				note = string(r[:1500]) + "（后面还有，没给你）"
 			}
 			b.WriteString(strings.Repeat("  ", depth+1) + "备注：" + note + "\n")
 		}
@@ -342,31 +367,31 @@ func diaOutline(root *model.Node) (string, map[string]string) {
 const diaSystem = `你把思维导图里的一支内容画成帮人理解的图解。只根据给你的内容画，原文没说的不要补；发现没说清、或互相矛盾的地方，写进 gaps，不要替用户决定。
 只回答一个 JSON 对象，不要任何别的文字。`
 
-const diaAsk = `画成下面几样。哪样内容里没有，就省略那个键，不要硬凑。
+const diaAsk = `回答是一个对象，键是 flow、state、table、objects、cases、gaps 这六个里有内容的那些：哪样内容里没有，就省略那个键，不要硬凑，也不要给空值。
 
 1. flow：流程。内容里有先后步骤时才画。
 {"lanes":["角色或部门"],"nodes":[{"id":"n1","kind":"start","title":"…","sub":"…","lane":0,"src":[1]}],"edges":[{"from":"n1","to":"n2","label":"…"}],"tell":[{"nodes":["n1"],"say":"…"}]}
-lanes 最多 5 个，没有角色之分就给空数组；lane 是 lanes 的下标。kind：start 起点（只一个）、step 步骤、decision 判断（title 用问句，出口的 label 写 是/否 或条件）、end 中途结束、ok 正常结束。title 不超过 8 个字，sub 可省，是不超过 12 个字的补充。最多 14 个节点。tell 按顺序把流程讲一遍，每步一句话，nodes 是这一步讲到的节点。
+lanes 最多 5 个，没有角色之分就给空数组，这时每个节点的 lane 都写 0；lane 是 lanes 的下标。kind：start 起点（只一个）、step 步骤、decision 判断（title 用问句，出口的 label 写 是/否 或条件）、end 中途结束、ok 正常结束。title 不超过 8 个字，sub 可省，是不超过 12 个字的补充；edges 的 label 不超过 6 个字。最多 14 个节点：放不下时，把几个被拒绝的出口并成一个 end，把细节留给 table。可以有往回走的边（比如驳回后重来）。tell 按顺序把流程讲一遍，每步一句话，nodes 是这一步讲到的节点。
 
 2. state：一个东西（单据、任务、账号……）有哪些状态、怎么变。内容里有状态时才画。
 {"nodes":[{"id":"s0","kind":"start"},{"id":"s1","title":"状态名","kind":"","src":[2]}],"edges":[{"from":"s0","to":"s1","label":"什么事让它变"}]}
-s0 是开始之前的圆点。kind：空是普通状态，ok 是圆满结束，bad 是被拒绝，end 是其他结束。label 不超过 8 个字。最多 9 个状态。
+s0 是开始之前的圆点。kind：空是普通状态，ok 是圆满结束，bad 是被拒绝，end 是其他结束。label 不超过 6 个字。最多 9 个状态。不要画从一个状态回到它自己的边。
 
 3. table：判定表。内容里有“什么情况下怎么办”的规则时才画。
 {"conds":["条件名"],"results":["结果名"],"rows":[{"when":["每个条件的取值"],"then":["每个结果"],"src":[3],"gap":false,"why":""}],"notes":[{"text":"表里放不下的规则","src":[4]}]}
-conds 最多 5 个，results 最多 3 个，rows 最多 10 行。不限的条件写“不限”。把条件的组合列全：导图没说怎么办的组合也列出来，gap 设为 true，then 留空，why 用一句话说哪里没说清。
+conds 最多 4 个，results 最多 2 个，rows 最多 10 行；每格不超过 12 个字。不限的条件写“不限”。只列结果不同的组合，用“不限”把结果相同的并成一行，不必列出每一种排列。导图没说怎么办、而又确实会遇到的组合也列出来，gap 设为 true，then 留空，why 用一句话说哪里没说清。条件放不进 4 个的规则写进 notes。
 
 4. objects：这一支里的名词：角色、单据、状态、系统、关键的量。
 [{"name":"名词","kind":"角色","what":"一句话：它是什么，在这里起什么作用","aliases":["导图里对它的其他叫法"]}]
-kind 从 角色、单据、状态、系统、规则、其他 里选。最多 12 个，只收导图里真的出现的词，至少两个字。
+kind 从 角色、单据、数据、状态、系统、规则、概念 里选最贴近的。最多 12 个，只收导图里真的出现的词，至少两个字。
 
 5. cases：3 到 5 个具体例子，用来把上面的图走一遍：每条主要规则一个，再加规则碰到一起或没说清的地方。
 [{"title":"不超过 10 个字","facts":["这个例子的具体情况，一项一条"],"flow":["依次经过的 flow 节点 id"],"states":["依次经过的 state 节点 id，不含 s0"],"row":1,"result":"一句话结果","gap":false}]
-row 是命中 table 的第几行，从 1 数，没有就写 0。走到导图没说清的地方走不下去的例子，gap 设为 true。
+row 是命中 table 的第几行，从 1 数，没有就写 0；没画 state 时 states 给空数组；flow 里可以重复经过同一个节点。走到导图没说清的地方走不下去的例子，gap 设为 true。
 
 6. gaps：导图里没说清、或互相矛盾的地方。
 [{"say":"一句话","src":[5],"row":0}]
-row 是对应 table 的第几行，没有就写 0。
+没说清的和互相矛盾的都写在这里，矛盾的在句子里说明是哪两处矛盾。row 是对应 table 里 gap 为 true 的那一行，没有就写 0。备注末尾写着“（后面还有，没给你）”是内容太长被截掉了，不算没说清。
 
 src 是这个节点、这一行依据的主题的编号（上面方括号里的数字），只能用出现过的编号。`
 
@@ -434,7 +459,11 @@ func diaWorth(n *model.Node) bool {
 // told is what the user asks of the drawing.
 func (a *app) drawDia(node, told string) {
 	n := a.file.Node(node)
-	if n == nil || a.diaBusy != "" {
+	if n == nil {
+		return
+	}
+	if a.diaBusy != "" {
+		a.tell("正在画另一组图解，等它画完再试")
 		return
 	}
 	if providerKey(a.cfg) == "" {
@@ -451,6 +480,7 @@ func (a *app) drawDia(node, told string) {
 	prompt, alias := a.diaPrompt(n, told)
 	seen := branchSeen(doc, n)
 	key, title := a.mapKey(a.path), n.Title
+	dir, path := a.dir, a.path
 	a.diaBusy, a.diaSince, a.diaErr, a.diaErrFor = node, a.now(), "", node
 	cfg := a.cfg
 	send, sendDS := a.sendAI, a.sendDeepSeek
@@ -471,6 +501,9 @@ func (a *app) drawDia(node, told string) {
 	}, func(v any, err error) {
 		a.diaBusy = ""
 		stageOver("diagram")
+		if a.dir != dir { // another folder was turned to: its sets are not this one's
+			return
+		}
 		set, _ := v.(*diagram.Set)
 		if err != nil || set == nil {
 			if err == nil {
@@ -485,13 +518,28 @@ func (a *app) drawDia(node, told string) {
 			a.diaErr = "保存图解失败：" + err.Error()
 			return
 		}
-		a.openDia(node, "")
-		if prev != nil {
+		// Shown at once only where the user waited for it: on its page,
+		// or on its topic with nothing being written. Turned elsewhere
+		// meanwhile, they are told, and go when they will.
+		here := a.path == path && !a.libOpen && (a.mode == viewDiagram && a.dia.node == node ||
+			a.mode == viewMap && a.selected == node && a.editing == "")
+		switch {
+		case here && prev != nil:
+			a.openDia(node, "")
 			was := *prev
 			a.tellUndo("照现在的导图重画了", func() {
 				if a.writeDia(&was) == nil && a.dia.node == node {
 					a.openDia(node, "")
 				}
+			})
+		case here:
+			a.openDia(node, "")
+		default:
+			a.tellAct("「"+title+"」的图解画好了", "看图解", func() {
+				if a.path != path && a.open(path) != nil {
+					return
+				}
+				a.openDia(node, "")
 			})
 		}
 	})
@@ -636,12 +684,18 @@ func (a *app) quizDue(f *diaFile) bool {
 // longest due first.
 func (a *app) diasDue() []*diaFile {
 	a.loadDias()
+	key := fmt.Sprint(a.diaVersion, a.dir, len(a.files), today(a.now()).Unix())
+	if key == a.diaDueKey {
+		return a.diaDue
+	}
+	maps := map[string]bool{} // the maps there are, by their key
+	for _, m := range a.files {
+		maps[a.mapKey(m.Path)] = true
+	}
 	var out []*diaFile
 	for _, f := range a.dias {
-		if a.quizDue(f) {
-			if _, err := os.Stat(filepath.Join(a.dir, filepath.FromSlash(f.Path))); err == nil {
-				out = append(out, f)
-			}
+		if a.quizDue(f) && maps[f.Path] {
+			out = append(out, f)
 		}
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -650,7 +704,31 @@ func (a *app) diasDue() []*diaFile {
 		}
 		return out[i].Node < out[j].Node
 	})
+	a.diaDueKey, a.diaDue = key, out
 	return out
+}
+
+// moveDiasTo has the sets of topics moved to another map follow them:
+// the topics keep their IDs there.
+func (a *app) moveDiasTo(nodes []*model.Node, path string) {
+	a.loadDias()
+	key := a.mapKey(path)
+	var walk func(n *model.Node)
+	walk = func(n *model.Node) {
+		if f := a.dias[n.ID]; f != nil && f.Path != key {
+			f.Path = key
+			_ = a.writeDia(f)
+		}
+		for _, c := range n.Children {
+			walk(c)
+		}
+		if t := n.SummaryTopic(); t != nil {
+			walk(t)
+		}
+	}
+	for _, n := range nodes {
+		walk(n)
+	}
 }
 
 // askBack opens a set of any map on its table, asked back.
@@ -684,7 +762,7 @@ const minNoun = 2
 // noun, by its name or another of its names, in their title or their
 // note. They are looked up as the map is, so they are never out of date.
 func (a *app) mentions(o diagram.Object) []mention {
-	key := fmt.Sprint(a.path, a.edits, o.Name, o.Aliases)
+	key := fmt.Sprintf("%q %d %q %q", a.path, a.edits, o.Name, o.Aliases)
 	if m, ok := a.mentionOf[key]; ok {
 		return m
 	}

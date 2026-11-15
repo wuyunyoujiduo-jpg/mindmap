@@ -295,6 +295,7 @@ func (a *app) moveToMap(path, sheet, id string) {
 		a.saveErr = err.Error()
 		return
 	}
+	a.moveDiasTo(nodes, path) // what was drawn of them goes with them
 	a.deleteSelection()
 	a.tell(fmt.Sprintf("已移到「%s」的「%s」下", mapName(path), title))
 }

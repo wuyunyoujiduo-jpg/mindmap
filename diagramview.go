@@ -253,7 +253,7 @@ func (a *app) diaStaleBar(c *ui.Context, f *diaFile) {
 			}
 		})
 	}
-	if a.diaErr != "" && a.diaBusy == "" {
+	if a.diaErr != "" && a.diaErrFor == f.Node && a.diaBusy == "" {
 		line("dia-err", a.diaErr, "再试一次", func() { a.drawDia(f.Node, f.Told) })
 	}
 	if ch := a.diaChanges(f); ch.n > 0 && a.diaBusy != f.Node {
@@ -516,7 +516,7 @@ func (a *app) diaTable(c *ui.Context, f *diaFile) {
 	cell := func(k any, text string, head bool) ui.Element {
 		b := ui.Box(c.Key(k)).Grow(1).Basis(0).MinWidth(0).Padding(0, 8)
 		b.Children(func() {
-			txt := ui.Text(c, text).FontSize(textSmall + 0.5).SingleLine().PassThrough()
+			txt := ui.Text(c, text).FontSize(textSmall + 0.5).Wrap().MaxLines(2).LineHeight(1.35).PassThrough()
 			switch {
 			case head:
 				txt.FontSize(textCaption).TextColor(t.TextMuted)
@@ -527,7 +527,7 @@ func (a *app) diaTable(c *ui.Context, f *diaFile) {
 		return b
 	}
 	ui.Scroll(c.Key("dia-table")).Grow(1).Basis(0).MinHeight(0).Bind(&a.diaBody).Children(func() {
-		ui.Column(c.Key("table")).MaxWidth(700).FillWidth().Padding(4, 20, 20).AlignSelf(ui.Center).Children(func() {
+		ui.Column(c.Key("table")).MaxWidth(860).FillWidth().Padding(4, 20, 20).AlignSelf(ui.Center).Children(func() {
 			ui.Row(c.Key("groups")).Padding(4, 0, 0).FillWidth().Children(func() {
 				ui.Box(c).Grow(float32(len(tb.Conds))).Basis(0).Padding(0, 8).Children(func() {
 					ui.Text(c, "什么情况").FontSize(textCaption).FontWeight(700).LetterSpacing(0.4).TextColor(t.TextMuted)
@@ -548,7 +548,7 @@ func (a *app) diaTable(c *ui.Context, f *diaFile) {
 				no := i + 1
 				pick := "row:" + strconv.Itoa(no)
 				hit := lit != nil && lit.rows[no]
-				row := ui.Row(c.Key(pick)).MinHeight(44).FillWidth().AlignItems(ui.Center).Cursor(ui.CursorPointer).
+				row := ui.Row(c.Key(pick)).MinHeight(44).Padding(5, 0).FillWidth().AlignItems(ui.Center).Cursor(ui.CursorPointer).
 					BorderWidth(0, 0, 1, 0).BorderColor(hairline(t)).Background(t.Text.Alpha(0)).Transition(rowMotion).
 					Label(fmt.Sprintf("第 %d 条", no))
 				switch {
@@ -602,7 +602,7 @@ func (a *app) diaTable(c *ui.Context, f *diaFile) {
 							case r.Gap:
 								ui.Text(c, "？").FontSize(textSmall + 0.5).TextColor(faint(t))
 							default:
-								txt := ui.Text(c, cmpOr(s, "—")).FontSize(textSmall + 0.5).SingleLine()
+								txt := ui.Text(c, cmpOr(s, "—")).FontSize(textSmall + 0.5).Wrap().MaxLines(2).LineHeight(1.35).Shrink(1).MinWidth(0)
 								if s == "" || s == "—" {
 									txt.TextColor(faint(t))
 								}
@@ -872,14 +872,22 @@ func (a *app) diaPanel(c *ui.Context) {
 			step := min(a.dia.step, len(f.Flow.Tell)-1)
 			st := f.Flow.Tell[step]
 			var ids []string
+			name := ""
 			for _, id := range st.Nodes {
-				for _, s := range f.Flow.Node(id).Src {
+				n := f.Flow.Node(id)
+				if n == nil {
+					continue
+				}
+				if name == "" {
+					name = n.Title
+				}
+				for _, s := range n.Src {
 					if !slices.Contains(ids, s) {
 						ids = append(ids, s)
 					}
 				}
 			}
-			head(fmt.Sprintf("讲一遍 · 第 %d 步", step+1), f.Flow.Node(st.Nodes[0]).Title)
+			head(fmt.Sprintf("讲一遍 · 第 %d 步", step+1), name)
 			say(st.Say)
 			sources("出自导图", ids)
 		case a.dia.way == diaCase && a.dia.cas < len(f.Cases) && a.dia.pick == "":
@@ -906,7 +914,7 @@ func (a *app) diaPanel(c *ui.Context) {
 			})
 			if cs.Gap {
 				var ids []string
-				if cs.Row > 0 && f.Table != nil {
+				if cs.Row > 0 && f.Table != nil && cs.Row <= len(f.Table.Rows) {
 					ids = f.Table.Rows[cs.Row-1].Src
 				}
 				mend(ids)
@@ -1078,7 +1086,9 @@ func (a *app) diaSetPanel(c *ui.Context, f *diaFile, head func(over, title strin
 				Grow(1).Basis(0).MinWidth(0)
 			if in.Submitted() && strings.TrimSpace(a.dia.told) != "" {
 				told := a.dia.told
-				a.dia.told = ""
+				if a.diaBusy == "" { // kept while another is being drawn, which is said
+					a.dia.told = ""
+				}
 				a.later(func() { a.drawDia(f.Node, told) })
 			}
 		})

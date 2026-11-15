@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -256,12 +257,28 @@ func TestDiagram(t *testing.T) {
 	// are, kept with the day to ask again.
 	a.setDiaWay(diaQuiz)
 	tt.Frame()
-	if tt.HasText("业务员") && !tt.HasText("名词") {
-		t.Fatal("results not covered")
+	if tt.HasText("主管") || tt.HasText("不可退") || !tt.HasText("不是质量问题") {
+		t.Fatalf("results not covered: %q", tt.Texts())
+	}
+	if err := tt.Click("第 6 条"); err != nil { // the one the map does not decide is not asked
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.dia.cur != 0 {
+		t.Fatal("a row the map leaves unsaid was asked back")
 	}
 	for i, right := range []bool{true, false, true, true, true} {
-		a.dia.open[i+1], a.dia.cur = true, i+1
+		if err := tt.Click(fmt.Sprintf("第 %d 条", i+1)); err != nil {
+			t.Fatal(err)
+		}
+		tt.Frame()
+		if !a.dia.open[i+1] || a.dia.cur != i+1 {
+			t.Fatalf("row %d not opened by its click", i+1)
+		}
 		if i == 1 {
+			if !tt.HasText("主管") || tt.HasText("不可退") {
+				t.Fatalf("the row opened does not show alone: %q", tt.Texts())
+			}
 			tt.Frame()
 			snapshot(t, tt, "diagram-quiz")
 			if err := tt.Click("没想起来"); err != nil {

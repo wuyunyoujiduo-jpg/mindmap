@@ -145,9 +145,16 @@ func TestLayoutNeverCrosses(t *testing.T) {
 	rnd := func(n int) int { seed = seed*1664525 + 1013904223; return int(seed>>16) % n }
 	for range 400 {
 		n := 2 + rnd(maxFlowNodes-1)
-		g := &Graph{Lanes: []string{"甲", "乙", "丙", "丁"}[:1+rnd(4)]}
+		g := &Graph{Lanes: []string{"甲", "乙", "丙", "丁"}[:rnd(5)]} // none too: its columns are found
 		for i := range n {
-			g.Nodes = append(g.Nodes, Node{ID: string(rune('a' + i)), Title: "x", Lane: rnd(len(g.Lanes))})
+			n := Node{ID: string(rune('a' + i)), Title: "x", Lane: rnd(max(len(g.Lanes), 1))}
+			switch rnd(4) { // of every size a box has
+			case 0:
+				n.Kind = KindDecision
+			case 1:
+				n.Sub = "y"
+			}
+			g.Nodes = append(g.Nodes, n)
 		}
 		for range n + rnd(n) {
 			a, b := rnd(n), rnd(n)
@@ -155,7 +162,7 @@ func TestLayoutNeverCrosses(t *testing.T) {
 				g.Edges = append(g.Edges, Edge{From: g.Nodes[a].ID, To: g.Nodes[b].ID})
 			}
 		}
-		if l := g.LayoutFlow(); l.Crossed(g) || len(l.Boxes) != n {
+		if l := g.LayoutFlow(); l.Crossed(g) || len(l.Boxes) != n || len(l.Routes) != len(g.Edges) {
 			t.Fatalf("flow %+v crossed", g)
 		}
 		s := &Graph{Nodes: append([]Node{{ID: "o", Kind: KindStart}}, g.Nodes[:min(n, maxStates)]...)}
@@ -165,9 +172,31 @@ func TestLayoutNeverCrosses(t *testing.T) {
 				s.Edges = append(s.Edges, e)
 			}
 		}
-		if l := s.LayoutState(); l.Crossed(s) || len(l.Boxes) != len(s.Nodes) {
+		if l := s.LayoutState(); l.Crossed(s) || len(l.Boxes) != len(s.Nodes) || len(l.Routes) != len(s.Edges) {
 			t.Fatalf("states %+v crossed", s)
 		}
+	}
+}
+
+// A flow with no lanes is not one long column: what turns off its
+// longest way is beside it.
+func TestFlowWithoutLanes(t *testing.T) {
+	g := refund()
+	g.Lanes = nil
+	for i := range g.Nodes {
+		g.Nodes[i].Lane = 0
+	}
+	l := g.LayoutFlow()
+	x := func(id string) float32 { return l.Boxes[id].X }
+	y := func(id string) float32 { return l.Boxes[id].Y + l.Boxes[id].H/2 }
+	if l.Width <= laneWidth || len(l.Lanes) != 0 || l.Head != 0 {
+		t.Fatalf("one column: %+v", l)
+	}
+	if x("X") <= x("B") || y("X") != y("B") || x("R") <= x("G") || y("R") != y("G") {
+		t.Fatalf("the ends not beside their questions: X %v,%v B %v,%v", x("X"), y("X"), x("B"), y("B"))
+	}
+	if l.Height >= 10*flowRow || l.Crossed(g) {
+		t.Fatalf("height %v crossed %v", l.Height, l.Crossed(g))
 	}
 }
 
@@ -248,5 +277,15 @@ func TestParse(t *testing.T) {
 	}
 	if _, err := Parse("画不出来"); err == nil {
 		t.Fatal("no error for no JSON")
+	}
+	// A kind written wrongly is not drawn; the others are.
+	s, err = Parse(`{"flow": [], "state": "", "table": {"conds": ["a"], "results": ["b"], "rows": [{"when": ["1"]}, {"when": ["2"]}]}, "objects": {}, "gaps": [{"say": "没写"}]}`)
+	if err != nil || s.Flow != nil || s.State != nil || s.Table == nil || len(s.Table.Rows) != 2 || len(s.Gaps) != 1 {
+		t.Fatalf("mixed answer: %+v, %v", s, err)
+	}
+	// A set not cleaned, with two nodes of one ID, lays out and ends.
+	twice := &Graph{Nodes: []Node{{ID: "a", Title: "x"}, {ID: "a", Title: "y"}, {ID: "c", Title: "z"}}, Edges: []Edge{{"a", "c", ""}}}
+	if l := twice.LayoutFlow(); len(l.Routes) != 1 {
+		t.Fatalf("layout %+v", l)
 	}
 }

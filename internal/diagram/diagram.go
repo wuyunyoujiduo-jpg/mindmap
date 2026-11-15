@@ -311,7 +311,7 @@ func cleanGraph(g *Graph, states bool, srcs func([]string) []string) *Graph {
 		if to, ok := rename[e.From]; ok {
 			e.From = to
 		}
-		e.Label = cut(e.Label, 10)
+		e.Label = cut(e.Label, 8)
 		if e.From == e.To || !has(e.From) || !has(e.To) || states && e.To == start ||
 			slices.ContainsFunc(edges, func(f Edge) bool { return f.From == e.From && f.To == e.To }) {
 			continue
@@ -493,17 +493,34 @@ func Parse(text string) (*Set, error) {
 	if i < 0 || j < i {
 		return nil, errors.New("no JSON object")
 	}
-	var raw any
+	var raw map[string]any
 	if err := json.Unmarshal([]byte(text[i:j+1]), &raw); err != nil {
 		return nil, err
 	}
-	b, err := json.Marshal(tidy("", raw))
-	if err != nil {
-		return nil, err
-	}
+	// A kind at a time: one written wrongly ("flow": [] for none, a list
+	// where a thing was asked) is not drawn, and the others are.
 	var s Set
-	if err := json.Unmarshal(b, &s); err != nil {
-		return nil, err
+	for key, into := range map[string]any{"flow": &s.Flow, "state": &s.State, "table": &s.Table,
+		"objects": &s.Objects, "cases": &s.Cases, "gaps": &s.Gaps} {
+		v, ok := raw[key]
+		if !ok || v == nil {
+			continue
+		}
+		switch v.(type) {
+		case map[string]any:
+			if key == "objects" || key == "cases" || key == "gaps" {
+				continue
+			}
+		case []any:
+			if key == "flow" || key == "state" || key == "table" {
+				continue
+			}
+		default:
+			continue
+		}
+		if b, err := json.Marshal(tidy("", v)); err == nil {
+			_ = json.Unmarshal(b, into)
+		}
 	}
 	return &s, nil
 }

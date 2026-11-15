@@ -261,6 +261,9 @@ type app struct {
 	diaMod        time.Time
 	diaFor        string
 	diaVersion    int
+	diaLooked     time.Time // when the sets' folder was last looked at
+	diaDueKey     string
+	diaDue        []*diaFile
 	diaIDsKey     string
 	diaIDsOf      map[string]*diaFile
 	diaChangeKey  string
@@ -570,6 +573,7 @@ func (a *app) open(path string) error {
 		a.broken = ""
 	}
 	a.path, a.file = path, f
+	a.edits++                                        // what was worked out of the map before is of another content
 	if a.dia = (diaState{}); a.mode == viewDiagram { // a diagram is of the map left
 		a.mode = viewMap
 	}

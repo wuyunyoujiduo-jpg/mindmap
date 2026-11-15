@@ -36,23 +36,24 @@ type Layout struct {
 
 // The sizes of a flow and of the states.
 const (
-	laneWidth  = 175
-	flowHead   = 36 // the lanes' names
-	flowRow    = 92
-	flowBoxW   = 152
-	flowBoxH   = 44
-	flowTallH  = 56 // a box with a second line
-	flowDiaH   = 60
-	stateCol   = 166
-	stateRow   = 140
-	stateBoxW  = 100
-	stateBoxH  = 44
-	stateLeft  = 60
-	stateDotY  = 44 // the row of the dot the states begin at
-	stateTop   = 140
-	dotSize    = 12
-	pairShift  = 9  // between two edges that would run on each other
-	gutterSide = 10 // of a detour between states, from a column's edge
+	laneWidth   = 175
+	flowHead    = 36 // the lanes' names
+	flowRow     = 92
+	flowBoxW    = 152
+	flowBoxH    = 44
+	flowTallH   = 56 // a box with a second line
+	flowDiaH    = 60
+	stateColMin = 166
+	stateColMax = 230
+	stateRow    = 140
+	stateBoxW   = 100
+	stateBoxH   = 44
+	stateLeft   = 60
+	stateDotY   = 44 // the row of the dot the states begin at
+	stateTop    = 140
+	dotSize     = 12
+	pairShift   = 9  // between two edges that would run on each other
+	gutterSide  = 10 // of a detour between states, from a column's edge
 )
 
 type cell struct{ c, r int }
@@ -195,11 +196,15 @@ func topo(g *Graph, fwd []bool) []string {
 			break // from the first again: the order written is kept where it may be
 		}
 		if !progressed { // cannot be, forward edges having no cycle
+			before := len(order)
 			for _, n := range g.Nodes {
 				if !done[n.ID] {
 					done[n.ID] = true
 					order = append(order, n.ID)
 				}
+			}
+			if len(order) == before { // two nodes of one ID, in a set not cleaned
+				break
 			}
 		}
 	}
@@ -221,7 +226,18 @@ func (g *Graph) LayoutFlow() Layout {
 }
 
 func (g *Graph) layoutFlow(apart bool) Layout {
+	fwd := forward(g)
 	lanes := max(len(g.Lanes), 1)
+	lane := func(n *Node) int { return n.Lane }
+	if len(g.Lanes) == 0 {
+		// With no lanes named it would be one long column: its longest
+		// way is the first column, and what turns off it goes beside.
+		auto := sideLanes(g, fwd)
+		lane = func(n *Node) int { return auto[n.ID] }
+		for _, c := range auto {
+			lanes = max(lanes, c+1)
+		}
+	}
 	head := float32(flowHead)
 	if len(g.Lanes) == 0 {
 		head = 0
@@ -232,10 +248,10 @@ func (g *Graph) layoutFlow(apart bool) Layout {
 		colL: func(c int) float32 { return float32(c) * laneWidth },
 		rowT: func(r int) float32 { return head + 2 + float32(r)*flowRow },
 	}
-	fwd := forward(g)
 	rows := 0
 	for _, id := range topo(g, fwd) {
 		n := g.Node(id)
+		col := lane(n)
 		r := 0
 		var beside []cell // those it comes from on other lanes
 		for i, e := range g.Edges {
@@ -246,7 +262,7 @@ func (g *Graph) layoutFlow(apart bool) Layout {
 			if !ok {
 				continue
 			}
-			if p.c == n.Lane {
+			if p.c == col {
 				r = max(r, p.r+1)
 			} else {
 				r = max(r, p.r)
@@ -257,10 +273,10 @@ func (g *Graph) layoutFlow(apart bool) Layout {
 			r = rows
 		}
 		for ; ; r++ {
-			if !gr.free(n.Lane, r) {
+			if !gr.free(col, r) {
 				continue
 			}
-			if !slices.ContainsFunc(beside, func(p cell) bool { return p.r == r && !gr.clear(p, cell{n.Lane, r}) }) {
+			if !slices.ContainsFunc(beside, func(p cell) bool { return p.r == r && !gr.clear(p, cell{col, r}) }) {
 				break
 			}
 		}
@@ -271,7 +287,7 @@ func (g *Graph) layoutFlow(apart bool) Layout {
 		case n.Sub != "":
 			h = flowTallH
 		}
-		gr.put(id, cell{n.Lane, r}, flowBoxW, h)
+		gr.put(id, cell{col, r}, flowBoxW, h)
 		rows = max(rows, r+1)
 	}
 	l := Layout{Boxes: map[string]Rect{}, Head: head, Width: float32(lanes) * laneWidth, Height: head + float32(rows)*flowRow + 8}
@@ -283,6 +299,72 @@ func (g *Graph) layoutFlow(apart bool) Layout {
 	}
 	l.Routes = routes(g, gr)
 	return l
+}
+
+// sideLanes gives the nodes of a flow with no lanes their columns: the
+// longest way from its beginning the first, and a node off it one column
+// further than what leads to it, three columns at most.
+func sideLanes(g *Graph, fwd []bool) map[string]int {
+	next := func(id string) []string {
+		var out []string
+		for i, e := range g.Edges {
+			if fwd[i] && e.From == id {
+				out = append(out, e.To)
+			}
+		}
+		return out
+	}
+	depth := map[string]int{}
+	var deep func(id string) int
+	deep = func(id string) int {
+		if d, ok := depth[id]; ok {
+			return d
+		}
+		depth[id] = 0
+		d := 0
+		for _, to := range next(id) {
+			d = max(d, deep(to)+1)
+		}
+		depth[id] = d
+		return d
+	}
+	lanes := map[string]int{}
+	order := topo(g, fwd)
+	at := ""
+	for _, n := range g.Nodes {
+		if n.Kind == KindStart {
+			at = n.ID
+			break
+		}
+	}
+	if at == "" && len(order) > 0 {
+		at = order[0]
+	}
+	main := map[string]bool{}
+	for at != "" {
+		main[at] = true
+		best := ""
+		for _, to := range next(at) {
+			if !main[to] && (best == "" || deep(to) > deep(best)) {
+				best = to
+			}
+		}
+		at = best
+	}
+	for _, id := range order {
+		if main[id] {
+			lanes[id] = 0
+			continue
+		}
+		c := -1
+		for i, e := range g.Edges {
+			if p, ok := lanes[e.From]; ok && fwd[i] && e.To == id && (c < 0 || p+1 < c) {
+				c = p + 1
+			}
+		}
+		lanes[id] = min(max(c, 1), 2)
+	}
+	return lanes
 }
 
 // LayoutState places the states of a thing: the longest way from the
@@ -300,6 +382,12 @@ func (g *Graph) LayoutState() Layout {
 }
 
 func (g *Graph) layoutState(apart bool) Layout {
+	// A column is as wide as the longest label of an arrow asks, which is
+	// written between two states.
+	stateCol := float32(stateColMin)
+	for _, e := range g.Edges {
+		stateCol = max(stateCol, min(stateBoxW+float32(len([]rune(e.Label)))*12.5+26, stateColMax))
+	}
 	gr := &grid{gut: gutterSide + 4, at: map[cell]string{}, pos: map[string]cell{}, size: map[string][2]float32{},
 		colX: func(c int) float32 { return stateLeft + stateBoxW/2 + float32(c)*stateCol },
 		rowY: func(r int) float32 {
