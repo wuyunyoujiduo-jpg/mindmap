@@ -558,6 +558,36 @@ func TestTodayOnAWideWindow(t *testing.T) {
 		t.Fatalf("what waits is not beside the tasks: %v %v", rail, list)
 	}
 	snapshot(t, tt, "today-wide")
+	// A task chosen in the list: its details are beside the list, and what
+	// waits is under the tasks, not a column between the two.
+	if err := tt.Click("任务 写周报"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Frame()
+	under, _ := tt.Find("记下的 买了永久的流量")
+	list2, _ := tt.Find("任务 写周报")
+	sheet, ok := tt.Find("任务备注")
+	if !ok || under.Y < list2.Y+list2.H || under.X >= sheet.X || list2.X != list.X {
+		t.Fatalf("with a task chosen: waiting %v, the task %v (was %v), its details %v", under, list2, list, sheet)
+	}
+	snapshot(t, tt, "today-wide-detail")
+	// Chosen from what waits beside the tasks, the column stays, its
+	// details beside it.
+	a.tasks.sel = ""
+	tt.Frame()
+	tt.Frame()
+	if err := tt.Click("记下的 交报销"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Frame()
+	stays, _ := tt.Find("记下的 交报销")
+	list3, _ := tt.Find("任务 写周报")
+	if a.tasks.sel == "" || stays.X < list3.X+list3.W-1 {
+		t.Fatalf("chosen from what waits, its column left: %v %v", stays, list3)
+	}
+	a.tasks.sel = ""
 	tt.SetSize(1280, 800)
 	tt.Frame()
 	tt.Frame()

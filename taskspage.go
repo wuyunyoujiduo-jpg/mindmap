@@ -76,6 +76,9 @@ type tasksState struct {
 	// sel is the task whose details show, as path#id; onMap the map whose
 	// tasks show alone, "" for all.
 	sel, onMap string
+	// selRail is the task chosen from what waits in the column beside
+	// the tasks: while its details show, that column stays.
+	selRail string
 	// The details edited: the title and the note, kept as they are typed
 	// and saved as they are left; the subtask being written.
 	title, note, draftOf string
@@ -489,13 +492,19 @@ func (a *app) tasksView(c *ui.Context) {
 	// under them, cut from them by a band; in a wide window beside them, in
 	// a column of its own, the tasks' column wider for the room there is.
 	band := a.tasks.view == tasksToday && a.tasks.onMap == ""
-	rail := band && a.todayRoom(c) >= railRoom
+	roomy := band && a.todayRoom(c) >= railRoom
+	// A task chosen in the list has its details beside the list: what
+	// waits gives its column up and is under the tasks meanwhile. It stood
+	// between the two, the user found, the details of a task a column away
+	// from the task. Chosen from what waits, it stays, the details beside
+	// it: a click does not take away what was clicked.
+	rail := roomy && (a.tasks.sel == "" || a.tasks.sel == a.tasks.selRail)
 	// With room, the list is a table: a column for a task's project and
 	// one for its day, named once over them.
 	plain := a.tasks.view == tasksWaiting || a.tasks.view == tasksReview || a.tasks.view == tasksAgents // a page of its own, not a list of tasks
 	a.tasks.table = !calendar && !plain && a.todayRoom(c) >= tableRoom
 	listWidth := float32(todayWidth)
-	if rail {
+	if roomy { // as wide with a task chosen as without: its row does not move
 		listWidth = 920
 	}
 	ui.Row(c.Key("tasks")).Grow(1).AlignItems(ui.Stretch).Label("任务").Children(func() {

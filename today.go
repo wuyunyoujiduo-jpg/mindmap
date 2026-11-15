@@ -453,7 +453,12 @@ func (a *app) waitingLine(c *ui.Context, w waitingItem, rail bool) {
 		row.Background(t.Text.Alpha(0.05))
 	}
 	if row.Clicked() {
-		a.later(func() { a.openWaiting(w) })
+		a.later(func() {
+			a.openWaiting(w)
+			if rail && w.task != nil {
+				a.tasks.selRail = w.task.key() // chosen from the column: it stays (tasksView)
+			}
+		})
 	}
 	row.ContextMenu(func(m *ui.Menu) { a.waitingMenu(m, w, has) })
 	row.Children(func() {
