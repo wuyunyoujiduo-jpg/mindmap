@@ -101,8 +101,12 @@ func ParseOPML(data []byte, title string) (*model.File, error) {
 
 // ParseMarkdown reads a Markdown outline: a first heading of the top level
 // becomes the root, under which the rest goes nested by headings and list
-// indentation; without one, a root named title holds it all.
+// indentation; without one, a root named title holds it all. A document,
+// with prose or tables under its headings, is read as one (parseDocument).
 func ParseMarkdown(text, title string) *model.File {
+	if isDocument(text) {
+		return parseDocument(text, title)
+	}
 	nodes := model.ParseOutline(text)
 	f := model.NewFile(title)
 	if len(nodes) == 1 {

@@ -96,3 +96,34 @@ func TestPDF(t *testing.T) {
 }
 
 func itoa(i int) string { return string(rune('0' + i)) }
+
+// A document, not an outline: its prose is notes, its tables' rows topics.
+func TestMarkdownDocument(t *testing.T) {
+	doc := "<!-- @author someone -->\n# 数据权限规则\n\n本文回答“这个员工能看到哪些记录”。\n见 [功能说明](../features/x.md)。\n\n## 1. 决策表\n\n" +
+		"| 编号 | 规则 | 说明 |\n|---|---|---|\n" +
+		"| R-PERM-01 | **全局一个开关**，`data_permission` 表（单行），默认关闭 | 关闭时不读授权表 |\n" +
+		"| R-PERM-02 | 档案自动过滤，单据按字段标记：员工、商品、客户档案开启后自动按自己的编号过滤 | a \\| b |\n\n" +
+		"## 2. 实现\n\n- 第一步\n  接着说\n- 一个很长很长的条目：它把一整段话写成了列表里的一项，放在导图上是读不了的，所以只取开头，全文放进备注里面\n  - 下一级\n\n```sql\nselect 1\n```\n"
+	f := ParseMarkdown(doc, "permission")
+	r := f.Sheets[0].Root
+	if r.Title != "数据权限规则" || !strings.Contains(r.Note, "本文回答") || strings.Contains(r.Note, "author") || len(r.Children) != 2 {
+		t.Fatalf("root %q note %q children %d", r.Title, r.Note, len(r.Children))
+	}
+	table := r.Children[0]
+	if table.Title != "1. 决策表" || len(table.Children) != 2 {
+		t.Fatalf("table %+v", table)
+	}
+	if row := table.Children[0]; row.Title != "R-PERM-01 全局一个开关" || !strings.Contains(row.Note, "**说明**：关闭时不读授权表") || !strings.Contains(row.Note, "**规则**：**全局一个开关**") {
+		t.Fatalf("row %q: %q", row.Title, row.Note)
+	}
+	if row := table.Children[1]; row.Title != "R-PERM-02 档案自动过滤" || !strings.Contains(row.Note, "a | b") {
+		t.Fatalf("row %q: %q", row.Title, row.Note)
+	}
+	impl := r.Children[1]
+	if len(impl.Children) != 2 || impl.Children[0].Title != "第一步 接着说" || !strings.Contains(impl.Note, "select 1") {
+		t.Fatalf("list %+v note %q", impl.Children, impl.Note)
+	}
+	if long := impl.Children[1]; long.Title != "一个很长很长的条目" || !strings.Contains(long.Note, "全文放进备注里面") || len(long.Children) != 1 {
+		t.Fatalf("long item %q: %q", long.Title, long.Note)
+	}
+}
