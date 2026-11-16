@@ -355,6 +355,7 @@ func TestIncluded(t *testing.T) {
 		".library/clips/1.json": true, ".library/files/x.pdf": true,
 		".library/vectors.json": false, ".sync/github.json": false, ".DS_Store": false,
 		"dir/.hidden": false, "a.mindmap.json.tmp": false, ".library": false,
+		".skills/review/SKILL.md": true, ".skills/_machines/mac.json": true, ".skills/.trash/x-1/SKILL.md": false,
 	} {
 		if Included(p) != want {
 			t.Errorf("Included(%q) = %v", p, !want)

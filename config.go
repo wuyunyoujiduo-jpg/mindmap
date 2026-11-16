@@ -14,6 +14,11 @@ type config struct {
 	// AgentsSeen is when what the AI agents reported was last looked at
 	// (agents.go): what came since is counted as new.
 	AgentsSeen time.Time `json:"agentsSeen,omitzero"`
+	// SkillsSeen are the AI agents found before (skillsview.go): one not
+	// among them is new, and said so; SkillsScanned is that they were
+	// looked for once, when every one found is taken as seen.
+	SkillsSeen    []string `json:"skillsSeen,omitempty"`
+	SkillsScanned bool     `json:"skillsScanned,omitempty"`
 	// PanelOpen shows the panel of the topic chosen beside the canvas: put
 	// away at first, which leaves the canvas the room.
 	PanelOpen bool `json:"panelOpen,omitempty"`

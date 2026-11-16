@@ -157,12 +157,14 @@ func Clean(s string) string {
 }
 
 // Included tells whether a file of the folder, by its slash-separated
-// relative path, is synced: maps, their assets and the library, but not
-// what can be made again, as the library's vectors, nor hidden files.
+// relative path, is synced: maps, their assets, the library and the
+// skills of the AI agents (.skills, internal/skills), but not what can be
+// made again, as the library's vectors, nor hidden files (the skills'
+// trash among them).
 func Included(rel string) bool {
 	parts := strings.Split(rel, "/")
 	for i, p := range parts {
-		if strings.HasPrefix(p, ".") && !(i == 0 && p == ".library" && len(parts) > 1) {
+		if strings.HasPrefix(p, ".") && !(i == 0 && (p == ".library" || p == ".skills") && len(parts) > 1) {
 			return false
 		}
 	}

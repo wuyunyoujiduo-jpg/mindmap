@@ -199,6 +199,19 @@ figures (`nodeFigures`); the field for a new tag is a pale block as every
 field; a column of the board says its count faint. The board's columns
 stay pale grounds under white cards (things of a kind, the user's rule).
 
+## AI 技能's page
+
+Built to the draft https://claude.ai/artifact/SUEZAk4SLoJ76BxsM9LXDE:
+a list of 今天 headed as the others, where the one copy is said in a
+pale block, the agents as cards apart (`wallCard`, chosen in the
+accent's line: a click shows its skills alone), the parts as quiet words
+(as 图解's kinds), then a table: a skill's name in the monospace (it is a
+folder's), a tool's two letters full where it has the skill and in a
+dashed outline where not, a dot of the accent where a copy took a
+link's place, the state a pill with a dot (the danger's for a fault).
+With nothing chosen the right column says what to look at and what a
+project's sessions load, as 图解's does.
+
 ## 今天's page
 
 Built to the draft https://claude.ai/artifact/5Nw4Mn4q4ozd9rpUNGh8AP.

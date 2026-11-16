@@ -1,0 +1,31 @@
+name: Agent tools
+
+# The table of the AI coding agents whose skills the app looks after
+# (internal/skills/tools.json), published to mindmap-models' release
+# desktop-latest as agent-tools.json, where the app reads it once a day
+# (skillsTableURL): an agent come out since a version was built is known
+# by it, the table changed on main and no new version made.
+on:
+  push:
+    branches: [main]
+    paths: [internal/skills/tools.json]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: mymind
+    env:
+      UPDATES_REPO: wuyunyoujiduo-jpg/mindmap-models
+      RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check the table reads
+        run: jq -e 'type == "array" and length > 0 and all(.[]; .id and .name and .home and (.global | length > 0))' internal/skills/tools.json
+      - name: Publish it
+        if: env.RELEASES_TOKEN != ''
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+        run: |
+          cp internal/skills/tools.json "$RUNNER_TEMP/agent-tools.json"
+          gh release upload desktop-latest "$RUNNER_TEMP/agent-tools.json" --repo "$UPDATES_REPO" --clobber

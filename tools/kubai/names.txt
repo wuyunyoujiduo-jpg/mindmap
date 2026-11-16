@@ -4,3 +4,4 @@ sidebar sparkles search settings folder folder-open sitemap scan
 sliders save sync plug
 key-round
 alarm-clock video
+puzzle

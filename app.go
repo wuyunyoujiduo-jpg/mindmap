@@ -402,10 +402,11 @@ type app struct {
 	async        asyncRunner
 	post         func(fn func()) // runs fn on the main thread, from any
 
-	tasks        tasksState // the tasks of all the maps (taskspage.go)
-	libReview    int        // the way 收集 looks back, or reviewOff (memos.go)
-	libWalk      int        // how many times 随机漫步 went on
-	clipTagsFor  int        // the library's version clipTagsList is of
+	tasks        tasksState  // the tasks of all the maps (taskspage.go)
+	skills       skillsState // the skills of the AI agents (skillsview.go)
+	libReview    int         // the way 收集 looks back, or reviewOff (memos.go)
+	libWalk      int         // how many times 随机漫步 went on
+	clipTagsFor  int         // the library's version clipTagsList is of
 	clipTagsOf   *library.Library
 	clipTagsList []tagCount
 	// lastTheme is the theme the window was last drawn in, for what is

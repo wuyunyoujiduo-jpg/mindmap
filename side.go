@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
@@ -179,6 +180,20 @@ func (a *app) todaySide(c *ui.Context) {
 			}
 			if sideRow(c, "list:agents", "AI 动态", count, noMap && a.tasks.view == tasksAgents, sideIcon(c, "sparkles")).Tooltip("AI 做了什么、定了什么、留下什么").Clicked() {
 				a.later(func() { a.showAgents("") })
+			}
+		}
+		// The skills of the agents, there once a tool is found; its count is
+		// what to look at.
+		if r := a.skills.report; r != nil && len(r.Tools) > 0 || a.tasks.view == tasksSkills {
+			count := ""
+			if n := a.skillsNeedCount(); n > 0 {
+				count = fmt.Sprint(n)
+			}
+			if sideRow(c, "list:skills", "AI 技能", count, noMap && a.tasks.view == tasksSkills, sideIcon(c, "puzzle")).Tooltip("各个 AI 编程工具的技能：在哪、管理、同步").Clicked() {
+				a.tasks.view, a.tasks.onMap = tasksSkills, ""
+				if a.skills.report == nil || a.now().Sub(a.skills.scanned) > 10*time.Second {
+					a.later(a.skillsRescan)
+				}
 			}
 		}
 		if n := len(a.waiting()); n > 0 || a.tasks.view == tasksWaiting {

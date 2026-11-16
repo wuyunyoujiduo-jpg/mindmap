@@ -378,6 +378,23 @@ by AI, and an AI assistant.
   `agentTools`; Codex's and Grok Build's were written from what is
   published of them, with neither tool at hand to try) give the brief as a session begins and ask for `log_session` when
   the code changed. Writers hold the folder's lock (`lock.go`).
+  The agents' skills are AI 技能, a list of 今天's left column beside
+  AI 动态 (`skillsview.go`, `internal/skills`, the user's, 0.99): which
+  agents there are (a table, `tools.json`, published on its own by the
+  workflow agent-tools and fetched once a day, `skillsTableURL`, and an
+  agent the table lacks found by `~/.name/skills/*/SKILL.md`; one found
+  since last seen said on the page, `skillsFresh`), each skill every
+  session's, a project's (the maps' `Project`s and Claude Code's
+  projects) or a plugin's, and what is wrong with it. A skill taken in
+  is kept once, in the maps folder's `.skills` (`~/.mymind-skills` with
+  none), synced by ghsync, and the agents' folders hold links to it (a
+  junction on Windows): the user asked for one copy and not one an agent
+  and a folder. A link in a repository is the user's to commit or not;
+  committed, it is said, and `MakeReal` puts the files there. What each
+  computer linked is in `.skills/_machines`, which the other offers.
+  Everything done to the folders has its way back (`skills.Undo`). Codex's
+  and the others' folders are as their documentation says (`Checked`
+  is Claude Code's alone).
   The app shows the logs as AI 动态, a list of 今天's left column
   (`agents.go`, `agentsView`): by day and project, each entry opened by a
   click and taken back by its menu (`takeBack`, with its way back); with

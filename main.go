@@ -532,6 +532,11 @@ func main() {
 				win.Update(func() { done(v, err) })
 			}()
 		}
+		// The agents and their skills, looked at now and whenever the app
+		// is come back to: one may have been installed meanwhile.
+		a.skillsFetchTable()
+		a.skillsRescan()
+		mygo.App.OnDidBecomeActive(func() { win.Update(a.skillsActive) })
 		item := func(label, accel string, fn func()) *mygo.MenuItem {
 			return &mygo.MenuItem{Label: label, Accelerator: accel, Click: func(*mygo.MenuItem, *mygo.Window) {
 				win.Update(fn)
