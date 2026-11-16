@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -151,7 +152,8 @@ func (a *app) skillsRescan() {
 			}
 		}
 	}
-	env := skills.Env{Home: home, Store: a.skillsStore(home), Machine: machineName(), Since: a.now().AddDate(0, 0, -30)}
+	env := skills.Env{Home: home, Store: a.skillsStore(home), Machine: machineName(), Since: a.now().AddDate(0, 0, -30),
+		Marked: maps.Clone(a.cfg.SkillsMarked)}
 	// The uses are counted once an hour: a scan comes whenever the app is
 	// come back to, and the records it reads are large.
 	if r := a.skills.report; r != nil && a.now().Sub(a.skills.counted) < time.Hour {
@@ -299,6 +301,11 @@ func skillState(t *ui.Theme, e *skills.Entry) (string, ui.Color) {
 		}
 	}
 	switch {
+	// Another's to keep: shown, never for the user to mend.
+	case e.Scope == skills.Plugin:
+		return "插件的，只读", faint(t)
+	case e.Scope == skills.Bundled:
+		return "工具自带，只读", faint(t)
 	case len(e.Copies) == 0 && len(e.Others) > 0:
 		return "在别的电脑上", t.Accent
 	case len(e.Issues) > 0:
@@ -313,8 +320,6 @@ func skillState(t *ui.Theme, e *skills.Entry) (string, ui.Color) {
 		return "有一份不一样的", t.Accent
 	case alike:
 		return "有一份重复的", t.Accent
-	case e.Scope == skills.Plugin:
-		return "插件的，只读", faint(t)
 	case !e.Stored:
 		return "未收进", faint(t)
 	case len(e.Copies) == 0:
@@ -325,7 +330,7 @@ func skillState(t *ui.Theme, e *skills.Entry) (string, ui.Color) {
 
 // skillNeeds tells whether a skill is for the user to look at.
 func skillNeeds(e *skills.Entry) bool {
-	if e.Secret && e.Scope != skills.Plugin {
+	if e.Secret && !e.ReadOnly() {
 		return true
 	}
 	switch s, _ := skillState(&ui.Theme{}, e); s {
@@ -380,11 +385,13 @@ func skillInPart(e *skills.Entry, part string) bool {
 	case part == "needs":
 		return skillNeeds(e)
 	case part == "unused":
-		return e.Used == 0 && len(e.Copies) > 0 && e.Scope != skills.Plugin
+		return e.Used == 0 && len(e.Copies) > 0 && !e.ReadOnly()
 	case part == "global":
 		return e.Scope == skills.Global && !skillElsewhere(e)
 	case part == "plugin":
 		return e.Scope == skills.Plugin
+	case part == "bundled":
+		return e.Scope == skills.Bundled
 	case part == "others":
 		return skillElsewhere(e)
 	case strings.HasPrefix(part, "repo:"):
@@ -487,6 +494,9 @@ func (a *app) skillsSide(c *ui.Context) {
 		}
 		if n := count("plugin"); n > 0 {
 			part("plugin", "插件带的", "plug", n, false)
+		}
+		if n := count("bundled"); n > 0 {
+			part("bundled", "工具自带的", "archive", n, false)
 		}
 		if n := count("others"); n > 0 {
 			part("others", "别的电脑上的", "sync", n, false)
@@ -712,7 +722,7 @@ func (a *app) skillsSuggestions() []skillSuggestion {
 	var take []*skills.Entry
 	dup, secret := 0, 0
 	for _, e := range r.Entries {
-		if e.Stored || e.Scope == skills.Plugin || skillOwner(r, e) == "" {
+		if e.Stored || e.ReadOnly() || skillOwner(r, e) == "" {
 			continue
 		}
 		if e.Secret {
@@ -751,6 +761,9 @@ func (a *app) skillsSuggestions() []skillSuggestion {
 	// Copies alike that took a link's place, and links to nothing.
 	var same, gone []func() (skills.Undo, error)
 	for _, e := range r.Entries {
+		if e.ReadOnly() {
+			continue
+		}
 		for tool, cp := range e.Copies {
 			switch cp.State {
 			case skills.Same:
@@ -972,6 +985,7 @@ func (a *app) skillsTable(c *ui.Context, shown []*skills.Entry) {
 		})
 	}
 	add("插件带的", "由插件管理，这里只能看", nil, func(e *skills.Entry) bool { return e.Scope == skills.Plugin })
+	add("工具自带的", "装工具时带的，由工具自己更新，这里只能看", nil, func(e *skills.Entry) bool { return e.Scope == skills.Bundled })
 	add("别的电脑上的", "随导图同步过来，这台还没链接", nil, elsewhere)
 	marksW := float32(len(r.Tools))*28 + 4
 	// In a narrow room the count of uses goes, before the names do.
@@ -1152,7 +1166,13 @@ func (a *app) skillMenu(m *ui.Menu, e *skills.Entry) {
 			a.later(func() { a.plat.ShowInFolder(dir) })
 		}
 	}
-	if e.Scope == skills.Plugin {
+	if mark, ok := skillMarkOffer(e); ok {
+		m.Separator()
+		if m.Item(mark).Chosen() {
+			a.later(func() { a.skillMarkOwn(e, e.Scope != skills.Bundled) })
+		}
+	}
+	if e.ReadOnly() {
 		return
 	}
 	m.Separator()
@@ -1181,6 +1201,48 @@ func (a *app) skillDo(done string, op func() (skills.Undo, error)) bool {
 		a.skillsRescan()
 	})
 	return true
+}
+
+// skillMarkOffer is the words of the item that says a skill came with its
+// tool, or that it did not, and whether it is offered: not for a skill
+// MyMind keeps, a project's or a plugin's, nor one in the tool's own
+// folder of them, which the table says.
+func skillMarkOffer(e *skills.Entry) (string, bool) {
+	switch {
+	case e.Stored || e.Scope == skills.Plugin || e.Scope == skills.Project || len(e.Copies) == 0:
+		return "", false
+	case e.Scope == skills.Bundled && strings.HasPrefix(e.Key, "b/"):
+		return "", false
+	case e.Scope == skills.Bundled:
+		return "不是工具自带的", true
+	}
+	return "标为工具自带", true
+}
+
+// skillMarkOwn keeps what the user said of a skill: that it came with its
+// tool, and is to be left alone, or that it did not.
+func (a *app) skillMarkOwn(e *skills.Entry, bundled bool) {
+	key := e.Key
+	was, had := a.cfg.SkillsMarked[key]
+	if a.cfg.SkillsMarked == nil {
+		a.cfg.SkillsMarked = map[string]bool{}
+	}
+	a.cfg.SkillsMarked[key] = bundled
+	a.cfg.save()
+	a.skillsRescan()
+	say := e.Name + " 标为工具自带：只显示，不再提示要处理，也不会被收进"
+	if !bundled {
+		say = e.Name + " 不再当作工具自带，和你自己的技能一样处理"
+	}
+	a.tellUndo(say, func() {
+		if had {
+			a.cfg.SkillsMarked[key] = was
+		} else {
+			delete(a.cfg.SkillsMarked, key)
+		}
+		a.cfg.save()
+		a.skillsRescan()
+	})
 }
 
 func (a *app) skillDisable(e *skills.Entry) {
@@ -1275,6 +1337,8 @@ func (a *app) skillsEffective(c *ui.Context) {
 					tip = "这个项目自己的"
 				case e.Scope == skills.Plugin:
 					tip = "插件 " + e.Plugin + " 的"
+				case e.Scope == skills.Bundled:
+					tip = "工具自带的"
 				}
 				b := ui.Box(c.Key("eff:"+e.Key)).Padding(2, 7).Radius(6).Background(cardColor(t)).InsetShadow(0, 0, 0, 1, hairline(t)).Tooltip(tip).Cursor(ui.CursorPointer)
 				if b.Clicked() {
@@ -1329,6 +1393,11 @@ func (a *app) skillDetail(c *ui.Context, e *skills.Entry) {
 				where = "项目 " + repoName(e)
 			case skills.Plugin:
 				where = "插件 " + e.Plugin
+			case skills.Bundled:
+				where = "工具自带"
+				if tl, ok := r.Tool(e.By); ok {
+					where = tl.Name + " 自带"
+				}
 			}
 			meta := where
 			if len(e.Copies) > 0 {
@@ -1365,12 +1434,17 @@ func (a *app) skillDetail(c *ui.Context, e *skills.Entry) {
 						a.plat.ShowInFolder(e.Dir)
 					}
 				}
+				if mark, ok := skillMarkOffer(e); ok && textKey(c, mark, mark+" "+e.Name, "").Clicked() {
+					a.later(func() { a.skillMarkOwn(e, e.Scope != skills.Bundled) })
+				}
 				if e.Scope == skills.Plugin {
 					if tl, ok := r.Tool(firstTool(e)); ok && textKey(c, "复制成自己的", "复制成自己的", "复制到 MyMind，作为全局技能链接到 "+tl.Name).Clicked() {
 						a.later(func() {
 							a.skillDo("已复制成自己的 "+e.Name, func() (skills.Undo, error) { return skills.CopyOwn(env, e, tl) })
 						})
 					}
+				}
+				if e.ReadOnly() {
 					return
 				}
 				if e.Stored && len(e.Copies) > 0 && textKey(c, "停用", "停用 "+e.Name, "拿掉各处的链接，MyMind 里留着").Clicked() {
@@ -1429,6 +1503,9 @@ func warnBlock(c *ui.Context, key string, lines []string, act func()) {
 func (a *app) skillWarnings(c *ui.Context, e *skills.Entry) {
 	env := a.skills.env
 	r := a.skills.report
+	if e.ReadOnly() {
+		return // another's to mend: its notes say whose
+	}
 	if len(e.Issues) > 0 {
 		warnBlock(c, "issues", e.Issues, nil)
 	}
@@ -1472,7 +1549,7 @@ func (a *app) skillWarnings(c *ui.Context, e *skills.Entry) {
 			})
 		}
 	}
-	if e.Secret && e.Scope != skills.Plugin {
+	if e.Secret {
 		say := "这个技能的文件里有一串像密钥的字。"
 		if e.Stored {
 			say += "它在 MyMind 里，会跟着导图同步到 GitHub：挪到环境变量里更稳妥。"
@@ -1502,6 +1579,18 @@ func (a *app) skillNotes(c *ui.Context, e *skills.Entry) {
 	switch {
 	case e.Scope == skills.Plugin:
 		note("plugin", "由插件 "+e.Plugin+" 装上和更新。要停用就停用整个插件；要改它，先复制成一份自己的。", nil)
+	case e.Scope == skills.Bundled:
+		tool := "工具"
+		if tl, ok := r.Tool(e.By); ok {
+			tool = tl.Name
+		}
+		why := "在 " + tool + " 放自带技能的地方"
+		if e.Marked {
+			why = "你标的"
+		} else if !strings.HasPrefix(e.Key, "b/") {
+			why = "它指向 " + tool + " 的安装目录"
+		}
+		note("bundled", "装 "+tool+" 时带的（"+why+"），由 "+tool+" 自己更新。改了会在它更新时被盖掉，换成链接也可能被它换回来，所以这里只显示、不处理，有什么问题也不提示。不想用它，在 "+tool+" 里关掉。", nil)
 	case len(e.Copies) == 0 && len(e.Others) > 0:
 		var where []string
 		for m, ts := range e.Others {
@@ -1602,7 +1691,7 @@ func (a *app) skillCopies(c *ui.Context, e *skills.Entry) {
 							a.later(func() { a.skillShowDiff(e, tl.ID) })
 						}
 					}
-					if !e.Stored || e.Scope == skills.Plugin || (cp != nil && cp.State != skills.Linked) {
+					if !e.Stored || e.ReadOnly() || (cp != nil && cp.State != skills.Linked) {
 						return
 					}
 					if e.Scope == skills.Project && (e.Repo == nil || len(tl.Project) == 0) {

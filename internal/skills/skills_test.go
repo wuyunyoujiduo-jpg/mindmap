@@ -425,3 +425,49 @@ func TestDiff(t *testing.T) {
 		t.Fatalf("%v", got)
 	}
 }
+
+// A tool's own skills, which it installs and updates, are of a kind of
+// their own: by the table's folders, by a link into the tool's install,
+// or as the user says.
+func TestBundled(t *testing.T) {
+	w := newWorld(t)
+	// Codex's own, in its hidden folder.
+	skill(t, filepath.Join(w.home, ".codex", "skills", ".system"), "skill-creator", "makes skills")
+	// A link into the tool's install, as some tools put theirs.
+	install := filepath.Join(w.home, ".codex", "vendor", "skills")
+	skill(t, install, "imagegen", "draws")
+	if err := os.Symlink(filepath.Join(install, "imagegen"), filepath.Join(w.home, ".codex", "skills", "imagegen")); err != nil {
+		t.Fatal(err)
+	}
+	// A link to the user's own folder is the user's.
+	mine := filepath.Join(w.home, "code", "my-skills")
+	skill(t, mine, "notes", "takes notes")
+	if err := os.Symlink(filepath.Join(mine, "notes"), filepath.Join(w.home, ".codex", "skills", "notes")); err != nil {
+		t.Fatal(err)
+	}
+	// One the user says came with a tool.
+	skill(t, filepath.Join(w.home, ".claude", "skills"), "builtin-ish", "")
+	w.env.Marked = map[string]bool{"g/builtin-ish": true, "g/imagegen": false}
+
+	r := Scan(w.env)
+	sc := r.Entry("b/codex/skill-creator")
+	if sc == nil || sc.Scope != Bundled || sc.By != "codex" || !sc.ReadOnly() {
+		t.Fatalf("skill-creator %+v", sc)
+	}
+	if n := r.Load("codex"); n < len("skill-creator")+len("makes skills") {
+		t.Errorf("a tool's own is loaded too: %d", n)
+	}
+	if e := r.Entry("g/notes"); e == nil || e.Scope != Global {
+		t.Errorf("a link to the user's folder taken as a tool's: %+v", e)
+	}
+	if e := r.Entry("g/builtin-ish"); e == nil || e.Scope != Bundled || e.By != "claude" || !e.Marked {
+		t.Errorf("marked by the user %+v", e)
+	}
+	if e := r.Entry("g/imagegen"); e == nil || e.Scope != Global || !e.Marked {
+		t.Errorf("said not to be a tool's own %+v", e)
+	}
+	w.env.Marked = nil
+	if e := Scan(w.env).Entry("g/imagegen"); e == nil || e.Scope != Bundled || e.By != "codex" {
+		t.Errorf("a link into the tool's install %+v", e)
+	}
+}

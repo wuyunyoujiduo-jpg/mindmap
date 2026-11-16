@@ -19,6 +19,9 @@ type config struct {
 	// looked for once, when every one found is taken as seen.
 	SkillsSeen    []string `json:"skillsSeen,omitempty"`
 	SkillsScanned bool     `json:"skillsScanned,omitempty"`
+	// SkillsMarked is what the user said of a skill, by its key: true that
+	// it came with its tool, false that it did not (skills.Env.Marked).
+	SkillsMarked map[string]bool `json:"skillsMarked,omitempty"`
 	// PanelOpen shows the panel of the topic chosen beside the canvas: put
 	// away at first, which leaves the canvas the room.
 	PanelOpen bool `json:"panelOpen,omitempty"`

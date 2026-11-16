@@ -40,6 +40,10 @@ type Tool struct {
 	// Plugins is the folder under which its plugins keep their skills,
 	// from the home, if it has plugins.
 	Plugins string `json:"plugins,omitempty"`
+	// Bundled are the folders, from the home, of the skills it comes
+	// with, which it installs and updates itself (Codex's
+	// .codex/skills/.system).
+	Bundled []string `json:"bundled,omitempty"`
 	// Usage names the record of its sessions that the skills used are
 	// counted from ("claude": ~/.claude/projects).
 	Usage string `json:"usage,omitempty"`

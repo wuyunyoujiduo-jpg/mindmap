@@ -405,6 +405,12 @@ by AI, and an AI assistant.
   and a folder. A link in a repository is the user's to commit or not;
   committed, it is said, and `MakeReal` puts the files there. What each
   computer linked is in `.skills/_machines`, which the other offers.
+  A tool's own skills, which it installs and updates (`Bundled`: the
+  table's `bundled` folders, Codex's `.system`; a link into the tool's
+  install, `bundledBy`; or as the user marks, `config.SkillsMarked`), are
+  shown and left alone as a plugin's are (`Entry.ReadOnly`): never taken
+  in, mended nor counted among 要处理, for the tool would put back what
+  was changed, the user asked (0.100.4).
   Everything done to the folders has its way back (`skills.Undo`). What
   is to do for many at once is offered at the page's head, a click each
   (`skillsSuggestions`: take all in, copies alike back to links, links

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -282,5 +283,57 @@ func TestSkillsTakeAll(t *testing.T) {
 		if isLink(filepath.Join(dir, "pdf")) {
 			t.Fatalf("%s not put back", dir)
 		}
+	}
+}
+
+// A tool's own skills, which it installs and updates itself, are shown
+// and left alone: not taken in, not to be mended, not 要处理; and one
+// the user says came with a tool is so too, with the way back.
+func TestSkillsBundled(t *testing.T) {
+	a, tt := newTestApp(t)
+	home := os.Getenv("HOME")
+	sys := filepath.Join(home, ".codex", "skills", ".system")
+	writeSkill(t, sys, "skill-creator", "")                             // no description: not the user's to mend
+	writeSkill(t, sys, "skill-installer", "TOKEN=abcdefghijklmnop1234") // what looks like a key, the tool's
+	writeSkill(t, filepath.Join(home, ".codex", "skills"), "release", "")
+	writeSkill(t, filepath.Join(home, ".claude", "skills"), "deploy", "发布")
+	a.showSkills()
+	tt.Frame()
+	tt.Frame()
+	if !tt.HasText("工具自带的") || !tt.HasText("skill-creator") || !tt.HasText("工具自带，只读") {
+		t.Fatalf("not shown: %q", tt.Texts())
+	}
+	if n := a.skillsNeedCount(); n != 1 { // release's missing description alone
+		t.Fatalf("要处理 %d", n)
+	}
+	if !tt.HasText("2 个技能还没收进 MyMind") {
+		t.Fatalf("a tool's own offered to take in: %q", tt.Texts())
+	}
+	if err := tt.Click("skill-creator"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	snapshot(t, tt, "skills-bundled")
+	all := strings.Join(tt.Texts(), "\n")
+	if !strings.Contains(all, "Codex 自带 ·") || strings.Contains(all, "没有 description") || slices.Contains(tt.Texts(), "收进 MyMind") {
+		t.Fatalf("its details: %q", tt.Texts())
+	}
+
+	// The user says release came with Codex: left alone too, and back.
+	a.skills.sel = "g/release"
+	tt.Frame()
+	if err := tt.Click("标为工具自带 release"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Frame()
+	if e := a.skills.report.Entry("g/release"); e == nil || e.Scope != 3 || a.skillsNeedCount() != 0 {
+		t.Fatalf("not marked: %+v", e)
+	}
+	a.noticeUndo()
+	tt.Frame()
+	tt.Frame()
+	if a.skillsNeedCount() != 1 || len(a.cfg.SkillsMarked) != 0 {
+		t.Fatal("not taken back")
 	}
 }

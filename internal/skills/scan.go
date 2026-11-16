@@ -23,14 +23,22 @@ import (
 )
 
 // Scope is where a skill is loaded: every session's, a project's, a
-// plugin's.
+// plugin's; or a tool's own, which came with it (Bundled), loaded in
+// every session too.
 type Scope int
 
 const (
 	Global Scope = iota
 	Project
 	Plugin
+	Bundled
 )
+
+// ReadOnly tells whether a skill is another's to keep: a plugin's or a
+// tool's own, installed and updated by them. MyMind shows it, and takes
+// it in, changes it or says what is wrong with it never: a change would
+// be put back at the next update, and a link put in its place undone.
+func (e *Entry) ReadOnly() bool { return e.Scope == Plugin || e.Scope == Bundled }
 
 // A Repo is a project's repository on this computer, whose skills are
 // looked for: Key names its folder in the store.
@@ -51,6 +59,9 @@ type Env struct {
 	// (the records of the sessions are large).
 	Since time.Time
 	Used  map[string]int
+	// Marked is what the user said of a skill by its key: true that it
+	// came with a tool, false that it did not, whatever its place says.
+	Marked map[string]bool
 }
 
 // CopyState is how a tool's folder holds a skill.
@@ -83,6 +94,10 @@ type Entry struct {
 	Scope  Scope
 	Repo   *Repo  // a project's
 	Plugin string // a plugin's
+	// By is the tool a bundled skill came with; Marked that the user said
+	// so, or that it is not (Env.Marked), and not the table or its link.
+	By     string
+	Marked bool
 	// Stored is that MyMind has it, at StorePath.
 	Stored    bool
 	StorePath string
@@ -205,6 +220,14 @@ func Scan(env Env) *Report {
 				}
 			}
 		}
+		for _, b := range t.Bundled {
+			for _, d := range skillDirs(filepath.Join(env.Home, b)) {
+				name := filepath.Base(d)
+				e := entry("b/"+t.ID+"/"+name, name, Bundled)
+				e.By = t.ID
+				addCopy(e, t.ID, d, "")
+			}
+		}
 		if t.Plugins != "" {
 			for _, ps := range pluginSkills(filepath.Join(env.Home, t.Plugins)) {
 				e := entry("x/"+t.ID+"/"+ps.plugin+"/"+ps.name, ps.name, Plugin)
@@ -261,6 +284,19 @@ func Scan(env Env) *Report {
 				}
 			}
 		}
+		// A tool's own, by where its folder is (a link into the tool's
+		// install), or as the user said.
+		if by := bundledBy(env, r.Tools, e); by != "" {
+			e.Scope, e.By = Bundled, by
+		}
+		if m, ok := env.Marked[e.Key]; ok && !e.Stored && e.Scope != Plugin && e.Scope != Project {
+			e.Marked = true
+			if m && e.Scope != Bundled {
+				e.Scope, e.By = Bundled, firstCopy(r.Tools, e)
+			} else if !m && e.Scope == Bundled && !strings.HasPrefix(e.Key, "b/") {
+				e.Scope, e.By = Global, ""
+			}
+		}
 		if dir != "" {
 			e.read(dir)
 		}
@@ -286,6 +322,67 @@ func Scan(env Env) *Report {
 		return a.Key < b.Key
 	})
 	return r
+}
+
+// bundledBy is the tool a skill of every session came with, by where it
+// is: each of its folders a link into where a program is installed (a
+// package's node_modules, an app, Homebrew's), or into the tool's own
+// folder outside its folders of skills. "" for none.
+func bundledBy(env Env, tools []Tool, e *Entry) string {
+	if e.Scope != Global || e.Stored || len(e.Copies) == 0 {
+		return ""
+	}
+	by := ""
+	for _, t := range tools {
+		c := e.Copies[t.ID]
+		if c == nil {
+			continue
+		}
+		if c.Target == "" || !installed(env.Home, t, c.Target) {
+			return ""
+		}
+		if by == "" {
+			by = t.ID
+		}
+	}
+	return by
+}
+
+// installed tells whether a link's target is where a program keeps what
+// it installs, and not a folder of the user's.
+func installed(home string, t Tool, target string) bool {
+	p := filepath.ToSlash(target)
+	for _, part := range []string{"/node_modules/", "/Cellar/", "/.app/", ".app/Contents/", "/Program Files", "/AppData/Local/Programs/", "/site-packages/"} {
+		if strings.Contains(p, part) {
+			return true
+		}
+	}
+	for _, root := range []string{"/Applications/", "/opt/", "/usr/", "/Library/"} {
+		if strings.HasPrefix(p, root) {
+			return true
+		}
+	}
+	// In the tool's own folder, and not in a folder of its skills.
+	own := filepath.Join(home, t.Home)
+	if rel, err := filepath.Rel(own, target); err != nil || strings.HasPrefix(rel, "..") {
+		return false
+	}
+	for _, g := range t.Global {
+		if rel, err := filepath.Rel(filepath.Join(home, g), target); err == nil && !strings.HasPrefix(rel, "..") {
+			return false
+		}
+	}
+	return true
+}
+
+// firstCopy is the first tool of the table's that has the skill.
+func firstCopy(tools []Tool, e *Entry) string {
+	for _, t := range tools {
+		if e.Copies[t.ID] != nil {
+			return t.ID
+		}
+	}
+	return ""
 }
 
 // projectsDir is the store's folder of the projects' skills: no skill's
