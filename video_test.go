@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/video"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
 )
 
@@ -46,11 +47,16 @@ func TestVideoClip(t *testing.T) {
 		t.Fatalf("no kind of videos: %v", err)
 	}
 	settle()
-	v := a.vids["card:"+clip.ID]
-	if v == nil {
-		t.Fatal("no player on the card")
+	// At rest a card opens no player: its poster, taken once.
+	if a.vids["card:"+clip.ID] != nil {
+		t.Fatal("a player on a card not pointed at")
 	}
-	t.Logf("the system's player: %v", v.broken())
+	for i := 0; i < 200 && len(a.grabs) > 0; i++ {
+		tt.Frame()
+		time.Sleep(10 * time.Millisecond)
+	}
+	tt.Frame()
+	tt.Frame()
 	snapshot(t, tt, "video-card")
 
 	a.libSel = clip.ID
@@ -105,7 +111,7 @@ func TestVideoSeenByTheAI(t *testing.T) {
 		tt.Frame()
 		time.Sleep(10 * time.Millisecond)
 	}
-	if clip.Organized == nil || a.grab != nil {
+	if clip.Organized == nil || len(a.grabs) > 0 {
 		t.Fatalf("not organized: %q", a.libStatus[clip.ID])
 	}
 	shots := a.vidShots[clip.ID]
@@ -124,8 +130,19 @@ func TestVideoSeenByTheAI(t *testing.T) {
 				_ = os.WriteFile(filepath.Join(dir, fmt.Sprintf("video-shot-%d.jpg", i)), p, 0o644)
 			}
 		}
+	} else if p, err := video.Open("testdata/clip.mp4"); err == nil {
+		p.Close()
+		t.Fatal("the system plays video, and no picture was taken of it")
 	} else if !strings.Contains(string(req), "画面没能读到") {
 		t.Fatalf("not told the pictures were not seen: %s", req)
+	} else if _, kept := a.vidShots[clip.ID]; kept {
+		t.Fatal("pictures not taken were kept: they would not be tried again")
+	}
+	// Its poster is kept with the cache, and its card shows it.
+	if len(shots.pics) > 0 {
+		if _, err := os.Stat(posterPath(clip)); err != nil || a.videoLen(clip) <= 0 {
+			t.Fatalf("no poster: %v, length %v", err, a.videoLen(clip))
+		}
 	}
 	if clip.Title != "彩条测试画面" || clip.Desc != "一段彩色竖条和计时器的测试视频。" || !strings.Contains(clip.Text, "计时器") {
 		t.Fatalf("title %q desc %q text %q", clip.Title, clip.Desc, clip.Text)
@@ -136,11 +153,33 @@ func TestVideoSeenByTheAI(t *testing.T) {
 }
 
 // TestShortClipsStayShort: of a line, the AI keeps a title, tags and the
-// words it is found by, and the details fold what it wrote at length.
+// words it is found by; what it says of what it does not know goes, a
+// sentence at a time, and only of its own answer: content that speaks of
+// what cannot be decided stays, and so does a description the user wrote.
 func TestShortClipsStayShort(t *testing.T) {
 	c := &library.Clip{Kind: library.KindLink, URL: "https://example.com", Text: "一句话的网页。"}
 	applyOrganized(c, &clipOrganized{Title: "一页", Desc: "这是一个网页，无法判断它的用途。", Summary: "它讲了一句话。", Analysis: "- 现状\n- 建议", Keywords: []string{"网页"}}, testNow)
 	if c.Title != "一页" || c.Summary != "" || c.Analysis != "" || c.Desc != "" {
 		t.Fatalf("%+v", c)
+	}
+	for _, s := range []string{"讲为什么量子态无法确定的科普文章", "合同条款，需确认付款日期", "介绍没有信息差时如何定价", "模型无法从少量样本泛化"} {
+		if fillerSaid(s) {
+			t.Errorf("content taken for filler: %q", s)
+		}
+	}
+	for _, s := range []string{"目前无法从文件名判断它拍的是什么、来自哪里、有什么用。", "需要打开播放并补充一句说明", "内容还需打开确认", "在确认内容前，无法判断它是素材、录屏还是教程"} {
+		if !fillerSaid(s) {
+			t.Errorf("filler not seen: %q", s)
+		}
+	}
+	if got := dropFiller("一段讲缓存的文章。目前无法从文件名判断它的用途。适合后端。"); got != "一段讲缓存的文章。适合后端。" {
+		t.Errorf("dropFiller: %q", got)
+	}
+	// Organized again, a description the user wrote stays when the answer
+	// has none, filler or not.
+	mine := &library.Clip{Kind: library.KindText, Text: strings.Repeat("长文", 300), Desc: "我写的：需要打开查看的那份合同"}
+	applyOrganized(mine, &clipOrganized{Title: "合同", Desc: "无法判断它的用途。"}, testNow)
+	if mine.Desc != "我写的：需要打开查看的那份合同" {
+		t.Fatalf("the user's description: %q", mine.Desc)
 	}
 }

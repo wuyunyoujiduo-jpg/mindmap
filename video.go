@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"image"
 	"image/jpeg"
+	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -121,38 +123,49 @@ func videoTime(d time.Duration) string {
 	return fmt.Sprintf("%d:%02d", s/60, s%60)
 }
 
-// videoCard is a video's face on its card: its first picture, which plays
-// without sound while the pointer is on the card, a round key of play over
-// it at rest, and its length at its corner.
+// videoCard is a video's face on its card: its poster, a picture taken
+// of it once and kept (read away from the window's work, as every
+// picture of a card), a round key of play over it and its length at its
+// corner; under the pointer, a player of it, without sound. A player on
+// each card of the wall was heavy, the review found: the wall builds all
+// its cards, scrolled past or not.
 func (a *app) videoCard(c *ui.Context, clip *library.Clip, hovered bool) {
-	t := c.Theme()
-	v := a.videoOf("card:"+clip.ID, a.lib.FilePath(clip))
+	poster := posterPath(clip)
+	pic, _ := a.filePicture(poster, true)
+	if pic == nil && poster != "" && !a.vidPosterAsked[clip.ID] {
+		if a.vidPosterAsked == nil {
+			a.vidPosterAsked = map[string]bool{}
+		}
+		a.vidPosterAsked[clip.ID] = true // once a run: one that cannot be seen is not asked again
+		if _, err := os.Stat(poster); err != nil {
+			a.queueGrab(clip.ID, false)
+		}
+	}
 	ui.Box(c.Key("video-face")).Height(110).FillWidth().Radius(8).Clip().Background(ui.Hex("#1d1d1f")).PassThrough().Children(func() {
-		ok := v.broken() == nil
-		if ok {
-			ui.Video(c, v.p).Fill().Fit(ui.Cover).PassThrough()
-			if hovered && v.p.Ready() {
-				if !v.p.Playing() {
+		if pic != nil {
+			ui.Image(c, pic).Fill().Fit(ui.Cover).PassThrough()
+		}
+		playing := false
+		if hovered {
+			if v := a.videoOf("card:"+clip.ID, a.lib.FilePath(clip)); v.broken() == nil {
+				ui.Video(c, v.p).Absolute().Left(0).Top(0).Right(0).Bottom(0).Fit(ui.Cover).PassThrough()
+				if v.p.Ready() && !v.p.Playing() {
 					v.p.SetLoop(true).Play()
 				}
-			} else {
-				holdFirst(v)
+				playing = v.p.Ready()
 			}
 		}
-		if !ok || !hovered {
+		if !playing {
 			ui.Box(c).Absolute().Left(0).Top(0).Right(0).Bottom(0).Center().PassThrough().Children(func() {
 				ui.Box(c).Size(34, 34).Radius(17).Background(ui.Hex("#000000").Alpha(0.45)).Center().PassThrough().Children(func() {
 					glyph(c, iconPlay, 13, ui.Hex("#ffffff"))
 				})
 			})
 		}
-		if ok && v.p.Duration() > 0 {
+		if d := a.videoLen(clip); d > 0 {
 			ui.Box(c).Absolute().Right(6).Bottom(6).Padding(1, 6).Radius(5).Background(ui.Hex("#000000").Alpha(0.55)).PassThrough().Children(func() {
-				ui.Text(c, videoTime(v.p.Duration())).FontSize(textCaption).TextColor(ui.Hex("#ffffff")).NoWrap()
+				ui.Text(c, videoTime(d)).FontSize(textCaption).TextColor(ui.Hex("#ffffff")).NoWrap()
 			})
-		}
-		if !ok {
-			ui.Text(c, "预览不了，可以用默认应用打开").Absolute().Left(10).Bottom(8).FontSize(textCaption).TextColor(t.TextMuted.MixOklab(ui.Hex("#ffffff"), 0.5)).NoWrap()
 		}
 	})
 }
@@ -294,14 +307,19 @@ func (a *app) videoBigView(c *ui.Context) {
 	})
 }
 
-// The AI sees a video by a few of its pictures (grabFrames): opened in a
-// player of its own, shown in a window that is not on the screen (a
-// Tester, which draws on the CPU what the system decoded), and stepped a
-// little at each of the window's frames, so that the window goes on
-// meanwhile: open it, wait for its first picture, then go to each time
-// and keep what shows once it has changed.
+// The pictures of a video are taken away from the clip's job, in a queue
+// of their own (a.grabs), a step at each of the window's frames: a player
+// of its own shown in a window that is not on the screen (a Tester, which
+// draws on the CPU what the system decoded), opened, its first picture
+// waited for, then each time gone to and what shows kept once it changed.
+// Of a video to organize, a few for the AI (grabShots), the first of
+// them its poster; of a video only shown, its poster. Its time is counted
+// while the window shows, for a window not seen draws no frame; and what
+// could not be seen is not kept, so that it is tried again. The review of
+// 0.98.0 found the clip queue held for the length of a grab, a grab timed
+// out on a window put behind another, and that failure kept.
 
-// vidShots are the pictures taken of a video, kept for the AI till the
+// vidShots are the pictures taken of a video for the AI, kept till the
 // app is closed, and its length.
 type vidShots struct {
 	pics [][]byte // JPEGs, in time's order
@@ -318,53 +336,79 @@ func (s vidShots) say() string {
 
 // frameGrab is the taking of a video's pictures, a step a frame.
 type frameGrab struct {
-	id              string
-	fetch, organize bool // the clip's job, started again once done
-	p               *ui.VideoPlayer
-	tt              *ui.Tester
-	at              []time.Duration
-	i, steps        int
-	since           time.Time
-	last            uint64 // what the picture before showed, to tell a new one
-	shots           vidShots
+	id     string
+	forAI  bool // the clip's organizing waits for it, and goes on once done
+	p      *ui.VideoPlayer
+	tt     *ui.Tester
+	at     []time.Duration
+	i      int
+	steps  int
+	spent  time.Duration // the time it was stepped, the window showing
+	lastAt time.Time
+	last   uint64 // what the picture before showed, to tell a new one
+	shots  vidShots
 }
 
 // grabShots is how many pictures the AI sees of a video.
 const grabShots = 4
 
-// grabFrames begins taking a video's pictures: the clip's job goes on
-// once they are taken, or once they cannot be.
-func (a *app) grabFrames(c *library.Clip, fetch, organize bool) {
-	a.libStatus[c.ID] = "正在看视频…"
-	a.grab = &frameGrab{id: c.ID, fetch: fetch, organize: organize, since: time.Now()}
+// queueGrab asks for a video's pictures: for the AI, or its poster alone.
+func (a *app) queueGrab(id string, forAI bool) {
+	for _, g := range a.grabs {
+		if g.id == id {
+			g.forAI = g.forAI || forAI
+			return
+		}
+	}
+	a.grabs = append(a.grabs, &frameGrab{id: id, forAI: forAI})
 }
 
-// stepGrab takes a step of the pictures being taken: called at each of
-// the window's frames.
-func (a *app) stepGrab() {
-	g := a.grab
-	if g == nil {
+// grabbingForAI tells whether a clip's organizing waits on its pictures.
+func (a *app) grabbingForAI() bool {
+	for _, g := range a.grabs {
+		if g.forAI {
+			return true
+		}
+	}
+	return false
+}
+
+// stepGrab takes a step of the pictures being taken: at each of the
+// window's frames while it shows.
+func (a *app) stepGrab(c *ui.Context) {
+	if len(a.grabs) == 0 || c.WindowHidden() {
 		return
 	}
+	g := a.grabs[0]
 	done := func() {
 		if g.p != nil {
 			g.p.Close()
 		}
-		a.grab = nil
+		a.grabs = a.grabs[1:]
+		cl := a.lib.Find(g.id)
+		if cl != nil && len(g.shots.pics) > 0 {
+			a.savePoster(cl, g.shots.pics[0], g.shots.dur)
+		}
+		if !g.forAI {
+			return
+		}
 		if a.vidShots == nil {
 			a.vidShots = map[string]vidShots{}
 		}
-		a.vidShots[g.id] = g.shots // none when it could not be seen: asked once
-		if cl := a.lib.Find(g.id); cl != nil {
-			a.startClipJob(cl, g.fetch, g.organize)
-		} else {
-			a.libWorking = ""
-			a.nextClipJob()
-		}
+		a.vidShots[g.id] = g.shots // used once when empty: tried again after
+		// Its organizing, which waited, goes on first.
+		a.libQueue = append([]clipJob{{g.id, true}}, a.libQueue...)
+		a.nextClipJob()
 	}
+	now := time.Now()
+	if !g.lastAt.IsZero() {
+		g.spent += min(now.Sub(g.lastAt), 100*time.Millisecond) // a gap is time not shown
+	}
+	g.lastAt = now
 	if g.p == nil {
 		cl := a.lib.Find(g.id)
 		if cl == nil {
+			delete(a.libStatus, g.id)
 			done()
 			return
 		}
@@ -376,7 +420,7 @@ func (a *app) stepGrab() {
 		g.p = p.SetMuted(true)
 		g.tt = ui.NewTester(func(c *ui.Context) { ui.Video(c, p).Fill().Fit(ui.Contain) }, 512, 288)
 	}
-	if time.Since(g.since) > 30*time.Second || g.p.Err() != nil {
+	if g.spent > 20*time.Second || g.p.Err() != nil {
 		done()
 		return
 	}
@@ -385,19 +429,19 @@ func (a *app) stepGrab() {
 		return
 	}
 	if g.at == nil {
-		// The times: the middles of grabShots parts, so that neither the
-		// black of its start nor its end is taken.
+		// The times: the middles of the parts, so that neither the black
+		// of its start nor its end is taken; the poster alone, at a tenth.
 		g.shots.dur = g.p.Duration()
 		if vw, vh := g.p.Size(); vw > 0 && vh > 0 {
 			k := min(1, 512/float64(max(vw, vh)))
 			g.tt.SetSize(max(int(float64(vw)*k), 16), max(int(float64(vh)*k), 16))
 		}
-		n := grabShots
-		if g.shots.dur < 2*time.Second {
-			n = 1
-		}
-		for k := range n {
-			g.at = append(g.at, time.Duration(float64(g.shots.dur)*(float64(k)+0.5)/float64(n)))
+		if g.forAI {
+			for k := range grabShots {
+				g.at = append(g.at, time.Duration(float64(g.shots.dur)*(float64(k)+0.5)/grabShots))
+			}
+		} else {
+			g.at = []time.Duration{g.shots.dur / 10}
 		}
 		g.p.Pause()
 		g.tt.Frame()
@@ -439,4 +483,51 @@ func pictureSum(img *image.RGBA) uint64 {
 		}
 	}
 	return s
+}
+
+// posterPath is where a video's poster is kept: with the app's cache, not
+// the library, which is synced. Its length is in a file beside it.
+func posterPath(c *library.Clip) string {
+	dir, err := os.UserCacheDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(dir, "MyMind", "posters", c.ID+".jpg")
+}
+
+// savePoster keeps a video's poster and its length.
+func (a *app) savePoster(c *library.Clip, pic []byte, dur time.Duration) {
+	if a.vidLens == nil {
+		a.vidLens = map[string]time.Duration{}
+	}
+	a.vidLens[c.ID] = dur
+	p := posterPath(c)
+	if p == "" || os.MkdirAll(filepath.Dir(p), 0o755) != nil {
+		return
+	}
+	if os.WriteFile(p, pic, 0o644) == nil {
+		_ = os.WriteFile(strings.TrimSuffix(p, ".jpg")+".len", []byte(strconv.FormatInt(int64(dur/time.Millisecond), 10)), 0o644)
+		delete(a.bitmaps, p) // read as missing before: read again
+		delete(a.bitmaps, "thumb:"+p)
+	}
+}
+
+// videoLen is a video's length, as kept with its poster: 0 when unknown.
+func (a *app) videoLen(c *library.Clip) time.Duration {
+	if d, ok := a.vidLens[c.ID]; ok {
+		return d
+	}
+	var d time.Duration
+	if p := posterPath(c); p != "" {
+		if b, err := os.ReadFile(strings.TrimSuffix(p, ".jpg") + ".len"); err == nil {
+			if ms, err := strconv.ParseInt(strings.TrimSpace(string(b)), 10, 64); err == nil {
+				d = time.Duration(ms) * time.Millisecond
+			}
+		}
+	}
+	if a.vidLens == nil {
+		a.vidLens = map[string]time.Duration{}
+	}
+	a.vidLens[c.ID] = d
+	return d
 }

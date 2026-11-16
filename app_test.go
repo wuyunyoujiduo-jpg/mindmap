@@ -4040,18 +4040,32 @@ func TestViewTabsStayWithASet(t *testing.T) {
 // column was put away.
 func TestTagsWrittenInATitle(t *testing.T) {
 	for _, c := range []struct {
-		in, title string
-		tags      []string
+		in, old, title string
+		tags           []string
 	}{
-		{"看看首页 #性能 #新标签", "看看首页", []string{"性能", "新标签"}},
-		{"#优化 加载慢", "加载慢", []string{"优化"}},
-		{"修 issue #12 和 C# 的事", "修 issue #12 和 C# 的事", nil},
-		{"https://x.com/a#b", "https://x.com/a#b", nil},
-		{"#性能，再看", "，再看", []string{"性能"}},
+		{"看看首页 #性能 #新标签", "", "看看首页", []string{"性能", "新标签"}},
+		{"#优化 加载慢", "", "加载慢", []string{"优化"}},
+		{"前端　#性能", "", "前端", []string{"性能"}}, // a full-width space
+		{"修 issue #12 和 C# 的事", "", "修 issue #12 和 C# 的事", nil},
+		{"https://x.com/a#b", "", "https://x.com/a#b", nil},
+		{"#性能，再看", "", "，再看", []string{"性能"}},
+		// Not tags: a color, a number, words that a number leads.
+		{"主色 #ff6600 按钮", "", "主色 #ff6600 按钮", nil},
+		{"#1号方案 和 #2024Q3", "", "#1号方案 和 #2024Q3", nil},
+		// A #word the title had before stays a word: an edit of a letter
+		// does not strip an imported title.
+		{"#include <stdio.h> 的用法", "#include <stdio.h> 的用发", "#include <stdio.h> 的用法", nil},
+		{"#include <stdio.h> #笔记", "#include <stdio.h>", "#include <stdio.h>", []string{"笔记"}},
 	} {
-		title, tags := titleTags(c.in)
+		title, tags := titleTags(c.in, c.old)
 		if title != c.title || !slices.Equal(tags, c.tags) {
 			t.Errorf("%q: %q %v, want %q %v", c.in, title, tags, c.title, c.tags)
+		}
+	}
+	// The offers follow the same rules: none for what will be no tag.
+	for in, want := range map[string]bool{"导出 #性": true, "导出 #": true, "修 #12": false, "#性能，再看": false, "a#b": false, "前端　#性": true} {
+		if _, got := titleTagBegun(in); got != want {
+			t.Errorf("titleTagBegun(%q) = %v", in, got)
 		}
 	}
 
@@ -4085,11 +4099,13 @@ func TestTagsWrittenInATitle(t *testing.T) {
 	if n.Title != "导出 PNG" || !n.HasTag("性能") || !n.HasTag("对外") || a.libraryIndex("对外") < 0 {
 		t.Fatalf("title %q, tags %v", n.Title, n.Tags)
 	}
+	// 撤销 on its toast takes back the title and the tags, and a tag it
+	// made is out of the library again.
 	id := n.ID
-	a.undo()
+	a.noticeUndo()
 	n, _ = a.doc.Find(id)
-	if n.Title != "支持导出图片" || n.HasTag("对外") {
-		t.Fatalf("not undone in one step: %q %v", n.Title, n.Tags)
+	if n.Title != "支持导出图片" || n.HasTag("对外") || a.libraryIndex("对外") >= 0 || a.libraryIndex("性能") < 0 {
+		t.Fatalf("not undone in one step: %q %v, library has 对外: %v", n.Title, n.Tags, a.libraryIndex("对外") >= 0)
 	}
 
 	// 新建标签… with the right column put away.

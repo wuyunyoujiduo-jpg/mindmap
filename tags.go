@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
@@ -213,8 +215,8 @@ func (a *app) tagPicker(c *ui.Context, n *model.Node) {
 		if in.Focused() {
 			in.Background(t.Background).InsetShadow(0, 0, 0, 1.5, t.Accent)
 		}
-		if a.tagFocus { // asked for by the 标签 menu's 新建标签…
-			a.tagFocus = false
+		if a.tagFocus > 0 { // asked for by the 标签 menu's 新建标签…
+			a.tagFocus = 0
 			in.Focus()
 		}
 		if in.Submitted() {
@@ -256,26 +258,42 @@ func (a *app) tagMenu(m *ui.Menu, n *model.Node) {
 					a.panelShow = map[string]bool{}
 				}
 				a.panelShow[n.ID+":tags"] = true // the picker, with its field
-				a.tagFocus = true
+				a.tagFocus = 3                   // a few frames: the field not drawn by then, it is not asked for later
 			})
 		}
 		m.Item("在标题里写 #标签 也能加").Disabled(true)
 	})
 }
 
-// titleTag is a #tag in a topic's title: # at its start or after a space,
-// then what is up to a space or a mark. A # in a word (C#, a link's
-// #part) is no tag, nor # and a number alone (#12, an issue's).
-var titleTag = regexp.MustCompile(`(^|\s)#([^\s#，。,.!！?？;；:：、（）()\[\]{}"'“”]+)`)
+// titleTag is a #tag in a topic's title: # at its start or after a space
+// (a full-width one too), then what is up to a space or a mark.
+var titleTag = regexp.MustCompile(`(^|[\s　])#([^\s　#，。,.!！?？;；:：、（）()\[\]{}"'“”<>]+)`)
 
-// titleTags takes the #tags out of a title: what is left of it, its words
-// closed up, and the tags.
-func titleTags(title string) (string, []string) {
+// hexColor is a color written as #ff6600: no tag, though letters lead it.
+var hexColor = regexp.MustCompile(`^(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$`)
+
+// tagWord tells whether what follows a # is a tag: it begins with a
+// letter, of any script, and is no color. #12, #2024Q3, #1号方案 and
+// #ff6600 are words of the title.
+func tagWord(w string) bool {
+	r, _ := utf8.DecodeRuneInString(w)
+	return w != "" && unicode.IsLetter(r) && !(hexColor.MatchString(w) && strings.ContainsAny(w, "0123456789"))
+}
+
+// titleTags takes out of a title the #tags written in it since old, the
+// title before the edit: what is left of it, its words closed up, and
+// the tags. A #word it had before stays a word: a title imported with
+// one is not stripped by the edit of a letter of it, the review found.
+func titleTags(title, old string) (string, []string) {
+	had := map[string]bool{}
+	for _, m := range titleTag.FindAllStringSubmatch(old, -1) {
+		had[m[2]] = true
+	}
 	var tags []string
 	out := titleTag.ReplaceAllStringFunc(title, func(m string) string {
 		sub := titleTag.FindStringSubmatch(m)
 		tag := sub[2]
-		if strings.Trim(tag, "0123456789") == "" {
+		if !tagWord(tag) || had[tag] {
 			return m
 		}
 		if !slices.Contains(tags, tag) {
@@ -289,14 +307,25 @@ func titleTags(title string) (string, []string) {
 	return strings.Join(strings.Fields(out), " "), tags
 }
 
-// titleTagBegun is the tag being written at a title's end: after a # at
-// its start or after a space, with no space since.
+// titleTagBegun is the tag being written at a title's end, by the rules
+// of titleTags: after a # at its start or after a space, with no space
+// nor mark since, and a letter first.
 func titleTagBegun(title string) (string, bool) {
 	i := strings.LastIndex(title, "#")
-	if i < 0 || i > 0 && !strings.ContainsAny(title[i-1:i], " \t") || strings.ContainsAny(title[i:], " \t\n　") {
+	if i < 0 {
 		return "", false
 	}
-	return title[i+1:], true
+	if i > 0 {
+		r, _ := utf8.DecodeLastRuneInString(title[:i])
+		if !unicode.IsSpace(r) {
+			return "", false
+		}
+	}
+	part := title[i+1:]
+	if part != "" && (!tagWord(part) || titleTag.FindString("#"+part) != "#"+part) {
+		return "", false
+	}
+	return part, true
 }
 
 // tagOffers are the tags, of the maps and of 收集, that begin with part
@@ -309,4 +338,20 @@ func (a *app) tagOffers(part string, n int) []string {
 		}
 	}
 	return out
+}
+
+// dropUnusedTags takes tags out of the library that no topic of the open
+// map carries: those a title made, taken back.
+func (a *app) dropUnusedTags(tags []string) {
+	if len(tags) == 0 || a.file == nil {
+		return
+	}
+	used := a.file.AllTags()
+	n := len(a.cfg.Tags)
+	a.cfg.Tags = slices.DeleteFunc(a.cfg.Tags, func(t tagDef) bool {
+		return slices.Contains(tags, t.Name) && !slices.Contains(used, t.Name)
+	})
+	if len(a.cfg.Tags) != n {
+		a.cfg.save()
+	}
 }

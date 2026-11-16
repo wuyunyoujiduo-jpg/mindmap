@@ -22,10 +22,8 @@ type mdBlock struct {
 }
 
 var (
-	mdHeading = regexp.MustCompile(`^(#{1,6})\s+(.*)$`)
-	// A bullet, or a dash a converter escaped (\-) at a line's start: a
-	// list pasted as text and written back, which is a list still.
-	mdBullet   = regexp.MustCompile(`^(\s*)(?:[-*+]|\\-)\s+(.*)$`)
+	mdHeading  = regexp.MustCompile(`^(#{1,6})\s+(.*)$`)
+	mdBullet   = regexp.MustCompile(`^(\s*)[-*+]\s+(.*)$`)
 	mdOrdered  = regexp.MustCompile(`^(\s*)(\d+)[.)]\s+(.*)$`)
 	mdRule     = regexp.MustCompile(`^\s*(?:(?:-\s*){3,}|(?:\*\s*){3,}|(?:_\s*){3,})$`)
 	mdTableSep = regexp.MustCompile(`^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$`)
@@ -86,15 +84,11 @@ func parseMarkdown(src string) []mdBlock {
 			blocks = append(blocks, b)
 		default:
 			if ind := mdIndent.FindString(trimmed); ind != "" {
-				// Indented by entities: under the list item before it, blank
-				// lines between or not; else a paragraph, the spaces gone.
+				// Indented by entities: the second line of the list item it
+				// follows straight on; else a paragraph, the spaces gone (a
+				// first line indented after a list is no part of it).
 				rest := strings.TrimSpace(trimmed[len(ind):])
-				k := len(blocks) - 1
-				for k >= 0 && blocks[k].kind == "gap" {
-					k--
-				}
-				if k >= 0 && (blocks[k].kind == "li" || blocks[k].kind == "ol") {
-					blocks = blocks[:k+1]
+				if k := len(blocks) - 1; k >= 0 && (blocks[k].kind == "li" || blocks[k].kind == "ol") {
 					sep := ""
 					if t := blocks[k].text; t != "" && rest != "" && t[len(t)-1] < 0x80 && rest[0] < 0x80 {
 						sep = " " // words of a script that spaces them

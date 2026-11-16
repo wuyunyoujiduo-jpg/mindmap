@@ -28,11 +28,13 @@ func TestMarkdownEscapes(t *testing.T) {
 	}
 }
 
-// Entities show as a page shows them, and spaces written as entities at a
-// line's start are a list item's second line, as a converter writes it:
-// the user's note showed "&#32;&#32;都要有出处".
+// Entities show as a page shows them, and spaces written as entities at
+// a line's start make the line a list item's second line when it follows
+// the item straight on: the user's note showed "&#32;&#32;都要有出处". An
+// escaped dash is a dash, and a first line indented after a list is a
+// paragraph of its own.
 func TestMarkdownEntities(t *testing.T) {
-	src := "\\- 先说读了哪些文件；每个数字、名称、流程\n\n&#32;&#32;都要有出处，拿不准的不写进视频。\n\n\\- 6～9 块板\n\n- a list\n&#32;&#32;goes on\n\nalone &amp; &lt;b&gt; `&amp;`"
+	src := "\\- 先说读了哪些文件；每个数字、名称、流程\n\n&#32;&#32;都要有出处，拿不准的不写进视频。\n\n- a list\n&#32;&#32;goes on\n\n&nbsp;&nbsp;首行缩进的一段\n\nalone &amp; &lt;b&gt; `&amp;`"
 	var got []string
 	for _, b := range parseMarkdown(src) {
 		var s strings.Builder
@@ -42,9 +44,10 @@ func TestMarkdownEntities(t *testing.T) {
 		got = append(got, b.kind+":"+s.String())
 	}
 	want := []string{
-		"li:先说读了哪些文件；每个数字、名称、流程都要有出处，拿不准的不写进视频。",
-		"li:6～9 块板",
+		"p:- 先说读了哪些文件；每个数字、名称、流程",
+		"p:都要有出处，拿不准的不写进视频。",
 		"li:a list goes on",
+		"p:首行缩进的一段",
 		"p:alone & <b> &amp;",
 	}
 	if strings.Join(got, "|") != strings.Join(want, "|") {

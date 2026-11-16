@@ -14,6 +14,9 @@ import (
 func (a *app) view(c *ui.Context) {
 	a.tick(c)
 	a.sweepVideos()
+	if a.tagFocus > 0 {
+		a.tagFocus--
+	}
 	motionOff = a.noMotion
 	if a.noMotion {
 		c.DisableAnimations()
@@ -81,8 +84,8 @@ func (a *app) view(c *ui.Context) {
 		a.runPending()
 		c.Invalidate()
 	}
-	if a.grab != nil { // a video's pictures being taken for the AI: a step a frame
-		a.stepGrab()
+	if len(a.grabs) > 0 { // a video's pictures being taken: a step a frame
+		a.stepGrab(c)
 		c.Invalidate()
 	}
 }

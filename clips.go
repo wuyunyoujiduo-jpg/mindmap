@@ -266,7 +266,7 @@ func (a *app) nextClipJob() {
 		}
 		a.startClipJob(c, fetch, organize)
 	}
-	if a.libWorking == "" && len(a.libQueue) == 0 && a.orgTotal > 0 {
+	if a.libWorking == "" && len(a.libQueue) == 0 && a.orgTotal > 0 && !a.grabbingForAI() {
 		// The run is over: said, when it was of several and long enough.
 		if a.orgTotal > 1 && a.now().Sub(a.orgSince) > 2*time.Second {
 			a.orgResult = fmt.Sprintf("整理了 %d 条资料", a.orgTotal)
@@ -297,8 +297,15 @@ func (a *app) startClipJob(c *library.Clip, fetch, organize bool) {
 		// had a random name and nothing else, and the AI said so at length.
 		shots, ok := a.vidShots[c.ID]
 		if !ok {
-			a.grabFrames(c, fetch, organize)
+			// Its pictures first, in their own queue: the clips after it
+			// go on meanwhile, and it comes back at the queue's head.
+			a.libWorking = ""
+			a.libStatus[c.ID] = "正在看视频…"
+			a.queueGrab(c.ID, true)
 			return
+		}
+		if len(shots.pics) == 0 {
+			delete(a.vidShots, c.ID) // not seen this time: tried again when asked again
 		}
 		for _, s := range shots.pics {
 			images = append(images, aiImage{s, "image/jpeg"})
@@ -395,18 +402,12 @@ func applyOrganized(c *library.Clip, o *clipOrganized, now time.Time) {
 	if clipContentLen(c, o) < analysisLen || c.Kind == library.KindImage || isVideo(c) {
 		o.Analysis = ""
 	}
-	if fillerSaid(o.Desc) {
-		o.Desc = ""
-	}
-	if fillerSaid(o.Summary) {
-		o.Summary = ""
-	}
+	// What the AI says of what it does not know goes, a sentence at a time;
+	// of the new answer only, never of what the user wrote.
+	o.Desc, o.Summary, o.Analysis = dropFiller(o.Desc), dropFiller(o.Summary), dropFiller(o.Analysis)
 	// Organized again, it is the new answer: a summary or an analysis the
 	// new one leaves out goes, and a description that said nothing.
 	c.Summary = strings.TrimSpace(o.Summary)
-	if fillerSaid(c.Desc) {
-		c.Desc = ""
-	}
 	if s := strings.TrimSpace(o.Desc); s != "" {
 		c.Desc = s
 	} else if c.Desc == "" {
@@ -439,32 +440,66 @@ const (
 )
 
 // clipContentLen is how much there was to read of a clip: its text and
-// note, or what its pictures showed.
+// note, or what its pictures showed (the new answer's, when there is one).
 func clipContentLen(c *library.Clip, o *clipOrganized) int {
-	n := len([]rune(strings.TrimSpace(c.Text))) + len([]rune(strings.TrimSpace(c.Note)))
-	if c.Kind == library.KindImage || isVideo(c) {
-		n += len([]rune(strings.TrimSpace(o.Text)))
+	text := c.Text
+	if (c.Kind == library.KindImage || isVideo(c)) && o != nil && strings.TrimSpace(o.Text) != "" {
+		text = o.Text // seen again: what was seen before is not added to it
 	}
-	return n
+	return utf8.RuneCountInString(strings.TrimSpace(text)) + utf8.RuneCountInString(strings.TrimSpace(c.Note))
 }
 
-// fillerWords are what is said of what is not known: the AI is told to
-// leave it out, and what it wrote all the same is.
-var fillerWords = regexp.MustCompile(`无法(判断|确定|得知|从)|(需要|还需|需)(打开|播放|补充|确认)|没有(任何)?(内容|实际内容|信息|线索)|建议(补充|补上)|待补充|内容未知|不得而知`)
+// fillerWords say what is not known of the clip itself: that it cannot be
+// told from its name, that it is to be opened, that a line is to be
+// added. Narrow, for they are dropped: a text on what cannot be decided
+// (量子态无法确定), a clause to confirm (需确认付款日期) or a gap of
+// knowledge (没有信息差) is content, the review of 0.98.0 found.
+var fillerWords = regexp.MustCompile(`(无法|不能|没法|难以)(从[^。，；]{0,10})?(判断|确定|得知|看出)(它|这|该|其|是什么|内容|用途|主题|来源)|无法从(文件名|标题|名称|文件)|(需要|还需|需)(打开|播放)(后|才|查看|确认|播放|一遍|看看|并)|没有(任何)?(实际内容|内容线索|任何信息)|建议(补充|补上)(一句|说明|描述|内容)|(内容|主题)(未知|不明|待补充)`)
 
 // fillerSaid tells whether a text says what is not known rather than
 // what is.
 func fillerSaid(s string) bool { return fillerWords.MatchString(s) }
 
+// dropFiller takes out of a text its sentences, or its lines, that say
+// what is not known.
+func dropFiller(s string) string {
+	if !fillerSaid(s) {
+		return s
+	}
+	var b strings.Builder
+	for _, line := range strings.SplitAfter(s, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "-") || strings.HasPrefix(strings.TrimSpace(line), "*") {
+			if !fillerSaid(line) {
+				b.WriteString(line) // a point of a list: whole, or not at all
+			}
+			continue
+		}
+		start := 0
+		for i, r := range line {
+			if r == '。' || r == '！' || r == '？' || r == '；' {
+				end := i + utf8.RuneLen(r)
+				if !fillerSaid(line[start:end]) {
+					b.WriteString(line[start:end])
+				}
+				start = end
+			}
+		}
+		if rest := line[start:]; !fillerSaid(rest) {
+			b.WriteString(rest)
+		}
+	}
+	return strings.TrimSpace(b.String())
+}
+
 // summaryShown and analysisShown tell whether a clip's details show what
 // the AI wrote of it: what was written before the rules of applyOrganized
-// is kept, and shown by them.
+// is kept, and shown by them, by the length of what it was made of.
 func summaryShown(c *library.Clip) bool {
-	return c.Summary != "" && !briefClip(c) && !fillerSaid(c.Summary) && clipContentLen(c, &clipOrganized{}) >= summaryLen
+	return c.Summary != "" && !briefClip(c) && clipContentLen(c, nil) >= summaryLen
 }
 
 func analysisShown(c *library.Clip) bool {
-	return c.Analysis != "" && !fillerSaid(c.Analysis) && clipContentLen(c, &clipOrganized{}) >= analysisLen && c.Kind != library.KindImage && !isVideo(c)
+	return c.Analysis != "" && clipContentLen(c, nil) >= analysisLen && c.Kind != library.KindImage && !isVideo(c)
 }
 
 const organizeSystem = `你是一个资料整理助手。用户把看到的文字、链接、图片和文件收进资料库，你为每条资料起标题、写摘要、分类、打标签，并给出检索关键词，方便以后查找和让 AI 检索。只输出一个 JSON 对象，不要输出其他内容。`
