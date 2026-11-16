@@ -3,12 +3,18 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/ghsync"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/versions"
 )
 
 // Sync with GitHub: the maps folder, maps and library alike, kept in step
@@ -24,6 +30,122 @@ const (
 
 func (a *app) syncConfig() ghsync.Config {
 	return ghsync.Config{Repo: ghsync.Clean(a.cfg.SyncRepo), Branch: a.cfg.SyncBranch, Token: ghsync.Clean(a.cfg.SyncToken), API: a.cfg.GitHubAPI}
+}
+
+// mergeMapVersions merges a map changed on two computers, topic by topic
+// (model.Merge), for the sync: two files of one map were two to compare
+// by eye, which no one can. What both changed is this computer's, and
+// its clashes are asked after (mergeAsk), as git asks.
+func mergeMapVersions(p string, base, local, remote []byte) ([]byte, []model.Clash, bool) {
+	if !strings.HasSuffix(p, model.Ext) {
+		return nil, nil, false
+	}
+	var b *model.File
+	if base != nil {
+		var err error
+		if b, err = model.Parse(base); err != nil {
+			return nil, nil, false
+		}
+	}
+	l, err := model.Parse(local)
+	if err != nil {
+		return nil, nil, false
+	}
+	r, err := model.Parse(remote)
+	if err != nil {
+		return nil, nil, false
+	}
+	m, clashes := model.Merge(b, l, r)
+	data, err := m.Marshal()
+	if err != nil {
+		return nil, nil, false
+	}
+	if _, err := model.Parse(data); err != nil {
+		return nil, nil, false
+	}
+	return data, clashes, true
+}
+
+// mergeConflictCopies merges into their maps the copies syncs before
+// 0.100 kept beside a map changed on two computers, "AI (GitHub 冲突 …)":
+// with no version both came from, what is in either is kept, and what
+// differs is asked (mergeAsk). The map's version before is kept, the copy
+// goes to the trash, and the toast takes it back.
+func (a *app) mergeConflictCopies() {
+	type undo struct {
+		path, copy  string
+		was, copied []byte
+	}
+	var done []undo
+	for _, fi := range a.files {
+		orig, ok := ghsync.CopyOf(fi.Path)
+		if !ok || a.conflict && orig == a.path {
+			continue
+		}
+		if _, err := os.Stat(orig); err != nil {
+			continue // the map is gone: the copy is a map of its own
+		}
+		if orig == a.path && a.dirty {
+			a.save()
+		}
+		was, err1 := os.ReadFile(orig)
+		copied, err2 := os.ReadFile(fi.Path)
+		if err1 != nil || err2 != nil {
+			continue
+		}
+		merged, clashes, ok := mergeMapVersions(orig, nil, was, copied)
+		if !ok {
+			continue
+		}
+		if f, err := model.Parse(was); err == nil {
+			_, _ = a.versions.Save(orig, f, versions.BeforeMerge, "", a.now())
+		}
+		if err := writeFile(orig, merged); err != nil {
+			continue
+		}
+		if err := a.plat.Trash(fi.Path); err != nil {
+			_ = os.Remove(fi.Path)
+		}
+		a.removeMapMeta(fi.Path)
+		done = append(done, undo{orig, fi.Path, was, copied})
+		a.askMerge(orig, clashes)
+	}
+	if len(done) == 0 {
+		return
+	}
+	a.refreshFiles()
+	a.syncChange()
+	opened := slices.ContainsFunc(done, func(u undo) bool { return u.path == a.path })
+	if opened {
+		a.reload()
+	}
+	msg := fmt.Sprintf("「%s」在两台电脑上改过的两份，已合成一张", mapName(done[0].path))
+	if len(done) > 1 {
+		msg = fmt.Sprintf("%d 张导图在两台电脑上改过的两份，已各合成一张", len(done))
+	}
+	a.tellUndo(msg, func() {
+		for _, u := range done {
+			_ = writeFile(u.path, u.was)
+			_ = writeFile(u.copy, u.copied)
+		}
+		a.refreshFiles()
+		a.syncChange()
+		if opened {
+			a.reload()
+		}
+		a.merges = slices.DeleteFunc(a.merges, func(m *mergeAsk) bool {
+			return slices.ContainsFunc(done, func(u undo) bool { return u.path == m.path })
+		})
+	})
+}
+
+// writeFile writes data to path through a file renamed over it.
+func writeFile(path string, data []byte) error {
+	tmp := path + ".merge.tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }
 
 // syncReady tells whether a repository and a token are set.
@@ -60,6 +182,17 @@ func (a *app) syncNow() {
 	}
 	a.syncBusy, a.syncTried, a.syncMsg = true, a.now(), "正在同步…"
 	dir, cfg, run, post := a.dir, a.syncConfig(), a.syncRun, a.post
+	var mu sync.Mutex
+	clashes := map[string][]model.Clash{}
+	cfg.Merge = func(p string, base, local, remote []byte) ([]byte, bool) {
+		data, cl, ok := mergeMapVersions(p, base, local, remote)
+		if ok && len(cl) > 0 {
+			mu.Lock()
+			clashes[filepath.Join(dir, filepath.FromSlash(p))] = cl
+			mu.Unlock()
+		}
+		return data, ok
+	}
 	a.async(func() (any, error) {
 		return run(context.Background(), dir, cfg, func(msg string) { post(func() { a.syncMsg = msg }) })
 	}, func(v any, err error) {
@@ -85,9 +218,21 @@ func (a *app) syncNow() {
 			a.refreshFiles()
 			a.checkLibrary()
 		}
+		mu.Lock()
+		for _, p := range res.Merged {
+			a.askMerge(filepath.Join(dir, filepath.FromSlash(p)), clashes[filepath.Join(dir, filepath.FromSlash(p))])
+		}
+		mu.Unlock()
+		switch n := len(res.Merged); {
+		case n == 1:
+			a.tell(fmt.Sprintf("「%s」在两台电脑上都改了，已按主题合并", mapName(res.Merged[0])))
+		case n > 1:
+			a.tell(fmt.Sprintf("%d 张导图在两台电脑上都改了，已按主题合并", n))
+		}
 		if n := len(res.Conflicts); n > 0 {
 			a.tell(fmt.Sprintf("同步时 %d 个文件在两台电脑上都改了：两份都保留了，另一份名字带「GitHub 冲突」", n))
 		}
+		a.mergeConflictCopies()
 	})
 }
 
@@ -146,7 +291,7 @@ func (a *app) syncFoot(c *ui.Context) {
 // it runs by itself.
 func (a *app) syncSettings(c *ui.Context) {
 	t := c.Theme()
-	ui.Text(c, "把导图和收集的资料同步到你的一个私有 GitHub 仓库：在这台电脑上的修改会自动上传，其他电脑的修改会自动下载。两台电脑改了同一张导图时，两份都会保留。超过 50MB 的文件只留在本机。").
+	ui.Text(c, "把导图和收集的资料同步到你的一个私有 GitHub 仓库：在这台电脑上的修改会自动上传，其他电脑的修改会自动下载。两台电脑改了同一张导图时，会按主题自动合并。超过 50MB 的文件只留在本机。").
 		FontSize(12).TextColor(t.TextMuted).Wrap()
 	saveDrafts := func() {
 		repo := strings.Trim(ghsync.Clean(a.syncDrafts[0]), "/")

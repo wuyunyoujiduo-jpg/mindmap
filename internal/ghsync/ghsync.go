@@ -4,8 +4,9 @@
 // A sync is a three-way merge. The state file remembers, for each file,
 // the version both sides had at the last sync (its git blob SHA). A file
 // changed on one side only takes that side's version; changed on both, the
-// local one stays and the repository's is kept beside it as a copy, but
-// for clips, whose newer edit wins. A file deleted on one side and changed
+// two are merged with the version both came from where Config.Merge can
+// (the maps, topic by topic), a clip's newer edit wins, and else the local
+// one stays and the repository's is kept beside it as a copy. A file deleted on one side and changed
 // on the other is kept. What the merge takes from the repository is
 // written into the folder; what it takes from the folder becomes one
 // commit on the branch.
@@ -53,6 +54,10 @@ type Config struct {
 	Client *http.Client
 	// Now is the clock, for the names of conflict copies; nil for time.Now.
 	Now func() time.Time
+	// Merge, when not nil, merges a file changed on both sides: the
+	// version both came from (nil for none), the local one and the
+	// repository's; ok false leaves them to be kept apart.
+	Merge func(path string, base, local, remote []byte) (merged []byte, ok bool)
 }
 
 func (c Config) branch() string {
@@ -75,10 +80,11 @@ type Result struct {
 	// Written are the local files the sync wrote or removed, slash
 	// separated and relative to the folder.
 	Written []string
-	// Conflicts are the files changed on both sides; Skipped those too
+	// Merged are the files changed on both sides and merged; Conflicts
+	// those kept apart, the repository's as a copy; Skipped those too
 	// large to sync.
-	Conflicts, Skipped []string
-	Commit             string
+	Merged, Conflicts, Skipped []string
+	Commit                     string
 }
 
 // Synced reports whether anything moved.
@@ -297,6 +303,7 @@ func Sync(ctx context.Context, dir string, cfg Config, progress func(string)) (R
 		res.Pushed += r.Pushed
 		res.Deleted += r.Deleted
 		res.Written = append(res.Written, r.Written...)
+		res.Merged = append(res.Merged, r.Merged...)
 		res.Conflicts = append(res.Conflicts, r.Conflicts...)
 		res.Skipped, res.Commit = r.Skipped, r.Commit
 		// Another device pushed in between: merge again with its commit.
@@ -357,7 +364,7 @@ func syncOnce(ctx context.Context, dir string, cfg Config, progress func(string)
 			merged[p] = sha
 		}
 	}
-	type conflict struct{ path, remote string }
+	type conflict struct{ path, base, local, remote string }
 	var conflicts []conflict
 	for p := range paths {
 		if slices.Contains(skipped, p) {
@@ -389,7 +396,7 @@ func syncOnce(ctx context.Context, dir string, cfg Config, progress func(string)
 			push = append(push, p)
 			keep(p, l)
 		default:
-			conflicts = append(conflicts, conflict{p, r})
+			conflicts = append(conflicts, conflict{p, b, l, r})
 			keep(p, l)
 		}
 	}
@@ -438,6 +445,14 @@ func syncOnce(ctx context.Context, dir string, cfg Config, progress func(string)
 			} else {
 				push = append(push, c.path)
 			}
+			continue
+		}
+		if ok, err := cfg.merge(ctx, dir, c.path, c.base, c.local, data); err != nil {
+			return res, err
+		} else if ok {
+			res.Merged = append(res.Merged, c.path)
+			res.Written = append(res.Written, c.path)
+			push = append(push, c.path)
 			continue
 		}
 		cp := conflictCopy(c.path, now())
@@ -542,6 +557,31 @@ func newerClip(dir, p string, data []byte) (newer, ok bool) {
 	return theirs.Updated.After(ours.Updated), true
 }
 
+// merge merges a file changed on both sides into the folder, by
+// Config.Merge, and tells whether it did: not when the file changed again
+// while syncing, which the next sync takes up.
+func (cfg Config) merge(ctx context.Context, dir, p, base, local string, remote []byte) (bool, error) {
+	if cfg.Merge == nil {
+		return false, nil
+	}
+	full := filepath.Join(dir, filepath.FromSlash(p))
+	mine, err := os.ReadFile(full)
+	if err != nil || blobSHA(mine) != local {
+		return false, nil
+	}
+	var old []byte
+	if base != "" {
+		if old, err = cfg.blob(ctx, base); err != nil {
+			return false, err
+		}
+	}
+	merged, ok := cfg.Merge(p, old, mine, remote)
+	if !ok || !unchanged(dir, p, local) {
+		return false, nil
+	}
+	return true, writeAtomic(full, merged)
+}
+
 // conflictCopy names the copy of the repository's version of a file
 // changed on both sides: "计划 (GitHub 冲突 2026-10-11 1504).mindmap.json".
 func conflictCopy(p string, now time.Time) string {
@@ -551,6 +591,21 @@ func conflictCopy(p string, now time.Time) string {
 		ext = ".mindmap.json"
 	}
 	return dir + strings.TrimSuffix(base, ext) + " (GitHub 冲突 " + now.Format("2006-01-02 1504") + ")" + ext
+}
+
+// CopyOf is the file a conflict copy was kept beside, by its name.
+func CopyOf(p string) (original string, ok bool) {
+	dir, base := filepath.Split(p)
+	i := strings.LastIndex(base, " (GitHub 冲突 ")
+	if i < 0 {
+		return "", false
+	}
+	rest := base[i+len(" (GitHub 冲突 "):]
+	j := strings.Index(rest, ")")
+	if j != len("2006-01-02 1504") {
+		return "", false
+	}
+	return dir + base[:i] + rest[j+1:], true
 }
 
 func writeAtomic(p string, data []byte) error {

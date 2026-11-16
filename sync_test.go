@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/ghsync"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
 
 // The sync is set up in the settings, runs when asked, by itself after a
@@ -136,5 +137,100 @@ func TestShotUnfinished(t *testing.T) {
 		if shotUnfinished(log) != want {
 			t.Errorf("%q: %v", log, !want)
 		}
+	}
+}
+
+// A map changed on two computers is merged by the sync; where both
+// changed one thing, a window asks which to keep, as git does.
+func TestSyncMergeAsks(t *testing.T) {
+	a, tt := newTestApp(t)
+	a.cfg.SyncRepo, a.cfg.SyncToken = "me/notes", "github_pat_x"
+	path := filepath.Join(a.dir, "AI.mindmap.json")
+	base := model.NewFile("AI")
+	base.Sheets[0].Root.ID = "r"
+	n, _ := base.Sheets[0].AddChild("r", "模型")
+	if err := base.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	ours, theirs := base.Clone(), base.Clone()
+	ours.Node(n.ID).Title = "这台的名字"
+	theirs.Node(n.ID).Title = "另一台的名字"
+	added, _ := theirs.Sheets[0].AddChild("r", "另一台加的")
+	if err := ours.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := base.Marshal()
+	o, _ := ours.Marshal()
+	r, _ := theirs.Marshal()
+	a.syncRun = func(_ context.Context, dir string, cfg ghsync.Config, _ func(string)) (ghsync.Result, error) {
+		data, ok := cfg.Merge("AI.mindmap.json", b, o, r)
+		if !ok {
+			t.Fatal("not merged")
+		}
+		os.WriteFile(filepath.Join(dir, "AI.mindmap.json"), data, 0o644)
+		return ghsync.Result{Pulled: 1, Written: []string{"AI.mindmap.json"}, Merged: []string{"AI.mindmap.json"}}, nil
+	}
+	a.syncNow()
+	tt.Frame()
+	tt.Frame()
+	snapshot(t, tt, "sync-merge-ask")
+	if !a.mergeOpen || !tt.HasText("合并「AI」") || !tt.HasText("「这台的名字」的标题") || !tt.HasText("另一台的名字") {
+		t.Fatalf("not asked: %q", tt.Texts())
+	}
+	if f, _ := model.Load(path); f.Node(added.ID) == nil {
+		t.Fatal("what the other computer added is not merged")
+	}
+	if err := tt.Click("另一台电脑"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if err := tt.Click("完成"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Frame()
+	f, _ := model.Load(path)
+	if a.mergeOpen || f.Node(n.ID).Title != "另一台的名字" || f.Node(added.ID) == nil {
+		t.Fatalf("open %v, title %q", a.mergeOpen, f.Node(n.ID).Title)
+	}
+}
+
+// A copy kept by a sync before is merged into its map, and asked about.
+func TestConflictCopyMerged(t *testing.T) {
+	a, tt := newTestApp(t)
+	path := filepath.Join(a.dir, "AI.mindmap.json")
+	cp := filepath.Join(a.dir, "AI (GitHub 冲突 2026-10-11 1011).mindmap.json")
+	f := model.NewFile("AI")
+	n, _ := f.Sheets[0].AddChild(f.Sheets[0].Root.ID, "两边都有")
+	n.Note = "这台的备注"
+	if err := f.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	g := f.Clone()
+	added, _ := g.Sheets[0].AddChild(g.Sheets[0].Root.ID, "只在副本")
+	g.Node(n.ID).Note = "副本的备注"
+	if err := g.Save(cp); err != nil {
+		t.Fatal(err)
+	}
+	a.refreshFiles()
+	a.mergeConflictCopies()
+	tt.Frame()
+	if _, err := os.Stat(cp); err == nil {
+		t.Fatal("the copy stayed")
+	}
+	m, _ := model.Load(path)
+	if m.Node(added.ID) == nil {
+		t.Fatal("the copy's topic is not merged")
+	}
+	if !a.mergeOpen || !tt.HasText("「两边都有」的备注") {
+		t.Fatalf("not asked: %q", tt.Texts())
+	}
+	// Taken back: both files as they were.
+	a.noticeUndo()
+	if _, err := os.Stat(cp); err != nil || len(a.merges) != 0 {
+		t.Fatal("not taken back")
+	}
+	if m, _ := model.Load(path); m.Node(added.ID) != nil {
+		t.Fatal("the map not as it was")
 	}
 }

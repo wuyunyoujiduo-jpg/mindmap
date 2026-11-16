@@ -33,6 +33,7 @@ const (
 	AI             = "ai"             // after it did
 	BeforeRestore  = "before-restore" // before a version was restored
 	Conflict       = "conflict"       // the version given up in a conflict
+	BeforeMerge    = "before-merge"   // before a sync's copy was merged in
 )
 
 // Label is how the UI names a reason.
@@ -54,6 +55,8 @@ func Label(reason string) string {
 		return "恢复前"
 	case Conflict:
 		return "冲突时放弃的版本"
+	case BeforeMerge:
+		return "合并冲突副本前"
 	}
 	return reason
 }
