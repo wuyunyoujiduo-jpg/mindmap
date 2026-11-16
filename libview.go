@@ -432,6 +432,7 @@ func (a *app) clipFilters(c *ui.Context) {
 		if len(fs) > 1 && textLink(c, "全部清除", "清除筛选").Clicked() {
 			a.later(a.clearLibFilters)
 		}
+		a.vaultState(c)
 		ui.Spacer(c)
 		a.materialBar(c)
 	})
@@ -595,6 +596,16 @@ func (a *app) clipMenu(m *ui.Menu, clip *library.Clip) {
 		clip.Starred = !clip.Starred
 		a.saveClip(clip)
 	}
+	// A password that nothing tells from a word: the whole of it sealed.
+	if a.vault.On() && (clip.Kind == library.KindText || clip.Kind == library.KindLink) {
+		if clip.Locked {
+			if m.Item("取消整条加密").Chosen() {
+				a.later(func() { a.lockWhole(clip, false) })
+			}
+		} else if m.Item("整条加密").Chosen() {
+			a.later(func() { a.lockWhole(clip, true) })
+		}
+	}
 	m.Separator()
 	if a.doc != nil && m.Item("加到当前导图").Chosen() {
 		a.clipIntoMap(clip)
@@ -618,8 +629,7 @@ func (a *app) clipMenu(m *ui.Menu, clip *library.Clip) {
 	m.Separator()
 	m.Submenu("复制", func(m *ui.Menu) {
 		if m.Item("复制内容").Chosen() {
-			a.plat.CopyText(clipCopyText(clip))
-			a.tell("已复制")
+			a.later(func() { a.copyClip(clip) })
 		}
 		if m.Item("复制资料链接").Chosen() {
 			a.plat.CopyText(clipScheme + clip.ID)
@@ -713,17 +723,21 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 
 	// The title and the line saying what it is, large, edited in place.
 	ui.Column(c).Gap(2).Margin(4, -6, 0).Children(func() {
-		title := clip.Title
-		if inlineInput(c.Key("clip-title"), &title, textHeadline, true, clip.Label(), "资料标题").Changed() {
+		// A part with a secret in it is in dots, and not written in, till
+		// the secrets are asked for (fieldText).
+		title, write := a.fieldText(clip, "title", clip.Title)
+		if in := inlineInput(c.Key("clip-title"), &title, textHeadline, true, clip.Label(), "资料标题"); in.Changed() && write {
 			clip.Title = title
 			a.saveClip(clip)
+			a.fieldTyped(clip, "title", title, clip.Title)
 		}
-		desc := clip.Desc
+		desc, write := a.fieldText(clip, "desc", clip.Desc)
 		in := inlineArea(c.Key("clip-desc"), &desc, textBody, 1, 4, "加一句说明，说清这是什么（AI 整理时自动生成）", "资料说明")
 		in.TextColor(t.TextMuted)
-		if in.Changed() {
+		if in.Changed() && write {
 			clip.Desc = desc
 			a.saveClip(clip)
+			a.fieldTyped(clip, "desc", desc, clip.Desc)
 		}
 	})
 
@@ -850,32 +864,40 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 		aiPart()
 	}
 
-	// The content.
+	// The content. What looks like a key or a password in it is in dots
+	// until asked for, and with a second password set is sealed: the
+	// password is asked then (secretKeys, fieldText).
+	keys := false // the keys of its secrets were drawn
+	content := func(key, hint, label string, size float32, maxLines int, changed func(text string)) ui.Element {
+		text, write := a.fieldText(clip, "text", clip.Text)
+		if !write {
+			keys = true
+			el := ui.Text(c.Key(key+"-dots"), text).FontSize(size).LineHeight(1.55).Wrap()
+			a.secretKeys(c, clip)
+			return el
+		}
+		in := inlineArea(c.Key(key), &text, size, 3, maxLines, hint, label).Margin(0, -8)
+		if in.Changed() {
+			changed(text)
+			a.fieldTyped(clip, "text", text, clip.Text)
+		}
+		if library.HasSecret(clip.Text) {
+			keys = true
+			a.secretKeys(c, clip)
+		}
+		return in
+	}
 	switch {
 	case clip.Kind == library.KindText:
 		sectionCard(c, iconText, tileOrange, "内容", nil, func() {
-			// What looks like a key or a password is in dots until asked for.
-			if clip.Secret() && a.secretShown != clip.ID {
-				ui.Text(c, library.Mask(clip.Text)).FontSize(textBody + 1).LineHeight(1.55).Wrap()
-				if ghostButton(c, "显示密钥", "这条里有看起来像密钥或密码的内容，已遮住；点一下显示并可以编辑").Margin(0, 0, 0, -8).Clicked() {
-					a.secretShown = clip.ID
-				}
-				return
-			}
-			text := clip.Text
-			if inlineArea(c.Key("clip-text"), &text, textBody+1, 3, 30, "", "资料内容").Margin(0, -8).Changed() {
-				a.setMemoText(clip, text)
-			}
+			content("clip-text", "", "资料内容", textBody+1, 30, func(text string) { a.setMemoText(clip, text) })
 		})
 	case clip.Kind == library.KindLink:
 		sectionCard(c, iconLink, tileGreen, "网页正文", nil, func() {
-			text := clip.Text
-			in := inlineArea(c.Key("clip-page"), &text, textBody, 3, 16,
-				"没读到网页正文时（需要登录的页面、公众号文章等），可以把正文复制粘贴到这里", "网页正文").Margin(0, -8)
-			if in.Changed() {
+			in := content("clip-page", "没读到网页正文时（需要登录的页面、公众号文章等），可以把正文复制粘贴到这里", "网页正文", textBody, 16, func(text string) {
 				clip.Text = text
 				a.saveClip(clip)
-			}
+			})
 			if in.PressedOutside() && clip.Text != "" && clip.Organized == nil && providerKey(a.cfg) != "" && !a.cfg.LibraryManual {
 				a.enqueueClip(clip.ID, true)
 			}
@@ -886,24 +908,27 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 			label = "图中内容（AI 识别）"
 		}
 		sectionCard(c, kindTile(clip.Kind), kindColor(clip.Kind), label, nil, func() {
-			text := clip.Text
-			hidden := clip.Secret() && a.secretShown != clip.ID
-			if hidden {
-				text = library.Mask(text)
-			}
+			text, _ := a.fieldText(clip, "text", clip.Text)
 			ui.Text(c, library.Excerpt(text, "", 3000)).FontSize(textSmall).LineHeight(1.5).TextColor(t.TextMuted).Wrap().Selectable()
-			if hidden && ghostButton(c, "显示密钥", "这条里有看起来像密钥或密码的内容，已遮住").Margin(0, 0, 0, -8).Clicked() {
-				a.secretShown = clip.ID
+			if library.HasSecret(clip.Text) {
+				keys = true
+				a.secretKeys(c, clip)
 			}
 		})
 	}
 
 	// The user's note.
 	sectionCard(c, iconPencil, tileYellow, "我的备注", nil, func() {
-		note := clip.Note
-		if inlineArea(c.Key("clip-note"), &note, textBody, 1, 10, "为什么收藏它、想怎么用…", "资料备注").Margin(0, -8).Changed() {
+		note, write := a.fieldText(clip, "note", clip.Note)
+		if !write {
+			ui.Text(c.Key("clip-note-dots"), note).FontSize(textBody).LineHeight(1.55).Wrap()
+		} else if inlineArea(c.Key("clip-note"), &note, textBody, 1, 10, "为什么收藏它、想怎么用…", "资料备注").Margin(0, -8).Changed() {
 			clip.Note = note
 			a.saveClip(clip)
+			a.fieldTyped(clip, "note", note, clip.Note)
+		}
+		if !keys { // the secret is here, or in the title
+			a.secretKeys(c, clip)
 		}
 	})
 

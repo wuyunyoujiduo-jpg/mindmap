@@ -154,11 +154,11 @@ func Cosine(a, b []float32) float64 {
 func EmbedText(c *Clip) string {
 	var b strings.Builder
 	for _, s := range []string{c.Title, c.Desc, c.Summary, c.Category, strings.Join(c.Tags, " "), strings.Join(c.Keywords, " "), strings.Join(c.Synonyms, " "), c.Analysis, c.Note} {
-		if s = strings.TrimSpace(s); s != "" {
+		if s = strings.TrimSpace(noSealed(s)); s != "" {
 			b.WriteString(s + "\n")
 		}
 	}
-	text := []rune(strings.TrimSpace(c.Text))
+	text := []rune(strings.TrimSpace(noSealed(c.Text)))
 	if len(text) > 1500 {
 		text = text[:1500]
 	}

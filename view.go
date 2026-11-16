@@ -81,6 +81,7 @@ func (a *app) view(c *ui.Context) {
 		a.historyView(c)
 		a.mcpView(c)
 		a.settingsView(c)
+		a.vaultView(c)
 		a.fromTextView(c)
 		a.mergeView(c)
 		a.templatesView(c)

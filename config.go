@@ -106,6 +106,12 @@ type config struct {
 	CardStyle int `json:"cardStyle,omitempty"`
 	// TourDone is set once the tour of the first run was seen.
 	TourDone bool `json:"tourDone,omitempty"`
+	// VaultLock is after how many minutes the secrets unlocked are locked
+	// again (vault.go): 0 for five, less for never while the app runs.
+	// VaultKeepClipboard leaves a secret copied on the clipboard, which is
+	// else cleared of it a minute on.
+	VaultLock          int  `json:"vaultLock,omitempty"`
+	VaultKeepClipboard bool `json:"vaultKeepClipboard,omitempty"`
 	// PanelWidth is the width the right panel was dragged to.
 	PanelWidth float32 `json:"panelWidth,omitempty"`
 }

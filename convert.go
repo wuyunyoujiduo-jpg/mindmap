@@ -22,7 +22,7 @@ import (
 func (a *app) clipToTask(cl *library.Clip) {
 	title := cl.Label()
 	if isMemo(cl) {
-		title = cl.Text
+		title = sealedOut(cl.Text)
 	}
 	title, _, _ = strings.Cut(strings.TrimSpace(refToken.ReplaceAllString(title, "")), "\n")
 	title = strings.NewReplacer("**", "", "- ", "").Replace(title)

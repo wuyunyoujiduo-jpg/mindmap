@@ -45,6 +45,7 @@ func (a *app) openLibrary() {
 		l = &library.Library{Dir: dir}
 	}
 	a.lib, a.libSel = l, ""
+	a.keepVault(l)
 	a.libMod = modTime(filepath.Join(dir, "clips"))
 }
 
@@ -216,6 +217,10 @@ func (a *app) organizeAll() {
 
 // organizeClip has the AI sort out a clip again.
 func (a *app) organizeClip(id string) {
+	if c := a.lib.Find(id); c != nil && c.Locked {
+		a.tell("整条加密的内容不交给 AI 整理")
+		return
+	}
 	if providerKey(a.cfg) == "" {
 		a.libNeedKey = id // said beside the button that asked
 		return
@@ -262,7 +267,8 @@ func (a *app) nextClipJob() {
 			continue
 		}
 		fetch := c.Kind == library.KindLink && c.Text == "" && c.URL != ""
-		organize := job.organize && providerKey(a.cfg) != ""
+		// Sealed whole, an AI would be shown dots and sum those up.
+		organize := job.organize && providerKey(a.cfg) != "" && !c.Locked
 		if !fetch && !organize {
 			a.orgDone++
 			continue
@@ -764,7 +770,7 @@ func (a *app) clipToMap(c *library.Clip) error {
 	if c.Kind == library.KindText && c.Text != c.Title {
 		note = append(note, c.Text)
 	}
-	n.Note = strings.Join(note, "\n\n")
+	n.Note = sealedOut(strings.Join(note, "\n\n")) // a secret stays in the clip
 	n.Links = []string{clipScheme + c.ID}
 	if c.URL != "" {
 		n.Links = append(n.Links, c.URL)

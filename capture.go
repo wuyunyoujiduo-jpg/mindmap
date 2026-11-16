@@ -398,7 +398,7 @@ func (a *app) settingsView(c *ui.Context) {
 	// On the ground, as a page: its parts are white cards.
 	modal(c, "settings", &a.settingsOpen, func() {
 		w, h := c.Size()
-		tabs := []string{"通用", "资料整理", "备份", "同步", "连接"}
+		tabs := slices.Clone(settingsTabs)
 		if a.file != nil {
 			tabs = append(tabs, "当前导图")
 		}
@@ -425,7 +425,7 @@ func (a *app) settingsView(c *ui.Context) {
 							row.ZIndex(-1) // under the others, which the pill slides behind
 						}
 						// Its icon, as a row of the left column has.
-						kubaiIcon(c, map[string]string{"通用": "sliders", "资料整理": "sparkles", "备份": "save", "同步": "sync", "连接": "plug", "当前导图": "sitemap"}[name], sideIconSize, hot)
+						kubaiIcon(c, map[string]string{"通用": "sliders", "资料整理": "sparkles", "备份": "save", "同步": "sync", "加密": "key-round", "连接": "plug", "当前导图": "sitemap"}[name], sideIconSize, hot)
 						txt := ui.Text(c, name).FontSize(textBody + 0.5).PassThrough()
 						if on {
 							txt.FontWeight(700)
@@ -461,6 +461,8 @@ func (a *app) settingsView(c *ui.Context) {
 						a.backupSettings(c)
 					case "同步":
 						a.syncSettings(c)
+					case "加密":
+						a.vaultSettings(c)
 					case "连接":
 						rowsField(c, "AI", "", func() {
 							setRow(c, "AI 助手", "服务商、API Key 和模型。当前："+providerModelName(a.cfg), func() {

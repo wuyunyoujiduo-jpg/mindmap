@@ -666,8 +666,7 @@ func (a *app) waitingMenu(m *ui.Menu, w waitingItem, has bool) {
 	}
 	m.Separator()
 	if m.Item("复制内容").Chosen() {
-		a.plat.CopyText(clipCopyText(cl))
-		a.tell("已复制")
+		a.later(func() { a.copyClip(cl) })
 	}
 	star := "加星标"
 	if cl.Starred {

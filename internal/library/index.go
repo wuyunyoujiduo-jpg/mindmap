@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strings"
 	"unicode"
+
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/vault"
 )
 
 // The index finds clips by words, ranked by BM25. Latin letters and
@@ -55,7 +57,7 @@ func NewIndex(clips []*Clip) *Index {
 		tf := map[string]float64{}
 		n := 0.0
 		for _, f := range fieldWeights {
-			for _, t := range Tokens(f.of(c)) {
+			for _, t := range Tokens(noSealed(f.of(c))) {
 				tf[t] += f.weight
 				n += f.weight
 			}
@@ -64,7 +66,7 @@ func NewIndex(clips []*Clip) *Index {
 			ix.df[t]++
 		}
 		ix.terms = append(ix.terms, tf)
-		ix.lower = append(ix.lower, strings.ToLower(c.Title+"\n"+c.Desc+"\n"+c.Summary+"\n"+c.Note+"\n"+c.Text+"\n"+strings.Join(c.Tags, " ")+"\n"+strings.Join(c.Synonyms, " ")))
+		ix.lower = append(ix.lower, strings.ToLower(noSealed(c.Title+"\n"+c.Desc+"\n"+c.Summary+"\n"+c.Note+"\n"+c.Text)+"\n"+strings.Join(c.Tags, " ")+"\n"+strings.Join(c.Synonyms, " ")))
 		ix.lens = append(ix.lens, n)
 		total += n
 	}
@@ -72,6 +74,15 @@ func NewIndex(clips []*Clip) *Index {
 		ix.avg = total / float64(len(clips))
 	}
 	return ix
+}
+
+// noSealed is s without the secrets sealed in it: a search is not to find
+// a clip by the letters of a ciphertext, nor a vector to be made of them.
+func noSealed(s string) string {
+	if !vault.Has(s) {
+		return s
+	}
+	return vault.Token.ReplaceAllString(s, " ")
 }
 
 // Hit is a clip found, with how well it matches.

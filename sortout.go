@@ -436,7 +436,7 @@ func (a *app) takeClipPlace(cl *library.Clip) bool {
 	if cl.Kind == library.KindText && strings.TrimSpace(cl.Text) != n.Title {
 		note = append(note, cl.Text)
 	}
-	n.Note = strings.Join(note, "\n\n")
+	n.Note = sealedOut(strings.Join(note, "\n\n")) // a secret stays in the clip
 	n.Links = []string{clipScheme + cl.ID}
 	if cl.URL != "" {
 		n.Links = append(n.Links, cl.URL)

@@ -17,6 +17,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/vault"
 )
 
 // Kinds of clips.
@@ -69,6 +71,10 @@ type Clip struct {
 	// Kept was the other way round, before 0.88: every clip of the week
 	// waited for a place unless kept from it. Read still, and of no use.
 	Kept bool `json:"kept,omitempty"`
+	// Locked says the whole of the text and the note is sealed, not only
+	// what in them looks like a secret (internal/vault): for a password
+	// that nothing tells from a word.
+	Locked bool `json:"locked,omitempty"`
 	// Folder is the folder of maps the clip was kept in, while the maps'
 	// list showed documents beside the maps (before 0.54): kept as it was
 	// written, and shown nowhere.
@@ -123,11 +129,14 @@ type Library struct {
 	Version int
 	byID    map[string]*Clip // Find's index, as of byIDVer
 	byIDVer int
+	// Vault seals what of a clip looks like a secret as the clip is
+	// written, once a second password is set.
+	Vault *vault.Vault
 }
 
 // Open reads the library of a folder, which need not exist yet.
 func Open(dir string) (*Library, error) {
-	l := &Library{Dir: dir}
+	l := &Library{Dir: dir, Vault: vault.Open(filepath.Join(dir, "vault"))}
 	entries, err := os.ReadDir(filepath.Join(dir, "clips"))
 	if err != nil && !os.IsNotExist(err) {
 		return nil, err
@@ -274,6 +283,9 @@ func (l *Library) Save(c *Clip, now time.Time) error {
 }
 
 func (l *Library) write(c *Clip) error {
+	if l.Vault.On() {
+		c.seal(l.Vault.Seal)
+	}
 	dir := filepath.Join(l.Dir, "clips")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
@@ -399,6 +411,9 @@ func counts(clips []*Clip, of func(*Clip) []string) []Count {
 // NeedsOrganizing tells whether the AI has yet to sort a clip out, or to
 // say in a line what it is.
 func (c *Clip) NeedsOrganizing() bool {
+	if c.Locked {
+		return false // sealed whole: an AI is shown dots, and has nothing to say of them
+	}
 	return c.Organized == nil || c.Desc == "" || len(c.Synonyms) == 0 && c.Analysis == ""
 }
 

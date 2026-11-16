@@ -253,6 +253,12 @@ func (a *app) syncNow() {
 			// any change made outside the app.
 			a.refreshFiles()
 			a.checkLibrary()
+			// A password set or changed on the other computer, and clips
+			// it kept before it had one.
+			a.vault.Reload()
+			if a.vaultSweep() > 0 {
+				a.noteLibraryWrite()
+			}
 		}
 		mu.Lock()
 		for _, p := range res.Merged {

@@ -15,6 +15,7 @@ import (
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/layout"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/vault"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/versions"
 )
 
@@ -451,7 +452,16 @@ type app struct {
 	treeQuick   bool   // the directory's rows being drawn are 快捷访问's
 	escLeave    bool   // Escape was pressed in a field of a pane: the focus leaves it (escRest)
 	secretShown string // the clip whose secrets its details show, asked for
-	wallShown   int    // how many clips 收集's wall shows, when more than wallStep
+	// The secrets sealed (vault.go): the keys of the library, until when
+	// they stay unlocked, the window that asks, what is being typed of a
+	// clip, and a secret copied, to clear the clipboard of.
+	vault       *vault.Vault
+	vaultUntil  time.Time
+	vaultAsk    vaultAsk
+	drafts      map[string]draft
+	copied      string
+	copiedUntil time.Time
+	wallShown   int // how many clips 收集's wall shows, when more than wallStep
 	// Long work, told in cards (wait.go): how many clips the index is made
 	// of and how many are left, since when, and what to say once done.
 	embedTotal, embedLeft int
@@ -775,6 +785,7 @@ func (a *app) tick(c *ui.Context) {
 		}
 	}
 	a.reminderCheck()
+	a.vaultTick(c, now)
 	if now.Sub(a.trayAt) >= time.Minute || a.trayAt.IsZero() {
 		a.trayAt = now
 		a.plat.UpdateTray()

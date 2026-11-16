@@ -462,6 +462,32 @@ by AI, and an AI assistant.
   a project chosen, that project's whole record. What came since it was
   last looked at (`config.AgentsSeen`) is counted on its row and said in
   a line on 今天 (`agentsLine`).
+- The secrets of 收集 are sealed (`internal/vault`, `vault.go`, the
+  user's, 0.101): asked for a password manager after 1Password's, the
+  user chose this of it: what looks like a key or a password
+  (`library.SealIn`, the patterns of `Mask`) is kept and synced sealed
+  by a second password, and stays in 收集, found under 含密钥; no fifth
+  place, and no keychain of one system's, for the other computer, not a
+  Mac's perhaps, is to read it. A pair of keys: the public one seals as
+  a clip is written (`Library.write`, an agent's too), nothing asked;
+  the private one, locked by the password and by a recovery code
+  (Argon2id), is asked for to see, copy or change a secret, once for a
+  while (`withVault`, `vaultLockAfter`). A secret sealed is a token in
+  its text, ⟦mm1.key.data⟧: the clip in memory is as its file, so that
+  nothing reads a secret by the way; the details open it for the clip
+  shown (`fieldText`) and hold what is typed as typed (`drafts`). The
+  password is changed with the one now or the code, and the code is new
+  with it (the user's); the key stays, so nothing is sealed again. What
+  no rule tells from a word is sealed whole from its menu (整条加密,
+  `Clip.Locked`), and not given to the AI. The keys' files
+  (`.library/vault/`) are never deleted, a vault turned off is marked so
+  (`TurnOff`): another computer may have sealed with a key meanwhile;
+  two set up apart leave two keys, each opening its own; a copy is kept
+  on the computer (`Spare`). The primitives are x/crypto's (NaCl's
+  anonymous box, secretbox), none of the app's making. Not sealed: a
+  file or a picture itself, a link's address, a map's topics, and what
+  GitHub's history has of before. Its draft is
+  https://claude.ai/artifact/8hvLab7D1yKyG8urBNzA71.
 - Sync with GitHub: `internal/ghsync` (a three-way merge over the REST API,
   state in `<maps folder>/.sync/`), wired in `sync.go`. A map changed on
   both computers is merged topic by topic against the version both came
