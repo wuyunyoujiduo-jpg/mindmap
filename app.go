@@ -921,38 +921,14 @@ func (a *app) commitEdit() {
 	if n == nil {
 		return
 	}
-	// The #tags written in it are its tags, out of its words (the user
-	// asked to make a tag by writing #): as in a thought of 收集.
-	title, tags := titleTags(a.editText, n.Title)
+	// A #word is words of the title unless made a tag as it was written
+	// (takeTitleTag): no rule turns it into one here.
+	title := a.editText
 	if title == "" {
 		title = cmpOr(n.Title, "新主题")
 	}
-	var adds []string
-	for _, tag := range tags {
-		if !slices.Contains(n.Tags, tag) {
-			adds = append(adds, tag)
-		}
-	}
-	if title != n.Title || len(adds) > 0 {
-		a.mutate("", func() {
-			n.Title = title
-			if len(adds) > 0 {
-				n.Tags = append(slices.Clone(n.Tags), adds...)
-			}
-		})
-		var fresh []string // new to the library: taken out of it again on 撤销
-		for _, tag := range adds {
-			if a.libraryIndex(tag) < 0 {
-				fresh = append(fresh, tag)
-			}
-			a.addTag(tag)
-		}
-		if len(adds) > 0 {
-			a.tellUndo("已加标签 #"+strings.Join(adds, " #"), func() {
-				a.undo()
-				a.dropUnusedTags(fresh)
-			})
-		}
+	if title != n.Title {
+		a.mutate("", func() { n.Title = title })
 	}
 	a.canvas.Focus()
 }

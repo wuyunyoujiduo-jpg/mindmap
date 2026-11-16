@@ -349,9 +349,12 @@ by AI, and an AI assistant.
     one looks for here left out (`nodeMenu`; the user found some thirty
     rows too many). An item that does nothing seen where it is chosen is
     a fault: 管理标签… chose the page of a column that was put away.
-  - A tag is made where words are written, by #: in a topic's title too
-    (`titleTags`, the tags offered under it as it is written: only a #
-    written in the edit, a letter first, no color nor number).
+  - A tag is made where words are written, by #: in a topic's title too,
+    offered under it as it is written and made one only when chosen (a
+    click or Tab, `takeTitleTag`), else words of the title. A rule that
+    made every #word a tag was one the user could not see nor refuse,
+    and the tags went from sight while a title was edited: they show
+    there, each taken off by a click.
 - The app's icon is drawn by `tools/icon/`; `resources/icon.png` is the
   desk (`tools/icon/desk.py`: a white note on the app's violet-blue, three lines
   each led by a dot of a map's color, the last ticked, the AI's spark), and

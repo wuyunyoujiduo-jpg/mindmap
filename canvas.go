@@ -1008,11 +1008,10 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 			in.OnPaste(func(text string) bool { return text == "" && a.pasteImage() })
 			in.HandleInput(func(ev ui.InputEvent) bool {
 				if ev.Kind == ui.InputKeyDown && ev.Key == ui.KeyTab && ev.Mods == 0 && a.editing == n.ID {
-					// A tag begun: Tab writes the first offered.
+					// A #word begun: Tab makes it the first tag offered.
 					if part, ok := titleTagBegun(a.editText); ok {
-						if offers := a.tagOffers(part, 1); len(offers) > 0 {
-							a.editText = a.editText[:len(a.editText)-len(part)] + offers[0] + " "
-							a.editFocus = false // the caret to the end
+						if offers := a.titleTagOffers(part); len(offers) > 0 {
+							a.takeTitleTag(n, part, offers[0])
 							return true
 						}
 					}
@@ -1024,31 +1023,35 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 				a.commitEdit()
 				return true
 			})
-			// A #tag being written: the tags that begin so, under the
-			// title, a click (or Tab) writing one; what is written after a
-			// # becomes the topic's tag when the title is kept.
+			// A #word being written: under the title, whether it is to be a
+			// tag, the tags that begin so and a new one, a click or Tab making
+			// it one; not chosen, it stays words of the title. Every #word a
+			// tag was a rule the user could not see, nor say no to (0.98.1).
 			if part, ok := titleTagBegun(a.editText); ok {
-				offers := a.tagOffers(part, 6)
+				offers := a.titleTagOffers(part)
 				a.tagOffered = true
 				ui.Popover(c, in, &a.tagOffered, func() {
-					ui.Row(c.Key("tag-offers")).Gap(6).Padding(8, 10).AlignItems(ui.Center).MaxWidth(420).Wrap().KeepFocus().Children(func() {
-						for _, tag := range offers {
-							chip := softTag(c, "#"+tag).Cursor(ui.CursorPointer).KeepFocus().Label("用标签 " + tag).Tooltip("用这个标签（Tab）")
-							if chip.Clicked() {
-								a.editText = a.editText[:len(a.editText)-len(part)] + tag + " "
-								a.editFocus = false // the caret to the end
+					ui.Column(c.Key("tag-offers")).Gap(6).Padding(8, 10).MaxWidth(420).KeepFocus().Children(func() {
+						ui.Row(c).Gap(6).Wrap().GapY(6).AlignItems(ui.Center).Children(func() {
+							for i, tag := range offers {
+								label, tip := "#"+tag, "设为标签"
+								if a.libraryIndex(tag) < 0 && !slices.Contains(a.allTags(), tag) {
+									label = "设为新标签 #" + tag
+								}
+								if i == 0 {
+									tip += "（Tab）"
+								}
+								chip := softTag(c, label).Cursor(ui.CursorPointer).KeepFocus().Label("设为标签 " + tag).Tooltip(tip)
+								if chip.Clicked() {
+									a.takeTitleTag(n, part, tag)
+								}
 							}
+						})
+						say := "写标签名，选一个设为标签；不选就当文字"
+						if len(offers) > 0 {
+							say = "点一下或按 Tab 设为标签；不选就当文字"
 						}
-						say := "写下标签名，记下后成为这个主题的标签"
-						switch {
-						case len(offers) > 0:
-							say = ""
-						case part != "":
-							say = "新标签「" + part + "」：记下后加上"
-						}
-						if say != "" {
-							ui.Text(c, say).FontSize(textCaption).TextColor(t.TextMuted).NoWrap()
-						}
+						ui.Text(c, say).FontSize(textCaption).TextColor(t.TextMuted).NoWrap()
 					})
 				})
 			}
@@ -1070,6 +1073,17 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 				a.editFocus = true
 			} else if a.editFocus {
 				a.commitEdit() // the focus went elsewhere
+			}
+			// Its tags show as it is edited, where they stand, each taken
+			// off by a click: they went with the title, and could not be seen
+			// nor changed while it was written.
+			for _, tag := range n.Tags {
+				chip := tagChip(c.Key("edit-tag:"+tag), tag, tag+" ✕", false, markSize*z).KeepFocus().
+					Label("去掉标签 " + tag).Tooltip("点一下去掉这个标签")
+				if chip.Clicked() {
+					tg := tag
+					a.later(func() { a.toggleTag(n, tg) })
+				}
 			}
 			return
 		}

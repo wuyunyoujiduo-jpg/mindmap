@@ -280,36 +280,9 @@ func tagWord(w string) bool {
 	return w != "" && unicode.IsLetter(r) && !(hexColor.MatchString(w) && strings.ContainsAny(w, "0123456789"))
 }
 
-// titleTags takes out of a title the #tags written in it since old, the
-// title before the edit: what is left of it, its words closed up, and
-// the tags. A #word it had before stays a word: a title imported with
-// one is not stripped by the edit of a letter of it, the review found.
-func titleTags(title, old string) (string, []string) {
-	had := map[string]bool{}
-	for _, m := range titleTag.FindAllStringSubmatch(old, -1) {
-		had[m[2]] = true
-	}
-	var tags []string
-	out := titleTag.ReplaceAllStringFunc(title, func(m string) string {
-		sub := titleTag.FindStringSubmatch(m)
-		tag := sub[2]
-		if !tagWord(tag) || had[tag] {
-			return m
-		}
-		if !slices.Contains(tags, tag) {
-			tags = append(tags, tag)
-		}
-		return sub[1]
-	})
-	if len(tags) == 0 {
-		return title, nil
-	}
-	return strings.Join(strings.Fields(out), " "), tags
-}
-
-// titleTagBegun is the tag being written at a title's end, by the rules
-// of titleTags: after a # at its start or after a space, with no space
-// nor mark since, and a letter first.
+// titleTagBegun is the #word being written at a title's end, which may be
+// made a tag: after a # at its start or after a space, with no space nor
+// mark since, and a letter first (no #12, no #ff6600).
 func titleTagBegun(title string) (string, bool) {
 	i := strings.LastIndex(title, "#")
 	if i < 0 {
@@ -354,4 +327,41 @@ func (a *app) dropUnusedTags(tags []string) {
 	if len(a.cfg.Tags) != n {
 		a.cfg.save()
 	}
+}
+
+// titleTagOffers are the tags offered for a #word being written: the tag
+// of that name if there is one, those that begin so, and the word as a
+// new tag.
+func (a *app) titleTagOffers(part string) []string {
+	var out []string
+	if part != "" && slices.Contains(a.allTags(), part) {
+		out = append(out, part)
+	}
+	out = append(out, a.tagOffers(part, 6)...)
+	if part != "" && !slices.Contains(out, part) {
+		out = append(out, part) // a new one, last
+	}
+	return out
+}
+
+// takeTitleTag makes the #word being written in n's title the tag tag:
+// the word out of the title, the tag on the topic, the title still being
+// written. 撤销 on its toast takes it back, and a tag it made out of the
+// library too.
+func (a *app) takeTitleTag(n *model.Node, part, tag string) {
+	a.editText = a.editText[:len(a.editText)-len(part)-1] // "#" and the word
+	a.editFocus = false                                   // the caret to the end
+	a.later(func() {
+		if n.HasTag(tag) {
+			return
+		}
+		fresh := a.libraryIndex(tag) < 0 && !slices.Contains(a.allTags(), tag)
+		a.toggleTag(n, tag)
+		a.tellUndo("已加标签 #"+tag, func() {
+			a.undo()
+			if fresh {
+				a.dropUnusedTags([]string{tag})
+			}
+		})
+	})
 }

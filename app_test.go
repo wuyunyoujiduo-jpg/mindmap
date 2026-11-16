@@ -4034,36 +4034,14 @@ func TestViewTabsStayWithASet(t *testing.T) {
 	}
 }
 
-// TestTagsWrittenInATitle: a #tag written in a topic's title is its tag
-// when the title is kept, those there are offered as it is written, and
-// the 标签 menu's 新建标签… brings the field of a new tag though the right
-// column was put away.
+// TestTagsWrittenInATitle: a #word written in a topic's title is offered
+// as a tag, and is one only when chosen (a click or Tab); not chosen, it
+// stays words of the title. The topic's tags show as its title is edited,
+// each taken off there by a click. The 标签 menu's 新建标签… brings the
+// field of a new tag though the right column was put away.
 func TestTagsWrittenInATitle(t *testing.T) {
-	for _, c := range []struct {
-		in, old, title string
-		tags           []string
-	}{
-		{"看看首页 #性能 #新标签", "", "看看首页", []string{"性能", "新标签"}},
-		{"#优化 加载慢", "", "加载慢", []string{"优化"}},
-		{"前端　#性能", "", "前端", []string{"性能"}}, // a full-width space
-		{"修 issue #12 和 C# 的事", "", "修 issue #12 和 C# 的事", nil},
-		{"https://x.com/a#b", "", "https://x.com/a#b", nil},
-		{"#性能，再看", "", "，再看", []string{"性能"}},
-		// Not tags: a color, a number, words that a number leads.
-		{"主色 #ff6600 按钮", "", "主色 #ff6600 按钮", nil},
-		{"#1号方案 和 #2024Q3", "", "#1号方案 和 #2024Q3", nil},
-		// A #word the title had before stays a word: an edit of a letter
-		// does not strip an imported title.
-		{"#include <stdio.h> 的用法", "#include <stdio.h> 的用发", "#include <stdio.h> 的用法", nil},
-		{"#include <stdio.h> #笔记", "#include <stdio.h>", "#include <stdio.h>", []string{"笔记"}},
-	} {
-		title, tags := titleTags(c.in, c.old)
-		if title != c.title || !slices.Equal(tags, c.tags) {
-			t.Errorf("%q: %q %v, want %q %v", c.in, title, tags, c.title, c.tags)
-		}
-	}
-	// The offers follow the same rules: none for what will be no tag.
-	for in, want := range map[string]bool{"导出 #性": true, "导出 #": true, "修 #12": false, "#性能，再看": false, "a#b": false, "前端　#性": true} {
+	// The offers are of what may be a tag: none for a number or a color.
+	for in, want := range map[string]bool{"导出 #性": true, "导出 #": true, "修 #12": false, "#性能，再看": false, "a#b": false, "前端　#性": true, "主色 #ff6600": false} {
 		if _, got := titleTagBegun(in); got != want {
 			t.Errorf("titleTagBegun(%q) = %v", in, got)
 		}
@@ -4074,39 +4052,71 @@ func TestTagsWrittenInATitle(t *testing.T) {
 		t.Fatal(err)
 	}
 	n, _ := a.selectedNode()
+	id := n.ID
 	a.startEdit(n.ID)
 	tt.Frame()
 	tt.Frame()
 	tt.Key(ui.Cmd, ui.KeyA)
 	tt.Type("导出 PNG #性")
 	tt.Frame()
-	if !tt.HasText("#性能") {
+	if !tt.HasText("#性能") || !tt.HasText("点一下或按 Tab 设为标签；不选就当文字") {
 		t.Fatalf("no tag offered: %q", tt.Texts())
 	}
 	snapshot(t, tt, "title-tag-offers")
 	tt.Key(0, ui.KeyTab)
 	tt.Frame()
-	if a.editText != "导出 PNG #性能 " {
-		t.Fatalf("Tab wrote %q", a.editText)
-	}
-	tt.Type("#对外")
 	tt.Frame()
-	if !tt.HasText("新标签「对外」：记下后加上") {
-		t.Fatalf("a new tag not said: %q", tt.Texts())
+	if a.editText != "导出 PNG " || !n.HasTag("性能") || a.editing != id {
+		t.Fatalf("Tab: %q, tags %v, editing %q", a.editText, n.Tags, a.editing)
 	}
+	// Its tags show as it is edited.
+	if !tt.HasText("性能 ✕") {
+		t.Fatalf("the tags not shown while editing: %q", tt.Texts())
+	}
+	snapshot(t, tt, "title-tags-editing")
+	// A #word not chosen is words of the title.
+	tt.Type("#v2 发布")
+	tt.Frame()
 	tt.Key(0, ui.KeyEnter)
 	tt.Frame()
-	if n.Title != "导出 PNG" || !n.HasTag("性能") || !n.HasTag("对外") || a.libraryIndex("对外") < 0 {
+	if n.Title != "导出 PNG #v2 发布" || n.HasTag("v2") || !n.HasTag("性能") {
 		t.Fatalf("title %q, tags %v", n.Title, n.Tags)
 	}
-	// 撤销 on its toast takes back the title and the tags, and a tag it
-	// made is out of the library again.
-	id := n.ID
+
+	// A new tag chosen by a click; 撤销 on its toast takes it back, and out
+	// of the library too.
+	a.startEdit(n.ID)
+	tt.Frame()
+	tt.Frame()
+	tt.Type(" #对外")
+	tt.Frame()
+	if err := tt.Click("设为标签 对外"); err != nil {
+		t.Fatalf("%v: %q", err, tt.Texts())
+	}
+	tt.Frame()
+	tt.Frame()
+	if !n.HasTag("对外") || a.libraryIndex("对外") < 0 || strings.Contains(a.editText, "#对外") {
+		t.Fatalf("not made a tag: %v, %q", n.Tags, a.editText)
+	}
 	a.noticeUndo()
 	n, _ = a.doc.Find(id)
-	if n.Title != "支持导出图片" || n.HasTag("对外") || a.libraryIndex("对外") >= 0 || a.libraryIndex("性能") < 0 {
-		t.Fatalf("not undone in one step: %q %v, library has 对外: %v", n.Title, n.Tags, a.libraryIndex("对外") >= 0)
+	if n.HasTag("对外") || a.libraryIndex("对外") >= 0 || !n.HasTag("性能") {
+		t.Fatalf("not taken back: %v, library has 对外: %v", n.Tags, a.libraryIndex("对外") >= 0)
 	}
+	// A tag taken off by a click as the title is edited.
+	a.startEdit(n.ID)
+	tt.Frame()
+	tt.Frame()
+	if err := tt.Click("去掉标签 性能"); err != nil {
+		t.Fatalf("%v: %q", err, tt.Texts())
+	}
+	tt.Frame()
+	n, _ = a.doc.Find(id)
+	if n.HasTag("性能") || a.editing != id {
+		t.Fatalf("tags %v, editing %q", n.Tags, a.editing)
+	}
+	tt.Key(0, ui.KeyEscape)
+	tt.Frame()
 
 	// 新建标签… with the right column put away.
 	a.panelOff = true
