@@ -21,10 +21,10 @@ import (
 // base nil merges two versions with no known common one: what is in
 // either is kept, and nothing is deleted.
 func Merge(base, ours, theirs *File) (merged *File, clashes []Clash) {
+	m := &merger{noBase: base == nil}
 	if base == nil {
 		base = &File{}
 	}
-	m := &merger{}
 	merged = &File{}
 	m.at = Clash{}
 	m.into(merged, m.object(nil, fileFields(base), fileFields(ours), fileFields(theirs)))
@@ -222,12 +222,14 @@ type Clash struct {
 	Sheet string // the canvas's ID, for a canvas's own field
 	// Field is where the field is in the JSON of the topic, the canvas or
 	// the map: ["title"], ["task", "status"].
-	Field        []string
-	Ours, Theirs json.RawMessage // nil for none
-	quiet        bool            // of a line between topics: not asked
+	Field              []string
+	Base, Ours, Theirs json.RawMessage // nil for none; Base nil too when there is no base
+	NoBase             bool            // merged with no version both came from
+	quiet              bool            // of a line between topics: not asked
 }
 
 type merger struct {
+	noBase  bool
 	clashes []Clash
 	at      Clash // what is being merged
 }
@@ -255,7 +257,7 @@ func (m *merger) value(path []string, b, o, t json.RawMessage) json.RawMessage {
 	}
 	if !m.at.quiet {
 		c := m.at
-		c.Field, c.Ours, c.Theirs = slices.Clone(path), o, t
+		c.Field, c.Base, c.Ours, c.Theirs, c.NoBase = slices.Clone(path), b, o, t, m.noBase
 		m.clashes = append(m.clashes, c)
 	}
 	return o

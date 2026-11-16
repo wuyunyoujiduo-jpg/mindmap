@@ -121,6 +121,11 @@ func (f *fakeGitHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.blobs[sha] = data
 		f.head = f.putCommit(f.putTree(map[string]string{strings.TrimPrefix(p, "/contents/"): sha}), "")
 		reply(201, map[string]any{"commit": map[string]string{"sha": f.head}})
+	case p == "/commits" && r.URL.Query().Get("path") != "" && r.URL.Query().Get("sha") == f.head:
+		reply(200, []any{map[string]any{"commit": map[string]any{
+			"message":   "MyMind 同步：1 个文件（Office-Mac.local）",
+			"committer": map[string]string{"date": "2026-11-15T14:20:00Z"},
+		}}})
 	case strings.HasPrefix(p, "/git/commits/"):
 		reply(200, map[string]any{"tree": map[string]string{"sha": f.commits[strings.TrimPrefix(p, "/git/commits/")][0]}})
 	case strings.HasPrefix(p, "/git/trees/") && r.Method == "GET":
@@ -418,11 +423,12 @@ func TestNewerMapAnalysis(t *testing.T) {
 func TestMerged(t *testing.T) {
 	f, cfg := setup(t)
 	var gotBase string
-	cfg.Merge = func(p string, base, local, remote []byte) ([]byte, bool) {
+	var when MergeInfo
+	cfg.Merge = func(p string, base, local, remote []byte, w MergeInfo) ([]byte, bool) {
 		if !strings.HasSuffix(p, ".mindmap.json") {
 			return nil, false
 		}
-		gotBase = string(base)
+		gotBase, when = string(base), w
 		return []byte(string(local) + "+" + string(remote)), true
 	}
 	a, b := t.TempDir(), t.TempDir()
@@ -441,6 +447,9 @@ func TestMerged(t *testing.T) {
 	if gotBase != "base" {
 		t.Errorf("merged against %q, want the version both came from", gotBase)
 	}
+	if when.RemoteFrom != "Office-Mac" || when.RemoteAt.IsZero() || when.LocalAt.IsZero() || when.BaseAt.IsZero() {
+		t.Errorf("when %+v", when)
+	}
 	if read(a, "计划.mindmap.json") != "from a+from b!" || len(res.Merged) != 1 {
 		t.Fatalf("map: %q, %+v", read(a, "计划.mindmap.json"), res)
 	}
@@ -457,5 +466,18 @@ func TestMerged(t *testing.T) {
 	sync1(t, b, cfg)
 	if read(b, "计划.mindmap.json") != "from a+from b!" {
 		t.Fatal("b did not take the merge")
+	}
+}
+
+func TestHostOf(t *testing.T) {
+	for msg, want := range map[string]string{
+		"MyMind 同步：3 个文件（MacBook-Pro.local）": "MacBook-Pro",
+		"MyMind 同步：1 个文件，删除 2 个（家里的 Mac）":    "家里的 Mac",
+		"MyMind 同步：1 个文件":                    "",
+		"Fix things (by hand)":               "",
+	} {
+		if got := hostOf(msg); got != want {
+			t.Errorf("hostOf(%q) = %q, want %q", msg, got, want)
+		}
 	}
 }

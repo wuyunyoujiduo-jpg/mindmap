@@ -8,31 +8,38 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/ghsync"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
 
 // A map changed on two computers is merged topic by topic by the sync
 // (mergeMapVersions); what both changed, each its own way, is this
 // computer's until the user chooses, as git asks: a window lists each
-// place, the two versions side by side, one chosen by a click.
+// place, where its topic is and what it was when the two last agreed,
+// then the two versions side by side, each with when and on which
+// computer it was made, one chosen by a click. Two values with nothing
+// round them were two to guess between, the user found.
 
 // mergeAsk is a merged map's clashes, waiting for the user's choice.
 type mergeAsk struct {
 	path    string
 	clashes []model.Clash
 	where   []string // what each clash is of, in words
+	under   []string // where its topic is: "收件箱 › 待整理"
 	theirs  []bool   // the other computer's chosen
+	when    ghsync.MergeInfo
 }
 
 // askMerge queues the clashes of a map merged, for mergeView to ask.
-func (a *app) askMerge(path string, clashes []model.Clash) {
+func (a *app) askMerge(path string, clashes []model.Clash, when ghsync.MergeInfo) {
 	if len(clashes) == 0 {
 		return
 	}
 	f, _ := model.Load(path)
-	m := &mergeAsk{path: path, clashes: clashes, theirs: make([]bool, len(clashes))}
+	m := &mergeAsk{path: path, clashes: clashes, theirs: make([]bool, len(clashes)), when: when}
 	for _, c := range clashes {
 		m.where = append(m.where, clashWhere(f, c))
+		m.under = append(m.under, clashUnder(f, c))
 	}
 	a.merges = slices.DeleteFunc(a.merges, func(x *mergeAsk) bool { return x.path == path })
 	a.merges = append(a.merges, m)
@@ -87,7 +94,7 @@ func (a *app) mergeView(c *ui.Context) {
 		w, h := c.Size()
 		ui.Column(c).Gap(12).Width(min(600, w-80)).Children(func() {
 			ui.Text(c, "合并「"+mapName(m.path)+"」").FontSize(17).Bold()
-			ui.Text(c, fmt.Sprintf("这张导图在两台电脑上都改了，其余已自动合并。下面 %d 处两边改得不一样，每处选一个留下。", len(m.clashes))).
+			ui.Text(c, fmt.Sprintf("两台电脑都改了这张导图，各自改的已合在一起。下面 %d 处两边改成了不一样的：对照原来是什么、哪边较新，每处选一个留下。", len(m.clashes))).
 				FontSize(12).TextColor(t.TextMuted).Wrap()
 			ui.Scroll(c.Key("clashes")).FillWidth().MaxHeight(max(160, h-280)).Gap(10).Children(func() {
 				for i := range m.clashes {
@@ -122,10 +129,34 @@ func (a *app) mergeView(c *ui.Context) {
 func (a *app) clashRow(c *ui.Context, m *mergeAsk, i int) {
 	t := c.Theme()
 	cl := m.clashes[i]
+	now := a.now()
+	ours, theirs := m.when.LocalAt, m.when.RemoteAt
+	later := 0 // 1 ours, 2 theirs
+	if !ours.IsZero() && !theirs.IsZero() {
+		if ours.After(theirs) {
+			later = 1
+		} else if theirs.After(ours) {
+			later = 2
+		}
+	}
 	ui.Column(c.Key(fmt.Sprint("clash", i))).Gap(6).FillWidth().Children(func() {
-		ui.Text(c, m.where[i]).FontSize(textSmall).FontWeight(600).Wrap()
+		ui.Column(c).Gap(2).Children(func() {
+			ui.Text(c, m.where[i]).FontSize(textSmall).FontWeight(600).Wrap()
+			if m.under[i] != "" {
+				ui.Text(c, "在 "+m.under[i]).FontSize(textCaption).TextColor(t.TextMuted).Wrap()
+			}
+		})
+		// What it was when the two last agreed: what each side did to it.
+		was := "原来：" + clashValue(cl.Field, cl.Base)
+		switch {
+		case cl.NoBase:
+			was = "这是旧版本同步留下的冲突副本，不知道两边原来一致时是什么"
+		case !m.when.BaseAt.IsZero():
+			was += "（上次两边一致，" + whenLabel(m.when.BaseAt.Local(), now) + " 同步时）"
+		}
+		ui.Text(c, was).FontSize(textCaption).TextColor(t.Text.MixOklab(t.TextMuted, 0.5)).Wrap()
 		ui.Row(c).Gap(8).FillWidth().Children(func() {
-			side := func(key, name string, v json.RawMessage, theirs bool) {
+			side := func(key, name string, at time.Time, newer bool, v json.RawMessage, theirs bool) {
 				chosen := m.theirs[i] == theirs
 				b := ui.Column(c.Key(key)).Grow(1).Basis(0).Gap(3).Padding(9, 12).Radius(radiusCard).
 					Cursor(ui.CursorPointer).Label(name)
@@ -142,12 +173,25 @@ func (a *app) clashRow(c *ui.Context, m *mergeAsk, i int) {
 					if chosen {
 						col = t.Accent
 					}
-					ui.Text(c, name).FontSize(textCaption).TextColor(col).PassThrough()
-					ui.Text(c, clashValue(cl.Field, v)).FontSize(textSmall).Wrap().MaxLines(6).PassThrough()
+					ui.Row(c).Gap(6).AlignItems(ui.Center).PassThrough().Children(func() {
+						ui.Text(c, name).FontSize(textCaption).TextColor(col).NoWrap().PassThrough()
+						if newer {
+							ui.Text(c, "较新").FontSize(11).TextColor(t.Accent).Padding(1, 6).Radius(5).
+								Background(t.Accent.Alpha(0.1)).NoWrap().PassThrough()
+						}
+					})
+					if !at.IsZero() {
+						ui.Text(c, "导图最后改于 "+whenLabel(at.Local(), now)).FontSize(11).TextColor(t.TextMuted).PassThrough()
+					}
+					ui.Text(c, clashValue(cl.Field, v)).FontSize(textSmall).Wrap().MaxLines(6).Margin(3, 0, 0).PassThrough()
 				})
 			}
-			side("ours", "这台电脑", cl.Ours, false)
-			side("theirs", "另一台电脑", cl.Theirs, true)
+			other := "另一台电脑"
+			if m.when.RemoteFrom != "" {
+				other += " · " + m.when.RemoteFrom
+			}
+			side("ours", "这台电脑", ours, later == 1, cl.Ours, false)
+			side("theirs", other, theirs, later == 2, cl.Theirs, true)
 		})
 	})
 }
@@ -158,7 +202,10 @@ func clashWhere(f *model.File, c model.Clash) string {
 	switch {
 	case c.Node != "":
 		title := "一个主题"
-		if f != nil {
+		var was string
+		if slices.Equal(c.Field, []string{"title"}) && json.Unmarshal(c.Base, &was) == nil && strings.TrimSpace(was) != "" {
+			title = "「" + strings.TrimSpace(was) + "」" // its title the two agreed on, not this one's
+		} else if f != nil {
 			if n := f.Node(c.Node); n != nil {
 				title = "「" + cmpOr(strings.TrimSpace(n.Title), "无标题") + "」"
 			}
@@ -174,6 +221,27 @@ func clashWhere(f *model.File, c model.Clash) string {
 		return title + "的" + field
 	}
 	return "导图的" + field
+}
+
+// clashUnder says where a clash's topic is: the titles above it, the
+// canvas's too when the map has several.
+func clashUnder(f *model.File, c model.Clash) string {
+	if f == nil || c.Node == "" {
+		return ""
+	}
+	d := f.SheetOf(c.Node)
+	if d == nil {
+		return ""
+	}
+	var parts []string
+	if len(f.Sheets) > 1 {
+		parts = append(parts, "画布「"+d.Title+"」")
+	}
+	path := d.Path(c.Node)
+	for _, n := range path[:max(0, len(path)-1)] {
+		parts = append(parts, cmpOr(strings.TrimSpace(n.Title), "无标题"))
+	}
+	return strings.Join(parts, " › ")
 }
 
 // fieldName names a field of a topic, a canvas or a map in words.

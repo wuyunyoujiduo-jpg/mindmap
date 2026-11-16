@@ -426,7 +426,10 @@ by AI, and an AI assistant.
   both computers is merged topic by topic against the version both came
   from (`model.Merge`, by `Config.Merge`), and where both changed one
   field each its own way a window asks which to keep, as git does
-  (`mergeask.go`, `Clash`, `TakeTheirs`); two files of one map, the
+  (`mergeask.go`, `Clash`, `TakeTheirs`), saying where the topic is, what
+  it was when the two agreed, and when and on which computer each side
+  last changed the map (`ghsync.MergeInfo`): two values alone were two to
+  guess between, the user found; two files of one map, the
   copy syncs before 0.100 kept, were two to compare by eye, which the
   user could not, and are folded into their map (`mergeConflictCopies`).
 - Screenshots are the app's own (`internal/screenshot`), on OneShot's way:

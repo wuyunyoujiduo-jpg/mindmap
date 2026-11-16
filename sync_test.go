@@ -163,7 +163,8 @@ func TestSyncMergeAsks(t *testing.T) {
 	o, _ := ours.Marshal()
 	r, _ := theirs.Marshal()
 	a.syncRun = func(_ context.Context, dir string, cfg ghsync.Config, _ func(string)) (ghsync.Result, error) {
-		data, ok := cfg.Merge("AI.mindmap.json", b, o, r)
+		data, ok := cfg.Merge("AI.mindmap.json", b, o, r, ghsync.MergeInfo{
+			BaseAt: testNow.Add(-26 * time.Hour), LocalAt: testNow.Add(-time.Hour), RemoteAt: testNow.Add(-2 * time.Hour), RemoteFrom: "Office-Mac"})
 		if !ok {
 			t.Fatal("not merged")
 		}
@@ -174,13 +175,15 @@ func TestSyncMergeAsks(t *testing.T) {
 	tt.Frame()
 	tt.Frame()
 	snapshot(t, tt, "sync-merge-ask")
-	if !a.mergeOpen || !tt.HasText("合并「AI」") || !tt.HasText("「这台的名字」的标题") || !tt.HasText("另一台的名字") {
+	if !a.mergeOpen || !tt.HasText("合并「AI」") || !tt.HasText("「模型」的标题") || !tt.HasText("另一台的名字") ||
+		!tt.HasText("原来：模型（上次两边一致，昨天 07:00 同步时）") || !tt.HasText("在 AI") ||
+		!tt.HasText("另一台电脑 · Office-Mac") || !tt.HasText("导图最后改于 今天 08:00") || !tt.HasText("较新") {
 		t.Fatalf("not asked: %q", tt.Texts())
 	}
 	if f, _ := model.Load(path); f.Node(added.ID) == nil {
 		t.Fatal("what the other computer added is not merged")
 	}
-	if err := tt.Click("另一台电脑"); err != nil {
+	if err := tt.Click("另一台电脑 · Office-Mac"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()

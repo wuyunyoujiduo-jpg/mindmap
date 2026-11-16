@@ -24,6 +24,7 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -56,8 +57,18 @@ type Config struct {
 	Now func() time.Time
 	// Merge, when not nil, merges a file changed on both sides: the
 	// version both came from (nil for none), the local one and the
-	// repository's; ok false leaves them to be kept apart.
-	Merge func(path string, base, local, remote []byte) (merged []byte, ok bool)
+	// repository's, and when each was; ok false leaves them to be kept
+	// apart.
+	Merge func(path string, base, local, remote []byte, when MergeInfo) (merged []byte, ok bool)
+}
+
+// MergeInfo is when the versions merged were, to tell the user which is
+// which: the last sync, which both had; the local file's last change; the
+// repository's last commit of it, and the computer that made it, as its
+// message names it ("" when not found).
+type MergeInfo struct {
+	BaseAt, LocalAt, RemoteAt time.Time
+	RemoteFrom                string
 }
 
 func (c Config) branch() string {
@@ -447,7 +458,7 @@ func syncOnce(ctx context.Context, dir string, cfg Config, progress func(string)
 			}
 			continue
 		}
-		if ok, err := cfg.merge(ctx, dir, c.path, c.base, c.local, data); err != nil {
+		if ok, err := cfg.merge(ctx, dir, c.path, c.base, c.local, data, head, s.At); err != nil {
 			return res, err
 		} else if ok {
 			res.Merged = append(res.Merged, c.path)
@@ -560,7 +571,7 @@ func newerClip(dir, p string, data []byte) (newer, ok bool) {
 // merge merges a file changed on both sides into the folder, by
 // Config.Merge, and tells whether it did: not when the file changed again
 // while syncing, which the next sync takes up.
-func (cfg Config) merge(ctx context.Context, dir, p, base, local string, remote []byte) (bool, error) {
+func (cfg Config) merge(ctx context.Context, dir, p, base, local string, remote []byte, head string, baseAt time.Time) (bool, error) {
 	if cfg.Merge == nil {
 		return false, nil
 	}
@@ -575,11 +586,51 @@ func (cfg Config) merge(ctx context.Context, dir, p, base, local string, remote 
 			return false, err
 		}
 	}
-	merged, ok := cfg.Merge(p, old, mine, remote)
+	when := MergeInfo{BaseAt: baseAt}
+	if info, err := os.Stat(full); err == nil {
+		when.LocalAt = info.ModTime()
+	}
+	when.RemoteAt, when.RemoteFrom = cfg.lastCommit(ctx, head, p)
+	merged, ok := cfg.Merge(p, old, mine, remote, when)
 	if !ok || !unchanged(dir, p, local) {
 		return false, nil
 	}
 	return true, writeAtomic(full, merged)
+}
+
+// lastCommit is when the repository's file was last committed, and from
+// which computer, as the sync's message names it ("…（host）"); zero
+// when not found, which is no failure of the sync.
+func (cfg Config) lastCommit(ctx context.Context, head, p string) (time.Time, string) {
+	var commits []struct {
+		Commit struct {
+			Message   string `json:"message"`
+			Committer struct {
+				Date time.Time `json:"date"`
+			} `json:"committer"`
+		} `json:"commit"`
+	}
+	q := "/commits?per_page=1&sha=" + url.QueryEscape(head) + "&path=" + url.QueryEscape(p)
+	if cfg.call(ctx, "GET", q, nil, &commits) != nil || len(commits) == 0 {
+		return time.Time{}, ""
+	}
+	c := commits[0].Commit
+	return c.Committer.Date, hostOf(c.Message)
+}
+
+// hostOf is the computer a sync's commit message names: "MyMind 同步：3 个
+// 文件（MacBook-Pro）" is "MacBook-Pro".
+func hostOf(msg string) string {
+	msg = strings.TrimSpace(strings.SplitN(msg, "\n", 2)[0])
+	if !strings.HasPrefix(msg, "MyMind 同步") || !strings.HasSuffix(msg, "）") {
+		return ""
+	}
+	i := strings.LastIndex(msg, "（")
+	if i < 0 {
+		return ""
+	}
+	host := strings.TrimSuffix(msg[i+len("（"):], "）")
+	return strings.TrimSuffix(host, ".local")
 }
 
 // conflictCopy names the copy of the repository's version of a file

@@ -93,6 +93,13 @@ func (a *app) mergeConflictCopies() {
 		if err1 != nil || err2 != nil {
 			continue
 		}
+		// When each was: this computer's last change, and the conflict's,
+		// which the copy's name says.
+		var when ghsync.MergeInfo
+		if info, err := os.Stat(orig); err == nil {
+			when.LocalAt = info.ModTime()
+		}
+		when.RemoteAt = copyTime(fi.Path)
 		merged, clashes, ok := mergeMapVersions(orig, nil, was, copied)
 		if !ok {
 			continue
@@ -108,7 +115,7 @@ func (a *app) mergeConflictCopies() {
 		}
 		a.removeMapMeta(fi.Path)
 		done = append(done, undo{orig, fi.Path, was, copied})
-		a.askMerge(orig, clashes)
+		a.askMerge(orig, clashes, when)
 	}
 	if len(done) == 0 {
 		return
@@ -137,6 +144,24 @@ func (a *app) mergeConflictCopies() {
 			return slices.ContainsFunc(done, func(u undo) bool { return u.path == m.path })
 		})
 	})
+}
+
+// copyTime is when a sync kept a conflict copy, as its name says.
+func copyTime(p string) time.Time {
+	base := filepath.Base(p)
+	i := strings.LastIndex(base, "(GitHub 冲突 ")
+	if i < 0 {
+		return time.Time{}
+	}
+	rest := base[i+len("(GitHub 冲突 "):]
+	if len(rest) < len("2006-01-02 1504") {
+		return time.Time{}
+	}
+	at, err := time.ParseInLocation("2006-01-02 1504", rest[:len("2006-01-02 1504")], time.Local)
+	if err != nil {
+		return time.Time{}
+	}
+	return at
 }
 
 // writeFile writes data to path through a file renamed over it.
@@ -183,12 +208,16 @@ func (a *app) syncNow() {
 	a.syncBusy, a.syncTried, a.syncMsg = true, a.now(), "正在同步…"
 	dir, cfg, run, post := a.dir, a.syncConfig(), a.syncRun, a.post
 	var mu sync.Mutex
-	clashes := map[string][]model.Clash{}
-	cfg.Merge = func(p string, base, local, remote []byte) ([]byte, bool) {
+	type found struct {
+		clashes []model.Clash
+		when    ghsync.MergeInfo
+	}
+	clashes := map[string]found{}
+	cfg.Merge = func(p string, base, local, remote []byte, when ghsync.MergeInfo) ([]byte, bool) {
 		data, cl, ok := mergeMapVersions(p, base, local, remote)
 		if ok && len(cl) > 0 {
 			mu.Lock()
-			clashes[filepath.Join(dir, filepath.FromSlash(p))] = cl
+			clashes[filepath.Join(dir, filepath.FromSlash(p))] = found{cl, when}
 			mu.Unlock()
 		}
 		return data, ok
@@ -220,7 +249,8 @@ func (a *app) syncNow() {
 		}
 		mu.Lock()
 		for _, p := range res.Merged {
-			a.askMerge(filepath.Join(dir, filepath.FromSlash(p)), clashes[filepath.Join(dir, filepath.FromSlash(p))])
+			full := filepath.Join(dir, filepath.FromSlash(p))
+			a.askMerge(full, clashes[full].clashes, clashes[full].when)
 		}
 		mu.Unlock()
 		switch n := len(res.Merged); {
