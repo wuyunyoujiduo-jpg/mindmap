@@ -4303,3 +4303,98 @@ func TestTagToastUndoesTheTag(t *testing.T) {
 		t.Fatal("the offer came back after Escape")
 	}
 }
+
+// TestTagOfferPutAway: Escape on the canvas puts the offer away and the
+// edit goes on; put away, Tab is the field's own (the outline's indents);
+// the next #word is offered again (the review of 0.99.1).
+func TestTagOfferPutAway(t *testing.T) {
+	a, tt := newTestApp(t)
+	if err := clickNode(t, tt, a, "支持导出图片"); err != nil {
+		t.Fatal(err)
+	}
+	n, _ := a.selectedNode()
+	id := n.ID
+	a.startEdit(id)
+	tt.Frame()
+	tt.Frame()
+	tt.Key(ui.Cmd, ui.KeyA)
+	tt.Type("导出 PNG #性")
+	tt.Frame()
+	tt.Key(0, ui.KeyEscape)
+	tt.Frame()
+	tt.Frame()
+	if a.editing != id || a.editText != "导出 PNG #性" || tt.HasText("#性能") {
+		t.Fatalf("Escape: editing %q, text %q, offer shown %v", a.editing, a.editText, tt.HasText("#性能"))
+	}
+	tt.Key(0, ui.KeyEscape) // with nothing offered, Escape ends the edit
+	tt.Frame()
+	if a.editing != "" {
+		t.Fatal("the second Escape did not end the edit")
+	}
+
+	// The outline: put away, Tab indents.
+	a.showView(viewOutline)
+	tt.Frame()
+	tt.Frame()
+	line := a.doc.Root.Children[1] // a main topic after another: it can be indented
+	depth := len(a.doc.Path(line.ID))
+	a.outlineFocus = line.ID
+	tt.Frame()
+	tt.Frame()
+	tt.Key(ui.Cmd, ui.KeyRight)
+	tt.Type(" #优")
+	tt.Frame()
+	if !tt.HasText("#优化") {
+		t.Fatalf("no offer: %q", tt.Texts())
+	}
+	tt.Key(0, ui.KeyEscape)
+	tt.Frame()
+	tt.Frame()
+	tt.Key(0, ui.KeyTab)
+	tt.Frame()
+	tt.Frame()
+	line, _ = a.doc.Find(line.ID)
+	if line.HasTag("优化") || len(a.doc.Path(line.ID)) != depth+1 {
+		t.Fatalf("Tab after Escape: tags %v, depth %d (was %d)", line.Tags, len(a.doc.Path(line.ID)), depth)
+	}
+	// The word ended, the next is offered again, the same text too.
+	tt.Type(" 再 ") // a frame between, as typing has
+	tt.Frame()
+	tt.Type("#优")
+	tt.Frame()
+	if !tt.HasText("#优化") {
+		t.Fatalf("the next #word not offered: %q", tt.Texts())
+	}
+}
+
+// TestGrabOrder: a grab for the AI goes after those for the AI and the
+// one being stepped, ahead of the posters; a poster's grab asked for by
+// the AI moves there, with its time from then (the review of 0.99.1).
+func TestGrabOrder(t *testing.T) {
+	a := &app{}
+	ids := func() string {
+		var s []string
+		for _, g := range a.grabs {
+			mark := ""
+			if g.forAI {
+				mark = "*"
+			}
+			s = append(s, g.id+mark)
+		}
+		return strings.Join(s, " ")
+	}
+	a.queueGrab("A", false)
+	a.queueGrab("B", false)
+	a.queueGrab("C", false)
+	a.grabs[0].p = &ui.VideoPlayer{} // A is being stepped
+	a.grabs[0].spent = 15 * time.Second
+	a.queueGrab("C", true)
+	a.queueGrab("D", true)
+	if got := ids(); got != "A C* D* B" {
+		t.Fatalf("order %q", got)
+	}
+	a.queueGrab("A", true) // the one being stepped stays first, its time new
+	if got := ids(); got != "A* C* D* B" || a.grabs[0].spent != 0 || a.grabs[0].at != nil {
+		t.Fatalf("order %q, spent %v", got, a.grabs[0].spent)
+	}
+}

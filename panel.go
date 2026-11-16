@@ -122,7 +122,7 @@ func (a *app) nodePanel(c *ui.Context) {
 			if in.Changed() {
 				a.mutate("title:"+n.ID, func() { n.Title = title })
 			}
-			a.fieldTitleTags(in, n, title, true)
+			a.fieldTitleTags(in, "panel:"+n.ID, n, title, true)
 			if in.Focused() {
 				a.titleTagOffer(c, in, "panel:"+n.ID, title, func(part, tag string) { a.takeFieldTag(n, part, tag) })
 			}

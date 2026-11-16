@@ -1009,7 +1009,7 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 			in.HandleInput(func(ev ui.InputEvent) bool {
 				if ev.Kind == ui.InputKeyDown && ev.Key == ui.KeyTab && ev.Mods == 0 && a.editing == n.ID {
 					// A #word begun: Tab makes it the first tag offered.
-					if part, tag, ok := a.titleTagTab(a.editText); ok {
+					if part, tag, ok := a.titleTagTab("canvas:"+n.ID, a.editText); ok {
 						a.takeTitleTag(n, part, tag)
 						return true
 					}
@@ -1025,6 +1025,7 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 			// tag, a click or Tab making it one; not chosen, it stays words of
 			// the title. Every #word a tag was a rule the user could not see,
 			// nor say no to (0.98.1).
+			offering := a.tagOfferShown("canvas:"+n.ID, a.editText) // as the frame began: Escape below puts it away
 			a.titleTagOffer(c, in, "canvas:"+n.ID, a.editText, func(part, tag string) { a.takeTitleTag(n, part, tag) })
 			if strings.ContainsAny(a.editText, "\r\n\t") { // pasted lines join
 				a.editText = strings.Join(strings.Fields(strings.ReplaceAll(a.editText, "\r", "\n")), " ")
@@ -1033,7 +1034,13 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 				a.reveal = true // the node grows as it is typed in: keep it in view
 			}
 			if in.Shortcut(0, ui.KeyEscape) {
-				a.cancelEdit()
+				if offering {
+					// The offer of a tag put away, the edit going on: its hint
+					// says Esc 收起, and Esc ended the edit, the words lost.
+					a.dismissTagOffer("canvas:"+n.ID, a.editText)
+				} else {
+					a.cancelEdit()
+				}
 			} else if in.Focused() {
 				if !a.editFocus {
 					// The caret at the end: a selection replaced by an input

@@ -452,60 +452,108 @@ func clipContentLen(c *library.Clip, o *clipOrganized) int {
 	return utf8.RuneCountInString(strings.TrimSpace(text)) + utf8.RuneCountInString(strings.TrimSpace(c.Note))
 }
 
-// fillerWords say what is not known of the clip itself: that it cannot be
-// told from its name, that this video or file cannot be told, that it is
-// to be opened, that a line is to be added. Only of the clip: what cannot
-// be decided in a text (医生无法确定这是否是过敏, 难以判断其长期影响,
-// 无法从文件恢复) is its content, which two reviews found dropped.
-var fillerWords = regexp.MustCompile(`无法从(文件名|标题|名称)|` +
-	`(无法|不能|没法|难以|看不出)(判断|确定|得知|看出|知道)?(这个|这条|该|此)(视频|文件|资料|图片|条目|笔记|链接|网页)|` +
-	`(这个|这条|该|此)(视频|文件|资料|图片|条目|笔记|链接|网页)[^，。；]{0,12}(无法|不能|没法|难以|看不出|不清楚)|` +
-	`(需要|还需|需)(打开|播放)(后|才|查看|确认|播放|一遍|看看|并)|没有(任何)?(实际内容|内容线索)|` +
-	`建议(补充|补上)(一句|说明|描述)|(内容|主题)(未知|待补充)`)
+// fillerWords say, of a clause, that what the clip is cannot be told:
+// from its name, or of this video, file or note, or of "it" when what is
+// not known is its content, its use or what it is; that it is to be
+// opened; that a line is to be added. Each is of the clip being what is
+// not known: a clause on what cannot be done or decided in a text (医生无
+// 法确定这是否是过敏, 该视频介绍了用户不能登录时的排查方法, 系统无法确定该
+// 文件的编码, 此文件夹无法删除) is content, which three reviews found
+// dropped; and "it" alone (无法判断它是病毒还是细菌) may be anything.
+var fillerWords = regexp.MustCompile(
+	// from its name
+	`无法从(文件名|标题|名称)|(从|仅凭|凭|根据)(文件名|标题|名称)(无法|不能|难以|看不出)|(文件名|标题)(没有|未)提供(任何)?(信息|线索)|` +
+		// what it is, its content or use, cannot be told
+		`^(无法|不能|没法|难以|看不出)(判断|确定|得知|看出|知道|识别)?(它|其|这个|这条|该|此)?(视频|文件|资料|图片|条目|笔记|链接|网页)?的?(具体)?(内容|用途|主题|来源|是什么|拍的是什么)[。！？；，]*$|` +
+		`^(无法|不能|没法|难以)(判断|确定|得知|看出)(它|其)是(素材|录屏|教程|随手)|` +
+		// this video, file or note cannot be told
+		`^(这个|这条|该|此)(视频|文件|资料|图片|条目|笔记|链接|网页)(的(内容|用途|主题|来源))?(暂时|目前|还)?(无法|不能|看不出|不清楚|未知)(判断|确定|得知|看出|归类|识别)?[^，。；]{0,4}[。！？；，]*$|` +
+		// to be opened, to be added to
+		`(需要|还需|需)(打开|播放)(后|才|查看|确认|播放|一遍|看看|并)|没有(任何)?(实际内容|内容线索)|` +
+		`建议(补充|补上)(一句|说明|描述)|(内容|主题)(未知|待补充)`)
 
-// fillerSaid tells whether a text says what is not known rather than
-// what is.
-func fillerSaid(s string) bool { return fillerWords.MatchString(s) }
+// clauses cuts a line at the ends of its clauses, each with its mark.
+func clauses(line string) []string {
+	var out []string
+	start := 0
+	for i, r := range line {
+		if strings.ContainsRune("。！？；，", r) {
+			end := i + utf8.RuneLen(r)
+			out = append(out, line[start:end])
+			start = end
+		}
+	}
+	if start < len(line) {
+		out = append(out, line[start:])
+	}
+	return out
+}
 
-// dropFiller takes out of a text the clauses, or the points of a list,
-// that say what is not known of the clip: a point whole, or not at all.
+// fillerClause tells whether a clause says what is not known of the clip.
+func fillerClause(c string) bool {
+	return fillerWords.MatchString(strings.TrimLeft(strings.TrimSpace(c), "但不过而且目前现在暂时，, "))
+}
+
+// fillerSaid tells whether a text has a clause that says what is not
+// known of the clip.
+func fillerSaid(s string) bool {
+	for _, line := range strings.Split(s, "\n") {
+		for _, c := range clauses(line) {
+			if fillerClause(c) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// listPoint is the head of a point of a list: - or * or 1. or 1、.
+var listPoint = regexp.MustCompile(`^\s*([-*]|\d+[.、)])\s`)
+
+// dropFiller takes out of a text the clauses, or the points of a list
+// with the lines that go on under them, that say what is not known of the
+// clip; what is left ends its sentences, with no line left empty.
 func dropFiller(s string) string {
 	if !fillerSaid(s) {
 		return s
 	}
-	var b strings.Builder
-	for _, line := range strings.SplitAfter(s, "\n") {
-		if t := strings.TrimSpace(line); strings.HasPrefix(t, "-") || strings.HasPrefix(t, "*") {
-			if !fillerSaid(line) {
-				b.WriteString(line)
+	var out []string
+	skipping := false // a point dropped: the lines under it go too
+	for _, line := range strings.Split(s, "\n") {
+		if listPoint.MatchString(line) {
+			skipping = fillerSaid(line)
+			if !skipping {
+				out = append(out, line)
 			}
 			continue
 		}
+		if skipping && strings.TrimSpace(line) != "" && (strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t") || strings.HasPrefix(line, "　")) {
+			continue
+		}
+		skipping = false
 		var kept strings.Builder
-		start := 0
-		for i, r := range line {
-			if strings.ContainsRune("。！？；，", r) {
-				end := i + utf8.RuneLen(r)
-				if !fillerSaid(line[start:end]) {
-					kept.WriteString(line[start:end])
-				}
-				start = end
+		for _, c := range clauses(line) {
+			if !fillerClause(c) {
+				kept.WriteString(c)
 			}
 		}
-		if rest := line[start:]; !fillerSaid(rest) {
-			kept.WriteString(rest)
+		k := strings.TrimSpace(kept.String())
+		// A clause gone leaves a mark or a word that led to it.
+		k = strings.TrimLeft(k, "，、；")
+		for _, w := range []string{"但是", "但", "不过", "而且"} {
+			if t, ok := strings.CutPrefix(k, w); ok && k != line {
+				k = strings.TrimLeft(t, "，, ")
+				break
+			}
 		}
-		// A clause gone from the end leaves its comma: the sentence ends.
-		k := strings.TrimRight(kept.String(), "\n")
-		if strings.HasSuffix(k, "，") {
-			k = strings.TrimSuffix(k, "，") + "。"
+		if r, size := utf8.DecodeLastRuneInString(k); size > 0 && strings.ContainsRune("，、；", r) {
+			k = k[:len(k)-size] + "。"
 		}
-		b.WriteString(k)
-		if strings.HasSuffix(line, "\n") {
-			b.WriteString("\n")
+		if k != "" {
+			out = append(out, k)
 		}
 	}
-	return strings.TrimSpace(b.String())
+	return strings.TrimSpace(strings.Join(out, "\n"))
 }
 
 // summaryShown and analysisShown tell whether a clip's details show what

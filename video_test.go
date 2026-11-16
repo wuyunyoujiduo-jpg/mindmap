@@ -158,26 +158,35 @@ func TestVideoSeenByTheAI(t *testing.T) {
 // what cannot be decided stays, and so does a description the user wrote.
 func TestShortClipsStayShort(t *testing.T) {
 	c := &library.Clip{Kind: library.KindLink, URL: "https://example.com", Text: "一句话的网页。"}
-	applyOrganized(c, &clipOrganized{Title: "一页", Desc: "这是一个网页，无法判断这个网页的用途。", Summary: "它讲了一句话。", Analysis: "- 现状\n- 建议", Keywords: []string{"网页"}}, testNow)
+	applyOrganized(c, &clipOrganized{Title: "一页", Desc: "这是一个网页，无法判断它的用途。", Summary: "它讲了一句话。", Analysis: "- 现状\n- 建议", Keywords: []string{"网页"}}, testNow)
 	if c.Title != "一页" || c.Summary != "" || c.Analysis != "" || c.Desc != "这是一个网页。" {
 		t.Fatalf("%+v", c)
 	}
 	for _, s := range []string{"讲为什么量子态无法确定的科普文章", "合同条款，需确认付款日期", "介绍没有信息差时如何定价", "模型无法从少量样本泛化",
 		// what the second review found dropped
-		"作者认为目前难以判断其长期影响。", "医生无法确定这是否是过敏。", "数据库损坏后无法从文件恢复。", "研究者不能确定其来源。", "难以看出这段代码的问题", "用户难以判断内容真假"} {
+		"作者认为目前难以判断其长期影响。", "医生无法确定这是否是过敏。", "数据库损坏后无法从文件恢复。", "研究者不能确定其来源。", "难以看出这段代码的问题", "用户难以判断内容真假",
+		// and the third
+		"该视频介绍了用户不能登录时的排查方法。", "这个视频讲的是为什么程序无法启动。", "该图片展示了手机无法连网时的设置页面", "此文件夹无法删除的解决办法",
+		"系统无法确定该文件的编码时会回退到 UTF-8。", "这条笔记记录了服务器不能启动的排查过程，最后是端口冲突", "无法判断它是病毒还是细菌"} {
 		if fillerSaid(s) {
 			t.Errorf("content taken for filler: %q", s)
 		}
 	}
-	for _, s := range []string{"目前无法从文件名判断它拍的是什么、来自哪里、有什么用。", "需要打开播放并补充一句说明", "内容还需打开确认", "无法判断这个视频的内容", "这条资料暂时无法归类"} {
+	for _, s := range []string{"目前无法从文件名判断它拍的是什么、来自哪里、有什么用。", "需要打开播放并补充一句说明", "内容还需打开确认", "无法判断这个视频的内容",
+		"这条资料暂时无法归类", "无法判断它的用途。", "无法判断它是什么。", "无法确定视频内容。", "从文件名无法判断用途。", "仅凭文件名无法得知内容。",
+		"文件名没有提供任何信息。", "在确认内容前，无法判断它是素材、录屏还是教程", "这个视频看不出来源。"} {
 		if !fillerSaid(s) {
 			t.Errorf("filler not seen: %q", s)
 		}
 	}
 	for in, want := range map[string]string{
 		"一段讲缓存的文章。目前无法从文件名判断它的用途。适合后端。":    "一段讲缓存的文章。适合后端。",
-		"这篇文章讲缓存，分为三部分，但无法判断这个文件的作者":       "这篇文章讲缓存，分为三部分。",
+		"这篇文章讲缓存，分为三部分，但无法判断这个文件的内容":       "这篇文章讲缓存，分为三部分。",
 		"- 先更新库再删缓存\n- 需要打开查看原文\n- 过期时间兜底": "- 先更新库再删缓存\n- 过期时间兜底",
+		"讲了缓存；这个视频看不出来源。":                  "讲了缓存。",
+		"这个视频无法判断，但讲了 TTL。":                "讲了 TTL。",
+		"1. 先更新库\n2. 需要打开查看\n3. 过期兜底":      "1. 先更新库\n3. 过期兜底",
+		"- 需要打开确认\n  续行：删缓存\n- 兜底":         "- 兜底",
 	} {
 		if got := dropFiller(in); got != want {
 			t.Errorf("dropFiller(%q) = %q, want %q", in, got, want)
@@ -186,7 +195,7 @@ func TestShortClipsStayShort(t *testing.T) {
 	// Organized again, a description the user wrote stays when the answer
 	// has none, filler or not.
 	mine := &library.Clip{Kind: library.KindText, Text: strings.Repeat("长文", 300), Desc: "我写的：需要打开查看的那份合同"}
-	applyOrganized(mine, &clipOrganized{Title: "合同", Desc: "无法判断这条资料的用途。"}, testNow)
+	applyOrganized(mine, &clipOrganized{Title: "合同", Desc: "无法判断它的用途。"}, testNow)
 	if mine.Desc != "我写的：需要打开查看的那份合同" {
 		t.Fatalf("the user's description: %q", mine.Desc)
 	}

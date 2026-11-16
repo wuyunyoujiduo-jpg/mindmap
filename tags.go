@@ -352,6 +352,9 @@ func (a *app) titleTagOffers(part string) []string {
 func (a *app) titleTagOffer(c *ui.Context, in ui.Element, key, text string, take func(part, tag string)) {
 	part, ok := titleTagBegun(text)
 	if !ok {
+		if strings.HasPrefix(a.tagDismissed, key+"|") {
+			a.tagDismissed = "" // the word ended: the next one is offered
+		}
 		return
 	}
 	// Put away (Escape, a click beside it), it stays away for this word:
@@ -390,13 +393,30 @@ func (a *app) titleTagOffer(c *ui.Context, in ui.Element, key, text string, take
 	}
 }
 
-// titleTagTab is what Tab takes in a title field: the #word being written
-// and the first tag offered for it.
-func (a *app) titleTagTab(text string) (part, tag string, ok bool) {
-	part, ok = titleTagBegun(text)
-	if !ok {
+// tagOfferShown tells whether the field key shows an offer for the #word
+// at the end of text: one is being written, and was not put away.
+func (a *app) tagOfferShown(key, text string) bool {
+	part, ok := titleTagBegun(text)
+	return ok && a.tagDismissed != key+"|"+part
+}
+
+// dismissTagOffer puts away the field key's offer for the #word at the end
+// of text: Escape on the canvas, which would else end the edit.
+func (a *app) dismissTagOffer(key, text string) {
+	if part, ok := titleTagBegun(text); ok {
+		a.tagDismissed, a.tagOffered = key+"|"+part, false
+	}
+}
+
+// titleTagTab is what Tab takes in the title field key: the #word being
+// written and the first tag offered for it, while the offer shows. Put
+// away, Tab is the field's own again: the outline's indents (the review
+// of 0.99.1).
+func (a *app) titleTagTab(key, text string) (part, tag string, ok bool) {
+	if !a.tagOfferShown(key, text) {
 		return "", "", false
 	}
+	part, _ = titleTagBegun(text)
 	offers := a.titleTagOffers(part)
 	if len(offers) == 0 {
 		return "", "", false
@@ -443,18 +463,24 @@ func (a *app) putTitleTag(n *model.Node, tag, before string, title *string) {
 	// was written after it, and, on the canvas, the edit itself (the review
 	// of 0.98.3).
 	a.tellUndo("已加标签 #"+tag, func() {
-		n, _ := a.doc.Find(id)
+		// On whichever canvas of the map it is now; nothing to do, no step.
+		n := a.nodeInFile(id)
 		if n == nil {
 			return
 		}
+		untag := !had && n.HasTag(tag)
+		retitle := title != nil && n.Title == *title
+		if !untag && !retitle {
+			return
+		}
 		a.mutate("", func() {
-			if !had {
+			if untag {
 				n.Tags = slices.DeleteFunc(slices.Clone(n.Tags), func(s string) bool { return s == tag })
 				if len(n.Tags) == 0 {
 					n.Tags = nil
 				}
 			}
-			if title != nil && n.Title == *title {
+			if retitle {
 				n.Title = before
 			}
 		})
@@ -485,7 +511,7 @@ func (a *app) takeTitleTag(n *model.Node, part, tag string) {
 // and, for a field with no keys of its own (keys false: the outline's line
 // has, and takes Tab there, outlineTagTab), Tab takes the tag offered and
 // nothing else: a shortcut of Tab took it from the outline's indent.
-func (a *app) fieldTitleTags(in ui.Element, n *model.Node, text string, keys bool) {
+func (a *app) fieldTitleTags(in ui.Element, key string, n *model.Node, text string, keys bool) {
 	if a.tagCaret == n.ID && in.Focused() {
 		k := utf8.RuneCountInString(n.Title)
 		in.SetTextSelection(k, k)
@@ -498,7 +524,7 @@ func (a *app) fieldTitleTags(in ui.Element, n *model.Node, text string, keys boo
 		if ev.Kind != ui.InputKeyDown || ev.Key != ui.KeyTab || ev.Mods != 0 {
 			return false
 		}
-		part, tag, ok := a.titleTagTab(n.Title)
+		part, tag, ok := a.titleTagTab(key, n.Title)
 		if ok {
 			a.takeFieldTag(n, part, tag)
 		}
@@ -509,9 +535,22 @@ func (a *app) fieldTitleTags(in ui.Element, n *model.Node, text string, keys boo
 // outlineTagTab takes, for Tab on an outline's line, the tag offered for
 // the #word being written: true when it did, the line not to be indented.
 func (a *app) outlineTagTab(n *model.Node) bool {
-	part, tag, ok := a.titleTagTab(n.Title) // the topic's, as takeFieldTag cuts it
+	part, tag, ok := a.titleTagTab("outline:"+n.ID, n.Title) // the topic's, as takeFieldTag cuts it
 	if ok {
 		a.takeFieldTag(n, part, tag)
 	}
 	return ok
+}
+
+// nodeInFile is the topic id on any canvas of the open map.
+func (a *app) nodeInFile(id string) *model.Node {
+	if a.file == nil {
+		return nil
+	}
+	for _, d := range a.file.Sheets {
+		if n, _ := d.Find(id); n != nil {
+			return n
+		}
+	}
+	return nil
 }

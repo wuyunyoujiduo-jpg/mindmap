@@ -352,24 +352,39 @@ const grabShots = 4
 // one each), and a poster's grab asked for by the AI takes its pictures
 // again: its one picture was given the AI for four (the review of 0.98.3).
 func (a *app) queueGrab(id string, forAI bool) {
-	for _, g := range a.grabs {
-		if g.id == id {
-			if forAI && !g.forAI {
-				g.forAI = true
-				g.at, g.i, g.steps, g.shots.pics = nil, 0, 0, nil // its times again, for the AI
-			}
-			return
+	for k, g := range a.grabs {
+		if g.id != id {
+			continue
 		}
+		if forAI && !g.forAI {
+			// Its times again, for the AI, and its time from now; not yet
+			// stepped, it goes where one for the AI goes (the review of
+			// 0.99.1: it waited behind the posters).
+			g.forAI = true
+			g.at, g.i, g.steps, g.shots.pics, g.spent = nil, 0, 0, nil, 0
+			if g.p == nil {
+				a.grabs = slices.Delete(a.grabs, k, k+1)
+				a.grabs = slices.Insert(a.grabs, a.aiGrabAt(), g)
+			}
+		}
+		return
 	}
 	g := &frameGrab{id: id, forAI: forAI}
 	at := len(a.grabs)
 	if forAI {
-		at = 0
-		for at < len(a.grabs) && (a.grabs[at].forAI || a.grabs[at].p != nil) {
-			at++ // after those for the AI, and after the one being stepped
-		}
+		at = a.aiGrabAt()
 	}
 	a.grabs = slices.Insert(a.grabs, at, g)
+}
+
+// aiGrabAt is where a grab for the AI goes in the queue: after those for
+// the AI, and after the one being stepped.
+func (a *app) aiGrabAt() int {
+	at := 0
+	for at < len(a.grabs) && (a.grabs[at].forAI || a.grabs[at].p != nil) {
+		at++
+	}
+	return at
 }
 
 // grabbingForAIOf tells whether a clip's organizing waits on its pictures.
@@ -516,9 +531,7 @@ func posterPath(c *library.Clip) string {
 
 // savePoster keeps a video's poster and its length.
 func (a *app) savePoster(c *library.Clip, pic []byte, dur time.Duration) {
-	if a.vidLens == nil {
-		a.vidLens, a.vidPosterHas = map[string]time.Duration{}, map[string]bool{}
-	}
+	a.posterMaps()
 	a.vidLens[c.ID] = dur
 	p := posterPath(c)
 	if p == "" || os.MkdirAll(filepath.Dir(p), 0o755) != nil {
@@ -543,9 +556,7 @@ func (a *app) lookPoster(c *library.Clip) {
 	if a.vidPosterAsked[c.ID] {
 		return
 	}
-	if a.vidPosterAsked == nil {
-		a.vidPosterAsked, a.vidPosterHas, a.vidLens = map[string]bool{}, map[string]bool{}, map[string]time.Duration{}
-	}
+	a.posterMaps()
 	a.vidPosterAsked[c.ID] = true
 	p, id := posterPath(c), c.ID
 	if p == "" {
@@ -572,4 +583,18 @@ func (a *app) lookPoster(c *library.Clip) {
 			a.vidLens[id] = d
 		}
 	})
+}
+
+// posterMaps makes the maps of the posters, each that is not: one made
+// before the others was replaced with them (the review of 0.99.1).
+func (a *app) posterMaps() {
+	if a.vidPosterAsked == nil {
+		a.vidPosterAsked = map[string]bool{}
+	}
+	if a.vidPosterHas == nil {
+		a.vidPosterHas = map[string]bool{}
+	}
+	if a.vidLens == nil {
+		a.vidLens = map[string]time.Duration{}
+	}
 }

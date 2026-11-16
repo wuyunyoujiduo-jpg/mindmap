@@ -170,7 +170,7 @@ func (a *app) outlineLine(c *ui.Context, rows []outlineRow, i int) {
 			a.selected, a.multi = n.ID, nil
 			a.titleTagOffer(c, in, "outline:"+n.ID, title, func(part, tag string) { a.takeFieldTag(n, part, tag) })
 		}
-		a.fieldTitleTags(in, n, title, false)
+		a.fieldTitleTags(in, "outline:"+n.ID, n, title, false)
 		// Its tags after it, each taken off by a click, as on the canvas.
 		for _, tag := range n.Tags {
 			chip := tagChip(c.Key("tag:"+tag), tag, tag+" ✕", false, 12).KeepFocus().Shrink(0).
