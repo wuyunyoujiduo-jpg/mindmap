@@ -186,6 +186,9 @@ type clipJob struct {
 }
 
 func (a *app) enqueueClip(id string, organize bool) {
+	if a.grabbingForAIOf(id) {
+		return // its job is under way, waiting on its pictures: not counted twice
+	}
 	for i, j := range a.libQueue {
 		if j.id == id {
 			a.libQueue[i].organize = a.libQueue[i].organize || organize
@@ -450,42 +453,56 @@ func clipContentLen(c *library.Clip, o *clipOrganized) int {
 }
 
 // fillerWords say what is not known of the clip itself: that it cannot be
-// told from its name, that it is to be opened, that a line is to be
-// added. Narrow, for they are dropped: a text on what cannot be decided
-// (量子态无法确定), a clause to confirm (需确认付款日期) or a gap of
-// knowledge (没有信息差) is content, the review of 0.98.0 found.
-var fillerWords = regexp.MustCompile(`(无法|不能|没法|难以)(从[^。，；]{0,10})?(判断|确定|得知|看出)(它|这|该|其|是什么|内容|用途|主题|来源)|无法从(文件名|标题|名称|文件)|(需要|还需|需)(打开|播放)(后|才|查看|确认|播放|一遍|看看|并)|没有(任何)?(实际内容|内容线索|任何信息)|建议(补充|补上)(一句|说明|描述|内容)|(内容|主题)(未知|不明|待补充)`)
+// told from its name, that this video or file cannot be told, that it is
+// to be opened, that a line is to be added. Only of the clip: what cannot
+// be decided in a text (医生无法确定这是否是过敏, 难以判断其长期影响,
+// 无法从文件恢复) is its content, which two reviews found dropped.
+var fillerWords = regexp.MustCompile(`无法从(文件名|标题|名称)|` +
+	`(无法|不能|没法|难以|看不出)(判断|确定|得知|看出|知道)?(这个|这条|该|此)(视频|文件|资料|图片|条目|笔记|链接|网页)|` +
+	`(这个|这条|该|此)(视频|文件|资料|图片|条目|笔记|链接|网页)[^，。；]{0,12}(无法|不能|没法|难以|看不出|不清楚)|` +
+	`(需要|还需|需)(打开|播放)(后|才|查看|确认|播放|一遍|看看|并)|没有(任何)?(实际内容|内容线索)|` +
+	`建议(补充|补上)(一句|说明|描述)|(内容|主题)(未知|待补充)`)
 
 // fillerSaid tells whether a text says what is not known rather than
 // what is.
 func fillerSaid(s string) bool { return fillerWords.MatchString(s) }
 
-// dropFiller takes out of a text its sentences, or its lines, that say
-// what is not known.
+// dropFiller takes out of a text the clauses, or the points of a list,
+// that say what is not known of the clip: a point whole, or not at all.
 func dropFiller(s string) string {
 	if !fillerSaid(s) {
 		return s
 	}
 	var b strings.Builder
 	for _, line := range strings.SplitAfter(s, "\n") {
-		if strings.HasPrefix(strings.TrimSpace(line), "-") || strings.HasPrefix(strings.TrimSpace(line), "*") {
+		if t := strings.TrimSpace(line); strings.HasPrefix(t, "-") || strings.HasPrefix(t, "*") {
 			if !fillerSaid(line) {
-				b.WriteString(line) // a point of a list: whole, or not at all
+				b.WriteString(line)
 			}
 			continue
 		}
+		var kept strings.Builder
 		start := 0
 		for i, r := range line {
-			if r == '。' || r == '！' || r == '？' || r == '；' {
+			if strings.ContainsRune("。！？；，", r) {
 				end := i + utf8.RuneLen(r)
 				if !fillerSaid(line[start:end]) {
-					b.WriteString(line[start:end])
+					kept.WriteString(line[start:end])
 				}
 				start = end
 			}
 		}
 		if rest := line[start:]; !fillerSaid(rest) {
-			b.WriteString(rest)
+			kept.WriteString(rest)
+		}
+		// A clause gone from the end leaves its comma: the sentence ends.
+		k := strings.TrimRight(kept.String(), "\n")
+		if strings.HasSuffix(k, "，") {
+			k = strings.TrimSuffix(k, "，") + "。"
+		}
+		b.WriteString(k)
+		if strings.HasSuffix(line, "\n") {
+			b.WriteString("\n")
 		}
 	}
 	return strings.TrimSpace(b.String())

@@ -124,7 +124,7 @@ func (a *app) nodePanel(c *ui.Context) {
 			}
 			a.fieldTitleTags(in, n, title, true)
 			if in.Focused() {
-				a.titleTagOffer(c, in, title, func(part, tag string) { a.takeFieldTag(n, part, tag) })
+				a.titleTagOffer(c, in, "panel:"+n.ID, title, func(part, tag string) { a.takeFieldTag(n, part, tag) })
 			}
 
 			// Only what the topic has shows: its task's rows, its tags, its

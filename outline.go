@@ -168,7 +168,7 @@ func (a *app) outlineLine(c *ui.Context, rows []outlineRow, i int) {
 		}
 		if in.Focused() && !a.outlineBlock {
 			a.selected, a.multi = n.ID, nil
-			a.titleTagOffer(c, in, title, func(part, tag string) { a.takeFieldTag(n, part, tag) })
+			a.titleTagOffer(c, in, "outline:"+n.ID, title, func(part, tag string) { a.takeFieldTag(n, part, tag) })
 		}
 		a.fieldTitleTags(in, n, title, false)
 		// Its tags after it, each taken off by a click, as on the canvas.
@@ -234,7 +234,7 @@ func (a *app) outlineLine(c *ui.Context, rows []outlineRow, i int) {
 				a.outlineFocus = prev
 			case ev.Mods == 0 && ev.Key == ui.KeyEnter:
 				a.later(func() { a.outlineAdd(n.ID, false) })
-			case ev.Mods == 0 && ev.Key == ui.KeyTab && a.outlineTagTab(n, title):
+			case ev.Mods == 0 && ev.Key == ui.KeyTab && a.outlineTagTab(n):
 				// A #word begun: Tab makes it a tag, not the line indented.
 			case ev.Mods == 0 && ev.Key == ui.KeyTab:
 				a.later(func() {

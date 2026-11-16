@@ -158,28 +158,82 @@ func TestVideoSeenByTheAI(t *testing.T) {
 // what cannot be decided stays, and so does a description the user wrote.
 func TestShortClipsStayShort(t *testing.T) {
 	c := &library.Clip{Kind: library.KindLink, URL: "https://example.com", Text: "一句话的网页。"}
-	applyOrganized(c, &clipOrganized{Title: "一页", Desc: "这是一个网页，无法判断它的用途。", Summary: "它讲了一句话。", Analysis: "- 现状\n- 建议", Keywords: []string{"网页"}}, testNow)
-	if c.Title != "一页" || c.Summary != "" || c.Analysis != "" || c.Desc != "" {
+	applyOrganized(c, &clipOrganized{Title: "一页", Desc: "这是一个网页，无法判断这个网页的用途。", Summary: "它讲了一句话。", Analysis: "- 现状\n- 建议", Keywords: []string{"网页"}}, testNow)
+	if c.Title != "一页" || c.Summary != "" || c.Analysis != "" || c.Desc != "这是一个网页。" {
 		t.Fatalf("%+v", c)
 	}
-	for _, s := range []string{"讲为什么量子态无法确定的科普文章", "合同条款，需确认付款日期", "介绍没有信息差时如何定价", "模型无法从少量样本泛化"} {
+	for _, s := range []string{"讲为什么量子态无法确定的科普文章", "合同条款，需确认付款日期", "介绍没有信息差时如何定价", "模型无法从少量样本泛化",
+		// what the second review found dropped
+		"作者认为目前难以判断其长期影响。", "医生无法确定这是否是过敏。", "数据库损坏后无法从文件恢复。", "研究者不能确定其来源。", "难以看出这段代码的问题", "用户难以判断内容真假"} {
 		if fillerSaid(s) {
 			t.Errorf("content taken for filler: %q", s)
 		}
 	}
-	for _, s := range []string{"目前无法从文件名判断它拍的是什么、来自哪里、有什么用。", "需要打开播放并补充一句说明", "内容还需打开确认", "在确认内容前，无法判断它是素材、录屏还是教程"} {
+	for _, s := range []string{"目前无法从文件名判断它拍的是什么、来自哪里、有什么用。", "需要打开播放并补充一句说明", "内容还需打开确认", "无法判断这个视频的内容", "这条资料暂时无法归类"} {
 		if !fillerSaid(s) {
 			t.Errorf("filler not seen: %q", s)
 		}
 	}
-	if got := dropFiller("一段讲缓存的文章。目前无法从文件名判断它的用途。适合后端。"); got != "一段讲缓存的文章。适合后端。" {
-		t.Errorf("dropFiller: %q", got)
+	for in, want := range map[string]string{
+		"一段讲缓存的文章。目前无法从文件名判断它的用途。适合后端。":    "一段讲缓存的文章。适合后端。",
+		"这篇文章讲缓存，分为三部分，但无法判断这个文件的作者":       "这篇文章讲缓存，分为三部分。",
+		"- 先更新库再删缓存\n- 需要打开查看原文\n- 过期时间兜底": "- 先更新库再删缓存\n- 过期时间兜底",
+	} {
+		if got := dropFiller(in); got != want {
+			t.Errorf("dropFiller(%q) = %q, want %q", in, got, want)
+		}
 	}
 	// Organized again, a description the user wrote stays when the answer
 	// has none, filler or not.
 	mine := &library.Clip{Kind: library.KindText, Text: strings.Repeat("长文", 300), Desc: "我写的：需要打开查看的那份合同"}
-	applyOrganized(mine, &clipOrganized{Title: "合同", Desc: "无法判断它的用途。"}, testNow)
+	applyOrganized(mine, &clipOrganized{Title: "合同", Desc: "无法判断这条资料的用途。"}, testNow)
 	if mine.Desc != "我写的：需要打开查看的那份合同" {
 		t.Fatalf("the user's description: %q", mine.Desc)
+	}
+}
+
+// TestVideoPosterGrabGivesWay: organizing a video whose poster is being
+// taken, as when 重新整理 is pressed on a wall of videos new to posters,
+// gives the AI all its pictures, not the poster's one; and the job is
+// counted once however often it is asked for (the review of 0.98.3).
+func TestVideoPosterGrabGivesWay(t *testing.T) {
+	if p, err := video.Open("testdata/clip.mp4"); err != nil {
+		t.Skip("no video here:", err)
+	} else {
+		p.Close()
+	}
+	a, tt := newTestApp(t)
+	fake := &fakeClaude{replies: []string{claudeText(`{"title": "彩条", "category": "资源", "tags": [], "keywords": [], "synonyms": [], "text": "彩条"}`)}}
+	a.sendAI = fake.send
+	a.cfg.AIKey = "sk-ant-test"
+	a.cfg.LibraryManual = true
+	clip, err := a.addClipFile("testdata/clip.mp4", "拖入")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.showLibrary()
+	// The wall asks for its poster; frames till that grab has its times.
+	for i := 0; i < 200 && (len(a.grabs) == 0 || a.grabs[0].at == nil); i++ {
+		tt.Frame()
+		time.Sleep(10 * time.Millisecond)
+	}
+	if len(a.grabs) == 0 || a.grabs[0].forAI || len(a.grabs[0].at) != 1 {
+		t.Fatalf("no poster's grab under way: %d", len(a.grabs))
+	}
+	a.organizeClip(clip.ID)
+	a.organizeClip(clip.ID) // asked again meanwhile: one job
+	if a.orgTotal != 1 {
+		t.Fatalf("the job counted %d times", a.orgTotal)
+	}
+	for i := 0; i < 400 && clip.Organized == nil; i++ {
+		tt.Frame()
+		time.Sleep(10 * time.Millisecond)
+	}
+	if clip.Organized == nil {
+		t.Fatal("not organized")
+	}
+	req, _ := json.Marshal(fake.requests[0].Messages)
+	if n := strings.Count(string(req), `"type":"image"`); n != grabShots {
+		t.Fatalf("the AI was sent %d pictures, not %d", n, grabShots)
 	}
 }

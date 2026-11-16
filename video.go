@@ -131,15 +131,10 @@ func videoTime(d time.Duration) string {
 // its cards, scrolled past or not.
 func (a *app) videoCard(c *ui.Context, clip *library.Clip, hovered bool) {
 	poster := posterPath(clip)
-	pic, _ := a.filePicture(poster, true)
-	if pic == nil && poster != "" && !a.vidPosterAsked[clip.ID] {
-		if a.vidPosterAsked == nil {
-			a.vidPosterAsked = map[string]bool{}
-		}
-		a.vidPosterAsked[clip.ID] = true // once a run: one that cannot be seen is not asked again
-		if _, err := os.Stat(poster); err != nil {
-			a.queueGrab(clip.ID, false)
-		}
+	a.lookPoster(clip)
+	var pic *ui.Bitmap
+	if a.vidPosterHas[clip.ID] {
+		pic, _ = a.filePicture(poster, true)
 	}
 	ui.Box(c.Key("video-face")).Height(110).FillWidth().Radius(8).Clip().Background(ui.Hex("#1d1d1f")).PassThrough().Children(func() {
 		if pic != nil {
@@ -353,14 +348,38 @@ type frameGrab struct {
 const grabShots = 4
 
 // queueGrab asks for a video's pictures: for the AI, or its poster alone.
+// One for the AI goes ahead of the posters (a wall of new videos queues
+// one each), and a poster's grab asked for by the AI takes its pictures
+// again: its one picture was given the AI for four (the review of 0.98.3).
 func (a *app) queueGrab(id string, forAI bool) {
 	for _, g := range a.grabs {
 		if g.id == id {
-			g.forAI = g.forAI || forAI
+			if forAI && !g.forAI {
+				g.forAI = true
+				g.at, g.i, g.steps, g.shots.pics = nil, 0, 0, nil // its times again, for the AI
+			}
 			return
 		}
 	}
-	a.grabs = append(a.grabs, &frameGrab{id: id, forAI: forAI})
+	g := &frameGrab{id: id, forAI: forAI}
+	at := len(a.grabs)
+	if forAI {
+		at = 0
+		for at < len(a.grabs) && (a.grabs[at].forAI || a.grabs[at].p != nil) {
+			at++ // after those for the AI, and after the one being stepped
+		}
+	}
+	a.grabs = slices.Insert(a.grabs, at, g)
+}
+
+// grabbingForAIOf tells whether a clip's organizing waits on its pictures.
+func (a *app) grabbingForAIOf(id string) bool {
+	for _, g := range a.grabs {
+		if g.id == id && g.forAI {
+			return true
+		}
+	}
+	return false
 }
 
 // grabbingForAI tells whether a clip's organizing waits on its pictures.
@@ -498,7 +517,7 @@ func posterPath(c *library.Clip) string {
 // savePoster keeps a video's poster and its length.
 func (a *app) savePoster(c *library.Clip, pic []byte, dur time.Duration) {
 	if a.vidLens == nil {
-		a.vidLens = map[string]time.Duration{}
+		a.vidLens, a.vidPosterHas = map[string]time.Duration{}, map[string]bool{}
 	}
 	a.vidLens[c.ID] = dur
 	p := posterPath(c)
@@ -509,25 +528,48 @@ func (a *app) savePoster(c *library.Clip, pic []byte, dur time.Duration) {
 		_ = os.WriteFile(strings.TrimSuffix(p, ".jpg")+".len", []byte(strconv.FormatInt(int64(dur/time.Millisecond), 10)), 0o644)
 		delete(a.bitmaps, p) // read as missing before: read again
 		delete(a.bitmaps, "thumb:"+p)
+		a.vidPosterHas[c.ID] = true
 	}
 }
 
-// videoLen is a video's length, as kept with its poster: 0 when unknown.
-func (a *app) videoLen(c *library.Clip) time.Duration {
-	if d, ok := a.vidLens[c.ID]; ok {
-		return d
+// videoLen is a video's length, as kept with its poster: 0 when unknown
+// (lookPoster reads it).
+func (a *app) videoLen(c *library.Clip) time.Duration { return a.vidLens[c.ID] }
+
+// lookPoster looks, once a run and away from the window's work, for a
+// video's poster and its length: a grab is queued when there is none.
+// Nothing that reads a file belongs in a frame.
+func (a *app) lookPoster(c *library.Clip) {
+	if a.vidPosterAsked[c.ID] {
+		return
 	}
-	var d time.Duration
-	if p := posterPath(c); p != "" {
+	if a.vidPosterAsked == nil {
+		a.vidPosterAsked, a.vidPosterHas, a.vidLens = map[string]bool{}, map[string]bool{}, map[string]time.Duration{}
+	}
+	a.vidPosterAsked[c.ID] = true
+	p, id := posterPath(c), c.ID
+	if p == "" {
+		return
+	}
+	a.async(func() (any, error) {
+		if _, err := os.Stat(p); err != nil {
+			return nil, err
+		}
+		var d time.Duration
 		if b, err := os.ReadFile(strings.TrimSuffix(p, ".jpg") + ".len"); err == nil {
 			if ms, err := strconv.ParseInt(strings.TrimSpace(string(b)), 10, 64); err == nil {
 				d = time.Duration(ms) * time.Millisecond
 			}
 		}
-	}
-	if a.vidLens == nil {
-		a.vidLens = map[string]time.Duration{}
-	}
-	a.vidLens[c.ID] = d
-	return d
+		return d, nil
+	}, func(v any, err error) {
+		if err != nil {
+			a.queueGrab(id, false)
+			return
+		}
+		a.vidPosterHas[id] = true
+		if d, _ := v.(time.Duration); d > 0 {
+			a.vidLens[id] = d
+		}
+	})
 }

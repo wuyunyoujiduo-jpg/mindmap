@@ -1025,7 +1025,7 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 			// tag, a click or Tab making it one; not chosen, it stays words of
 			// the title. Every #word a tag was a rule the user could not see,
 			// nor say no to (0.98.1).
-			a.titleTagOffer(c, in, a.editText, func(part, tag string) { a.takeTitleTag(n, part, tag) })
+			a.titleTagOffer(c, in, "canvas:"+n.ID, a.editText, func(part, tag string) { a.takeTitleTag(n, part, tag) })
 			if strings.ContainsAny(a.editText, "\r\n\t") { // pasted lines join
 				a.editText = strings.Join(strings.Fields(strings.ReplaceAll(a.editText, "\r", "\n")), " ")
 			}

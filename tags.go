@@ -349,9 +349,14 @@ func (a *app) titleTagOffers(part string) []string {
 // taking one (take). The canvas's title, the right column's and the
 // outline's lines have it alike; the user asked for the two after the
 // first. Tab takes the first offered: titleTagTab, in the field's keys.
-func (a *app) titleTagOffer(c *ui.Context, in ui.Element, text string, take func(part, tag string)) {
+func (a *app) titleTagOffer(c *ui.Context, in ui.Element, key, text string, take func(part, tag string)) {
 	part, ok := titleTagBegun(text)
 	if !ok {
+		return
+	}
+	// Put away (Escape, a click beside it), it stays away for this word:
+	// "not chosen" is a choice, and it came back a frame later before.
+	if a.tagDismissed == key+"|"+part {
 		return
 	}
 	t := c.Theme()
@@ -373,13 +378,16 @@ func (a *app) titleTagOffer(c *ui.Context, in ui.Element, text string, take func
 					}
 				}
 			})
-			say := "写标签名，选一个设为标签；不选就当文字"
+			say := "写标签名，选一个设为标签；不选就当文字（Esc 收起）"
 			if len(offers) > 0 {
-				say = "点一下或按 Tab 设为标签；不选就当文字"
+				say = "点一下或按 Tab 设为标签；不选就当文字（Esc 收起）"
 			}
 			ui.Text(c, say).FontSize(textCaption).TextColor(t.TextMuted).NoWrap()
 		})
 	})
+	if !a.tagOffered {
+		a.tagDismissed = key + "|" + part
+	}
 }
 
 // titleTagTab is what Tab takes in a title field: the #word being written
@@ -401,30 +409,55 @@ func (a *app) titleTagTab(text string) (part, tag string, ok bool) {
 // the tag tag: the word out of the title and the tag on, one step. The
 // caret goes back to the field's end (tagCaret).
 func (a *app) takeFieldTag(n *model.Node, part, tag string) {
-	title := strings.TrimRight(n.Title[:max(len(n.Title)-len(part)-1, 0)], " 　")
-	a.tagCaret = n.ID
-	a.later(func() { a.putTitleTag(n, tag, &title) })
+	word := "#" + part
+	if !strings.HasSuffix(n.Title, word) {
+		return // the field and the topic do not say the same: nothing cut
+	}
+	before := n.Title
+	title := strings.TrimRight(strings.TrimSuffix(before, word), " 　")
+	a.tagCaret, a.tagCaretTTL = n.ID, 3
+	a.later(func() { a.putTitleTag(n, tag, before, &title) })
 }
 
 // putTitleTag puts tag on n, and title as its title when there is one, in
 // one step: 撤销 on its toast takes it back, and a tag it made out of the
 // library too.
-func (a *app) putTitleTag(n *model.Node, tag string, title *string) {
+func (a *app) putTitleTag(n *model.Node, tag, before string, title *string) {
 	if n.HasTag(tag) && title == nil {
 		return
 	}
 	fresh := !slices.Contains(a.allTags(), tag)
+	had := n.HasTag(tag)
 	a.mutate("", func() {
 		if title != nil {
 			n.Title = *title
 		}
-		if !n.HasTag(tag) {
+		if !had {
 			n.Tags = append(slices.Clone(n.Tags), tag)
 		}
 	})
 	a.addTag(tag)
+	id := n.ID
+	// 撤销 takes back this and nothing else: the tag off, and the title as
+	// it was if it is as this left it. An undo of the history took back what
+	// was written after it, and, on the canvas, the edit itself (the review
+	// of 0.98.3).
 	a.tellUndo("已加标签 #"+tag, func() {
-		a.undo()
+		n, _ := a.doc.Find(id)
+		if n == nil {
+			return
+		}
+		a.mutate("", func() {
+			if !had {
+				n.Tags = slices.DeleteFunc(slices.Clone(n.Tags), func(s string) bool { return s == tag })
+				if len(n.Tags) == 0 {
+					n.Tags = nil
+				}
+			}
+			if title != nil && n.Title == *title {
+				n.Title = before
+			}
+		})
 		if fresh {
 			a.dropUnusedTags([]string{tag})
 		}
@@ -435,9 +468,16 @@ func (a *app) putTitleTag(n *model.Node, tag string, title *string) {
 // the tag tag: the word out of the title being written, the tag on the
 // topic, the title still being written.
 func (a *app) takeTitleTag(n *model.Node, part, tag string) {
-	a.editText = a.editText[:len(a.editText)-len(part)-1] // "#" and the word
-	a.editFocus = false                                   // the caret to the end
-	a.later(func() { a.putTitleTag(n, tag, nil) })
+	word := "#" + part
+	if !strings.HasSuffix(a.editText, word) {
+		return
+	}
+	// The word out, the space before it kept for what is written on; the
+	// title kept is trimmed (commitEdit), not left with a space at its end
+	// (the review of 0.98.3).
+	a.editText = strings.TrimSuffix(a.editText, word)
+	a.editFocus = false // the caret to the end
+	a.later(func() { a.putTitleTag(n, tag, "", nil) })
 }
 
 // fieldTitleTags is what a title field that writes as it is typed does
@@ -449,7 +489,7 @@ func (a *app) fieldTitleTags(in ui.Element, n *model.Node, text string, keys boo
 	if a.tagCaret == n.ID && in.Focused() {
 		k := utf8.RuneCountInString(n.Title)
 		in.SetTextSelection(k, k)
-		a.tagCaret = ""
+		a.tagCaret, a.tagCaretTTL = "", 0
 	}
 	if !keys {
 		return
@@ -468,8 +508,8 @@ func (a *app) fieldTitleTags(in ui.Element, n *model.Node, text string, keys boo
 
 // outlineTagTab takes, for Tab on an outline's line, the tag offered for
 // the #word being written: true when it did, the line not to be indented.
-func (a *app) outlineTagTab(n *model.Node, text string) bool {
-	part, tag, ok := a.titleTagTab(text)
+func (a *app) outlineTagTab(n *model.Node) bool {
+	part, tag, ok := a.titleTagTab(n.Title) // the topic's, as takeFieldTag cuts it
 	if ok {
 		a.takeFieldTag(n, part, tag)
 	}

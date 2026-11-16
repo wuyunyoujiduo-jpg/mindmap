@@ -475,10 +475,13 @@ type app struct {
 	grabs                 []*frameGrab             // the videos whose pictures are being taken, the first being stepped
 	vidLens               map[string]time.Duration // the videos' lengths, as kept with their posters
 	vidPosterAsked        map[string]bool          // the videos whose poster was asked for in this run
+	vidPosterHas          map[string]bool          // the videos whose poster is in the cache
 	folds                 map[string]bool          // the folded parts opened (foldKey)
 	vidShots              map[string]vidShots      // the pictures taken of the videos, by clip
 	tagOffered            bool                     // the tags offered under a title being written show
 	tagCaret              string                   // the topic whose title field has its caret put back at its end, a tag taken
+	tagCaretTTL           int                      // frames left for tagCaret to find its field
+	tagDismissed          string                   // the #word whose offer was put away: field|word
 	tagAdding             bool                     // the sidebar's new-tag field is shown
 	tagNew                string
 	tagRenaming           string // the tag renamed in the sidebar
@@ -925,7 +928,7 @@ func (a *app) commitEdit() {
 	}
 	// A #word is words of the title unless made a tag as it was written
 	// (takeTitleTag): no rule turns it into one here.
-	title := a.editText
+	title := strings.TrimRight(a.editText, " 　") // a space left where a #word was taken
 	if title == "" {
 		title = cmpOr(n.Title, "新主题")
 	}

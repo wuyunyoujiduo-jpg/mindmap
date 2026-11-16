@@ -98,6 +98,7 @@ func newTestApp(t *testing.T) (*app, *ui.Tester) {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir()) // the videos' posters
 	dir := t.TempDir()
 	clock = func() time.Time { return testNow }
 	a := newApp(&fakePlatform{}, config{Dir: dir, ShowTree: true, PanelOpen: true})
@@ -4217,5 +4218,88 @@ func TestTagsInPanelAndOutline(t *testing.T) {
 	n, _ = a.doc.Find(id)
 	if n.HasTag("性能") {
 		t.Fatalf("not taken off: %v", n.Tags)
+	}
+}
+
+// TestTagToastUndoesTheTag: 撤销 on the toast of a tag taken from a title
+// takes back the tag, not what was written after it nor the edit; the
+// canvas's title keeps no space where the word was; Escape puts the offer
+// away for that word (the review of 0.98.3).
+func TestTagToastUndoesTheTag(t *testing.T) {
+	a, tt := newTestApp(t)
+	if err := clickNode(t, tt, a, "支持导出图片"); err != nil {
+		t.Fatal(err)
+	}
+	n, _ := a.selectedNode()
+	id := n.ID
+	find := func() *model.Node { n, _ := a.doc.Find(id); return n }
+
+	// The canvas: taken, written on, 撤销 — the edit goes on, with what was
+	// written; the tag is off.
+	a.startEdit(id)
+	tt.Frame()
+	tt.Frame()
+	tt.Key(ui.Cmd, ui.KeyA)
+	tt.Type("导出 PNG #性")
+	tt.Frame()
+	tt.Key(0, ui.KeyTab)
+	tt.Frame()
+	tt.Frame()
+	tt.Type("再改")
+	tt.Frame()
+	a.noticeUndo()
+	tt.Frame()
+	if find().HasTag("性能") || a.editing != id || a.editText != "导出 PNG 再改" {
+		t.Fatalf("canvas: tags %v, editing %q, text %q", find().Tags, a.editing, a.editText)
+	}
+	// Taken, then kept: no space at the title's end.
+	tt.Key(ui.Cmd, ui.KeyA)
+	tt.Type("导出 PNG #性")
+	tt.Frame()
+	tt.Key(0, ui.KeyTab)
+	tt.Frame()
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if find().Title != "导出 PNG" || !find().HasTag("性能") {
+		t.Fatalf("canvas kept: %q %v", find().Title, find().Tags)
+	}
+	a.noticeUndo()
+	if find().Title != "导出 PNG" || find().HasTag("性能") {
+		t.Fatalf("canvas 撤销 after the edit: %q %v", find().Title, find().Tags)
+	}
+
+	// The right column: taken, written on, 撤销 — what was written stays.
+	tt.Frame()
+	if err := tt.Click("标题"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Key(ui.Cmd, ui.KeyA)
+	tt.Type("导出 PNG #性")
+	tt.Frame()
+	tt.Key(0, ui.KeyTab)
+	tt.Frame()
+	tt.Frame()
+	tt.Type(" 再改")
+	tt.Frame()
+	if find().Title != "导出 PNG 再改" || !find().HasTag("性能") {
+		t.Fatalf("panel: %q %v", find().Title, find().Tags)
+	}
+	a.noticeUndo()
+	tt.Frame()
+	if find().Title != "导出 PNG 再改" || find().HasTag("性能") {
+		t.Fatalf("panel 撤销: %q %v", find().Title, find().Tags)
+	}
+	// Escape puts the offer away, and it stays away for that word.
+	tt.Type(" #v")
+	tt.Frame()
+	if !tt.HasText("设为新标签 #v") {
+		t.Fatalf("no offer: %q", tt.Texts())
+	}
+	tt.Key(0, ui.KeyEscape)
+	tt.Frame()
+	tt.Frame()
+	tt.Frame()
+	if tt.HasText("设为新标签 #v") {
+		t.Fatal("the offer came back after Escape")
 	}
 }

@@ -17,6 +17,11 @@ func (a *app) view(c *ui.Context) {
 	if a.tagFocus > 0 {
 		a.tagFocus--
 	}
+	if a.tagCaretTTL > 0 {
+		if a.tagCaretTTL--; a.tagCaretTTL == 0 {
+			a.tagCaret = "" // its field went: not put on another one's later
+		}
+	}
 	motionOff = a.noMotion
 	if a.noMotion {
 		c.DisableAnimations()
