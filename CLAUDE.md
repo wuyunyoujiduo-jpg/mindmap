@@ -251,7 +251,14 @@ by AI, and an AI assistant.
     `Clip.Secret`) is in dots on cards, lines, titles and cards to share,
     and in what goes to an AI; a clip's details show it when asked
     (`secretShown`), and the left column lists the clips that hold one
-    (含密钥, `secretCat`). The thoughts that name a clip and those it names
+    (含密钥, `secretCat`). A video is a file clip of a video's ending
+    (`video.go`, `isVideo`), shown as one: its first picture on its card,
+    playing without sound under the pointer, a player in its details and
+    larger over the window, a kind of its own in the left column while
+    there is one; the players are the system's (MyGo's `ui/video`),
+    opened as shown and closed a frame after (`sweepVideos`). The user
+    dropped one in and saw a random name and nothing of it.
+    The thoughts that name a clip and those it names
     are in its details (`clipMentions`). What is collected is 收集's (the
     word of the UI, never 资料库), and is on a map by a topic's link.
   - Color is kept for small things that mean something: each map has its

@@ -13,6 +13,7 @@ import (
 // tasks in the middle, and the selected node's details on the right.
 func (a *app) view(c *ui.Context) {
 	a.tick(c)
+	a.sweepVideos()
 	motionOff = a.noMotion
 	if a.noMotion {
 		c.DisableAnimations()
@@ -60,6 +61,9 @@ func (a *app) view(c *ui.Context) {
 		toastLook(c)
 		if a.lightbox != "" && a.doc != nil {
 			a.lightboxView(c)
+		}
+		if a.videoBig != "" {
+			a.videoBigView(c)
 		}
 		a.deleteConfirm(c)
 		a.paletteView(c)

@@ -332,12 +332,15 @@ func (a *app) libSide(c *ui.Context) {
 		for _, k := range []struct {
 			kind       int
 			name, icon string
-		}{{kindAll, "全部", "layers"}, {kindMemos, "灵感", "lightbulb"}, {kindLinks, "链接", "link"}, {kindDocs, "文档", "file-text"}, {kindImages, "图片", "image"}} {
+		}{{kindAll, "全部", "layers"}, {kindMemos, "灵感", "lightbulb"}, {kindLinks, "链接", "link"}, {kindDocs, "文档", "file-text"}, {kindImages, "图片", "image"}, {kindVideos, "视频", "video"}} {
 			n := 0
 			for _, cl := range l.Clips {
 				if ofKind(cl, k.kind) {
 					n++
 				}
+			}
+			if k.kind == kindVideos && n == 0 && a.libKind != kindVideos {
+				continue // a row of its own once there is a video
 			}
 			// A kind goes with a tag and with 星标, 未整理 or 含密钥 chosen
 			// below it: each narrows what the other leaves, and each row

@@ -258,7 +258,7 @@ func clipTall(clip *library.Clip, cols int) float32 {
 		return 32 + lines(clip.Text, 7)*24 + 34
 	}
 	h := float32(32 + 24 + 34)
-	if clip.Kind == library.KindImage {
+	if clip.Kind == library.KindImage || isVideo(clip) {
 		h += 120
 	}
 	if sub := cmpOr(cmpOr(cmpOr(clip.Desc, clip.Summary), cmpOr(clip.Note, clip.Text)), clip.URL); sub != "" {
@@ -491,6 +491,9 @@ func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 					glyph(c, iconStarFilled, 12, t.Warning)
 				}
 			})
+			if isVideo(clip) {
+				a.videoCard(c, clip, row.Hovered())
+			}
 			if clip.Kind == library.KindImage {
 				// Its picture small, read away from the window's work; a
 				// pale block in its room until it is.
@@ -521,7 +524,7 @@ func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 		a.clipPlaceLine(c, clip)
 		ui.Row(c).Gap(6).Wrap().GapY(4).AlignItems(ui.Center).Children(func() {
 			_, ink := tinted(t, kcol)
-			kind := library.KindLabel(clip.Kind)
+			kind := clipKindLabel(clip)
 			if memo {
 				kind = "灵感"
 			}
@@ -668,7 +671,7 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 	// The bar: what it is and when, and what to do with it.
 	ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
 		tile(c, kindTile(clip.Kind), kindColor(clip.Kind), 22)
-		ui.Text(c, library.KindLabel(clip.Kind)).FontSize(textCaption).Bold().TextColor(kindColor(clip.Kind)).NoWrap().Margin(0, 0, 0, 4)
+		ui.Text(c, clipKindLabel(clip)).FontSize(textCaption).Bold().TextColor(kindColor(clip.Kind)).NoWrap().Margin(0, 0, 0, 4)
 		ui.Text(c, cmpOr(clip.Source, "手动")+" · "+clip.Created.Format("2006-01-02 15:04")).FontSize(textCaption).
 			TextColor(t.TextMuted).SingleLine().Grow(1).Shrink(1).MinWidth(0).Margin(0, 0, 0, 4)
 		star := iconStar
@@ -683,8 +686,8 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 			a.openCard(clip)
 		}
 		iconButton(c, iconMore, "资料菜单", "更多", 28, true).Menu(func(m *ui.Menu) { a.clipMenu(m, clip) })
-		esc := !a.barOpen && c.Shortcut(0, ui.KeyEscape)
-		if esc && c.FocusTakesText() { // out of the field first; the next closes
+		esc := !a.barOpen && a.videoBig == "" && c.Shortcut(0, ui.KeyEscape) // the video larger closes first
+		if esc && c.FocusTakesText() {                                       // out of the field first; the next closes
 			esc, a.escLeave = false, true
 		}
 		a.escRest(c)
@@ -728,6 +731,10 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 				a.plat.OpenPath(a.lib.FilePath(clip))
 			}
 		}
+	}
+
+	if isVideo(clip) {
+		a.videoDetail(c, clip)
 	}
 
 	// Where it is used, or where it may go.
@@ -981,7 +988,7 @@ func (a *app) libFilters() []libFilter {
 		return nil
 	}
 	var fs []libFilter
-	if name := map[int]string{kindMemos: "灵感", kindLinks: "链接", kindDocs: "文档", kindImages: "图片", kindMaps: "导图"}[a.libKind]; name != "" {
+	if name := map[int]string{kindMemos: "灵感", kindLinks: "链接", kindDocs: "文档", kindImages: "图片", kindVideos: "视频", kindMaps: "导图"}[a.libKind]; name != "" {
 		fs = append(fs, libFilter{name, func() { a.libKind = kindAll }})
 	}
 	cat := map[string]string{"★": "星标", "-": "未整理", secretCat: "含密钥"}[a.libCat]

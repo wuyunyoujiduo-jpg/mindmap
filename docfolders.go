@@ -25,7 +25,8 @@ const (
 	kindDocs // text and files
 	kindLinks
 	kindImages
-	kindMemos // the notes of 灵感
+	kindMemos  // the notes of 灵感
+	kindVideos // the files that are videos
 )
 
 // ofKind tells whether a clip, or a map as one, is of a kind of the list.
@@ -36,9 +37,11 @@ func ofKind(c *library.Clip, kind int) bool {
 	case kindMemos:
 		return c.Kind == library.KindText
 	case kindDocs:
-		return c.Kind != kindMap && c.Kind != library.KindLink && c.Kind != library.KindImage && c.Kind != library.KindText
+		return c.Kind != kindMap && c.Kind != library.KindLink && c.Kind != library.KindImage && c.Kind != library.KindText && !isVideo(c)
 	case kindImages:
 		return c.Kind == library.KindImage
+	case kindVideos:
+		return isVideo(c)
 	case kindLinks:
 		return c.Kind == library.KindLink
 	}

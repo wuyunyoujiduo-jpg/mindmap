@@ -458,17 +458,21 @@ type app struct {
 	orgResult             string
 	pluginSince           time.Time
 	pluginResult          string
-	syncChecking          bool      // the sync's repository is being checked
-	syncByHand            bool      // the sync going on was asked for: its result is said
-	pluginChecking        bool      // a newer plugin is being looked for
-	noticeAct             string    // the name of the notice's key, when not 撤销
-	noticeToasted         time.Time // the notice shown as a toast already
-	noticeUndo            func()    // what takes back what the notice says, if it can be
-	exportCam             *camera   // set while the canvas is drawn into an image
-	tagDraft              string    // a tag being typed in the node panel
-	tagFocus              bool      // the node panel's field of a new tag takes the focus
-	tagOffered            bool      // the tags offered under a title being written show
-	tagAdding             bool      // the sidebar's new-tag field is shown
+	syncChecking          bool                  // the sync's repository is being checked
+	syncByHand            bool                  // the sync going on was asked for: its result is said
+	pluginChecking        bool                  // a newer plugin is being looked for
+	noticeAct             string                // the name of the notice's key, when not 撤销
+	noticeToasted         time.Time             // the notice shown as a toast already
+	noticeUndo            func()                // what takes back what the notice says, if it can be
+	exportCam             *camera               // set while the canvas is drawn into an image
+	tagDraft              string                // a tag being typed in the node panel
+	tagFocus              bool                  // the node panel's field of a new tag takes the focus
+	vids                  map[string]*vidPlayer // the players of the videos shown (video.go)
+	vidFrame              int                   // the frames, for the players not shown to be closed
+	videoMuted            bool                  // the videos play without their sound
+	videoBig              string                // the clip whose video plays larger, over the window
+	tagOffered            bool                  // the tags offered under a title being written show
+	tagAdding             bool                  // the sidebar's new-tag field is shown
 	tagNew                string
 	tagRenaming           string // the tag renamed in the sidebar
 	tagRenameText         string
