@@ -471,3 +471,50 @@ func TestBundled(t *testing.T) {
 		t.Errorf("a link into the tool's install %+v", e)
 	}
 }
+
+// What was taken in is given back, found by its links once the app has
+// forgotten the way back: each tool its folder again, MyMind's put away.
+func TestGiveBack(t *testing.T) {
+	w := newWorld(t)
+	cc := filepath.Join(w.home, ".claude", "skills")
+	cx := filepath.Join(w.home, ".codex", "skills")
+	skill(t, cc, "review", "reviews")
+	skill(t, cx, "review", "reviews")
+	skill(t, cc, "older", "taken in before")
+	r := Scan(w.env)
+	if _, err := Adopt(w.env, r.Entry("g/older"), "claude"); err != nil {
+		t.Fatal(err)
+	}
+	lchtimes(t, filepath.Join(cc, "older"), time.Now().Add(-time.Hour)) // the link's own time
+	r = Scan(w.env)
+	if _, err := Adopt(w.env, r.Entry("g/review"), "claude"); err != nil {
+		t.Fatal(err)
+	}
+	r = Scan(w.env)
+	taken, at := r.LastTaken()
+	if len(taken) != 1 || taken[0].Name != "review" || at.IsZero() {
+		t.Fatalf("last taken %v", taken)
+	}
+	undo, err := GiveBack(w.env, taken[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, dir := range []string{cc, cx} {
+		p := filepath.Join(dir, "review")
+		if _, ok := linkTarget(p); ok || !fileExists(filepath.Join(p, "SKILL.md")) {
+			t.Fatalf("%s not a folder of its own again", p)
+		}
+	}
+	if exists(filepath.Join(w.env.Store, "review")) {
+		t.Fatal("MyMind's copy stayed")
+	}
+	if e := Scan(w.env).Entry("g/review"); e == nil || e.Stored || len(e.Copies) != 2 {
+		t.Fatalf("after %+v", e)
+	}
+	if err := undo(); err != nil {
+		t.Fatal(err)
+	}
+	if e := Scan(w.env).Entry("g/review"); e == nil || !e.Stored || e.Copies["codex"].State != Linked {
+		t.Fatalf("not taken back %+v", e)
+	}
+}

@@ -337,3 +337,67 @@ func TestSkillsBundled(t *testing.T) {
 		t.Fatal("not taken back")
 	}
 }
+
+// What 全部收进 took in is given back after the app forgot its 撤销 (an
+// update restarts it): all at once, or one as its tool's own.
+func TestSkillsGiveBack(t *testing.T) {
+	a, tt := newTestApp(t)
+	home := os.Getenv("HOME")
+	cc, cx := filepath.Join(home, ".claude", "skills"), filepath.Join(home, ".codex", "skills")
+	for _, dir := range []string{cc, cx} {
+		writeSkill(t, dir, "pdf", "读 PDF")
+		writeSkill(t, dir, "bundled-helper", "工具带的")
+	}
+	writeSkill(t, cc, "my-review", "我自己的审查清单")
+	a.showSkills()
+	tt.Frame()
+	tt.Frame()
+	if err := tt.Click("全部收进"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Frame()
+	if !isLink(filepath.Join(cc, "pdf")) || !isLink(filepath.Join(cx, "bundled-helper")) {
+		t.Fatal("not taken in")
+	}
+	a.notice, a.noticeUndo = "", nil // the app restarted: its 撤销 is gone
+
+	// One is the tool's own: back to the tools' folders, and left alone.
+	a.skills.sel = "g/bundled-helper"
+	tt.Frame()
+	if !slices.Contains(tt.Texts(), "其实是工具自带的") {
+		t.Fatalf("no key: %q", tt.Texts())
+	}
+	a.skillGiveBack(a.skills.report.Entry("g/bundled-helper"), true) // the key, at the sheet's foot, below the tester's window
+	tt.Frame()
+	tt.Frame()
+	for _, dir := range []string{cc, cx} {
+		if p := filepath.Join(dir, "bundled-helper"); isLink(p) || !fileThere(filepath.Join(p, "SKILL.md")) {
+			t.Fatalf("%s not given back", p)
+		}
+	}
+	if e := a.skills.report.Entry("g/bundled-helper"); e == nil || !e.ReadOnly() {
+		t.Fatalf("not left alone: %+v", e)
+	}
+
+	// The rest, at once, from the page's head.
+	a.skills.sel = ""
+	tt.Frame()
+	if !strings.Contains(strings.Join(tt.Texts(), "\n"), "一次收进了 2 个技能") {
+		t.Fatalf("no way back: %q", tt.Texts())
+	}
+	snapshot(t, tt, "skills-give-back")
+	if err := tt.Click("全部放回"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Frame()
+	for _, p := range []string{filepath.Join(cc, "pdf"), filepath.Join(cx, "pdf"), filepath.Join(cc, "my-review")} {
+		if isLink(p) || !fileThere(filepath.Join(p, "SKILL.md")) {
+			t.Fatalf("%s not given back", p)
+		}
+	}
+	if strings.Contains(strings.Join(tt.Texts(), "\n"), "一次收进了") {
+		t.Fatal("the way back stays when nothing is left to give back")
+	}
+}

@@ -683,6 +683,9 @@ type skillSuggestion struct {
 	act, tip        string
 	do              func()
 	main            bool // the key in the accent: the first thing to do
+	// skip is the words of a quiet key beside it that puts it away.
+	skip   string
+	skipDo func()
 }
 
 // skillsSuggestions is what can be done in one click, worked out from the
@@ -693,6 +696,31 @@ func (a *app) skillsSuggestions() []skillSuggestion {
 	r := a.skills.report
 	env := a.skills.env
 	var out []skillSuggestion
+	// What was taken in last, together, given back in one click while it
+	// is recent: its 撤销 is forgotten once the app restarts, as it did
+	// for an update when the user asked for it (0.100.5).
+	if taken, at := r.LastTaken(); len(taken) > 0 && a.now().Sub(at) < 3*24*time.Hour && at.After(a.cfg.SkillsBackSeen) {
+		names := make([]string, 0, len(taken))
+		for _, e := range taken {
+			names = append(names, e.Name)
+		}
+		head := strings.Join(names, "、")
+		if len(names) > 4 {
+			head = strings.Join(names[:4], "、") + fmt.Sprintf(" 等 %d 个", len(names))
+		}
+		out = append(out, skillSuggestion{key: "back", title: fmt.Sprintf("%s 一次收进了 %d 个技能", whenLabel(at, a.now()), len(taken)),
+			sub: head + "。想回到收进之前，就全部放回：各工具里换回各自的文件夹，MyMind 里这份移到回收。只想放回工具自带的，就到它的详情里点「其实是工具自带的」，自己装的留在 MyMind 里随导图同步。",
+			act: "全部放回", tip: "回到收进之前的样子", skip: "不用了", skipDo: func() {
+				a.cfg.SkillsBackSeen = at
+				a.cfg.save()
+			}, do: func() {
+				ops := make([]func() (skills.Undo, error), 0, len(taken))
+				for _, e := range taken {
+					ops = append(ops, func() (skills.Undo, error) { return skills.GiveBack(env, e) })
+				}
+				a.skillsBatch("放回了 %d 个技能，各工具里换回了各自的文件夹", ops)
+			}})
+	}
 	// A tool new here: the skills linked to it.
 	if fresh := a.skillsFresh(); len(fresh) > 0 {
 		var names []string
@@ -854,6 +882,9 @@ func (a *app) skillsSuggest(c *ui.Context) {
 				}
 				if b.Clicked() {
 					a.later(s.do)
+				}
+				if s.skip != "" && textKey(c, s.skip, s.skip, "").Clicked() {
+					a.later(s.skipDo)
 				}
 				if s.key == "fresh" && s.act != "知道了" && textKey(c, "知道了", "知道了，不链接", "").Clicked() {
 					a.later(func() {
@@ -1176,6 +1207,14 @@ func (a *app) skillMenu(m *ui.Menu, e *skills.Entry) {
 		return
 	}
 	m.Separator()
+	if skillGivable(e) {
+		if m.Item("其实是工具自带的").Chosen() {
+			a.later(func() { a.skillGiveBack(e, true) })
+		}
+		if m.Item("不收了，放回原处").Chosen() {
+			a.later(func() { a.skillGiveBack(e, false) })
+		}
+	}
 	if e.Stored && len(e.Copies) > 0 && m.Item("停用").Chosen() {
 		a.later(func() { a.skillDisable(e) })
 	}
@@ -1201,6 +1240,58 @@ func (a *app) skillDo(done string, op func() (skills.Undo, error)) bool {
 		a.skillsRescan()
 	})
 	return true
+}
+
+// skillGivable tells whether a skill MyMind keeps can be given back to
+// the tools' folders: this computer links it somewhere.
+func skillGivable(e *skills.Entry) bool {
+	if !e.Stored || e.ReadOnly() {
+		return false
+	}
+	for _, c := range e.Copies {
+		if c.State == skills.Linked {
+			return true
+		}
+	}
+	return false
+}
+
+// skillGiveBack puts a skill MyMind keeps back into the tools' folders,
+// each a folder of its own again (skills.GiveBack); bundled, it is
+// marked as its tool's own too, and left alone from then on.
+func (a *app) skillGiveBack(e *skills.Entry, bundled bool) {
+	key := e.Key
+	was, had := a.cfg.SkillsMarked[key]
+	undo, err := skills.GiveBack(a.skills.env, e)
+	if err != nil {
+		a.tell("没放回去：" + err.Error())
+		a.skillsRescan()
+		return
+	}
+	say := "已把 " + e.Name + " 放回各工具的文件夹，MyMind 里这份移到了回收"
+	if bundled {
+		if a.cfg.SkillsMarked == nil {
+			a.cfg.SkillsMarked = map[string]bool{}
+		}
+		a.cfg.SkillsMarked[key] = true
+		a.cfg.save()
+		say = e.Name + " 放回了工具的文件夹，标为工具自带：以后只显示、不处理"
+	}
+	a.skillsRescan()
+	a.tellUndo(say, func() {
+		if err := undo(); err != nil {
+			a.tell("没能撤回：" + err.Error())
+		}
+		if bundled {
+			if had {
+				a.cfg.SkillsMarked[key] = was
+			} else {
+				delete(a.cfg.SkillsMarked, key)
+			}
+			a.cfg.save()
+		}
+		a.skillsRescan()
+	})
 }
 
 // skillMarkOffer is the words of the item that says a skill came with its
@@ -1446,6 +1537,9 @@ func (a *app) skillDetail(c *ui.Context, e *skills.Entry) {
 				}
 				if e.ReadOnly() {
 					return
+				}
+				if skillGivable(e) && textKey(c, "其实是工具自带的", "其实是工具自带的", "放回工具的文件夹，以后只显示、不处理").Clicked() {
+					a.later(func() { a.skillGiveBack(e, true) })
 				}
 				if e.Stored && len(e.Copies) > 0 && textKey(c, "停用", "停用 "+e.Name, "拿掉各处的链接，MyMind 里留着").Clicked() {
 					a.later(func() { a.skillDisable(e) })

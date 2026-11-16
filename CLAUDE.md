@@ -411,6 +411,11 @@ by AI, and an AI assistant.
   shown and left alone as a plugin's are (`Entry.ReadOnly`): never taken
   in, mended nor counted among 要处理, for the tool would put back what
   was changed, the user asked (0.100.4).
+  What was taken in is given back (`skills.GiveBack`: each link a folder
+  of its own again, MyMind's copy put away), one by one (其实是工具自带的,
+  which marks it too) or the last batch at once (`LastTaken`, by when its
+  links were made): 全部收进's 撤销 was lost when an update restarted the
+  app, the user found.
   Everything done to the folders has its way back (`skills.Undo`). What
   is to do for many at once is offered at the page's head, a click each
   (`skillsSuggestions`: take all in, copies alike back to links, links

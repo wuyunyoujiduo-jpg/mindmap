@@ -22,6 +22,8 @@ type config struct {
 	// SkillsMarked is what the user said of a skill, by its key: true that
 	// it came with its tool, false that it did not (skills.Env.Marked).
 	SkillsMarked map[string]bool `json:"skillsMarked,omitempty"`
+	// SkillsBackSeen is the last taking in whose 全部放回 was put away.
+	SkillsBackSeen time.Time `json:"skillsBackSeen,omitzero"`
 	// PanelOpen shows the panel of the topic chosen beside the canvas: put
 	// away at first, which leaves the canvas the room.
 	PanelOpen bool `json:"panelOpen,omitempty"`

@@ -97,6 +97,88 @@ func Adopt(env Env, e *Entry, tool string) (Undo, error) {
 	}, nil
 }
 
+// GiveBack undoes a taking in, as Adopt's way back does once the app
+// has forgotten it: each of this computer's links to MyMind's copy is
+// replaced by a folder of its own, a copy of it, and MyMind's copy is
+// put away. A skill no tool links here is not given back: it would be
+// gone.
+func GiveBack(env Env, e *Entry) (Undo, error) {
+	if !e.Stored || e.ReadOnly() {
+		return nil, errors.New("这个技能不在 MyMind 里")
+	}
+	var linked []*Copy
+	for _, c := range e.Copies {
+		if c.State == Linked {
+			linked = append(linked, c)
+		}
+	}
+	if len(linked) == 0 {
+		return nil, errors.New("这台电脑上没有工具链接着它，放回去就没了；不要了就删除")
+	}
+	var undos []Undo
+	for _, c := range linked {
+		if err := os.Remove(c.Path); err != nil {
+			_ = all(undos)()
+			return nil, err
+		}
+		if err := copyDir(e.StorePath, c.Path); err != nil {
+			_ = os.RemoveAll(c.Path)
+			_ = makeLink(e.StorePath, c.Path)
+			_ = all(undos)()
+			return nil, err
+		}
+		undos = append(undos, func() error {
+			if err := os.RemoveAll(c.Path); err != nil {
+				return err
+			}
+			return makeLink(e.StorePath, c.Path)
+		})
+	}
+	to, err := putAway(env, e.StorePath)
+	if err != nil {
+		_ = all(undos)()
+		return nil, err
+	}
+	undos = append(undos, func() error { return moveDir(to, e.StorePath) })
+	return all(undos), nil
+}
+
+// LinkedAt is when the first of this computer's links to MyMind's copy
+// was made: when the skill was taken in here, or first linked. Zero for
+// none.
+func (e *Entry) LinkedAt() time.Time {
+	var at time.Time
+	for _, c := range e.Copies {
+		if c.State != Linked {
+			continue
+		}
+		if fi, err := os.Lstat(c.Path); err == nil && (at.IsZero() || fi.ModTime().Before(at)) {
+			at = fi.ModTime()
+		}
+	}
+	return at
+}
+
+// LastTaken is the skills taken in last, together: those first linked
+// within a few minutes of the newest. A batch of 全部收进, found by its
+// links once its way back is forgotten.
+func (r *Report) LastTaken() (taken []*Entry, at time.Time) {
+	for _, e := range r.Entries {
+		if t := e.LinkedAt(); e.Stored && !e.ReadOnly() && t.After(at) {
+			at = t
+		}
+	}
+	if at.IsZero() {
+		return nil, at
+	}
+	for _, e := range r.Entries {
+		if t := e.LinkedAt(); e.Stored && !e.ReadOnly() && !t.IsZero() && at.Sub(t) <= 5*time.Minute {
+			taken = append(taken, e)
+		}
+	}
+	return taken, at
+}
+
 // Link puts a link to MyMind's copy into tool's folder.
 func Link(env Env, e *Entry, t Tool) (Undo, error) {
 	if !e.Stored {
