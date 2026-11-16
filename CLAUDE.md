@@ -406,7 +406,19 @@ by AI, and an AI assistant.
   none), synced by ghsync, and the agents' folders hold links to it (a
   junction on Windows): the user asked for one copy and not one an agent
   and a folder. A link in a repository is the user's to commit or not;
-  committed, it is said, and `MakeReal` puts the files there. What each
+  committed, it is said, and `MakeReal` puts the files there. Since
+  0.100.7 (the user's choice) the store is `~/.agents/skills`, the
+  agents' common place (`skillsStore`), which Codex reads itself
+  (`Env.Reads`, a copy `Native`: no link, which would have it read a
+  skill twice) and the others by links; what MyMind keeps of its own
+  beside it (put away, turned off: a skill turned off must leave a folder
+  Codex reads) is `~/.agents/.mymind` (`Env.Keep`); a project's skills
+  are files in its repository's `.agents/skills`, linked from inside it
+  (`linkIn`, relative: a link committed works in every clone). The
+  store goes with the maps by a mount of the sync (`Config.Mounts`, at
+  `.skills`, the path it had), and the maps folder's `.skills` of before
+  is moved there as a folder is opened (`skillsMigrate`, `Migrate`,
+  before any sync), the links mended by `Repair`. What each
   computer linked is in `.skills/_machines`, which the other offers.
   A tool's own skills, which it installs and updates (`Bundled`: the
   table's `bundled` folders, Codex's `.system`; a link into the tool's

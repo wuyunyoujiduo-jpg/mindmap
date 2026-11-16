@@ -64,13 +64,74 @@ type skillDiff struct {
 	lines     []skills.Line
 }
 
-// skillsStore is MyMind's folder of skills: in the maps folder, or, with
-// none, the home's .mymind-skills.
-func (a *app) skillsStore(home string) string {
+// skillsStore is MyMind's folder of skills: ~/.agents/skills, the AI
+// agents' common place (the user's choice, 0.100.7), which Codex reads
+// itself and the others by links; synced with the maps as .skills
+// (syncConfig). Before, it was the maps folder's .skills (oldSkillsStore),
+// moved there as the app opens (skillsMigrate).
+func skillsStore(home string) string { return filepath.Join(home, ".agents", "skills") }
+
+// skillsKeep is MyMind's own beside it, which no tool reads: what is put
+// away and what is turned off.
+func skillsKeep(home string) string { return filepath.Join(home, ".agents", ".mymind") }
+
+// oldSkillsStores are where the store was before 0.100.7.
+func (a *app) oldSkillsStores(home string) []string {
+	out := []string{filepath.Join(home, ".mymind-skills")}
 	if a.dir != "" {
-		return filepath.Join(a.dir, ".skills")
+		out = append(out, filepath.Join(a.dir, ".skills"))
 	}
-	return filepath.Join(home, ".mymind-skills")
+	return out
+}
+
+// skillsMigrate moves the store of before into ~/.agents/skills, as the
+// app opens and before the sync, which syncs the new place at the same
+// path of the repository. The links are mended by the scan after.
+func (a *app) skillsMigrate() {
+	home, _ := os.UserHomeDir()
+	if home == "" {
+		return
+	}
+	olds := []string{}
+	for _, o := range a.oldSkillsStores(home) {
+		if isDirPath(o) {
+			olds = append(olds, o)
+		}
+	}
+	if len(olds) == 0 {
+		return
+	}
+	env := skills.Env{Home: home, Store: skillsStore(home), Keep: skillsKeep(home), Table: skillsTable()}
+	env.Repos = skillRepos(home, a.skillRepoMaps())
+	n := 0
+	for _, o := range olds {
+		m, err := skills.Migrate(env, o)
+		n += m
+		if err != nil {
+			a.tell("技能没有全部搬到 ~/.agents/skills：" + err.Error())
+			return
+		}
+	}
+	if n > 0 {
+		a.tell(fmt.Sprintf("技能搬到了 ~/.agents/skills（各个 AI 工具通用的位置），共 %d 个，链接已经接好", n))
+	}
+}
+
+// skillRepoMaps is the maps' projects, by their roots.
+func (a *app) skillRepoMaps() map[string]string {
+	repoMap := map[string]string{}
+	for _, fi := range a.files {
+		f := a.file
+		if fi.Path != a.path {
+			f = a.indexed(fi.Path)
+		}
+		if f != nil && f.Project != "" {
+			if _, ok := repoMap[filepath.Clean(f.Project)]; !ok {
+				repoMap[filepath.Clean(f.Project)] = fi.Path
+			}
+		}
+	}
+	return repoMap
 }
 
 // machineName is this computer's, as the other computers see it.
@@ -153,7 +214,7 @@ func (a *app) skillsRescan() {
 			}
 		}
 	}
-	env := skills.Env{Home: home, Store: a.skillsStore(home), Machine: machineName(), Since: a.now().AddDate(0, 0, -30),
+	env := skills.Env{Home: home, Store: skillsStore(home), Keep: skillsKeep(home), Machine: machineName(), Since: a.now().AddDate(0, 0, -30),
 		Marked: maps.Clone(a.cfg.SkillsMarked)}
 	// The uses are counted once an hour: a scan comes whenever the app is
 	// come back to, and the records it reads are large.
@@ -325,10 +386,12 @@ func skillState(t *ui.Theme, e *skills.Entry) (string, ui.Color) {
 		return "有一份不一样的", t.Accent
 	case alike:
 		return "有一份重复的", t.Accent
+	case e.Disabled:
+		return "停用了", faint(t)
 	case !e.Stored:
 		return "未收进", faint(t)
 	case len(e.Copies) == 0:
-		return "停用了", faint(t)
+		return "没有工具在用", faint(t)
 	}
 	return "已链接", t.Success
 }
@@ -621,7 +684,7 @@ func (a *app) skillsView(c *ui.Context) {
 	}
 	// Where the one copy is, a line.
 	ui.Row(c.Key("skills-store")).Gap(4).AlignItems(ui.Center).FillWidth().Children(func() {
-		ui.Text(c, "技能只存一份，在 "+tildePath(a.skills.env.Store, a.skills.env.Home)+"，各个工具里放的是指向它的链接。").
+		ui.Text(c, "技能只存一份，在 "+tildePath(a.skills.env.Store, a.skills.env.Home)+"：Codex 直接读，其他工具用链接。").
 			FontSize(textCaption).TextColor(t.TextMuted).SingleLine().Shrink(1).MinWidth(0)
 		if textLink(c, "在访达中显示", "在访达中显示技能的目录").Clicked() {
 			if isDirPath(a.skills.env.Store) {
@@ -1139,6 +1202,8 @@ func (a *app) skillMark(c *ui.Context, e *skills.Entry, tl skills.Tool) {
 	case cp == nil:
 	case cp.State == skills.Linked:
 		tip = tl.Name + "：链接到 MyMind 的那份"
+	case cp.State == skills.Native:
+		tip = tl.Name + "：直接读 ~/.agents/skills，不用链接"
 	case cp.State == skills.Own:
 		tip = tl.Name + "：它自己的一份"
 	case cp.State == skills.Diverged:
@@ -1207,7 +1272,10 @@ func (a *app) skillMenu(m *ui.Menu, e *skills.Entry) {
 			a.later(func() { a.skillGiveBack(e, false) })
 		}
 	}
-	if e.Stored && len(e.Copies) > 0 && m.Item("停用").Chosen() {
+	if e.Disabled && m.Item("启用").Chosen() {
+		a.later(func() { a.skillEnable(e) })
+	}
+	if e.Stored && !e.Disabled && m.Item("停用").Chosen() {
 		a.later(func() { a.skillDisable(e) })
 	}
 	if m.Item("删除").Chosen() {
@@ -1329,7 +1397,13 @@ func (a *app) skillMarkOwn(e *skills.Entry, bundled bool) {
 }
 
 func (a *app) skillDisable(e *skills.Entry) {
-	a.skillDo("已停用 "+e.Name+"，拿掉了各处的链接，MyMind 里还留着", func() (skills.Undo, error) { return skills.Disable(a.skills.env, e) })
+	a.skillDo("已停用 "+e.Name+"：拿掉了各处的链接，文件移到了 ~/.agents/.mymind/disabled，哪个工具都读不到", func() (skills.Undo, error) { return skills.Disable(a.skills.env, e) })
+}
+
+// skillEnable puts a skill turned off back where the tools read it: those
+// that read ~/.agents/skills have it at once, the others by their switch.
+func (a *app) skillEnable(e *skills.Entry) {
+	a.skillDo("已启用 "+e.Name+"：直接读 ~/.agents/skills 的工具马上能用，其他工具在详情里打开开关", func() (skills.Undo, error) { return skills.Enable(a.skills.env, e) })
 }
 
 func (a *app) skillDelete(e *skills.Entry) {
@@ -1533,7 +1607,10 @@ func (a *app) skillDetail(c *ui.Context, e *skills.Entry) {
 				if skillGivable(e) && textKey(c, "其实是工具自带的", "其实是工具自带的", "放回工具的文件夹，以后只显示、不处理").Clicked() {
 					a.later(func() { a.skillGiveBack(e, true) })
 				}
-				if e.Stored && len(e.Copies) > 0 && textKey(c, "停用", "停用 "+e.Name, "拿掉各处的链接，MyMind 里留着").Clicked() {
+				if e.Disabled && textKey(c, "启用", "启用 "+e.Name, "放回 ~/.agents/skills").Clicked() {
+					a.later(func() { a.skillEnable(e) })
+				}
+				if e.Stored && !e.Disabled && textKey(c, "停用", "停用 "+e.Name, "拿掉各处的链接，文件移到哪个工具都读不到的地方").Clicked() {
 					a.later(func() { a.skillDisable(e) })
 				}
 				del := ui.Box(c.Key("del")).Height(28).Padding(0, 12).Radius(radiusPill).Center().Cursor(ui.CursorPointer).Label("删除 " + e.Name).
@@ -1701,8 +1778,8 @@ func (a *app) skillNotes(c *ui.Context, e *skills.Entry) {
 				})
 			}
 		})
-	case e.Stored && len(e.Copies) == 0:
-		note("off", "停用了：MyMind 里留着，哪个工具里都没有链接。打开下面的开关就能再用。", nil)
+	case e.Disabled:
+		note("off", "停用了：文件在 ~/.agents/.mymind/disabled，哪个工具都读不到。点「启用」，或打开下面一个工具的开关，就能再用。", nil)
 	case !e.Stored:
 		var in []string
 		owner := ""
@@ -1764,6 +1841,8 @@ func (a *app) skillCopies(c *ui.Context, e *skills.Entry) {
 							say, col = "链接指向的文件夹没了", t.Danger
 						case cp.State == skills.Linked:
 							say, mono = tildePath(cp.Path, env.Home)+" → MyMind", true
+						case cp.State == skills.Native:
+							say = "直接读 " + tildePath(filepath.Dir(cp.Path), env.Home) + "，不用链接"
 						default:
 							say, mono = tildePath(cp.Path, env.Home), true
 						}

@@ -10,6 +10,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/skills"
 )
 
 // writeSkill writes a skill's folder under dir.
@@ -81,31 +82,43 @@ func TestSkillsPage(t *testing.T) {
 	}
 	tt.Frame()
 	tt.Frame()
-	store := filepath.Join(a.dir, ".skills", "code-review")
+	// In ~/.agents/skills: Claude Code by a link, Codex reading it itself
+	// (its own copy alike put away, or it would read it twice).
+	store := filepath.Join(home, ".agents", "skills", "code-review")
 	if _, err := os.Stat(filepath.Join(store, "SKILL.md")); err != nil {
 		t.Fatal("not in the store")
 	}
-	if !isLink(filepath.Join(cc, "code-review")) || !isLink(filepath.Join(cx, "code-review")) {
-		t.Fatal("not links in the tools")
+	if !isLink(filepath.Join(cc, "code-review")) || dirThere(filepath.Join(cx, "code-review")) {
+		t.Fatal("not as it should be in the tools")
 	}
-	if !tt.HasText("已链接") || !tt.HasText("在哪些工具里") || !tt.HasText("放在哪一层") {
+	if !tt.HasText("已链接") || !tt.HasText("在哪些工具里") || !tt.HasText("放在哪一层") || !tt.HasText("直接读 ~/.agents/skills，不用链接") {
 		t.Fatalf("details: %q", tt.Texts())
 	}
 	snapshot(t, tt, "skill-detail")
-	// Out of Codex by its switch, and back by 撤销.
-	if err := tt.Click("链接到 Codex"); err != nil {
+	// Into Grok Build by its switch, out by 撤销, in again.
+	gb := filepath.Join(home, ".grok", "skills")
+	_ = os.MkdirAll(gb, 0o755)
+	a.skillsRescan()
+	a.skillSeen("grok") // known: not the new tool of below
+	tt.Frame()
+	if err := tt.Click("链接到 Grok Build"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
 	tt.Frame()
-	if _, err := os.Lstat(filepath.Join(cx, "code-review")); err == nil {
-		t.Fatal("still linked in Codex")
+	if !isLink(filepath.Join(gb, "code-review")) {
+		t.Fatal("not linked in Grok Build")
 	}
 	a.noticeUndo()
 	tt.Frame()
-	if !isLink(filepath.Join(cx, "code-review")) {
-		t.Fatal("not back in Codex")
+	if _, err := os.Lstat(filepath.Join(gb, "code-review")); err == nil {
+		t.Fatal("still linked in Grok Build")
 	}
+	if err := tt.Click("链接到 Grok Build"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Frame()
 
 	// A tool installed since: offered the skills.
 	writeSkill(t, filepath.Join(home, ".newagent", "skills"), "its-own", "它自己的")
@@ -127,15 +140,15 @@ func TestSkillsPage(t *testing.T) {
 		t.Fatal("still new")
 	}
 
-	// Codex writes the skill anew: a copy of its own; taken as MyMind's.
-	_ = os.Remove(filepath.Join(cx, "code-review"))
-	writeSkill(t, cx, "code-review", "按团队的清单审一遍改动，先列会出错的地方")
+	// Grok writes the skill anew: a copy of its own; taken as MyMind's.
+	_ = os.Remove(filepath.Join(gb, "code-review"))
+	writeSkill(t, gb, "code-review", "按团队的清单审一遍改动，先列会出错的地方")
 	a.skillsRescan()
 	tt.Frame()
 	if !tt.HasText("有一份不一样的") {
 		t.Fatalf("not told: %q", tt.Texts())
 	}
-	if err := tt.Click("看 Codex 的差异"); err != nil {
+	if err := tt.Click("看 Grok Build 的差异"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
@@ -149,7 +162,7 @@ func TestSkillsPage(t *testing.T) {
 	tt.Frame()
 	tt.Frame()
 	data, _ := os.ReadFile(filepath.Join(store, "SKILL.md"))
-	if !strings.Contains(string(data), "先列会出错的地方") || !isLink(filepath.Join(cx, "code-review")) {
+	if !strings.Contains(string(data), "先列会出错的地方") || !isLink(filepath.Join(gb, "code-review")) {
 		t.Fatalf("not settled: %s", data)
 	}
 
@@ -249,8 +262,13 @@ func TestSkillsTakeAll(t *testing.T) {
 	tt.Frame()
 	for _, dir := range tools {
 		for _, name := range []string{"pdf", "docx", "frontend-design"} {
-			if !isLink(filepath.Join(dir, name)) {
-				t.Fatalf("%s/%s not a link", dir, name)
+			p := filepath.Join(dir, name)
+			if strings.Contains(dir, ".codex") { // reads ~/.agents/skills itself
+				if dirThere(p) {
+					t.Fatalf("%s kept beside ~/.agents/skills", p)
+				}
+			} else if !isLink(p) {
+				t.Fatalf("%s not a link", p)
 			}
 		}
 	}
@@ -361,7 +379,7 @@ func TestSkillsGiveBack(t *testing.T) {
 	}
 	tt.Frame()
 	tt.Frame()
-	if !isLink(filepath.Join(cc, "pdf")) || !isLink(filepath.Join(cx, "bundled-helper")) {
+	if !isLink(filepath.Join(cc, "pdf")) || !isLink(filepath.Join(cc, "bundled-helper")) || dirThere(filepath.Join(cx, "bundled-helper")) {
 		t.Fatal("not taken in")
 	}
 	a.notice, a.noticeUndo = "", nil // the app restarted: its 撤销 is gone
@@ -391,8 +409,8 @@ func TestSkillsGiveBack(t *testing.T) {
 	tt.Frame()
 	pdf := a.skills.report.Entry("g/pdf")
 	a.cfg.SkillsMarked["g/pdf"] = true
-	_ = os.Remove(filepath.Join(cx, "my-review"))
-	writeSkill(t, cx, "my-review", "我自己的审查清单") // as MyMind's, alike
+	_ = os.Remove(filepath.Join(cc, "my-review"))
+	writeSkill(t, cc, "my-review", "我自己的审查清单") // as MyMind's, alike
 	if pdf == nil || !pdf.Stored {
 		t.Fatal("pdf not in MyMind")
 	}
@@ -405,7 +423,7 @@ func TestSkillsGiveBack(t *testing.T) {
 			t.Fatalf("%s not given back", p)
 		}
 	}
-	if !isLink(filepath.Join(cx, "my-review")) {
+	if !isLink(filepath.Join(cc, "my-review")) {
 		t.Fatal("the copy alike not linked again")
 	}
 	if a.notice != "打开时自动整理了 2 处：工具自带的 1 个放回工具，1 份一样的复制换回链接" {
@@ -414,5 +432,40 @@ func TestSkillsGiveBack(t *testing.T) {
 	snapshot(t, tt, "skills-tidied")
 	if strings.Contains(strings.Join(tt.Texts(), "\n"), "一次收进了") || tt.HasText("全部放回") {
 		t.Fatal("a card stays for what was taken in")
+	}
+}
+
+func dirThere(p string) bool {
+	fi, err := os.Lstat(p)
+	return err == nil && fi.IsDir()
+}
+
+// The store of before, the maps folder's .skills, moves to ~/.agents/skills
+// as the app opens, the links mended by the scan after.
+func TestSkillsMigrate(t *testing.T) {
+	a, tt := newTestApp(t)
+	home := os.Getenv("HOME")
+	old := filepath.Join(a.dir, ".skills")
+	writeSkill(t, old, "review", "审查")
+	cc := filepath.Join(home, ".claude", "skills")
+	_ = os.MkdirAll(cc, 0o755)
+	_ = os.MkdirAll(filepath.Join(home, ".codex", "skills"), 0o755)
+	_ = os.Symlink(filepath.Join(old, "review"), filepath.Join(cc, "review"))
+	_ = os.Symlink(filepath.Join(old, "review"), filepath.Join(home, ".codex", "skills", "review"))
+	a.skillsMigrate()
+	if a.notice != "技能搬到了 ~/.agents/skills（各个 AI 工具通用的位置），共 1 个，链接已经接好" || dirThere(old) {
+		t.Fatalf("said %q", a.notice)
+	}
+	a.showSkills()
+	tt.Frame()
+	e := a.skills.report.Entry("g/review")
+	if e == nil || e.Copies["claude"].State != skills.Linked || e.Copies["codex"].State != skills.Native {
+		t.Fatalf("after %+v", e)
+	}
+	if _, err := os.Lstat(filepath.Join(home, ".codex", "skills", "review")); err == nil {
+		t.Fatal("Codex's link kept: it would read it twice")
+	}
+	if got := a.syncConfig().Mounts[".skills"]; got != filepath.Join(home, ".agents", "skills") {
+		t.Fatalf("synced from %q", got)
 	}
 }

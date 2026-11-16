@@ -22,3 +22,15 @@ func makeLink(target, at string) error {
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	return cmd.Run()
 }
+
+// makeRelLink puts at a link to target from where at is, if Windows lets
+// a link be made; a junction, which is whole, else.
+func makeRelLink(target, at string) error {
+	if err := os.MkdirAll(filepath.Dir(at), 0o755); err != nil {
+		return err
+	}
+	if rel, err := filepath.Rel(filepath.Dir(at), target); err == nil && os.Symlink(rel, at) == nil {
+		return nil
+	}
+	return makeLink(target, at)
+}

@@ -41,12 +41,12 @@ func newWorld(t *testing.T) world {
 	root := t.TempDir()
 	home := filepath.Join(root, "home")
 	repo := filepath.Join(root, "code", "ergora")
-	for _, d := range []string{filepath.Join(home, ".claude"), filepath.Join(home, ".codex"), repo} {
+	for _, d := range []string{filepath.Join(home, ".claude"), filepath.Join(home, ".codex"), filepath.Join(home, ".grok"), repo} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
-	env := Env{Home: home, Store: filepath.Join(root, "maps", ".skills"), Machine: "here",
+	env := Env{Home: home, Store: filepath.Join(home, ".agents", "skills"), Keep: filepath.Join(home, ".agents", ".mymind"), Machine: "here",
 		Repos: []Repo{{Root: repo, Name: "ergora", Key: "ergora"}}, Table: Builtin(), Since: time.Now().AddDate(0, 0, -30)}
 	return world{env, home, repo}
 }
@@ -71,11 +71,11 @@ func TestDetect(t *testing.T) {
 	for _, tl := range tools {
 		ids = append(ids, tl.ID)
 	}
-	if got := strings.Join(ids, ","); got != "claude,codex,newagent" {
+	if got := strings.Join(ids, ","); got != "claude,codex,grok,newagent" {
 		t.Fatalf("tools %s", got)
 	}
-	if !tools[2].Found || tools[2].Global[0] != filepath.Join(".newagent", "skills") {
-		t.Fatalf("found %+v", tools[2])
+	if !tools[3].Found || tools[3].Global[0] != filepath.Join(".newagent", "skills") {
+		t.Fatalf("found %+v", tools[3])
 	}
 }
 
@@ -158,11 +158,14 @@ func TestAdoptLinkAndBack(t *testing.T) {
 	}
 	r = Scan(w.env)
 	e = r.Entry("g/review")
-	if !e.Stored || e.Copies["claude"].State != Linked || e.Copies["codex"].State != Linked {
+	// Claude Code by a link; Codex reads ~/.agents/skills itself, and its
+	// own copy alike is put away rather than linked (it would read it twice).
+	if !e.Stored || e.StorePath != filepath.Join(w.home, ".agents", "skills", "review") ||
+		e.Copies["claude"].State != Linked || e.Copies["codex"].State != Native || exists(cx) {
 		t.Fatalf("after adopt %+v %+v", e.Copies["claude"], e.Copies["codex"])
 	}
 	// Written through a link, it is the one copy.
-	if err := os.WriteFile(filepath.Join(cx, "notes.md"), []byte("x"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(cc, "notes.md"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(w.env.Store, "review", "notes.md")); err != nil {
@@ -171,8 +174,8 @@ func TestAdoptLinkAndBack(t *testing.T) {
 	if err := undo(); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := linkTarget(cc); ok || !fileExists(filepath.Join(cc, "SKILL.md")) {
-		t.Fatal("claude's not put back")
+	if _, ok := linkTarget(cc); ok || !fileExists(filepath.Join(cc, "SKILL.md")) || !fileExists(filepath.Join(cx, "SKILL.md")) {
+		t.Fatal("not put back")
 	}
 	if exists(filepath.Join(w.env.Store, "review")) {
 		t.Fatal("store kept it")
@@ -185,15 +188,19 @@ func TestAdoptLinkAndBack(t *testing.T) {
 	}
 	r = Scan(w.env)
 	e = r.Entry("g/review")
-	un, err := Link(w.env, e, w.tool(t, "codex"))
+	if _, err := Link(w.env, e, w.tool(t, "codex")); err == nil {
+		t.Fatal("a link for a tool that reads the store")
+	}
+	gb := filepath.Join(w.home, ".grok", "skills", "review")
+	un, err := Link(w.env, e, w.tool(t, "grok"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := linkTarget(cx); !ok {
-		t.Fatal("no link in codex")
+	if _, ok := linkTarget(gb); !ok {
+		t.Fatal("no link in grok")
 	}
 	_ = un()
-	if exists(cx) {
+	if exists(gb) {
 		t.Fatal("link not undone")
 	}
 	r = Scan(w.env)
@@ -201,8 +208,48 @@ func TestAdoptLinkAndBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	r = Scan(w.env)
-	if e := r.Entry("g/review"); !e.Stored || len(e.Copies) != 0 {
+	if e := r.Entry("g/review"); !e.Stored || len(e.Copies) != 1 || e.Copies["codex"].State != Native {
 		t.Fatalf("after unlink %+v", e)
+	}
+}
+
+// Turned off, a skill leaves ~/.agents/skills, which Codex reads, and
+// comes back by a switch.
+func TestDisableEnable(t *testing.T) {
+	w := newWorld(t)
+	cc := skill(t, filepath.Join(w.home, ".claude", "skills"), "pdf", "reads pdfs")
+	r := Scan(w.env)
+	if _, err := Adopt(w.env, r.Entry("g/pdf"), "claude"); err != nil {
+		t.Fatal(err)
+	}
+	r = Scan(w.env)
+	undo, err := Disable(w.env, r.Entry("g/pdf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r = Scan(w.env)
+	e := r.Entry("g/pdf")
+	if e == nil || !e.Disabled || len(e.Copies) != 0 || exists(filepath.Join(w.env.Store, "pdf")) || exists(cc) {
+		t.Fatalf("off %+v", e)
+	}
+	if err := undo(); err != nil {
+		t.Fatal(err)
+	}
+	r = Scan(w.env)
+	if e := r.Entry("g/pdf"); e.Disabled || e.Copies["claude"].State != Linked || e.Copies["codex"].State != Native {
+		t.Fatalf("back %+v", e)
+	}
+	// Off, and on again by linking it.
+	if _, err := Disable(w.env, r.Entry("g/pdf")); err != nil {
+		t.Fatal(err)
+	}
+	r = Scan(w.env)
+	if _, err := Link(w.env, r.Entry("g/pdf"), w.tool(t, "claude")); err != nil {
+		t.Fatal(err)
+	}
+	r = Scan(w.env)
+	if e := r.Entry("g/pdf"); e.Disabled || e.Copies["claude"].State != Linked || e.Copies["codex"].State != Native {
+		t.Fatalf("on %+v", e)
 	}
 }
 
@@ -214,32 +261,32 @@ func TestDivergedAndResolve(t *testing.T) {
 		t.Fatal(err)
 	}
 	r = Scan(w.env)
-	if _, err := Link(w.env, r.Entry("g/msg"), w.tool(t, "codex")); err != nil {
+	if _, err := Link(w.env, r.Entry("g/msg"), w.tool(t, "grok")); err != nil {
 		t.Fatal(err)
 	}
-	// Codex writes the skill again: a folder of its own, other words.
-	cx := filepath.Join(w.home, ".codex", "skills", "msg")
-	_ = os.Remove(cx)
-	skill(t, filepath.Join(w.home, ".codex", "skills"), "msg", "writes better messages")
+	// Grok writes the skill again: a folder of its own, other words.
+	gb := filepath.Join(w.home, ".grok", "skills", "msg")
+	_ = os.Remove(gb)
+	skill(t, filepath.Join(w.home, ".grok", "skills"), "msg", "writes better messages")
 	r = Scan(w.env)
 	e := r.Entry("g/msg")
-	if e.Copies["codex"].State != Diverged {
-		t.Fatalf("state %v", e.Copies["codex"].State)
+	if e.Copies["grok"].State != Diverged {
+		t.Fatalf("state %v", e.Copies["grok"].State)
 	}
-	undo, err := Resolve(w.env, e, "codex", true)
+	undo, err := Resolve(w.env, e, "grok", true)
 	if err != nil {
 		t.Fatal(err)
 	}
 	r = Scan(w.env)
 	e = r.Entry("g/msg")
-	if e.Description != "writes better messages" || e.Copies["codex"].State != Linked || e.Copies["claude"].State != Linked {
-		t.Fatalf("after taking theirs %q %v", e.Description, e.Copies["codex"].State)
+	if e.Description != "writes better messages" || e.Copies["grok"].State != Linked || e.Copies["claude"].State != Linked {
+		t.Fatalf("after taking theirs %q %v", e.Description, e.Copies["grok"].State)
 	}
 	if err := undo(); err != nil {
 		t.Fatal(err)
 	}
 	r = Scan(w.env)
-	if e := r.Entry("g/msg"); e.Description != "writes messages" || e.Copies["codex"].State != Diverged {
+	if e := r.Entry("g/msg"); e.Description != "writes messages" || e.Copies["grok"].State != Diverged {
 		t.Fatalf("undo %q", e.Description)
 	}
 }
@@ -260,8 +307,11 @@ func TestDeleteScopeRename(t *testing.T) {
 	}
 	r = Scan(w.env)
 	p := r.Entry("p/ergora/deploy")
-	if p == nil || p.Copies["claude"] == nil || p.Copies["claude"].State != Linked || r.Entry("g/deploy") != nil {
-		t.Fatalf("to project %+v", p)
+	// In the repository's .agents/skills, Claude Code's link from inside it.
+	link := filepath.Join(w.repo, ".claude", "skills", "deploy")
+	if raw, _ := os.Readlink(link); p == nil || p.StorePath != filepath.Join(w.repo, ".agents", "skills", "deploy") ||
+		p.Copies["claude"] == nil || p.Copies["claude"].State != Linked || filepath.IsAbs(raw) || p.Copies["codex"].State != Native || r.Entry("g/deploy") != nil {
+		t.Fatalf("to project %+v %q", p, raw)
 	}
 	if err := undo(); err != nil {
 		t.Fatal(err)
@@ -287,6 +337,9 @@ func TestDeleteScopeRename(t *testing.T) {
 	if r = Scan(w.env); r.Entry("g/deploy") != nil {
 		t.Fatal("still there")
 	}
+	if !exists(filepath.Join(w.env.Keep, trashDir)) {
+		t.Fatal("not in the trash beside the store")
+	}
 	if err := del(); err != nil {
 		t.Fatal(err)
 	}
@@ -295,7 +348,9 @@ func TestDeleteScopeRename(t *testing.T) {
 	}
 }
 
-func TestMakeRealAndTracked(t *testing.T) {
+// A project's skill is files in its repository, and the links to it are
+// from inside it: committed, they work in every clone, and are no fault.
+func TestProjectLinksCommitted(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("no git")
 	}
@@ -308,33 +363,16 @@ func TestMakeRealAndTracked(t *testing.T) {
 	if _, err := Adopt(w.env, r.Entry("p/ergora/rules"), "claude"); err != nil {
 		t.Fatal(err)
 	}
-	tools := Detect(w.home, w.env.Table)
-	r = Scan(w.env)
-	if _, err := Link(w.env, r.Entry("p/ergora/rules"), w.tool(t, "codex")); err != nil {
-		t.Fatal(err)
-	}
-	if out, err := exec.Command("git", "-C", w.repo, "add", ".claude/skills/rules").CombinedOutput(); err != nil {
+	if out, err := exec.Command("git", "-C", w.repo, "add", ".").CombinedOutput(); err != nil {
 		t.Fatal(string(out))
 	}
 	r = Scan(w.env)
 	e := r.Entry("p/ergora/rules")
-	if !e.Copies["claude"].Tracked || e.Copies["codex"].Tracked {
-		t.Fatalf("tracked %v %v", e.Copies["claude"].Tracked, e.Copies["codex"].Tracked)
+	if !fileExists(filepath.Join(w.repo, ".agents", "skills", "rules", "SKILL.md")) || e.Copies["claude"].State != Linked || e.Copies["claude"].Tracked {
+		t.Fatalf("project %+v", e.Copies["claude"])
 	}
-	if _, err := MakeReal(w.env, e, tools); err != nil {
-		t.Fatal(err)
-	}
-	cc := filepath.Join(w.repo, ".claude", "skills", "rules")
-	if _, ok := linkTarget(cc); ok || !fileExists(filepath.Join(cc, "SKILL.md")) {
-		t.Fatal("not real")
-	}
-	cx := filepath.Join(w.repo, ".codex", "skills", "rules")
-	if tg, _ := os.Readlink(cx); filepath.IsAbs(tg) || !fileExists(filepath.Join(cx, "SKILL.md")) {
-		t.Fatalf("codex's link %q", tg)
-	}
-	r = Scan(w.env)
-	if e := r.Entry("p/ergora/rules"); e.Stored || e.Copies["codex"].State != Elsewhere {
-		t.Fatalf("after %+v", e)
+	if _, err := MakeReal(w.env, e, Detect(w.home, w.env.Table)); err == nil {
+		t.Fatal("made real what is real")
 	}
 }
 
@@ -356,7 +394,7 @@ func TestOtherComputers(t *testing.T) {
 	_ = os.MkdirAll(filepath.Join(other.Home, ".claude"), 0o755)
 	r2 := Scan(other)
 	e := r2.Entry("g/sql")
-	if e == nil || len(e.Copies) != 0 || len(e.Others["here"]) != 1 || e.Others["here"][0] != "claude" {
+	if e == nil || len(e.Copies) != 0 || len(e.Others["here"]) != 2 || e.Others["here"][0] != "claude" {
 		t.Fatalf("other %+v", e)
 	}
 	if _, err := InstallHere(other, e, r2.Tools); err != nil {
@@ -367,29 +405,47 @@ func TestOtherComputers(t *testing.T) {
 	}
 }
 
-func TestRepair(t *testing.T) {
+// The store of before 0.100.7, the maps folder's .skills, moves into
+// ~/.agents/skills and the repositories' .agents/skills; the links are
+// mended, and Codex's, which reads the store itself now, taken out.
+func TestMigrate(t *testing.T) {
 	w := newWorld(t)
-	skill(t, filepath.Join(w.home, ".claude", "skills"), "x", "does x")
+	old := filepath.Join(filepath.Dir(w.home), "maps", ".skills")
+	skill(t, old, "x", "does x")
+	skill(t, filepath.Join(old, projectsDir, "ergora"), "rules", "the rules")
+	skill(t, w.env.Store, "y", "already here")
+	skill(t, old, "y", "an older y")
+	past := time.Now().Add(-time.Hour)
+	_ = os.Chtimes(filepath.Join(old, "y", "SKILL.md"), past, past)
+	cc, cx := filepath.Join(w.home, ".claude", "skills"), filepath.Join(w.home, ".codex", "skills")
+	_ = os.MkdirAll(cc, 0o755)
+	_ = os.MkdirAll(cx, 0o755)
+	_ = os.Symlink(filepath.Join(old, "x"), filepath.Join(cc, "x"))
+	_ = os.Symlink(filepath.Join(old, "x"), filepath.Join(cx, "x"))
+	rp := filepath.Join(w.repo, ".claude", "skills")
+	_ = os.MkdirAll(rp, 0o755)
+	_ = os.Symlink(filepath.Join(old, projectsDir, "ergora", "rules"), filepath.Join(rp, "rules"))
+	n, err := Migrate(w.env, old)
+	if err != nil || n != 2 {
+		t.Fatalf("moved %d %v", n, err)
+	}
+	if exists(old) {
+		t.Fatal("the old store left")
+	}
 	r := Scan(w.env)
-	if _, err := Adopt(w.env, r.Entry("g/x"), "claude"); err != nil {
-		t.Fatal(err)
+	if got := Repair(w.env, r); got != 3 {
+		t.Fatalf("repaired %d", got)
 	}
-	// The maps folder moves.
-	moved := filepath.Join(filepath.Dir(filepath.Dir(w.env.Store)), "maps2", ".skills")
-	_ = os.MkdirAll(filepath.Dir(moved), 0o755)
-	if err := os.Rename(w.env.Store, moved); err != nil {
-		t.Fatal(err)
-	}
-	w.env.Store = moved
 	r = Scan(w.env)
-	if r.Entry("g/x").Copies["claude"].State != Dangling {
-		t.Fatal("not dangling")
+	if e := r.Entry("g/x"); e.Copies["claude"].State != Linked || e.Copies["codex"].State != Native || exists(filepath.Join(cx, "x")) {
+		t.Fatalf("x %+v %+v", e.Copies["claude"], e.Copies["codex"])
 	}
-	if n := Repair(w.env, r); n != 1 {
-		t.Fatalf("repaired %d", n)
+	if e := r.Entry("g/y"); e.Description != "already here" {
+		t.Fatalf("y %q", e.Description)
 	}
-	if Scan(w.env).Entry("g/x").Copies["claude"].State != Linked {
-		t.Fatal("not linked again")
+	p := r.Entry("p/ergora/rules")
+	if raw, _ := os.Readlink(filepath.Join(rp, "rules")); p == nil || p.Copies["claude"].State != Linked || filepath.IsAbs(raw) {
+		t.Fatalf("rules %+v %q", p, raw)
 	}
 }
 
@@ -514,7 +570,7 @@ func TestGiveBack(t *testing.T) {
 	if err := undo(); err != nil {
 		t.Fatal(err)
 	}
-	if e := Scan(w.env).Entry("g/review"); e == nil || !e.Stored || e.Copies["codex"].State != Linked {
+	if e := Scan(w.env).Entry("g/review"); e == nil || !e.Stored || e.Copies["codex"].State != Native || exists(filepath.Join(cx, "review")) {
 		t.Fatalf("not taken back %+v", e)
 	}
 }

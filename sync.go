@@ -29,7 +29,14 @@ const (
 )
 
 func (a *app) syncConfig() ghsync.Config {
-	return ghsync.Config{Repo: ghsync.Clean(a.cfg.SyncRepo), Branch: a.cfg.SyncBranch, Token: ghsync.Clean(a.cfg.SyncToken), API: a.cfg.GitHubAPI}
+	cfg := ghsync.Config{Repo: ghsync.Clean(a.cfg.SyncRepo), Branch: a.cfg.SyncBranch, Token: ghsync.Clean(a.cfg.SyncToken), API: a.cfg.GitHubAPI}
+	// The AI agents' skills, kept in ~/.agents/skills, which the agents
+	// read and so cannot be in the maps folder, go with the maps, at the
+	// path they had when they were in it.
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		cfg.Mounts = map[string]string{".skills": skillsStore(home)}
+	}
+	return cfg
 }
 
 // mergeMapVersions merges a map changed on two computers, topic by topic

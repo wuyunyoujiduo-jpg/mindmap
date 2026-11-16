@@ -49,8 +49,11 @@ type Repo struct {
 
 // Env is what a scan looks at.
 type Env struct {
-	Home    string // the user's home
-	Store   string // MyMind's folder of skills
+	Home  string // the user's home
+	Store string // MyMind's folder of skills: ~/.agents/skills, the tools' common place
+	// Keep is MyMind's own beside it, which no tool reads: what is put
+	// away (.trash) and what is turned off (disabled). Empty, the store.
+	Keep    string
 	Machine string // this computer's name
 	Repos   []Repo
 	Table   []Tool
@@ -74,7 +77,43 @@ const (
 	Diverged                   // a folder of its own while MyMind has the skill, not alike
 	Elsewhere                  // a link to a folder that is not MyMind's (in the repository, another tool's)
 	Dangling                   // a link to what is not there
+	Native                     // the tool reads MyMind's folder itself (~/.agents/skills, a repository's .agents/skills): no link
 )
+
+// ProjectStore is a repository's folder of skills that MyMind keeps, the
+// tools' common place in it, which Codex reads itself and the others by
+// links from inside the repository: the files go with the repository.
+func ProjectStore(root string) string { return filepath.Join(root, ".agents", "skills") }
+
+// Reads tells whether a tool reads MyMind's folder of a scope itself,
+// needing no link there: one of its folders of skills is it.
+func (env Env) Reads(t Tool, scope Scope) bool {
+	switch scope {
+	case Global:
+		for _, g := range t.Global {
+			if env.Store != "" && filepath.Clean(filepath.Join(env.Home, g)) == filepath.Clean(env.Store) {
+				return true
+			}
+		}
+	case Project:
+		for _, p := range t.Project {
+			if filepath.Clean(p) == filepath.Join(".agents", "skills") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// ReadsID is Reads of the tool of the table by its ID.
+func (env Env) ReadsID(id string, scope Scope) bool {
+	for _, t := range env.Table {
+		if t.ID == id {
+			return env.Reads(t, scope)
+		}
+	}
+	return false
+}
 
 // A Copy is a skill as a tool's folder has it.
 type Copy struct {
@@ -98,9 +137,11 @@ type Entry struct {
 	// so, or that it is not (Env.Marked), and not the table or its link.
 	By     string
 	Marked bool
-	// Stored is that MyMind has it, at StorePath.
+	// Stored is that MyMind has it, at StorePath; Disabled that it is
+	// turned off, kept apart where no tool reads it (Env.Keep).
 	Stored    bool
 	StorePath string
+	Disabled  bool
 	Copies    map[string]*Copy // by tool
 	// What its SKILL.md says, of MyMind's copy if there is one.
 	Title, Description, Body string
@@ -198,10 +239,33 @@ func Scan(env Env) *Report {
 		e.Stored, e.StorePath = true, d
 	}
 	for _, rp := range env.Repos {
-		for _, d := range skillDirs(filepath.Join(env.Store, projectsDir, rp.Key)) {
+		for _, d := range skillDirs(ProjectStore(rp.Root)) {
+			if _, ok := linkTarget(d); ok {
+				continue // a link there is a tool's way to it, not MyMind's copy
+			}
 			name := filepath.Base(d)
 			e := entry("p/"+rp.Key+"/"+name, name, Project)
 			e.Stored, e.StorePath = true, d
+		}
+	}
+	// What is turned off, unless a skill of its name came back meanwhile.
+	if env.Keep != "" {
+		off := filepath.Join(env.Keep, disabledDir)
+		for _, d := range skillDirs(off) {
+			name := filepath.Base(d)
+			if byKey["g/"+name] == nil {
+				e := entry("g/"+name, name, Global)
+				e.Stored, e.StorePath, e.Disabled = true, d, true
+			}
+		}
+		for _, rp := range env.Repos {
+			for _, d := range skillDirs(filepath.Join(off, projectsDir, rp.Key)) {
+				name := filepath.Base(d)
+				if key := "p/" + rp.Key + "/" + name; byKey[key] == nil {
+					e := entry(key, name, Project)
+					e.Stored, e.StorePath, e.Disabled = true, d, true
+				}
+			}
 		}
 	}
 	// The tools'.
@@ -263,6 +327,8 @@ func Scan(env Env) *Report {
 		}
 		for _, c := range e.Copies {
 			switch {
+			case c.Target == "" && e.StorePath != "" && filepath.Clean(c.Path) == filepath.Clean(e.StorePath):
+				c.State = Native
 			case c.Target != "" && !exists(c.Target):
 				c.State = Dangling
 			case c.Target != "" && e.Stored && samePath(c.Target, e.StorePath):
@@ -310,7 +376,7 @@ func Scan(env Env) *Report {
 			}
 		}
 		e.Used = used[e.Name]
-		if e.Stored && len(e.Copies) == 0 {
+		if e.Stored && !e.Disabled && len(e.Copies) == 0 {
 			e.Others = others[e.Key]
 		}
 	}
@@ -385,9 +451,13 @@ func firstCopy(tools []Tool, e *Entry) string {
 	return ""
 }
 
-// projectsDir is the store's folder of the projects' skills: no skill's
-// name has an underscore, so it is never a skill's.
+// projectsDir is, in the old store and in the disabled folder, the
+// folder of the projects' skills: no skill's name has an underscore, so
+// it is never a skill's.
 const projectsDir = "_projects"
+
+// disabledDir is the folder of Env.Keep where what is turned off waits.
+const disabledDir = "disabled"
 
 // machinesDir is where each computer says what it linked.
 const machinesDir = "_machines"
@@ -402,7 +472,9 @@ func addCopy(e *Entry, tool, path, root string) {
 	if t, ok := linkTarget(path); ok {
 		c.Target = t
 	}
-	if root != "" && c.Target != "" {
+	// A link committed is a fault only when it names this computer's
+	// path: a relative one, inside the repository, works in every clone.
+	if raw, err := os.Readlink(path); root != "" && c.Target != "" && err == nil && filepath.IsAbs(raw) {
 		if rel, err := filepath.Rel(root, path); err == nil && gitbase.IsRepo(root) {
 			c.Tracked = gitbase.Tracked(root, filepath.ToSlash(rel))
 		}

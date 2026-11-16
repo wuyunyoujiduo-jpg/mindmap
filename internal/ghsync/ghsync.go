@@ -60,6 +60,23 @@ type Config struct {
 	// repository's, and when each was; ok false leaves them to be kept
 	// apart.
 	Merge func(path string, base, local, remote []byte, when MergeInfo) (merged []byte, ok bool)
+	// Mounts are folders outside the synced one kept in the repository
+	// under a path of their own: by that path (".skills"), the folder on
+	// this computer (~/.agents/skills, which the AI agents read, and so
+	// cannot be in the maps folder). The repository is the same whichever
+	// computer's folder it is.
+	Mounts map[string]string
+}
+
+// local is where a file of the repository, by its path, is on this
+// computer: in the folder synced, or in the folder mounted at its path.
+func (c Config) local(dir, p string) string {
+	for prefix, d := range c.Mounts {
+		if strings.HasPrefix(p, prefix+"/") {
+			return filepath.Join(d, filepath.FromSlash(strings.TrimPrefix(p, prefix+"/")))
+		}
+	}
+	return filepath.Join(dir, filepath.FromSlash(p))
 }
 
 // MergeInfo is when the versions merged were, to tell the user which is
@@ -186,6 +203,11 @@ func Included(rel string) bool {
 		}
 	}
 	base := parts[len(parts)-1]
+	for _, p := range parts { // what a skill's program installs, made again
+		if p == "node_modules" || p == "__pycache__" {
+			return false
+		}
+	}
 	switch {
 	case rel == ".library/vectors.json", strings.HasSuffix(base, ".tmp"), base == "Thumbs.db", base == "desktop.ini":
 		return false
@@ -255,48 +277,63 @@ func blobSHA(data []byte) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// scan finds the folder's files and their SHAs.
-func scan(dir string, s *state) (files map[string]string, skipped []string, err error) {
+// scan finds the folder's files and their SHAs, and the mounted
+// folders', under their paths.
+func scan(dir string, s *state, mounts map[string]string) (files map[string]string, skipped []string, err error) {
 	files = map[string]string{}
 	hashes := map[string]cached{}
-	err = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-		rel, _ := filepath.Rel(dir, p)
-		rel = filepath.ToSlash(rel)
-		if rel == "." {
-			return nil
-		}
-		if d.IsDir() {
-			if !Included(rel + "/x") {
-				return filepath.SkipDir
+	walk := func(root, prefix string, top bool) error {
+		return filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return nil
 			}
+			rel, _ := filepath.Rel(root, p)
+			rel = filepath.ToSlash(rel)
+			if rel == "." {
+				return nil
+			}
+			if prefix != "" {
+				rel = prefix + "/" + rel
+			}
+			if d.IsDir() {
+				if _, mounted := mounts[rel]; top && mounted { // its own folder is elsewhere
+					return filepath.SkipDir
+				}
+				if !Included(rel + "/x") {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if !d.Type().IsRegular() || !Included(rel) {
+				return nil
+			}
+			info, err := d.Info()
+			if err != nil {
+				return nil
+			}
+			if info.Size() > MaxFile {
+				skipped = append(skipped, rel)
+				return nil
+			}
+			if c, ok := s.Hashes[rel]; ok && c.Size == info.Size() && c.Mod.Equal(info.ModTime()) {
+				files[rel], hashes[rel] = c.SHA, c
+				return nil
+			}
+			data, err := os.ReadFile(p)
+			if err != nil {
+				return nil
+			}
+			sha := blobSHA(data)
+			files[rel], hashes[rel] = sha, cached{info.Size(), info.ModTime(), sha}
 			return nil
+		})
+	}
+	err = walk(dir, "", true)
+	for prefix, d := range mounts {
+		if _, e := os.Stat(d); e == nil && err == nil {
+			err = walk(d, prefix, false)
 		}
-		if !d.Type().IsRegular() || !Included(rel) {
-			return nil
-		}
-		info, err := d.Info()
-		if err != nil {
-			return nil
-		}
-		if info.Size() > MaxFile {
-			skipped = append(skipped, rel)
-			return nil
-		}
-		if c, ok := s.Hashes[rel]; ok && c.Size == info.Size() && c.Mod.Equal(info.ModTime()) {
-			files[rel], hashes[rel] = c.SHA, c
-			return nil
-		}
-		data, err := os.ReadFile(p)
-		if err != nil {
-			return nil
-		}
-		sha := blobSHA(data)
-		files[rel], hashes[rel] = sha, cached{info.Size(), info.ModTime(), sha}
-		return nil
-	})
+	}
 	s.Hashes = hashes
 	return files, skipped, err
 }
@@ -335,7 +372,7 @@ func syncOnce(ctx context.Context, dir string, cfg Config, progress func(string)
 	}
 	s := loadState(dir, cfg)
 	progress("正在检查本地文件…")
-	local, skipped, err := scan(dir, s)
+	local, skipped, err := scan(dir, s, cfg.Mounts)
 	if err != nil {
 		return res, err
 	}
@@ -423,18 +460,18 @@ func syncOnce(ctx context.Context, dir string, cfg Config, progress func(string)
 		if err != nil {
 			return err
 		}
-		if !unchanged(dir, p, local[p]) {
+		if !unchanged(cfg.local(dir, p), local[p]) {
 			return nil // changed while syncing: the next sync takes it
 		}
-		return writeAtomic(filepath.Join(dir, filepath.FromSlash(p)), data)
+		return writeAtomic(cfg.local(dir, p), data)
 	}); err != nil {
 		return res, err
 	}
 	res.Pulled = len(pull)
 	res.Written = append(res.Written, pull...)
 	for _, p := range unlink {
-		if unchanged(dir, p, local[p]) {
-			_ = os.Remove(filepath.Join(dir, filepath.FromSlash(p)))
+		if unchanged(cfg.local(dir, p), local[p]) {
+			_ = os.Remove(cfg.local(dir, p))
 		}
 	}
 	res.Deleted += len(unlink)
@@ -445,9 +482,9 @@ func syncOnce(ctx context.Context, dir string, cfg Config, progress func(string)
 		if err != nil {
 			return res, err
 		}
-		if newer, ok := newerClip(dir, c.path, data); ok {
+		if newer, ok := newerClip(cfg.local(dir, c.path), c.path, data); ok {
 			if newer { // the repository's edit of the clip is the newer
-				if err := writeAtomic(filepath.Join(dir, filepath.FromSlash(c.path)), data); err != nil {
+				if err := writeAtomic(cfg.local(dir, c.path), data); err != nil {
 					return res, err
 				}
 				merged[c.path] = c.remote
@@ -467,7 +504,7 @@ func syncOnce(ctx context.Context, dir string, cfg Config, progress func(string)
 			continue
 		}
 		cp := conflictCopy(c.path, now())
-		if err := writeAtomic(filepath.Join(dir, filepath.FromSlash(cp)), data); err != nil {
+		if err := writeAtomic(cfg.local(dir, cp), data); err != nil {
 			return res, err
 		}
 		res.Conflicts = append(res.Conflicts, c.path)
@@ -482,7 +519,7 @@ func syncOnce(ctx context.Context, dir string, cfg Config, progress func(string)
 		var mu sync.Mutex
 		entries := []treeEntry{}
 		if err := cfg.each(ctx, push, func(p string) error {
-			data, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(p)))
+			data, err := os.ReadFile(cfg.local(dir, p))
 			if err != nil {
 				return err
 			}
@@ -540,8 +577,8 @@ func message(pushed, dropped int) string {
 
 // unchanged tells whether a local file still has the SHA it was scanned
 // with ("" for none).
-func unchanged(dir, p, sha string) bool {
-	data, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(p)))
+func unchanged(full, sha string) bool {
+	data, err := os.ReadFile(full)
 	if err != nil {
 		return sha == ""
 	}
@@ -551,7 +588,7 @@ func unchanged(dir, p, sha string) bool {
 // newerClip tells, for a clip of the library, whether the repository's
 // version, data, was edited after the local one; ok is false for other
 // files.
-func newerClip(dir, p string, data []byte) (newer, ok bool) {
+func newerClip(full, p string, data []byte) (newer, ok bool) {
 	// The maps' analyses and what was drawn of their topics, of the same
 	// form, are taken as clips.
 	if !strings.HasPrefix(p, ".library/clips/") && !strings.HasPrefix(p, ".library/maps/") &&
@@ -561,7 +598,7 @@ func newerClip(dir, p string, data []byte) (newer, ok bool) {
 	var theirs, ours struct {
 		Updated time.Time `json:"updated"`
 	}
-	mine, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(p)))
+	mine, err := os.ReadFile(full)
 	if err != nil || json.Unmarshal(mine, &ours) != nil || json.Unmarshal(data, &theirs) != nil {
 		return false, false
 	}
@@ -575,7 +612,7 @@ func (cfg Config) merge(ctx context.Context, dir, p, base, local string, remote 
 	if cfg.Merge == nil {
 		return false, nil
 	}
-	full := filepath.Join(dir, filepath.FromSlash(p))
+	full := cfg.local(dir, p)
 	mine, err := os.ReadFile(full)
 	if err != nil || blobSHA(mine) != local {
 		return false, nil
@@ -592,7 +629,7 @@ func (cfg Config) merge(ctx context.Context, dir, p, base, local string, remote 
 	}
 	when.RemoteAt, when.RemoteFrom = cfg.lastCommit(ctx, head, p)
 	merged, ok := cfg.Merge(p, old, mine, remote, when)
-	if !ok || !unchanged(dir, p, local) {
+	if !ok || !unchanged(full, local) {
 		return false, nil
 	}
 	return true, writeAtomic(full, merged)

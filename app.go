@@ -562,6 +562,7 @@ func (a *app) openDir(dir string) {
 		}
 	}
 	a.cfg.Dir = dir
+	a.skillsMigrate() // a store of before in this folder, to ~/.agents/skills, before any sync
 }
 
 func (a *app) refreshFiles() {

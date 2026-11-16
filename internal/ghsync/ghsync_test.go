@@ -403,7 +403,7 @@ func TestNewerMapAnalysis(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, filepath.FromSlash(p)), []byte(`{"path":"a.mindmap.json","updated":"2026-10-01T00:00:00Z"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	newer, ok := newerClip(dir, p, []byte(`{"path":"a.mindmap.json","updated":"2026-10-02T00:00:00Z"}`))
+	newer, ok := newerClip(filepath.Join(dir, filepath.FromSlash(p)), p, []byte(`{"path":"a.mindmap.json","updated":"2026-10-02T00:00:00Z"}`))
 	if !ok || !newer {
 		t.Fatalf("newer %v ok %v", newer, ok)
 	}
@@ -415,7 +415,7 @@ func TestNewerMapAnalysis(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, filepath.FromSlash(p)), []byte(`{"path":"a.mindmap.json","updated":"2026-10-03T00:00:00Z","node":"abc123"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if newer, ok := newerClip(dir, p, []byte(`{"path":"a.mindmap.json","updated":"2026-10-02T00:00:00Z","node":"abc123"}`)); !ok || newer {
+	if newer, ok := newerClip(filepath.Join(dir, filepath.FromSlash(p)), p, []byte(`{"path":"a.mindmap.json","updated":"2026-10-02T00:00:00Z","node":"abc123"}`)); !ok || newer {
 		t.Fatalf("diagram: newer %v ok %v", newer, ok)
 	}
 }
@@ -479,5 +479,44 @@ func TestHostOf(t *testing.T) {
 		if got := hostOf(msg); got != want {
 			t.Errorf("hostOf(%q) = %q, want %q", msg, got, want)
 		}
+	}
+}
+
+// A folder outside the maps folder, mounted at a path of the repository
+// (~/.agents/skills at .skills), is synced as if it were in it, and lands
+// in the other computer's own; what is in the maps folder at that path is
+// not synced. A device of before, whose skills were in the maps folder's
+// .skills, sees the same repository.
+func TestMounts(t *testing.T) {
+	f, cfg := setup(t)
+	a, b := t.TempDir(), t.TempDir()
+	skillsA, skillsB := t.TempDir(), t.TempDir()
+	put(t, a, "项目.mindmap.json", `{"v":1}`)
+	put(t, skillsA, "review/SKILL.md", "---\nname: review\n---\n")
+	put(t, skillsA, "_machines/a.json", `{"name":"a"}`)
+	put(t, skillsA, ".trash/old/SKILL.md", "gone")
+	put(t, a, ".skills/stale/SKILL.md", "left over")
+	ca := cfg
+	ca.Mounts = map[string]string{".skills": skillsA}
+	if res := sync1(t, a, ca); res.Pushed != 3 {
+		t.Fatalf("pushed %d", res.Pushed)
+	}
+	got := f.files()
+	if got[".skills/review/SKILL.md"] == "" || got[".skills/_machines/a.json"] == "" || got[".skills/.trash/old/SKILL.md"] != "" || got[".skills/stale/SKILL.md"] != "" {
+		t.Fatalf("repository %v", got)
+	}
+	cb := cfg
+	cb.Mounts = map[string]string{".skills": skillsB}
+	sync1(t, b, cb)
+	if read(skillsB, "review/SKILL.md") == "" || read(b, ".skills/review/SKILL.md") != "" {
+		t.Fatal("not in b's mounted folder")
+	}
+	// Changed and deleted there, followed here.
+	put(t, skillsB, "review/SKILL.md", "---\nname: review\ndescription: better\n---\n")
+	os.Remove(filepath.Join(skillsB, "_machines", "a.json"))
+	sync1(t, b, cb)
+	sync1(t, a, ca)
+	if !strings.Contains(read(skillsA, "review/SKILL.md"), "better") || read(skillsA, "_machines/a.json") != "" {
+		t.Fatal("a did not follow")
 	}
 }

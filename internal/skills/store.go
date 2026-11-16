@@ -20,9 +20,19 @@ import (
 // Undo takes back what was done.
 type Undo func() error
 
-// trashDir is where what is put away waits, in the store, not synced (a
-// hidden folder): a way back.
+// trashDir is where what is put away waits, in Env.Keep (in the store
+// when there is none, hidden there), not synced: a way back.
 const trashDir = ".trash"
+
+// linkIn puts at a link to target, a skill of the scope: from inside the
+// repository for a project's, so that the repository's other clones
+// follow it too; else whole, a folder of the home's being linked to.
+func linkIn(scope Scope, target, at string) error {
+	if scope == Project {
+		return makeRelLink(target, at)
+	}
+	return makeLink(target, at)
+}
 
 // Where is where a skill of the store goes in a tool's folders: e's
 // scope's first folder.
@@ -46,9 +56,21 @@ func where(env Env, t Tool, scope Scope, repo *Repo, name string) string {
 // storePath is where MyMind keeps a skill.
 func storePath(env Env, scope Scope, repo *Repo, name string) string {
 	if scope == Project && repo != nil {
-		return filepath.Join(env.Store, projectsDir, repo.Key, name)
+		return filepath.Join(ProjectStore(repo.Root), name)
 	}
 	return filepath.Join(env.Store, name)
+}
+
+// disabledPath is where a skill turned off waits.
+func disabledPath(env Env, e *Entry) string {
+	keep := env.Keep
+	if keep == "" {
+		keep = filepath.Join(env.Store, trashDir)
+	}
+	if e.Scope == Project && e.Repo != nil {
+		return filepath.Join(keep, disabledDir, projectsDir, e.Repo.Key, e.Name)
+	}
+	return filepath.Join(keep, disabledDir, e.Name)
 }
 
 // Adopt takes a skill into MyMind: its folder, of tool's copy, moves to
@@ -67,18 +89,23 @@ func Adopt(env Env, e *Entry, tool string) (Undo, error) {
 	if err := moveDir(c.Path, dst); err != nil {
 		return nil, err
 	}
-	if err := makeLink(dst, c.Path); err != nil {
-		_ = moveDir(dst, c.Path)
-		return nil, err
+	// A tool that reads MyMind's folder itself is given no link: it would
+	// read the skill twice.
+	native := env.ReadsID(tool, e.Scope)
+	if !native {
+		if err := linkIn(e.Scope, dst, c.Path); err != nil {
+			_ = moveDir(dst, c.Path)
+			return nil, err
+		}
 	}
 	type moved struct{ from, to string }
 	var alike []moved
-	for _, o := range e.Copies {
+	for id, o := range e.Copies {
 		if o == c || o.Target != "" || treeSum(o.Path) != sum {
 			continue
 		}
 		if to, err := putAway(env, o.Path); err == nil {
-			if makeLink(dst, o.Path) == nil {
+			if env.ReadsID(id, e.Scope) || linkIn(e.Scope, dst, o.Path) == nil {
 				alike = append(alike, moved{o.Path, to})
 			} else {
 				_ = moveDir(to, o.Path)
@@ -90,8 +117,10 @@ func Adopt(env Env, e *Entry, tool string) (Undo, error) {
 			_ = os.Remove(m.from)
 			_ = moveDir(m.to, m.from)
 		}
-		if err := os.Remove(c.Path); err != nil {
-			return err
+		if !native {
+			if err := os.Remove(c.Path); err != nil {
+				return err
+			}
 		}
 		return moveDir(dst, c.Path)
 	}, nil
@@ -112,10 +141,37 @@ func GiveBack(env Env, e *Entry) (Undo, error) {
 			linked = append(linked, c)
 		}
 	}
-	if len(linked) == 0 {
+	// A tool that read MyMind's folder itself gets a copy in a folder of
+	// its own, where there is one (Codex's ~/.codex/skills).
+	var own []string
+	for _, t := range env.Table {
+		if c := e.Copies[t.ID]; c == nil || c.State != Native {
+			continue
+		}
+		dirs := t.Global
+		root := env.Home
+		if e.Scope == Project && e.Repo != nil {
+			dirs, root = t.Project, e.Repo.Root
+		}
+		for _, d := range dirs {
+			if p := filepath.Join(root, d, e.Name); filepath.Clean(filepath.Join(root, d)) != filepath.Clean(filepath.Dir(e.StorePath)) && !exists(p) {
+				own = append(own, p)
+				break
+			}
+		}
+	}
+	if len(linked) == 0 && len(own) == 0 {
 		return nil, errors.New("这台电脑上没有工具链接着它，放回去就没了；不要了就删除")
 	}
 	var undos []Undo
+	for _, p := range own {
+		if err := copyDir(e.StorePath, p); err != nil {
+			_ = os.RemoveAll(p)
+			_ = all(undos)()
+			return nil, err
+		}
+		undos = append(undos, func() error { return os.RemoveAll(p) })
+	}
 	for _, c := range linked {
 		if err := os.Remove(c.Path); err != nil {
 			_ = all(undos)()
@@ -123,7 +179,7 @@ func GiveBack(env Env, e *Entry) (Undo, error) {
 		}
 		if err := copyDir(e.StorePath, c.Path); err != nil {
 			_ = os.RemoveAll(c.Path)
-			_ = makeLink(e.StorePath, c.Path)
+			_ = linkIn(e.Scope, e.StorePath, c.Path)
 			_ = all(undos)()
 			return nil, err
 		}
@@ -131,7 +187,7 @@ func GiveBack(env Env, e *Entry) (Undo, error) {
 			if err := os.RemoveAll(c.Path); err != nil {
 				return err
 			}
-			return makeLink(e.StorePath, c.Path)
+			return linkIn(e.Scope, e.StorePath, c.Path)
 		})
 	}
 	to, err := putAway(env, e.StorePath)
@@ -184,6 +240,17 @@ func Link(env Env, e *Entry, t Tool) (Undo, error) {
 	if !e.Stored {
 		return nil, errors.New("先收进 MyMind")
 	}
+	if env.Reads(t, e.Scope) {
+		return nil, fmt.Errorf("%s 直接读这个目录，不用链接", t.Name)
+	}
+	var on Undo
+	if e.Disabled { // turned on again first
+		u, err := Enable(env, e)
+		if err != nil {
+			return nil, err
+		}
+		on = u
+	}
 	at := Where(env, t, e)
 	if at == "" {
 		return nil, errors.New("这个工具没有项目里的技能目录")
@@ -195,10 +262,41 @@ func Link(env Env, e *Entry, t Tool) (Undo, error) {
 			return nil, fmt.Errorf("%s 里已经有一个 %s", t.Name, e.Name)
 		}
 	}
-	if err := makeLink(e.StorePath, at); err != nil {
+	if err := linkIn(e.Scope, e.StorePath, at); err != nil {
+		if on != nil {
+			_ = on()
+		}
 		return nil, err
 	}
-	return func() error { return os.Remove(at) }, nil
+	return func() error {
+		if err := os.Remove(at); err != nil {
+			return err
+		}
+		if on != nil {
+			return on()
+		}
+		return nil
+	}, nil
+}
+
+// Enable turns a skill turned off on again: back where the tools read it.
+func Enable(env Env, e *Entry) (Undo, error) {
+	if !e.Disabled {
+		return func() error { return nil }, nil
+	}
+	dst := storePath(env, e.Scope, e.Repo, e.Name)
+	if exists(dst) {
+		return nil, fmt.Errorf("已经有一个 %s 在用", e.Name)
+	}
+	from := e.StorePath
+	if err := moveDir(from, dst); err != nil {
+		return nil, err
+	}
+	e.StorePath, e.Disabled = dst, false
+	return func() error {
+		e.StorePath, e.Disabled = from, true
+		return moveDir(dst, from)
+	}, nil
 }
 
 // Unlink takes MyMind's link out of tool's folder: only a link, never a
@@ -212,11 +310,45 @@ func Unlink(env Env, e *Entry, tool string) (Undo, error) {
 	if err := os.Remove(c.Path); err != nil {
 		return nil, err
 	}
-	return func() error { return makeLink(target, c.Path) }, nil
+	return func() error { return linkIn(e.Scope, target, c.Path) }, nil
 }
 
-// Disable takes every link of this computer out, MyMind's copy kept.
+// Disable turns a skill off: every link of this computer out, and
+// MyMind's copy moved where no tool reads it (a tool that reads the
+// store itself would go on using it), to be turned on again.
 func Disable(env Env, e *Entry) (Undo, error) {
+	if e.Disabled {
+		return func() error { return nil }, nil
+	}
+	undo, err := unlinkAll(env, e)
+	if err != nil {
+		return nil, err
+	}
+	if !e.Stored {
+		return undo, nil
+	}
+	to := disabledPath(env, e)
+	if exists(to) {
+		if _, err := putAway(env, to); err != nil {
+			_ = undo()
+			return nil, err
+		}
+	}
+	from := e.StorePath
+	if err := moveDir(from, to); err != nil {
+		_ = undo()
+		return nil, err
+	}
+	return func() error {
+		if err := moveDir(to, from); err != nil {
+			return err
+		}
+		return undo()
+	}, nil
+}
+
+// unlinkAll takes every link of this computer out, MyMind's copy kept.
+func unlinkAll(env Env, e *Entry) (Undo, error) {
 	var undos []Undo
 	for tool, c := range e.Copies {
 		if c.Target == "" {
@@ -238,7 +370,7 @@ func Delete(env Env, e *Entry) (Undo, error) {
 	if e.Scope == Plugin {
 		return nil, errors.New("插件的技能要停用整个插件")
 	}
-	undo, err := Disable(env, e)
+	undo, err := unlinkAll(env, e)
 	if err != nil {
 		return nil, err
 	}
@@ -258,7 +390,7 @@ func Delete(env Env, e *Entry) (Undo, error) {
 		}
 	}
 	for _, c := range e.Copies {
-		if c.Target == "" {
+		if c.Target == "" && c.State != Native { // a tool's own folder; MyMind's went above
 			if err := put(c.Path); err != nil {
 				_ = all(undos)()
 				return nil, err
@@ -287,7 +419,7 @@ func SetScope(env Env, e *Entry, scope Scope, repo *Repo, tools []Tool) (Undo, e
 			linked = append(linked, t)
 		}
 	}
-	undo, err := Disable(env, e)
+	undo, err := unlinkAll(env, e)
 	if err != nil {
 		return nil, err
 	}
@@ -298,10 +430,10 @@ func SetScope(env Env, e *Entry, scope Scope, repo *Repo, tools []Tool) (Undo, e
 	var made []string
 	for _, t := range linked {
 		at := where(env, t, scope, repo, e.Name)
-		if at == "" || exists(at) {
+		if at == "" || exists(at) || env.Reads(t, scope) {
 			continue
 		}
-		if makeLink(dst, at) == nil {
+		if linkIn(scope, dst, at) == nil {
 			made = append(made, at)
 		}
 	}
@@ -333,7 +465,7 @@ func Rename(env Env, e *Entry, name string, tools []Tool) (Undo, error) {
 			linked = append(linked, t)
 		}
 	}
-	undo, err := Disable(env, e)
+	undo, err := unlinkAll(env, e)
 	if err != nil {
 		return nil, err
 	}
@@ -349,7 +481,7 @@ func Rename(env Env, e *Entry, name string, tools []Tool) (Undo, error) {
 	var made []string
 	for _, t := range linked {
 		at := where(env, t, e.Scope, e.Repo, name)
-		if at != "" && !exists(at) && makeLink(dst, at) == nil {
+		if at != "" && !exists(at) && !env.Reads(t, e.Scope) && linkIn(e.Scope, dst, at) == nil {
 			made = append(made, at)
 		}
 	}
@@ -389,6 +521,9 @@ func setName(text, name string) string {
 func MakeReal(env Env, e *Entry, tools []Tool) (Undo, error) {
 	if !e.Stored || e.Scope != Project || e.Repo == nil {
 		return nil, errors.New("只有项目里的技能可以换成真文件")
+	}
+	if strings.HasPrefix(e.StorePath, e.Repo.Root+string(filepath.Separator)) {
+		return nil, errors.New("它已经是仓库里的真文件")
 	}
 	var first *Copy
 	var rest []*Copy
@@ -455,7 +590,7 @@ func Resolve(env Env, e *Entry, tool string, theirs bool) (Undo, error) {
 			_ = moveDir(was, e.StorePath)
 			return nil, err
 		}
-		if err := makeLink(e.StorePath, c.Path); err != nil {
+		if err := linkIn(e.Scope, e.StorePath, c.Path); err != nil {
 			_ = moveDir(e.StorePath, c.Path)
 			_ = moveDir(was, e.StorePath)
 			return nil, err
@@ -472,7 +607,7 @@ func Resolve(env Env, e *Entry, tool string, theirs bool) (Undo, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := makeLink(e.StorePath, c.Path); err != nil {
+	if err := linkIn(e.Scope, e.StorePath, c.Path); err != nil {
 		_ = moveDir(to, c.Path)
 		return nil, err
 	}
@@ -510,9 +645,11 @@ func CopyOwn(env Env, e *Entry, t Tool) (Undo, error) {
 		_ = os.RemoveAll(dst)
 		return nil, err
 	}
-	if err := makeLink(dst, at); err != nil {
-		_ = os.RemoveAll(dst)
-		return nil, err
+	if !env.Reads(t, Global) {
+		if err := makeLink(dst, at); err != nil {
+			_ = os.RemoveAll(dst)
+			return nil, err
+		}
 	}
 	return func() error {
 		_ = os.Remove(at)
@@ -520,29 +657,143 @@ func CopyOwn(env Env, e *Entry, t Tool) (Undo, error) {
 	}, nil
 }
 
-// Repair puts the links of this computer that point to where MyMind's
-// copies were, and are not there now (the maps folder moved), back to
-// where they are. It gives how many it mended.
+// Repair mends this computer's links to MyMind's copies: those that
+// point where the copies were and are not now (the maps folder moved, or
+// the store went from it to ~/.agents/skills) point to where they are;
+// and those of a tool that reads the store itself are taken out, which
+// would have it read a skill twice. It gives how many it mended.
 func Repair(env Env, r *Report) int {
 	n := 0
+	oldStore := func(t, name string) bool {
+		s := filepath.ToSlash(t)
+		return filepath.Base(t) == name && (strings.Contains(s, "/.skills/") || strings.Contains(s, "/.mymind-skills/"))
+	}
 	for _, e := range r.Entries {
-		if !e.Stored {
+		if !e.Stored || e.Disabled {
 			continue
 		}
-		for _, c := range e.Copies {
-			if c.State != Dangling || !strings.Contains(filepath.ToSlash(c.Target), "/.skills/") && !strings.Contains(filepath.ToSlash(c.Target), "/.mymind-skills/") {
+		for id, c := range e.Copies {
+			if c.State != Dangling || !oldStore(c.Target, e.Name) || os.Remove(c.Path) != nil {
 				continue
 			}
-			if filepath.Base(c.Target) != e.Name {
+			n++
+			if env.ReadsID(id, e.Scope) {
 				continue
 			}
-			if os.Remove(c.Path) == nil && makeLink(e.StorePath, c.Path) == nil {
+			if linkIn(e.Scope, e.StorePath, c.Path) == nil {
 				c.State, c.Target = Linked, e.StorePath
-				n++
+			}
+		}
+		for _, t := range r.Tools {
+			if !env.Reads(t, e.Scope) {
+				continue
+			}
+			dirs, root := t.Global, env.Home
+			if e.Scope == Project {
+				if e.Repo == nil {
+					continue
+				}
+				dirs, root = t.Project, e.Repo.Root
+			}
+			for _, d := range dirs {
+				p := filepath.Join(root, d, e.Name)
+				if filepath.Clean(p) == filepath.Clean(e.StorePath) {
+					continue
+				}
+				if tg, ok := linkTarget(p); ok && (samePath(tg, e.StorePath) || oldStore(tg, e.Name)) && os.Remove(p) == nil {
+					n++
+				}
 			}
 		}
 	}
 	return n
+}
+
+// Migrate moves the store of before, old (the maps folder's .skills),
+// into env's: every session's skills into ~/.agents/skills, a project's
+// into its repository's .agents/skills, what computers said and what was
+// put away beside them. Where a skill of the name is there already, the
+// newer stays and the other is put away. The links are mended by the
+// next scan (Repair). It gives how many skills it moved.
+func Migrate(env Env, old string) (int, error) {
+	if old == "" || !isDir(old) || filepath.Clean(old) == filepath.Clean(env.Store) {
+		return 0, nil
+	}
+	n := 0
+	var first error
+	place := func(from, to string) {
+		if exists(to) {
+			if treeSum(from) == treeSum(to) || modOf(to).After(modOf(from)) {
+				if _, err := putAway(env, from); err != nil && first == nil {
+					first = err
+				}
+				return
+			}
+			if _, err := putAway(env, to); err != nil {
+				if first == nil {
+					first = err
+				}
+				return
+			}
+		}
+		if err := moveDir(from, to); err != nil {
+			if first == nil {
+				first = err
+			}
+			return
+		}
+		n++
+	}
+	for _, d := range skillDirs(old) {
+		if _, ok := linkTarget(d); ok {
+			continue
+		}
+		place(d, filepath.Join(env.Store, filepath.Base(d)))
+	}
+	for _, rp := range env.Repos {
+		for _, d := range skillDirs(filepath.Join(old, projectsDir, rp.Key)) {
+			place(d, filepath.Join(ProjectStore(rp.Root), filepath.Base(d)))
+		}
+	}
+	files, _ := filepath.Glob(filepath.Join(old, machinesDir, "*.json"))
+	for _, f := range files {
+		to := filepath.Join(env.Store, machinesDir, filepath.Base(f))
+		if !exists(to) {
+			_ = moveDir(f, to)
+		}
+	}
+	if entries, err := os.ReadDir(filepath.Join(old, trashDir)); err == nil {
+		for _, e := range entries {
+			_, _ = putAway(env, filepath.Join(old, trashDir, e.Name()))
+		}
+	}
+	removeEmpty(old)
+	return n, first
+}
+
+// modOf is when a skill's SKILL.md was last changed.
+func modOf(dir string) time.Time {
+	fi, err := os.Stat(filepath.Join(dir, "SKILL.md"))
+	if err != nil {
+		return time.Time{}
+	}
+	return fi.ModTime()
+}
+
+// removeEmpty removes dir and the folders in it that hold nothing.
+func removeEmpty(dir string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			removeEmpty(filepath.Join(dir, e.Name()))
+		} else if e.Name() == ".DS_Store" {
+			_ = os.Remove(filepath.Join(dir, e.Name()))
+		}
+	}
+	_ = os.Remove(dir) // only when empty
 }
 
 // Remember writes what this computer linked into the store, for the
@@ -556,7 +807,7 @@ func Remember(env Env, r *Report) error {
 		}
 		var tools []string
 		for _, t := range r.Tools {
-			if c := e.Copies[t.ID]; c != nil && c.State == Linked {
+			if c := e.Copies[t.ID]; c != nil && (c.State == Linked || c.State == Native) {
 				tools = append(tools, t.ID)
 			}
 		}
@@ -591,6 +842,13 @@ func InstallHere(env Env, e *Entry, here []Tool) (Undo, error) {
 		}
 	}
 	var undos []Undo
+	var linkable []Tool // a tool that reads the store itself has it already
+	for _, t := range here {
+		if !env.Reads(t, e.Scope) {
+			linkable = append(linkable, t)
+		}
+	}
+	here = linkable
 	for _, t := range here {
 		if !want[t.ID] {
 			continue
@@ -636,6 +894,9 @@ func RepoKey(name string, taken map[string]bool) string {
 // putAway moves p into the store's trash, and gives where.
 func putAway(env Env, p string) (string, error) {
 	dir := filepath.Join(env.Store, trashDir)
+	if env.Keep != "" {
+		dir = filepath.Join(env.Keep, trashDir)
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
