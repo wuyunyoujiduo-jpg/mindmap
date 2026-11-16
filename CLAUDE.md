@@ -257,7 +257,16 @@ by AI, and an AI assistant.
     larger over the window, a kind of its own in the left column while
     there is one; the players are the system's (MyGo's `ui/video`),
     opened as shown and closed a frame after (`sweepVideos`). The user
-    dropped one in and saw a random name and nothing of it.
+    dropped one in and saw a random name and nothing of it. The AI sees
+    it by a few of its pictures (`grabFrames`, `stepGrab`: a player in a
+    Tester, which draws on the CPU, stepped a little at each of the
+    window's frames so that the window goes on).
+    What the AI writes of a clip is as long as what it was made of
+    (`applyOrganized`, `summaryLen`, `analysisLen`), and never what it
+    does not know (`fillerSaid`); the details show the user's content and
+    note first, the summary above a long content, and fold the analysis
+    and the words it is found by (`foldKey`): the user found a line kept
+    and a page of the AI's words under it.
     The thoughts that name a clip and those it names
     are in its details (`clipMentions`). What is collected is 收集's (the
     word of the UI, never 资料库), and is on a map by a topic's link.

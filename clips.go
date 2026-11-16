@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -282,11 +283,27 @@ func (a *app) startClipJob(c *library.Clip, fetch, organize bool) {
 		a.libStatus[c.ID] = "AI 整理中…"
 	}
 	clip := *c
-	var image []byte
+	var images []aiImage
 	if organize && clip.Kind == library.KindImage && a.cfg.AIProvider == providerClaude {
 		if data, err := os.ReadFile(a.lib.FilePath(c)); err == nil && len(data) <= 4<<20 {
-			image = data
+			if mt := imageMediaType(clip.File); mt != "" {
+				images = append(images, aiImage{data, mt})
+			}
 		}
+	}
+	if organize && isVideo(c) && a.cfg.AIProvider == providerClaude {
+		// The AI sees a video by a few of its pictures, taken across the
+		// window's frames before it is asked (video.go): the user's video
+		// had a random name and nothing else, and the AI said so at length.
+		shots, ok := a.vidShots[c.ID]
+		if !ok {
+			a.grabFrames(c, fetch, organize)
+			return
+		}
+		for _, s := range shots.pics {
+			images = append(images, aiImage{s, "image/jpeg"})
+		}
+		clip.Seen = shots.say()
 	}
 	base := a.organizePrompt()
 	cfg := a.cfg
@@ -305,7 +322,7 @@ func (a *app) startClipJob(c *library.Clip, fetch, organize bool) {
 		}
 		if organize {
 			prompt := organizePromptFor(&clip, base)
-			r.org, r.orgErr = askOrganize(ctx, cfg, send, sendDS, prompt, image, clip.File)
+			r.org, r.orgErr = askOrganize(ctx, cfg, send, sendDS, prompt, images)
 		}
 		return r, nil
 	}, func(v any, _ error) {
@@ -360,14 +377,35 @@ func applyPage(c *library.Clip, p library.Page) {
 // none, the summary and words to find it by, a category where it has
 // none, and the tags beside the user's.
 func applyOrganized(c *library.Clip, o *clipOrganized, now time.Time) {
-	if c.Title == "" || c.Kind == library.KindText && c.Organized == nil {
-		c.Title = strings.TrimSpace(o.Title)
+	// A file's title is its name till the AI gives a better: a video's
+	// random name was all the user's had.
+	named := c.Kind == library.KindFile && c.Name != "" && c.Title == strings.TrimSuffix(c.Name, filepath.Ext(c.Name))
+	if t := strings.TrimSpace(o.Title); t != "" && (c.Title == "" || named || c.Kind == library.KindText && c.Organized == nil) {
+		c.Title = t
 	}
 	if briefClip(c) {
 		o.Summary, o.Desc, o.Analysis = "", "", "" // it says itself what it is
 	}
-	if s := strings.TrimSpace(o.Summary); s != "" {
-		c.Summary = s
+	// As long as what it was made of allows: a summary of a few lines and
+	// an analysis of a document, not of a line or of a name. The user
+	// found a line kept and a page written of it.
+	if n := clipContentLen(c, o); n < summaryLen {
+		o.Summary = ""
+	}
+	if clipContentLen(c, o) < analysisLen || c.Kind == library.KindImage || isVideo(c) {
+		o.Analysis = ""
+	}
+	if fillerSaid(o.Desc) {
+		o.Desc = ""
+	}
+	if fillerSaid(o.Summary) {
+		o.Summary = ""
+	}
+	// Organized again, it is the new answer: a summary or an analysis the
+	// new one leaves out goes, and a description that said nothing.
+	c.Summary = strings.TrimSpace(o.Summary)
+	if fillerSaid(c.Desc) {
+		c.Desc = ""
 	}
 	if s := strings.TrimSpace(o.Desc); s != "" {
 		c.Desc = s
@@ -386,13 +424,47 @@ func applyOrganized(c *library.Clip, o *clipOrganized, now time.Time) {
 	if syn := cleanTags(o.Synonyms); len(syn) > 0 {
 		c.Synonyms = syn
 	}
-	if s := strings.TrimSpace(o.Analysis); s != "" {
-		c.Analysis = s
-	}
-	if c.Kind == library.KindImage && c.Text == "" {
-		c.Text = strings.TrimSpace(o.Text)
+	c.Analysis = strings.TrimSpace(o.Analysis)
+	if c.Kind == library.KindImage && c.Text == "" || isVideo(c) && strings.TrimSpace(o.Text) != "" {
+		c.Text = strings.TrimSpace(o.Text) // a video's, seen again, is new
 	}
 	c.Organized = &now
+}
+
+// What a clip was made of decides what the AI writes of it: a summary of
+// summaryLen runes and more, an analysis of analysisLen.
+const (
+	summaryLen  = 400
+	analysisLen = 1500
+)
+
+// clipContentLen is how much there was to read of a clip: its text and
+// note, or what its pictures showed.
+func clipContentLen(c *library.Clip, o *clipOrganized) int {
+	n := len([]rune(strings.TrimSpace(c.Text))) + len([]rune(strings.TrimSpace(c.Note)))
+	if c.Kind == library.KindImage || isVideo(c) {
+		n += len([]rune(strings.TrimSpace(o.Text)))
+	}
+	return n
+}
+
+// fillerWords are what is said of what is not known: the AI is told to
+// leave it out, and what it wrote all the same is.
+var fillerWords = regexp.MustCompile(`无法(判断|确定|得知|从)|(需要|还需|需)(打开|播放|补充|确认)|没有(任何)?(内容|实际内容|信息|线索)|建议(补充|补上)|待补充|内容未知|不得而知`)
+
+// fillerSaid tells whether a text says what is not known rather than
+// what is.
+func fillerSaid(s string) bool { return fillerWords.MatchString(s) }
+
+// summaryShown and analysisShown tell whether a clip's details show what
+// the AI wrote of it: what was written before the rules of applyOrganized
+// is kept, and shown by them.
+func summaryShown(c *library.Clip) bool {
+	return c.Summary != "" && !briefClip(c) && !fillerSaid(c.Summary) && clipContentLen(c, &clipOrganized{}) >= summaryLen
+}
+
+func analysisShown(c *library.Clip) bool {
+	return c.Analysis != "" && !fillerSaid(c.Analysis) && clipContentLen(c, &clipOrganized{}) >= analysisLen && c.Kind != library.KindImage && !isVideo(c)
 }
 
 const organizeSystem = `你是一个资料整理助手。用户把看到的文字、链接、图片和文件收进资料库，你为每条资料起标题、写摘要、分类、打标签，并给出检索关键词，方便以后查找和让 AI 检索。只输出一个 JSON 对象，不要输出其他内容。`
@@ -416,7 +488,9 @@ func (a *app) organizePrompt() string {
 	}
 	var b strings.Builder
 	b.WriteString(`请整理下面这条资料，输出 JSON：
-{"title": "简短标题，不超过 30 字", "desc": "一句简单的描述说明：这是什么、有什么用，不超过 40 字", "summary": "2–4 句话的摘要，说清它讲了什么、有什么用", "category": "一个分类", "tags": ["1–5 个标签"], "keywords": ["5–12 个检索关键词：资料里的核心概念和术语"], "synonyms": ["6–15 个同义词和近义说法：别名、中英文对应、缩写、口语说法、上下位概念，用户以后可能用这些词来找它"], "analysis": "简要分析，3–5 条 Markdown 要点：核心观点或结论、适用场景、价值、局限、可以怎么用或下一步", "text": "只有图片才填：图中的文字和内容描述；其他留空字符串"}
+{"title": "简短标题，不超过 30 字", "desc": "一句话说清这是什么，不超过 40 字", "summary": "只有内容有好几段时才写，2–3 句；否则空字符串", "category": "一个分类", "tags": ["1–4 个标签"], "keywords": ["3–8 个检索关键词：资料里的核心概念和术语"], "synonyms": ["3–8 个同义词和近义说法：别名、中英文对应、缩写，用户以后可能用这些词来找它"], "analysis": "只有长文章、长文档才写，2–3 条 Markdown 要点；否则空字符串", "text": "只有图片和视频才填：画面里的文字和内容，视频按时间顺序；其他留空字符串"}
+
+写多少看内容有多少：内容只有一句话、一个文件名时，只起标题、分类、标签和检索词，其余留空。不知道的就留空，不要写“无法判断”“需要打开查看”“建议补充说明”“没有任何信息”之类的话。
 `)
 	if len(cats) > 0 {
 		b.WriteString("\n已有分类：" + strings.Join(cats, "、") + "。合适就沿用已有分类，都不合适才新建；分类要宽泛，比如 技术、产品、设计、学习、工作、灵感、生活、资源。\n")
@@ -468,6 +542,13 @@ func organizePromptFor(c *library.Clip, prompt string) string {
 	if c.Kind == library.KindImage {
 		b.WriteString("（图片见附件）\n")
 	}
+	if isVideo(c) {
+		if c.Seen != "" {
+			b.WriteString("（这是一个视频：" + c.Seen + "。按画面起标题、写描述，文件名多半是随机字符，不用管它）\n")
+		} else {
+			b.WriteString("（这是一个视频，画面没能读到。文件名是随机字符时，title 和 desc 都留空字符串）\n")
+		}
+	}
 	if briefClip(c) {
 		b.WriteString("\n这条内容很短，它自己就说清了自己：desc、summary、analysis 都填空字符串，不要复述或展开原文；只起标题、分类、打标签、给关键词和同义词。\n")
 	} else {
@@ -485,7 +566,13 @@ func cmpOr(s, def string) string {
 }
 
 // askOrganize asks the provider chosen to sort out a clip.
-func askOrganize(ctx context.Context, cfg config, send aiSender, sendDS deepseekSender, prompt string, image []byte, file string) (*clipOrganized, error) {
+// aiImage is a picture sent to the AI with what it is asked.
+type aiImage struct {
+	data []byte
+	mt   string // its media type
+}
+
+func askOrganize(ctx context.Context, cfg config, send aiSender, sendDS deepseekSender, prompt string, images []aiImage) (*clipOrganized, error) {
 	var text string
 	if cfg.AIProvider == providerDeepSeek {
 		// Room for the thinking of the models that think first, as V4 Pro.
@@ -501,9 +588,9 @@ func askOrganize(ctx context.Context, cfg config, send aiSender, sendDS deepseek
 		}
 	} else {
 		var blocks []anthropic.BetaContentBlockParamUnion
-		if mt := imageMediaType(file); len(image) > 0 && mt != "" {
+		for _, im := range images {
 			blocks = append(blocks, anthropic.NewBetaImageBlock(anthropic.BetaBase64ImageSourceParam{
-				Data: base64.StdEncoding.EncodeToString(image), MediaType: anthropic.BetaBase64ImageSourceMediaType(mt),
+				Data: base64.StdEncoding.EncodeToString(im.data), MediaType: anthropic.BetaBase64ImageSourceMediaType(im.mt),
 			}))
 		}
 		blocks = append(blocks, anthropic.NewBetaTextBlock(prompt))

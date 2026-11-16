@@ -26,7 +26,8 @@ func TestLibraryKeepsAndOrganizes(t *testing.T) {
 	var fetched []string
 	a.fetchPage = func(_ context.Context, url string) (library.Page, error) {
 		fetched = append(fetched, url)
-		return library.Page{Title: "缓存设计的五个原则", Description: "讲缓存", Text: "先读缓存再读库；过期时间加随机，避免雪崩。"}, nil
+		// A page of an article: long enough for a summary and an analysis.
+		return library.Page{Title: "缓存设计的五个原则", Description: "讲缓存", Text: "先读缓存再读库；过期时间加随机，避免雪崩。" + strings.Repeat("缓存要和数据库保持一致，写的时候先更新库再删缓存。", 60)}, nil
 	}
 	fake := &fakeClaude{replies: []string{
 		claudeText("```json\n" + `{"title": "缓存设计原则", "desc": "一篇讲缓存读写顺序和防雪崩的实践文章。", "summary": "介绍缓存读写顺序和防雪崩的做法。", "category": "技术", "tags": ["后端", "缓存"], "keywords": ["cache", "Redis", "雪崩"], "synonyms": ["高速缓存", "缓存穿透", "cache avalanche"], "analysis": "- 先读缓存再读库\n- 过期时间加随机值防雪崩", "text": ""}` + "\n```"),
@@ -326,7 +327,7 @@ func TestOrganizeWithDeepSeek(t *testing.T) {
 		return &r, err
 	}
 	cfg := config{AIProvider: providerDeepSeek, DSModel: "deepseek-v4-pro"}
-	o, err := askOrganize(context.Background(), cfg, nil, send, "整理", nil, "")
+	o, err := askOrganize(context.Background(), cfg, nil, send, "整理", nil)
 	if err != nil || o.Title != "标题" {
 		t.Fatalf("organized %+v, %v", o, err)
 	}
@@ -334,7 +335,7 @@ func TestOrganizeWithDeepSeek(t *testing.T) {
 		t.Fatalf("request %+v", got)
 	}
 	reply = `{"choices":[{"message":{"role":"assistant","content":"","reasoning_content":"想了很久"},"finish_reason":"length"}]}`
-	if _, err := askOrganize(context.Background(), cfg, nil, send, "整理", nil, ""); err == nil || strings.HasPrefix(aiError(err), "网络错误") {
+	if _, err := askOrganize(context.Background(), cfg, nil, send, "整理", nil); err == nil || strings.HasPrefix(aiError(err), "网络错误") {
 		t.Fatalf("cut short: %v", err)
 	}
 }

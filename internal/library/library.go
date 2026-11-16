@@ -38,6 +38,9 @@ type Clip struct {
 	Text string `json:"text,omitempty"`
 	// Note is the user's own words on it.
 	Note string `json:"note,omitempty"`
+	// Seen says, for the AI, what was seen of a video: how long it is and
+	// the pictures taken of it. It is not kept.
+	Seen string `json:"-"`
 	URL  string `json:"url,omitempty"`
 	// File is the picture's or file's name in the files folder, Name the
 	// name it had.

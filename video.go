@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"image"
+	"image/jpeg"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -289,4 +292,151 @@ func (a *app) videoBigView(c *ui.Context) {
 			a.videoPlayer(c, clip, min(w-120, 1280), min(h-160, 760), true)
 		})
 	})
+}
+
+// The AI sees a video by a few of its pictures (grabFrames): opened in a
+// player of its own, shown in a window that is not on the screen (a
+// Tester, which draws on the CPU what the system decoded), and stepped a
+// little at each of the window's frames, so that the window goes on
+// meanwhile: open it, wait for its first picture, then go to each time
+// and keep what shows once it has changed.
+
+// vidShots are the pictures taken of a video, kept for the AI till the
+// app is closed, and its length.
+type vidShots struct {
+	pics [][]byte // JPEGs, in time's order
+	dur  time.Duration
+}
+
+// say tells the AI what it is sent of the video.
+func (s vidShots) say() string {
+	if len(s.pics) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("时长 %s，附 %d 张按时间顺序截取的画面", videoTime(s.dur), len(s.pics))
+}
+
+// frameGrab is the taking of a video's pictures, a step a frame.
+type frameGrab struct {
+	id              string
+	fetch, organize bool // the clip's job, started again once done
+	p               *ui.VideoPlayer
+	tt              *ui.Tester
+	at              []time.Duration
+	i, steps        int
+	since           time.Time
+	last            uint64 // what the picture before showed, to tell a new one
+	shots           vidShots
+}
+
+// grabShots is how many pictures the AI sees of a video.
+const grabShots = 4
+
+// grabFrames begins taking a video's pictures: the clip's job goes on
+// once they are taken, or once they cannot be.
+func (a *app) grabFrames(c *library.Clip, fetch, organize bool) {
+	a.libStatus[c.ID] = "正在看视频…"
+	a.grab = &frameGrab{id: c.ID, fetch: fetch, organize: organize, since: time.Now()}
+}
+
+// stepGrab takes a step of the pictures being taken: called at each of
+// the window's frames.
+func (a *app) stepGrab() {
+	g := a.grab
+	if g == nil {
+		return
+	}
+	done := func() {
+		if g.p != nil {
+			g.p.Close()
+		}
+		a.grab = nil
+		if a.vidShots == nil {
+			a.vidShots = map[string]vidShots{}
+		}
+		a.vidShots[g.id] = g.shots // none when it could not be seen: asked once
+		if cl := a.lib.Find(g.id); cl != nil {
+			a.startClipJob(cl, g.fetch, g.organize)
+		} else {
+			a.libWorking = ""
+			a.nextClipJob()
+		}
+	}
+	if g.p == nil {
+		cl := a.lib.Find(g.id)
+		if cl == nil {
+			done()
+			return
+		}
+		p, err := video.Open(a.lib.FilePath(cl))
+		if err != nil {
+			done()
+			return
+		}
+		g.p = p.SetMuted(true)
+		g.tt = ui.NewTester(func(c *ui.Context) { ui.Video(c, p).Fill().Fit(ui.Contain) }, 512, 288)
+	}
+	if time.Since(g.since) > 30*time.Second || g.p.Err() != nil {
+		done()
+		return
+	}
+	g.tt.Frame()
+	if !g.p.Ready() {
+		return
+	}
+	if g.at == nil {
+		// The times: the middles of grabShots parts, so that neither the
+		// black of its start nor its end is taken.
+		g.shots.dur = g.p.Duration()
+		if vw, vh := g.p.Size(); vw > 0 && vh > 0 {
+			k := min(1, 512/float64(max(vw, vh)))
+			g.tt.SetSize(max(int(float64(vw)*k), 16), max(int(float64(vh)*k), 16))
+		}
+		n := grabShots
+		if g.shots.dur < 2*time.Second {
+			n = 1
+		}
+		for k := range n {
+			g.at = append(g.at, time.Duration(float64(g.shots.dur)*(float64(k)+0.5)/float64(n)))
+		}
+		g.p.Pause()
+		g.tt.Frame()
+		g.last = pictureSum(g.tt.Image()) // what shows before the seek
+		g.p.Seek(g.at[0])
+		return
+	}
+	g.steps++
+	if g.steps < 4 {
+		return // the seek's picture has not come yet
+	}
+	img := g.tt.Image()
+	sum := pictureSum(img)
+	if sum == g.last && g.steps < 60 {
+		return // the picture before still shows
+	}
+	g.last = sum
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 72}); err == nil {
+		g.shots.pics = append(g.shots.pics, buf.Bytes())
+	}
+	g.i++
+	if g.i == len(g.at) {
+		done()
+		return
+	}
+	g.steps = 0
+	g.p.Seek(g.at[g.i]) // g.last is what shows till its picture comes
+}
+
+// pictureSum tells pictures apart: a sum of a few of their pixels.
+func pictureSum(img *image.RGBA) uint64 {
+	var s uint64
+	b := img.Bounds()
+	for y := b.Min.Y; y < b.Max.Y; y += max(b.Dy()/16, 1) {
+		for x := b.Min.X; x < b.Max.X; x += max(b.Dx()/16, 1) {
+			p := img.RGBAAt(x, y)
+			s = s*31 + uint64(p.R)<<16 + uint64(p.G)<<8 + uint64(p.B)
+		}
+	}
+	return s
 }

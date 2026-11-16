@@ -471,6 +471,9 @@ type app struct {
 	vidFrame              int                   // the frames, for the players not shown to be closed
 	videoMuted            bool                  // the videos play without their sound
 	videoBig              string                // the clip whose video plays larger, over the window
+	grab                  *frameGrab            // a video's pictures being taken for the AI
+	folds                 map[string]bool       // the folded parts opened (foldKey)
+	vidShots              map[string]vidShots   // the pictures taken of the videos, by clip
 	tagOffered            bool                  // the tags offered under a title being written show
 	tagAdding             bool                  // the sidebar's new-tag field is shown
 	tagNew                string

@@ -207,7 +207,7 @@ func (a *app) analyzeMap(path string) {
 	cfg := a.cfg
 	send, sendDS := a.sendAI, a.sendDeepSeek
 	a.async(func() (any, error) {
-		return askOrganize(context.Background(), cfg, send, sendDS, prompt, nil, "")
+		return askOrganize(context.Background(), cfg, send, sendDS, prompt, nil)
 	}, func(v any, err error) {
 		auto := a.mapAuto
 		a.mapWorking, a.mapAuto = "", false

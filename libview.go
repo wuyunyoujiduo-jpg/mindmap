@@ -626,6 +626,9 @@ func (a *app) clipMenu(m *ui.Menu, clip *library.Clip) {
 			a.openCard(clip)
 		}
 	})
+	if m.Item("问 AI").Chosen() {
+		a.libSel, a.aiOpen = clip.ID, true
+	}
 	if m.Item("AI 重新整理").Disabled(providerKey(a.cfg) == "").Chosen() {
 		a.organizeClip(clip.ID)
 	}
@@ -671,7 +674,11 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 	// The bar: what it is and when, and what to do with it.
 	ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
 		tile(c, kindTile(clip.Kind), kindColor(clip.Kind), 22)
-		ui.Text(c, clipKindLabel(clip)).FontSize(textCaption).Bold().TextColor(kindColor(clip.Kind)).NoWrap().Margin(0, 0, 0, 4)
+		kind := clipKindLabel(clip)
+		if isMemo(clip) {
+			kind = "灵感" // as its card says
+		}
+		ui.Text(c, kind).FontSize(textCaption).Bold().TextColor(kindColor(clip.Kind)).NoWrap().Margin(0, 0, 0, 4)
 		ui.Text(c, cmpOr(clip.Source, "手动")+" · "+clip.Created.Format("2006-01-02 15:04")).FontSize(textCaption).
 			TextColor(t.TextMuted).SingleLine().Grow(1).Shrink(1).MinWidth(0).Margin(0, 0, 0, 4)
 		star := iconStar
@@ -737,6 +744,163 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 		a.videoDetail(c, clip)
 	}
 
+	// What the AI made of it: above the content when it summed it up (a
+	// page, a document, which the summary reads faster), else below, a
+	// line or two that the content needs not wait for.
+	aiPart := func() {
+		// What the AI made of it.
+		sectionCard(c, iconSparkle, tilePurple, "AI 整理", func() {
+			label := "整理"
+			if clip.Organized != nil {
+				label = "重新整理"
+			}
+			if a.libWorking == clip.ID { // one sign of a wait: the shapes below
+			} else if ghostButton(c, label, "让 AI 起标题、写说明、分类、打标签；内容长的再写摘要和分析").Clicked() {
+				a.organizeClip(clip.ID)
+			}
+		}, func() {
+			had := clip.Summary != "" || clip.Analysis != "" || len(clip.Synonyms) > 0
+			if waitShown(c, "organize:"+clip.ID, working) {
+				// What it is doing, then, where nothing is known yet, the
+				// shape of what it writes: two lines, three points, a line of
+				// words. What was there before stays, fainter, till the new comes.
+				ui.Row(c.Key("org-status")).Gap(8).AlignItems(ui.Center).Children(func() {
+					ui.Spinner(c).Size(12, 12)
+					ui.Text(c, cmpOr(status, "AI 整理中…")).FontSize(textSmall).TextColor(t.TextMuted)
+				})
+				if !had {
+					skeletonShapes(c, "organize", func(shade ui.Color) {
+						ui.Box(c).Height(12).WidthPercent(96).Radius(6).Background(shade)
+						ui.Box(c).Height(12).WidthPercent(72).Radius(6).Background(shade)
+						for i, w := range []float32{58, 66, 44} {
+							ui.Row(c.Key(i)).Gap(9).AlignItems(ui.Center).FillWidth().Margin(2, 0, 0).Children(func() {
+								ui.Box(c).Size(5, 5).Radius(3).Shrink(0).Background(shade)
+								ui.Box(c).Height(12).WidthPercent(w).Radius(6).Background(shade)
+							})
+						}
+						ui.Box(c).Height(10).WidthPercent(36).Radius(5).Margin(6, 0, 0).Background(shade)
+						ui.Box(c).Height(12).WidthPercent(62).Radius(6).Background(shade)
+					})
+					return
+				}
+			}
+			// What kept it from organizing, said here where it was asked for.
+			if a.libNeedKey == clip.ID && providerKey(a.cfg) == "" {
+				ui.Row(c.Key("need-key")).Padding(8, 10).Gap(8).Radius(8).AlignItems(ui.Center).
+					Background(t.Warning.Alpha(0.12)).Children(func() {
+					ui.Text(c, "AI 整理要先填写 API Key。").FontSize(textSmall).Wrap().Grow(1)
+					if inkButton(c, "填写 API Key", true).Clicked() {
+						a.openKeySettings()
+					}
+				})
+			} else if failed {
+				ui.Row(c.Key("org-failed")).Padding(8, 10).Gap(8).Radius(8).AlignItems(ui.Center).
+					Background(t.Danger.Alpha(0.08)).Children(func() {
+					ui.Text(c, status).FontSize(textSmall).TextColor(t.Danger).Wrap().Grow(1).Selectable()
+				})
+			}
+			if clip.Summary == "" && clip.Analysis == "" && len(clip.Synonyms) == 0 {
+				if a.libNeedKey != clip.ID && !failed {
+					ui.Text(c, "还没整理。点「整理」，AI 会起标题、分类、打标签，内容长的再写摘要。").FontSize(textSmall).TextColor(t.TextMuted).Wrap()
+				}
+				return
+			}
+			// A short note has no summary: one written before this was so is
+			// kept, and not shown.
+			if summaryShown(clip) {
+				ui.Text(c, library.Mask(clip.Summary)).FontSize(textBody).LineHeight(1.55).Wrap().Selectable()
+			}
+			// What is long and seldom read is folded: the points of a long
+			// text, and the words it is found by. Laid out, they made the
+			// details a page of the AI's words over a line of the user's.
+			if analysisShown(clip) {
+				if a.foldKey(c, "analysis:"+clip.ID, "分析要点", "") {
+					markdownView(c.Key("clip-analysis"), clip.Analysis, textBody)
+				}
+			}
+			if a.libSynFor != clip.ID || !a.libSynEditing {
+				a.libSynFor, a.libSynText = clip.ID, strings.Join(clip.Synonyms, "、")
+			}
+			if n := len(clip.Synonyms) + len(clip.Keywords); n > 0 && a.foldKey(c, "words:"+clip.ID, "检索词", fmt.Sprint(n)) {
+				ui.Column(c).Gap(2).Children(func() {
+					sectionHeader(c, "同义词 · 可修改")
+					in := inlineInput(c.Key("clip-syn"), &a.libSynText, textSmall, false, "AI 整理时自动生成", "资料同义词").Margin(0, -6)
+					if in.Changed() {
+						a.libSynEditing = true
+					}
+					if a.libSynEditing && (in.Submitted() || in.PressedOutside()) {
+						clip.Synonyms = cleanTags(strings.FieldsFunc(a.libSynText, func(r rune) bool { return r == '、' || r == ',' || r == '，' || r == ';' || r == '；' }))
+						a.libSynEditing = false
+						a.saveClip(clip)
+					}
+					if len(clip.Keywords) > 0 {
+						ui.Text(c, "关键词："+strings.Join(clip.Keywords, "、")).FontSize(textCaption).TextColor(t.TextMuted).Wrap().Margin(4, 0, 0)
+					}
+				})
+			}
+		})
+	}
+	if summaryShown(clip) {
+		aiPart()
+	}
+
+	// The content.
+	switch {
+	case clip.Kind == library.KindText:
+		sectionCard(c, iconText, tileOrange, "内容", nil, func() {
+			// What looks like a key or a password is in dots until asked for.
+			if clip.Secret() && a.secretShown != clip.ID {
+				ui.Text(c, library.Mask(clip.Text)).FontSize(textBody + 1).LineHeight(1.55).Wrap()
+				if ghostButton(c, "显示密钥", "这条里有看起来像密钥或密码的内容，已遮住；点一下显示并可以编辑").Margin(0, 0, 0, -8).Clicked() {
+					a.secretShown = clip.ID
+				}
+				return
+			}
+			text := clip.Text
+			if inlineArea(c.Key("clip-text"), &text, textBody+1, 3, 30, "", "资料内容").Margin(0, -8).Changed() {
+				a.setMemoText(clip, text)
+			}
+		})
+	case clip.Kind == library.KindLink:
+		sectionCard(c, iconLink, tileGreen, "网页正文", nil, func() {
+			text := clip.Text
+			in := inlineArea(c.Key("clip-page"), &text, textBody, 3, 16,
+				"没读到网页正文时（需要登录的页面、公众号文章等），可以把正文复制粘贴到这里", "网页正文").Margin(0, -8)
+			if in.Changed() {
+				clip.Text = text
+				a.saveClip(clip)
+			}
+			if in.PressedOutside() && clip.Text != "" && clip.Organized == nil && providerKey(a.cfg) != "" && !a.cfg.LibraryManual {
+				a.enqueueClip(clip.ID, true)
+			}
+		})
+	case clip.Text != "":
+		label := "文件内容"
+		if clip.Kind == library.KindImage {
+			label = "图中内容（AI 识别）"
+		}
+		sectionCard(c, kindTile(clip.Kind), kindColor(clip.Kind), label, nil, func() {
+			text := clip.Text
+			hidden := clip.Secret() && a.secretShown != clip.ID
+			if hidden {
+				text = library.Mask(text)
+			}
+			ui.Text(c, library.Excerpt(text, "", 3000)).FontSize(textSmall).LineHeight(1.5).TextColor(t.TextMuted).Wrap().Selectable()
+			if hidden && ghostButton(c, "显示密钥", "这条里有看起来像密钥或密码的内容，已遮住").Margin(0, 0, 0, -8).Clicked() {
+				a.secretShown = clip.ID
+			}
+		})
+	}
+
+	// The user's note.
+	sectionCard(c, iconPencil, tileYellow, "我的备注", nil, func() {
+		note := clip.Note
+		if inlineArea(c.Key("clip-note"), &note, textBody, 1, 10, "为什么收藏它、想怎么用…", "资料备注").Margin(0, -8).Changed() {
+			clip.Note = note
+			a.saveClip(clip)
+		}
+	})
+
 	// Where it is used, or where it may go.
 	a.clipPlacesSection(c, clip)
 	a.clipMentions(c, clip)
@@ -798,160 +962,8 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 		}
 	})
 
-	// What the AI made of it.
-	sectionCard(c, iconSparkle, tilePurple, "AI 整理", func() {
-		label := "整理"
-		if clip.Organized != nil {
-			label = "重新整理"
-		}
-		if a.libWorking == clip.ID { // one sign of a wait: the shapes below
-		} else if ghostButton(c, label, "让 AI 起标题、写说明和摘要、分类、打标签、生成同义词和分析").Clicked() {
-			a.organizeClip(clip.ID)
-		}
-	}, func() {
-		had := clip.Summary != "" || clip.Analysis != "" || len(clip.Synonyms) > 0
-		if waitShown(c, "organize:"+clip.ID, working) {
-			// What it is doing, then, where nothing is known yet, the
-			// shape of what it writes: two lines, three points, a line of
-			// words. What was there before stays, fainter, till the new comes.
-			ui.Row(c.Key("org-status")).Gap(8).AlignItems(ui.Center).Children(func() {
-				ui.Spinner(c).Size(12, 12)
-				ui.Text(c, cmpOr(status, "AI 整理中…")).FontSize(textSmall).TextColor(t.TextMuted)
-			})
-			if !had {
-				skeletonShapes(c, "organize", func(shade ui.Color) {
-					ui.Box(c).Height(12).WidthPercent(96).Radius(6).Background(shade)
-					ui.Box(c).Height(12).WidthPercent(72).Radius(6).Background(shade)
-					for i, w := range []float32{58, 66, 44} {
-						ui.Row(c.Key(i)).Gap(9).AlignItems(ui.Center).FillWidth().Margin(2, 0, 0).Children(func() {
-							ui.Box(c).Size(5, 5).Radius(3).Shrink(0).Background(shade)
-							ui.Box(c).Height(12).WidthPercent(w).Radius(6).Background(shade)
-						})
-					}
-					ui.Box(c).Height(10).WidthPercent(36).Radius(5).Margin(6, 0, 0).Background(shade)
-					ui.Box(c).Height(12).WidthPercent(62).Radius(6).Background(shade)
-				})
-				return
-			}
-		}
-		// What kept it from organizing, said here where it was asked for.
-		if a.libNeedKey == clip.ID && providerKey(a.cfg) == "" {
-			ui.Row(c.Key("need-key")).Padding(8, 10).Gap(8).Radius(8).AlignItems(ui.Center).
-				Background(t.Warning.Alpha(0.12)).Children(func() {
-				ui.Text(c, "AI 整理要先填写 API Key。").FontSize(textSmall).Wrap().Grow(1)
-				if inkButton(c, "填写 API Key", true).Clicked() {
-					a.openKeySettings()
-				}
-			})
-		} else if failed {
-			ui.Row(c.Key("org-failed")).Padding(8, 10).Gap(8).Radius(8).AlignItems(ui.Center).
-				Background(t.Danger.Alpha(0.08)).Children(func() {
-				ui.Text(c, status).FontSize(textSmall).TextColor(t.Danger).Wrap().Grow(1).Selectable()
-			})
-		}
-		if clip.Summary == "" && clip.Analysis == "" && len(clip.Synonyms) == 0 {
-			if a.libNeedKey != clip.ID && !failed {
-				ui.Text(c, "还没整理。点「整理」，AI 会写摘要、分析要点，并生成检索用的同义词。").FontSize(textSmall).TextColor(t.TextMuted).Wrap()
-			}
-			return
-		}
-		// A short note has no summary: one written before this was so is
-		// kept, and not shown.
-		if clip.Summary != "" && !briefClip(clip) {
-			ui.Text(c, library.Mask(clip.Summary)).FontSize(textBody).LineHeight(1.55).Wrap().Selectable()
-		}
-		if clip.Analysis != "" && !briefClip(clip) {
-			markdownView(c.Key("clip-analysis"), clip.Analysis, textBody)
-		}
-		if a.libSynFor != clip.ID || !a.libSynEditing {
-			a.libSynFor, a.libSynText = clip.ID, strings.Join(clip.Synonyms, "、")
-		}
-		ui.Column(c).Gap(2).Margin(4, 0, 0).Children(func() {
-			sectionHeader(c, "同义词 · 用来检索，可修改")
-			in := inlineInput(c.Key("clip-syn"), &a.libSynText, textSmall, false, "AI 整理时自动生成", "资料同义词").Margin(0, -6)
-			if in.Changed() {
-				a.libSynEditing = true
-			}
-			if a.libSynEditing && (in.Submitted() || in.PressedOutside()) {
-				clip.Synonyms = cleanTags(strings.FieldsFunc(a.libSynText, func(r rune) bool { return r == '、' || r == ',' || r == '，' || r == ';' || r == '；' }))
-				a.libSynEditing = false
-				a.saveClip(clip)
-			}
-		})
-	})
-
-	// The user's note.
-	sectionCard(c, iconPencil, tileYellow, "我的备注", nil, func() {
-		note := clip.Note
-		if inlineArea(c.Key("clip-note"), &note, textBody, 1, 10, "为什么收藏它、想怎么用…", "资料备注").Margin(0, -8).Changed() {
-			clip.Note = note
-			a.saveClip(clip)
-		}
-	})
-
-	// The content.
-	switch {
-	case clip.Kind == library.KindText:
-		sectionCard(c, iconText, tileOrange, "内容", nil, func() {
-			// What looks like a key or a password is in dots until asked for.
-			if clip.Secret() && a.secretShown != clip.ID {
-				ui.Text(c, library.Mask(clip.Text)).FontSize(textBody + 1).LineHeight(1.55).Wrap()
-				if ghostButton(c, "显示密钥", "这条里有看起来像密钥或密码的内容，已遮住；点一下显示并可以编辑").Margin(0, 0, 0, -8).Clicked() {
-					a.secretShown = clip.ID
-				}
-				return
-			}
-			text := clip.Text
-			if inlineArea(c.Key("clip-text"), &text, textBody+1, 3, 30, "", "资料内容").Margin(0, -8).Changed() {
-				a.setMemoText(clip, text)
-			}
-		})
-	case clip.Kind == library.KindLink:
-		sectionCard(c, iconLink, tileGreen, "网页正文", nil, func() {
-			text := clip.Text
-			in := inlineArea(c.Key("clip-page"), &text, textBody, 3, 16,
-				"没读到网页正文时（需要登录的页面、公众号文章等），可以把正文复制粘贴到这里", "网页正文").Margin(0, -8)
-			if in.Changed() {
-				clip.Text = text
-				a.saveClip(clip)
-			}
-			if in.PressedOutside() && clip.Text != "" && clip.Organized == nil && providerKey(a.cfg) != "" && !a.cfg.LibraryManual {
-				a.enqueueClip(clip.ID, true)
-			}
-		})
-	case clip.Text != "":
-		label := "文件内容"
-		if clip.Kind == library.KindImage {
-			label = "图中内容（AI 识别）"
-		}
-		sectionCard(c, kindTile(clip.Kind), kindColor(clip.Kind), label, nil, func() {
-			text := clip.Text
-			hidden := clip.Secret() && a.secretShown != clip.ID
-			if hidden {
-				text = library.Mask(text)
-			}
-			ui.Text(c, library.Excerpt(text, "", 3000)).FontSize(textSmall).LineHeight(1.5).TextColor(t.TextMuted).Wrap().Selectable()
-			if hidden && ghostButton(c, "显示密钥", "这条里有看起来像密钥或密码的内容，已遮住").Margin(0, 0, 0, -8).Clicked() {
-				a.secretShown = clip.ID
-			}
-		})
-	}
-
-	// What else to do with it.
-	ui.Row(c).Gap(6).Wrap().GapY(6).Children(func() {
-		if iconTextButton(c, iconSparkle, "问 AI", "问 AI", "打开 AI 助手，就这条资料提问", false).Clicked() {
-			a.aiOpen = true
-		}
-		if a.doc != nil && button(c, "加到导图").Tooltip("加到「"+mapName(a.path)+"」的选中节点下").Clicked() {
-			a.later(func() { a.clipIntoMap(clip) })
-		}
-		if button(c, "复制").Clicked() {
-			a.plat.CopyText(clipCopyText(clip))
-			a.tell("已复制")
-		}
-	})
-	if len(clip.Keywords) > 0 {
-		ui.Text(c, "检索关键词："+strings.Join(clip.Keywords, "、")).FontSize(textCaption).TextColor(t.TextMuted).Wrap()
+	if !summaryShown(clip) {
+		aiPart()
 	}
 	a.relatedSection(c, clip)
 }
@@ -1044,4 +1056,41 @@ func filterChip(c *ui.Context, word string) bool {
 		off = x.Clicked()
 	})
 	return off
+}
+
+// foldKey is a part folded under a quiet line, its name and how many it
+// holds, a click opening it or closing it: what is long and seldom read
+// on a clip's details (its analysis, the words it is found by). It tells
+// whether the part is open.
+func (a *app) foldKey(c *ui.Context, key, name, count string) bool {
+	t := c.Theme()
+	open := a.folds[key]
+	row := ui.Row(c.Key("fold:"+key)).Gap(6).AlignItems(ui.Center).Padding(4, 0).Cursor(ui.CursorPointer).Label(name)
+	if row.Clicked() {
+		if a.folds == nil {
+			a.folds = map[string]bool{}
+		}
+		a.folds[key] = !open
+	}
+	ink := t.TextMuted
+	if row.Hovered() {
+		ink = t.Text
+	}
+	row.Children(func() {
+		ui.Box(c).Size(10, 10).Shrink(0).PassThrough().Draw(func(p *ui.Painter, r ui.Rect) {
+			cx, cy := r.X+r.W/2, r.Y+r.H/2
+			path := new(ui.Path)
+			if open {
+				path.MoveTo(cx-3.5, cy-1.75).LineTo(cx, cy+1.75).LineTo(cx+3.5, cy-1.75)
+			} else {
+				path.MoveTo(cx-1.75, cy-3.5).LineTo(cx+1.75, cy).LineTo(cx-1.75, cy+3.5)
+			}
+			p.StrokePath(path, 1.3, ink)
+		})
+		ui.Text(c, name).FontSize(textSmall).FontWeight(600).TextColor(ink).PassThrough()
+		if count != "" {
+			ui.Text(c, count).FontSize(textCaption).TextColor(t.TextMuted).PassThrough()
+		}
+	})
+	return open
 }

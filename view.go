@@ -81,6 +81,10 @@ func (a *app) view(c *ui.Context) {
 		a.runPending()
 		c.Invalidate()
 	}
+	if a.grab != nil { // a video's pictures being taken for the AI: a step a frame
+		a.stepGrab()
+		c.Invalidate()
+	}
 }
 
 // pageView is the page beside the directory: a place's, or a map's.
