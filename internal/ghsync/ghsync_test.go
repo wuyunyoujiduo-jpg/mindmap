@@ -414,3 +414,48 @@ func TestNewerMapAnalysis(t *testing.T) {
 		t.Fatalf("diagram: newer %v ok %v", newer, ok)
 	}
 }
+
+func TestMerged(t *testing.T) {
+	f, cfg := setup(t)
+	var gotBase string
+	cfg.Merge = func(p string, base, local, remote []byte) ([]byte, bool) {
+		if !strings.HasSuffix(p, ".mindmap.json") {
+			return nil, false
+		}
+		gotBase = string(base)
+		return []byte(string(local) + "+" + string(remote)), true
+	}
+	a, b := t.TempDir(), t.TempDir()
+	put(t, a, "计划.mindmap.json", "base")
+	put(t, a, "笔记.txt", "base")
+	sync1(t, a, cfg)
+	sync1(t, b, cfg)
+
+	put(t, a, "计划.mindmap.json", "from a")
+	put(t, b, "计划.mindmap.json", "from b!")
+	put(t, a, "笔记.txt", "from a")
+	put(t, b, "笔记.txt", "from b!")
+	sync1(t, b, cfg)
+	res := sync1(t, a, cfg)
+
+	if gotBase != "base" {
+		t.Errorf("merged against %q, want the version both came from", gotBase)
+	}
+	if read(a, "计划.mindmap.json") != "from a+from b!" || len(res.Merged) != 1 {
+		t.Fatalf("map: %q, %+v", read(a, "计划.mindmap.json"), res)
+	}
+	if read(a, "计划 (GitHub 冲突 2026-10-11 1504).mindmap.json") != "" {
+		t.Error("a merged map was kept apart too")
+	}
+	// What Merge leaves is kept apart, as before.
+	if len(res.Conflicts) != 1 || read(a, "笔记 (GitHub 冲突 2026-10-11 1504).txt") != "from b!" {
+		t.Errorf("conflicts %v", res.Conflicts)
+	}
+	if got := f.files(); got["计划.mindmap.json"] != "from a+from b!" {
+		t.Fatalf("repository %v", got)
+	}
+	sync1(t, b, cfg)
+	if read(b, "计划.mindmap.json") != "from a+from b!" {
+		t.Fatal("b did not take the merge")
+	}
+}

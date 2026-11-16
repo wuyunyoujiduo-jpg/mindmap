@@ -383,6 +383,8 @@ type app struct {
 	syncLast                       ghsync.Result
 	syncDrafts                     [2]string
 	syncRun                        func(context.Context, string, ghsync.Config, func(string)) (ghsync.Result, error)
+	merges                         []*mergeAsk // maps merged by the sync, whose clashes are asked
+	mergeOpen                      bool
 	syncCheckRepo                  func(context.Context, ghsync.Config) (*ghsync.Repo, error)
 
 	// The presentation.

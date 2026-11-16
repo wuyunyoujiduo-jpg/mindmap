@@ -80,6 +80,7 @@ func (a *app) view(c *ui.Context) {
 		a.mcpView(c)
 		a.settingsView(c)
 		a.fromTextView(c)
+		a.mergeView(c)
 		a.templatesView(c)
 		a.tourView(c)
 		a.shotAlertView(c)
