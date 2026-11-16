@@ -4145,3 +4145,77 @@ func TestTagsWrittenInATitle(t *testing.T) {
 		t.Fatalf("the field had not the focus: %v", n.Tags)
 	}
 }
+
+// TestTagsInPanelAndOutline: the right column's title and the outline's
+// lines offer a #word as a tag as the canvas does, a choice made by Tab
+// or a click; in the outline Tab takes the tag rather than indent the
+// line, and a line shows its tags, each taken off by a click.
+func TestTagsInPanelAndOutline(t *testing.T) {
+	a, tt := newTestApp(t)
+	if err := clickNode(t, tt, a, "支持导出图片"); err != nil {
+		t.Fatal(err)
+	}
+	n, _ := a.selectedNode()
+	id := n.ID
+	tt.Frame()
+	if err := tt.Click("标题"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Key(ui.Cmd, ui.KeyA)
+	tt.Type("导出 PNG #性")
+	tt.Frame()
+	if !tt.HasText("#性能") {
+		t.Fatalf("the right column offers no tag: %q", tt.Texts())
+	}
+	tt.Key(0, ui.KeyTab)
+	tt.Frame()
+	tt.Frame()
+	n, _ = a.doc.Find(id)
+	if n.Title != "导出 PNG" || !n.HasTag("性能") {
+		t.Fatalf("the right column: title %q, tags %v", n.Title, n.Tags)
+	}
+	// A #word not chosen stays words.
+	tt.Type(" #v2")
+	tt.Frame()
+	tt.Key(0, ui.KeyEscape)
+	tt.Frame()
+	n, _ = a.doc.Find(id)
+	if n.Title != "导出 PNG #v2" || n.HasTag("v2") {
+		t.Fatalf("title %q, tags %v", n.Title, n.Tags)
+	}
+
+	// The outline.
+	a.showView(viewOutline)
+	tt.Frame()
+	tt.Frame()
+	if !tt.HasText("性能 ✕") {
+		t.Fatalf("the outline shows not the line's tags: %q", tt.Texts())
+	}
+	snapshot(t, tt, "outline-tags")
+	other := a.doc.Root.Children[0]
+	depth := len(a.doc.Path(other.ID))
+	a.outlineFocus = other.ID
+	tt.Frame()
+	tt.Frame()
+	tt.Key(ui.Cmd, ui.KeyRight)
+	tt.Type(" #架")
+	tt.Frame()
+	if !tt.HasText("#架构") {
+		t.Fatalf("the outline offers no tag: %q", tt.Texts())
+	}
+	tt.Key(0, ui.KeyTab)
+	tt.Frame()
+	tt.Frame()
+	other, _ = a.doc.Find(other.ID)
+	if !other.HasTag("架构") || strings.Contains(other.Title, "#") || len(a.doc.Path(other.ID)) != depth {
+		t.Fatalf("the outline: title %q, tags %v, depth %d (was %d)", other.Title, other.Tags, len(a.doc.Path(other.ID)), depth)
+	}
+	if err := tt.Click("去掉「导出 PNG #v2」的标签 性能"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	n, _ = a.doc.Find(id)
+	if n.HasTag("性能") {
+		t.Fatalf("not taken off: %v", n.Tags)
+	}
+}

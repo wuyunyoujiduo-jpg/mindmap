@@ -351,7 +351,10 @@ by AI, and an AI assistant.
     a fault: 管理标签… chose the page of a column that was put away.
   - A tag is made where words are written, by #: in a topic's title too,
     offered under it as it is written and made one only when chosen (a
-    click or Tab, `takeTitleTag`), else words of the title. A rule that
+    click or Tab, `titleTagOffer`), else words of the title; on the
+    canvas, in the right column and on the outline's lines alike (the
+    user asked for the two after the first). A Tab taken for a tag is
+    taken only while one is offered: the outline's Tab indents. A rule that
     made every #word a tag was one the user could not see nor refuse,
     and the tags went from sight while a title was edited: they show
     there, each taken off by a click.

@@ -1009,11 +1009,9 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 			in.HandleInput(func(ev ui.InputEvent) bool {
 				if ev.Kind == ui.InputKeyDown && ev.Key == ui.KeyTab && ev.Mods == 0 && a.editing == n.ID {
 					// A #word begun: Tab makes it the first tag offered.
-					if part, ok := titleTagBegun(a.editText); ok {
-						if offers := a.titleTagOffers(part); len(offers) > 0 {
-							a.takeTitleTag(n, part, offers[0])
-							return true
-						}
+					if part, tag, ok := a.titleTagTab(a.editText); ok {
+						a.takeTitleTag(n, part, tag)
+						return true
 					}
 					return false
 				}
@@ -1024,37 +1022,10 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 				return true
 			})
 			// A #word being written: under the title, whether it is to be a
-			// tag, the tags that begin so and a new one, a click or Tab making
-			// it one; not chosen, it stays words of the title. Every #word a
-			// tag was a rule the user could not see, nor say no to (0.98.1).
-			if part, ok := titleTagBegun(a.editText); ok {
-				offers := a.titleTagOffers(part)
-				a.tagOffered = true
-				ui.Popover(c, in, &a.tagOffered, func() {
-					ui.Column(c.Key("tag-offers")).Gap(6).Padding(8, 10).MaxWidth(420).KeepFocus().Children(func() {
-						ui.Row(c).Gap(6).Wrap().GapY(6).AlignItems(ui.Center).Children(func() {
-							for i, tag := range offers {
-								label, tip := "#"+tag, "设为标签"
-								if a.libraryIndex(tag) < 0 && !slices.Contains(a.allTags(), tag) {
-									label = "设为新标签 #" + tag
-								}
-								if i == 0 {
-									tip += "（Tab）"
-								}
-								chip := softTag(c, label).Cursor(ui.CursorPointer).KeepFocus().Label("设为标签 " + tag).Tooltip(tip)
-								if chip.Clicked() {
-									a.takeTitleTag(n, part, tag)
-								}
-							}
-						})
-						say := "写标签名，选一个设为标签；不选就当文字"
-						if len(offers) > 0 {
-							say = "点一下或按 Tab 设为标签；不选就当文字"
-						}
-						ui.Text(c, say).FontSize(textCaption).TextColor(t.TextMuted).NoWrap()
-					})
-				})
-			}
+			// tag, a click or Tab making it one; not chosen, it stays words of
+			// the title. Every #word a tag was a rule the user could not see,
+			// nor say no to (0.98.1).
+			a.titleTagOffer(c, in, a.editText, func(part, tag string) { a.takeTitleTag(n, part, tag) })
 			if strings.ContainsAny(a.editText, "\r\n\t") { // pasted lines join
 				a.editText = strings.Join(strings.Fields(strings.ReplaceAll(a.editText, "\r", "\n")), " ")
 			}

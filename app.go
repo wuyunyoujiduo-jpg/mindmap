@@ -477,6 +477,7 @@ type app struct {
 	folds                 map[string]bool          // the folded parts opened (foldKey)
 	vidShots              map[string]vidShots      // the pictures taken of the videos, by clip
 	tagOffered            bool                     // the tags offered under a title being written show
+	tagCaret              string                   // the topic whose title field has its caret put back at its end, a tag taken
 	tagAdding             bool                     // the sidebar's new-tag field is shown
 	tagNew                string
 	tagRenaming           string // the tag renamed in the sidebar

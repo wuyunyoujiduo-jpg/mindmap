@@ -168,6 +168,17 @@ func (a *app) outlineLine(c *ui.Context, rows []outlineRow, i int) {
 		}
 		if in.Focused() && !a.outlineBlock {
 			a.selected, a.multi = n.ID, nil
+			a.titleTagOffer(c, in, title, func(part, tag string) { a.takeFieldTag(n, part, tag) })
+		}
+		a.fieldTitleTags(in, n, title, false)
+		// Its tags after it, each taken off by a click, as on the canvas.
+		for _, tag := range n.Tags {
+			chip := tagChip(c.Key("tag:"+tag), tag, tag+" ✕", false, 12).KeepFocus().Shrink(0).
+				Label("去掉「" + n.Title + "」的标签 " + tag).Tooltip("点一下去掉这个标签")
+			if chip.Clicked() {
+				tg := tag
+				a.later(func() { a.toggleTag(n, tg) })
+			}
 		}
 		// Dragging from the line onto others selects the lines whole; back
 		// on it, its text is selected again.
@@ -223,6 +234,8 @@ func (a *app) outlineLine(c *ui.Context, rows []outlineRow, i int) {
 				a.outlineFocus = prev
 			case ev.Mods == 0 && ev.Key == ui.KeyEnter:
 				a.later(func() { a.outlineAdd(n.ID, false) })
+			case ev.Mods == 0 && ev.Key == ui.KeyTab && a.outlineTagTab(n, title):
+				// A #word begun: Tab makes it a tag, not the line indented.
 			case ev.Mods == 0 && ev.Key == ui.KeyTab:
 				a.later(func() {
 					a.mutate("", func() { _ = a.doc.Indent(n.ID) })

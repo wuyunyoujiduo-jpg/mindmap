@@ -344,24 +344,134 @@ func (a *app) titleTagOffers(part string) []string {
 	return out
 }
 
-// takeTitleTag makes the #word being written in n's title the tag tag:
-// the word out of the title, the tag on the topic, the title still being
-// written. 撤销 on its toast takes it back, and a tag it made out of the
+// titleTagOffer offers the #word being written at the end of a title
+// field as a tag, under the field: the tags of titleTagOffers, a click
+// taking one (take). The canvas's title, the right column's and the
+// outline's lines have it alike; the user asked for the two after the
+// first. Tab takes the first offered: titleTagTab, in the field's keys.
+func (a *app) titleTagOffer(c *ui.Context, in ui.Element, text string, take func(part, tag string)) {
+	part, ok := titleTagBegun(text)
+	if !ok {
+		return
+	}
+	t := c.Theme()
+	offers := a.titleTagOffers(part)
+	a.tagOffered = true
+	ui.Popover(c, in, &a.tagOffered, func() {
+		ui.Column(c.Key("tag-offers")).Gap(6).Padding(8, 10).MaxWidth(420).KeepFocus().Children(func() {
+			ui.Row(c).Gap(6).Wrap().GapY(6).AlignItems(ui.Center).Children(func() {
+				for i, tag := range offers {
+					label, tip := "#"+tag, "设为标签"
+					if !slices.Contains(a.allTags(), tag) {
+						label = "设为新标签 #" + tag
+					}
+					if i == 0 {
+						tip += "（Tab）"
+					}
+					if softTag(c, label).Cursor(ui.CursorPointer).KeepFocus().Label("设为标签 " + tag).Tooltip(tip).Clicked() {
+						take(part, tag)
+					}
+				}
+			})
+			say := "写标签名，选一个设为标签；不选就当文字"
+			if len(offers) > 0 {
+				say = "点一下或按 Tab 设为标签；不选就当文字"
+			}
+			ui.Text(c, say).FontSize(textCaption).TextColor(t.TextMuted).NoWrap()
+		})
+	})
+}
+
+// titleTagTab is what Tab takes in a title field: the #word being written
+// and the first tag offered for it.
+func (a *app) titleTagTab(text string) (part, tag string, ok bool) {
+	part, ok = titleTagBegun(text)
+	if !ok {
+		return "", "", false
+	}
+	offers := a.titleTagOffers(part)
+	if len(offers) == 0 {
+		return "", "", false
+	}
+	return part, offers[0], true
+}
+
+// takeFieldTag makes the #word written at the end of n's title, in a field
+// that writes the title as it is typed (the right column's, the outline's),
+// the tag tag: the word out of the title and the tag on, one step. The
+// caret goes back to the field's end (tagCaret).
+func (a *app) takeFieldTag(n *model.Node, part, tag string) {
+	title := strings.TrimRight(n.Title[:max(len(n.Title)-len(part)-1, 0)], " 　")
+	a.tagCaret = n.ID
+	a.later(func() { a.putTitleTag(n, tag, &title) })
+}
+
+// putTitleTag puts tag on n, and title as its title when there is one, in
+// one step: 撤销 on its toast takes it back, and a tag it made out of the
 // library too.
+func (a *app) putTitleTag(n *model.Node, tag string, title *string) {
+	if n.HasTag(tag) && title == nil {
+		return
+	}
+	fresh := !slices.Contains(a.allTags(), tag)
+	a.mutate("", func() {
+		if title != nil {
+			n.Title = *title
+		}
+		if !n.HasTag(tag) {
+			n.Tags = append(slices.Clone(n.Tags), tag)
+		}
+	})
+	a.addTag(tag)
+	a.tellUndo("已加标签 #"+tag, func() {
+		a.undo()
+		if fresh {
+			a.dropUnusedTags([]string{tag})
+		}
+	})
+}
+
+// takeTitleTag makes the #word being written in n's title on the canvas
+// the tag tag: the word out of the title being written, the tag on the
+// topic, the title still being written.
 func (a *app) takeTitleTag(n *model.Node, part, tag string) {
 	a.editText = a.editText[:len(a.editText)-len(part)-1] // "#" and the word
 	a.editFocus = false                                   // the caret to the end
-	a.later(func() {
-		if n.HasTag(tag) {
-			return
+	a.later(func() { a.putTitleTag(n, tag, nil) })
+}
+
+// fieldTitleTags is what a title field that writes as it is typed does
+// for its #words: after a tag is taken the caret goes back to its end,
+// and, for a field with no keys of its own (keys false: the outline's line
+// has, and takes Tab there, outlineTagTab), Tab takes the tag offered and
+// nothing else: a shortcut of Tab took it from the outline's indent.
+func (a *app) fieldTitleTags(in ui.Element, n *model.Node, text string, keys bool) {
+	if a.tagCaret == n.ID && in.Focused() {
+		k := utf8.RuneCountInString(n.Title)
+		in.SetTextSelection(k, k)
+		a.tagCaret = ""
+	}
+	if !keys {
+		return
+	}
+	in.HandleInput(func(ev ui.InputEvent) bool {
+		if ev.Kind != ui.InputKeyDown || ev.Key != ui.KeyTab || ev.Mods != 0 {
+			return false
 		}
-		fresh := a.libraryIndex(tag) < 0 && !slices.Contains(a.allTags(), tag)
-		a.toggleTag(n, tag)
-		a.tellUndo("已加标签 #"+tag, func() {
-			a.undo()
-			if fresh {
-				a.dropUnusedTags([]string{tag})
-			}
-		})
+		part, tag, ok := a.titleTagTab(n.Title)
+		if ok {
+			a.takeFieldTag(n, part, tag)
+		}
+		return ok
 	})
+}
+
+// outlineTagTab takes, for Tab on an outline's line, the tag offered for
+// the #word being written: true when it did, the line not to be indented.
+func (a *app) outlineTagTab(n *model.Node, text string) bool {
+	part, tag, ok := a.titleTagTab(text)
+	if ok {
+		a.takeFieldTag(n, part, tag)
+	}
+	return ok
 }
