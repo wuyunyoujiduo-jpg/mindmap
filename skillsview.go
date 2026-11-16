@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"maps"
 	"os"
@@ -13,7 +12,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/wuyunyoujiduo-jpg/mindmap/internal/gitbase"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/skills"
 )
@@ -101,8 +99,9 @@ func (a *app) skillsMigrate() {
 	if len(olds) == 0 {
 		return
 	}
+	// No repositories: what the old store kept of a project's (_projects)
+	// stays where it is, the links to it in the repositories still good.
 	env := skills.Env{Home: home, Store: skillsStore(home), Keep: skillsKeep(home), Table: skillsTable()}
-	env.Repos = skillRepos(home, a.skillRepoMaps())
 	n := 0
 	for _, o := range olds {
 		m, err := skills.Migrate(env, o)
@@ -115,23 +114,6 @@ func (a *app) skillsMigrate() {
 	if n > 0 {
 		a.tell(fmt.Sprintf("技能搬到了 ~/.agents/skills（各个 AI 工具通用的位置），共 %d 个，链接已经接好", n))
 	}
-}
-
-// skillRepoMaps is the maps' projects, by their roots.
-func (a *app) skillRepoMaps() map[string]string {
-	repoMap := map[string]string{}
-	for _, fi := range a.files {
-		f := a.file
-		if fi.Path != a.path {
-			f = a.indexed(fi.Path)
-		}
-		if f != nil && f.Project != "" {
-			if _, ok := repoMap[filepath.Clean(f.Project)]; !ok {
-				repoMap[filepath.Clean(f.Project)] = fi.Path
-			}
-		}
-	}
-	return repoMap
 }
 
 // machineName is this computer's, as the other computers see it.
@@ -201,19 +183,9 @@ func (a *app) skillsRescan() {
 		return
 	}
 	home, _ := os.UserHomeDir()
-	// The projects of the maps, read here, where the maps are.
+	// The skills of a project, in its repository, are not looked at: the
+	// user leaves them to the repository (0.100.7). env.Repos stays empty.
 	repoMap := map[string]string{}
-	for _, fi := range a.files {
-		f := a.file
-		if fi.Path != a.path {
-			f = a.indexed(fi.Path)
-		}
-		if f != nil && f.Project != "" {
-			if _, ok := repoMap[f.Project]; !ok {
-				repoMap[filepath.Clean(f.Project)] = fi.Path
-			}
-		}
-	}
 	env := skills.Env{Home: home, Store: skillsStore(home), Keep: skillsKeep(home), Machine: machineName(), Since: a.now().AddDate(0, 0, -30),
 		Marked: maps.Clone(a.cfg.SkillsMarked)}
 	// The uses are counted once an hour: a scan comes whenever the app is
@@ -226,7 +198,6 @@ func (a *app) skillsRescan() {
 	a.skills.busy = true
 	a.async(func() (any, error) {
 		env.Table = skillsTable()
-		env.Repos = skillRepos(home, repoMap)
 		r := skills.Scan(env)
 		if skills.Repair(env, r) > 0 {
 			r = skills.Scan(env)
@@ -262,46 +233,6 @@ func (a *app) skillsActive() {
 	if a.now().Sub(a.skills.scanned) > 10*time.Second {
 		a.skillsRescan()
 	}
-}
-
-// skillRepos is the repositories whose skills are looked at: the maps'
-// projects, and those Claude Code worked in. Each has a key of its own,
-// the same from a scan to the next (by their roots' order).
-func skillRepos(home string, repoMap map[string]string) []skills.Repo {
-	roots := map[string]bool{}
-	for root := range repoMap {
-		if isDirPath(root) {
-			roots[root] = true
-		}
-	}
-	var cj struct {
-		Projects map[string]json.RawMessage `json:"projects"`
-	}
-	if data, err := os.ReadFile(filepath.Join(home, ".claude.json")); err == nil && json.Unmarshal(data, &cj) == nil {
-		for p := range cj.Projects {
-			p = filepath.Clean(p)
-			if p != home && isDirPath(p) && (isDirPath(filepath.Join(p, ".git")) || fileThere(filepath.Join(p, ".git"))) {
-				roots[p] = true
-			}
-		}
-	}
-	sorted := make([]string, 0, len(roots))
-	for r := range roots {
-		sorted = append(sorted, r)
-	}
-	slices.Sort(sorted)
-	taken := map[string]bool{}
-	var out []skills.Repo
-	for _, root := range sorted {
-		name := filepath.Base(root)
-		if p, ok := repoMap[root]; ok {
-			name = mapName(p)
-		}
-		key := skills.RepoKey(filepath.Base(root), taken)
-		taken[key] = true
-		out = append(out, skills.Repo{Root: root, Name: name, Key: key, Remote: gitbase.Remote(root)})
-	}
-	return out
 }
 
 func isDirPath(p string) bool {
@@ -1568,7 +1499,6 @@ func (a *app) skillDetail(c *ui.Context, e *skills.Entry) {
 				a.skillCopies(c, e)
 			}
 			if e.Stored {
-				a.skillScope(c, e)
 				ui.Column(c.Key("other-computers")).Gap(8).FillWidth().Margin(14, 0, 0).Children(func() {
 					ui.Text(c, "别的电脑").FontSize(textSmall).FontWeight(700)
 					say := "在设置的「同步」里打开 GitHub 同步，技能就会跟着导图到别的电脑，那边一点就能链接上。"
@@ -1878,85 +1808,6 @@ func (a *app) skillCopies(c *ui.Context, e *skills.Entry) {
 			}
 		})
 	})
-}
-
-// skillScope is where a skill of MyMind is loaded, and its links in a
-// repository.
-func (a *app) skillScope(c *ui.Context, e *skills.Entry) {
-	t := c.Theme()
-	env := a.skills.env
-	r := a.skills.report
-	repos := env.Repos
-	ui.Column(c.Key("scope")).Gap(8).FillWidth().Margin(14, 0, 0).Children(func() {
-		ui.Text(c, "放在哪一层").FontSize(textSmall).FontWeight(700)
-		raise(ui.Column(c.Key("rows")).Padding(2, 12).Radius(radiusCard).FillWidth(), t).Children(func() {
-			sub := "这台电脑上每个会话都会加载"
-			if e.Scope == skills.Project {
-				sub = "只在 " + repoName(e) + " 的会话里加载"
-			}
-			setRow(c, map[bool]string{true: "全局", false: "只在项目里"}[e.Scope == skills.Global], sub, func() {
-				ui.Box(c).Width(140).Children(func() {
-					cur := 0
-					if e.Scope == skills.Project {
-						cur = 1
-					}
-					if to := segmented(c, "skill-scope", "放在", []string{"全局", "项目"}, cur); to != cur {
-						switch {
-						case to == 0:
-							a.later(func() {
-								if a.skillDo("已改成全局，每个会话都会加载", func() (skills.Undo, error) { return skills.SetScope(env, e, skills.Global, nil, r.Tools) }) {
-									a.skills.sel = "g/" + e.Name
-								}
-							})
-						case len(repos) == 0:
-							a.tell("还没有关联代码仓库的项目：在导图的设置里填上项目代码目录")
-						default:
-							rp := repos[0]
-							for _, x := range repos {
-								if x.Root == a.skills.effRepo {
-									rp = x
-								}
-							}
-							a.later(func() { a.skillToRepo(e, rp) })
-						}
-					}
-				})
-			})
-			if e.Scope != skills.Project {
-				return
-			}
-			setLine(c)
-			setRow(c, "项目", "", func() {
-				dropButton(c, "skill-repo", repoName(e), "换一个项目", "挪到另一个项目").Menu(func(m *ui.Menu) {
-					for _, rp := range repos {
-						rp := rp
-						if m.Item(rp.Name).Checked(e.Repo != nil && rp.Root == e.Repo.Root).Chosen() && (e.Repo == nil || rp.Root != e.Repo.Root) {
-							a.later(func() { a.skillToRepo(e, rp) })
-						}
-					}
-				})
-			})
-			setLine(c)
-			setRow(c, "仓库里是链接", "提交不提交由你。链接指向这台电脑上的路径；要给队友用，换成真文件。", func() {
-				linked := false
-				for _, cp := range e.Copies {
-					linked = linked || cp.State == skills.Linked
-				}
-				if linked && textKey(c, "换成真文件", "换成仓库里的真文件", "文件放进仓库，其他工具用仓库内的相对链接指向它").Clicked() {
-					a.later(func() { a.skillMakeReal(e) })
-				}
-			})
-		})
-	})
-}
-
-func (a *app) skillToRepo(e *skills.Entry, rp skills.Repo) {
-	env := a.skills.env
-	if a.skillDo("已放进 "+rp.Name+" 的仓库，只在它的会话里加载", func() (skills.Undo, error) {
-		return skills.SetScope(env, e, skills.Project, &rp, a.skills.report.Tools)
-	}) {
-		a.skills.sel = "p/" + rp.Key + "/" + e.Name
-	}
 }
 
 func (a *app) skillMakeReal(e *skills.Entry) {

@@ -65,9 +65,16 @@ func TestSkillsPage(t *testing.T) {
 	if a.place() != placeSkills {
 		t.Fatal("not on 技能")
 	}
-	for _, want := range []string{"AI 技能", "2 个编程工具", "Claude Code", "Codex", "code-review", "write-weekly", "项目 · ergora", "有问题", "被全局的盖住", "未收进", "一键优化", "· 收进 5 个技能，各工具里只留一份链接", "还有 2 个要你看一眼"} {
+	for _, want := range []string{"AI 技能", "2 个编程工具", "Claude Code", "Codex", "code-review", "write-weekly", "有问题", "未收进", "一键优化", "· 收进 3 个技能，各工具里只留一份链接", "还有 1 个要你看一眼"} {
 		if !tt.HasText(want) {
 			t.Fatalf("no %q: %q", want, tt.Texts())
+		}
+	}
+	// A project's skills, in its repository, are the repository's: not
+	// shown, nor touched (the user's choice).
+	for _, not := range []string{"ergora-api-rules", "ergora 自己的发布流程", "放在哪一层", "被全局的盖住"} {
+		if tt.HasText(not) {
+			t.Fatalf("%q shown", not)
 		}
 	}
 	snapshot(t, tt, "skills")
@@ -91,7 +98,7 @@ func TestSkillsPage(t *testing.T) {
 	if !isLink(filepath.Join(cc, "code-review")) || dirThere(filepath.Join(cx, "code-review")) {
 		t.Fatal("not as it should be in the tools")
 	}
-	if !tt.HasText("已链接") || !tt.HasText("在哪些工具里") || !tt.HasText("放在哪一层") || !tt.HasText("直接读 ~/.agents/skills，不用链接") {
+	if !tt.HasText("已链接") || !tt.HasText("在哪些工具里") || !tt.HasText("直接读 ~/.agents/skills，不用链接") {
 		t.Fatalf("details: %q", tt.Texts())
 	}
 	snapshot(t, tt, "skill-detail")
@@ -164,19 +171,6 @@ func TestSkillsPage(t *testing.T) {
 	data, _ := os.ReadFile(filepath.Join(store, "SKILL.md"))
 	if !strings.Contains(string(data), "先列会出错的地方") || !isLink(filepath.Join(gb, "code-review")) {
 		t.Fatalf("not settled: %s", data)
-	}
-
-	// Moved into the project and back.
-	e := a.skills.report.Entry("g/code-review")
-	a.skillToRepo(e, a.skills.env.Repos[0])
-	tt.Frame()
-	if !isLink(filepath.Join(repo, ".claude", "skills", "code-review")) || isLink(filepath.Join(cc, "code-review")) {
-		t.Fatal("not moved to the project")
-	}
-	a.noticeUndo()
-	tt.Frame()
-	if !isLink(filepath.Join(cc, "code-review")) {
-		t.Fatal("not back")
 	}
 
 	// Deleted, and back.

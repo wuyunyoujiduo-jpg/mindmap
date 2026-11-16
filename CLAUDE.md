@@ -412,9 +412,10 @@ by AI, and an AI assistant.
   (`Env.Reads`, a copy `Native`: no link, which would have it read a
   skill twice) and the others by links; what MyMind keeps of its own
   beside it (put away, turned off: a skill turned off must leave a folder
-  Codex reads) is `~/.agents/.mymind` (`Env.Keep`); a project's skills
-  are files in its repository's `.agents/skills`, linked from inside it
-  (`linkIn`, relative: a link committed works in every clone). The
+  Codex reads) is `~/.agents/.mymind` (`Env.Keep`). A project's skills,
+  in its repository, are not looked at nor touched (the user's choice:
+  the repository's to keep; `Env.Repos` left empty, though the package
+  still knows them: `ProjectStore`, `linkIn`'s links from inside). The
   store goes with the maps by a mount of the sync (`Config.Mounts`, at
   `.skills`, the path it had), and the maps folder's `.skills` of before
   is moved there as a folder is opened (`skillsMigrate`, `Migrate`,
