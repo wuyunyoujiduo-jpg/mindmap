@@ -142,7 +142,7 @@ func (a *app) writeCard(c *ui.Context, w writeCard) {
 			if !w.inline {
 				ui.Box(c).Width(1).Height(16).Margin(0, 4).Background(hairline(t))
 			}
-			tool("引用", "[[", 0, "链接到灵感、资料、导图或导图里的主题：写 [[ 再写几个字，从列出的里面选", func() { add("[[") })
+			tool("引用", "[[", 0, "链接到灵感、资料、导图、导图里的主题或 AI 技能：写 [[ 再写几个字，从列出的里面选", func() { add("[[") })
 		}
 		reads := func() {
 			if w.reads != nil {
@@ -345,13 +345,17 @@ func (a *app) noteText(c *ui.Context, text string, size float32, lines int) {
 			ui.Text(c, cl.Label()).FontSize(textSmall).TextColor(ink).SingleLine().Shrink(1).MinWidth(0)
 		})
 	}
-	// The topics and maps it links to, each going there.
+	// The topics, maps and skills it links to, each going there.
 	for _, link := range tokenLinks(text) {
-		if !strings.HasPrefix(link, nodeScheme) {
+		tip := "打开导图里的这一处"
+		switch {
+		case strings.HasPrefix(link, skillScheme):
+			tip = "打开这个技能"
+		case !strings.HasPrefix(link, nodeScheme):
 			continue
 		}
 		_, label := a.linkLabel(link)
-		b := ui.Row(c.Key("ref:" + link)).Gap(6).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label("前往链接 " + label).Tooltip("打开导图里的这一处")
+		b := ui.Row(c.Key("ref:" + link)).Gap(6).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label("前往链接 " + label).Tooltip(tip)
 		ink := t.TextMuted
 		if b.Hovered() {
 			ink = t.Accent

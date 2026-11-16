@@ -61,6 +61,10 @@ func (a *app) saveHomeLine() {
 	if text == "" {
 		return
 	}
+	// What it is kept as is told of the words as written, as the bar said
+	// it: with its links made tokens a line that links to a clip or a
+	// skill read as a plain one, and was kept as a task on 今天.
+	task := a.barTask(text)
 	text = a.resolveRefs(text)
 	switch ask, asking := barQuestion(text); {
 	case asking:
@@ -72,7 +76,7 @@ func (a *app) saveHomeLine() {
 		a.homeDraft, a.barOpen = "", false
 		a.later(a.aiSend)
 		return
-	case a.barTask(text):
+	case task:
 		var day *time.Time
 		if a.place() == placeToday { // written on 今天, for today unless it says a day
 			d := today(a.now())

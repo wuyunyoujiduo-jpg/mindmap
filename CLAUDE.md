@@ -443,8 +443,17 @@ by AI, and an AI assistant.
   linked, a new tool's links), one 撤销 for all; what is for the user to
   judge is sent to 要处理: one by one was too slow, the user found, with
   seventy skills in sixteen tools, and then a card a kind too many keys. Its left column
-  narrows by a part and a tool together (`skillsSide`), the tools with no
-  skill folded: sixteen cards on the page were too many to take in. Codex's
+  narrows by one row at a time, a part or a tool (`skillsSide`: 全局 and
+  Claude Code chosen together, two chips over the list, were one kind of
+  condition said twice, the user found, 0.100.8), the tools with no
+  skill folded: sixteen cards on the page were too many to take in.
+  A topic links to a skill as to a clip (`skilllinks.go`, the user's,
+  0.100.8): a link `skill:name`, by its folder's name, made by 链接到技能…
+  of the topic's links, by [[ in a note, a thought or a task's line
+  (`addTask` makes a line's links the task's), and from the skill
+  (引用到导图…); the skill's details say what names it (`skillUses`), and
+  an agent reading the map is told the link is the skill to do that
+  topic with (`internal/mcp`'s instructions). Codex's
   and the others' folders are as their documentation says (`Checked`
   is Claude Code's alone).
   The app shows the logs as AI 动态, a list of 今天's left column

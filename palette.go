@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
 
@@ -25,6 +26,7 @@ const (
 	paletteMove   // a node to move the nodes selected under
 	paletteClip   // a clip of the library to link the node a.linkFrom to
 	paletteAttach // a node, of any map, to link a.attachRef to
+	paletteSkill  // a skill of the AI agents to link the node a.linkFrom to
 )
 
 // paletteItem is a line of the palette.
@@ -177,8 +179,12 @@ func (a *app) paletteItems() []paletteItem {
 	}
 	if a.paletteMode == paletteAttach {
 		ref := a.attachRef
+		what := "资料"
+		if strings.HasPrefix(ref, skillScheme) {
+			what = "技能"
+		}
 		attach := func(path, _, id string) {
-			if err := a.attachTo(path, id, ref, "资料"); err != nil {
+			if err := a.attachTo(path, id, ref, what); err != nil {
 				a.saveErr = err.Error()
 			}
 		}
@@ -218,6 +224,16 @@ func (a *app) paletteItems() []paletteItem {
 					a.addFloatingClip(id, *at)
 				} else if n := a.file.Node(a.linkFrom); n != nil {
 					a.addLink(n, clipScheme+id)
+				}
+			}, nil})
+		}
+	}
+	if a.paletteMode == paletteSkill {
+		for _, e := range a.skillsNamed(q, 100) {
+			name := e.Name
+			items = append(items, paletteItem{"技能", name, library.Mask(e.Description), func() {
+				if n := a.file.Node(a.linkFrom); n != nil {
+					a.addLink(n, skillScheme+name)
 				}
 			}, nil})
 		}
@@ -495,7 +511,11 @@ func (a *app) paletteView(c *ui.Context) {
 			paletteMove:   "移到哪个节点下？输入关键词查找，或选择导图的中心主题…",
 			paletteClip:   "在收集里查找要链接的资料…",
 			paletteAttach: "把资料挂到哪个节点？输入关键词查找，或选择建议的节点…",
+			paletteSkill:  "查找要链接的 AI 技能…",
 		}[a.paletteMode]
+		if a.paletteMode == paletteAttach && strings.HasPrefix(a.attachRef, skillScheme) {
+			placeholder = "哪个主题要用这个技能？输入关键词查找，或选一张导图的中心主题…"
+		}
 		if a.paletteMode == paletteClip && a.floatAt != nil {
 			placeholder = "在收集里查找要放到画布上的那一条…"
 		}

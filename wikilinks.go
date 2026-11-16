@@ -16,26 +16,28 @@ import (
 // or in a node's note offers what there is to link to: thoughts and clips,
 // maps, the topics of every map; one chosen is a link there, and what it
 // links to says so in turn (refIndex). A thought keeps a link as a token
-// in its words, <clip:id> or <mindmap:map#id> (refToken); a node's note as
-// a link of its Markdown, [name](mindmap:map#id) (noteLink). Before this a
-// thought could name only another thought or clip, and a note nothing.
+// in its words, <clip:id>, <mindmap:map#id> or <skill:name> (refToken); a
+// node's note as a link of its Markdown, [name](mindmap:map#id)
+// (noteLink). Before this a thought could name only another thought or
+// clip, and a note nothing.
 
-// refToken is a link in a thought's words: to a clip, a topic or a map.
-var refToken = regexp.MustCompile(`<((?:clip|mindmap):[^>\n]+)>`)
+// refToken is a link in a thought's words: to a clip, a topic, a map or
+// a skill.
+var refToken = regexp.MustCompile(`<((?:clip|mindmap|skill):[^>\n]+)>`)
 
 // noteLink is a link of this kind in a node's note, as its Markdown has it.
-var noteLink = regexp.MustCompile(`\]\(<?((?:clip|mindmap):[^)>\n]+)>?\)`)
+var noteLink = regexp.MustCompile(`\]\(<?((?:clip|mindmap|skill):[^)>\n]+)>?\)`)
 
 // A linkOffer is something [[ offers to link to.
 type linkOffer struct {
-	link  string // "clip:id" or "mindmap:map#id", whole: never relative to a map
+	link  string // "clip:id", "mindmap:map#id" or "skill:name", whole: never relative to a map
 	name  string // as it is written and shown
 	where string // a word on it: its kind, or the map it is of
 }
 
 // linkOffers are what [[part offers: the thoughts and clips named so, the
-// maps, and, once something is written, the topics of every map; n of
-// each at most.
+// maps, and, once something is written, the skills and the topics of
+// every map; n of each at most.
 func (a *app) linkOffers(part string, n int) []linkOffer {
 	var out []linkOffer
 	low := strings.ToLower(strings.TrimSpace(part))
@@ -57,6 +59,9 @@ func (a *app) linkOffers(part string, n int) []linkOffer {
 	}
 	if low == "" {
 		return out
+	}
+	for _, e := range a.skillsNamed(low, n) {
+		out = append(out, linkOffer{skillScheme + e.Name, e.Name, "技能"})
 	}
 	topics := 0
 	for _, fi := range a.recentFiles() {
@@ -98,7 +103,7 @@ func (a *app) offerChips(c *ui.Context, part string) (linkOffer, bool) {
 	got := false
 	offers := a.linkOffers(part, 4)
 	if len(offers) == 0 {
-		ui.Text(c, "没有找到可以链接的：换个词，灵感、资料、导图和主题都能搜").FontSize(textCaption).TextColor(faint(t))
+		ui.Text(c, "没有找到可以链接的：换个词，灵感、资料、导图、主题和技能都能搜").FontSize(textCaption).TextColor(faint(t))
 		return chosen, false
 	}
 	for i, o := range offers {

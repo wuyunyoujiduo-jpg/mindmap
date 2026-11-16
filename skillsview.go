@@ -45,12 +45,13 @@ type skillsState struct {
 	again     bool              // and another was asked for meanwhile
 	scanned   time.Time
 	counted   time.Time // when the uses were last counted
-	tool      string    // the tool narrowed to
-	side      string    // the part of the left column: "", needs, unused, global, plugin, others, repo:<root>
+	tool      string    // the tool narrowed to; with one, side is ""
+	side      string    // the part of the left column: "", needs, unused, global, plugin, bundled, others, repo:<root>
 	moreTools bool      // the tools with no skill shown in the left column
 	effTool   string    // the tool whose sessions are looked at
 	find      string
 	sel       string // the key of the skill chosen
+	want      string // the name of one to choose once the scan is in (showSkill)
 	effRepo   string // the project whose sessions are looked at
 	diff      *skillDiff
 	diffOn    bool
@@ -215,6 +216,12 @@ func (a *app) skillsRescan() {
 		if s, ok := v.(skillsScan); ok {
 			a.skills.env, a.skills.report, a.skills.repoMap, a.skills.hooks, a.skills.scanned = s.env, s.report, s.repoMap, s.hooks, a.now()
 			a.skillsNoticeTools()
+			if want := a.skills.want; want != "" { // a link opened before the scan was in (showSkill)
+				a.skills.want = ""
+				if e := a.skillNamed(want); e != nil {
+					a.skills.sel = e.Key
+				}
+			}
 			if a.skills.tidy { // the first scan of a run: what loses nothing is done by itself
 				a.skills.tidy = false
 				a.skillsTidyOnOpen()
@@ -434,7 +441,10 @@ func (a *app) skillsToolCount(id string) int {
 // skillsSide is 技能's left column, the one way to narrow its page: what
 // to look at, where the skills are loaded, and the tools, those with
 // skills first and the others folded (sixteen tools as cards on the page
-// were too many to take in, the user found).
+// were too many to take in, the user found). One row of it is chosen at a
+// time, a part or a tool: 全局 and Claude Code chosen together read to
+// the user as one kind of condition said twice (0.100.8); a tool's skills
+// are told by where they are loaded in the list's own groups.
 func (a *app) skillsSide(c *ui.Context) {
 	a.sidePane(c, "skills-side", func() {
 		r := a.skills.report
@@ -443,7 +453,7 @@ func (a *app) skillsSide(c *ui.Context) {
 			return
 		}
 		part := func(id, name, icon string, count int, danger bool) {
-			on := a.skills.side == id
+			on := a.skills.side == id && a.skills.tool == ""
 			n := ""
 			if count > 0 {
 				n = fmt.Sprint(count)
@@ -454,7 +464,7 @@ func (a *app) skillsSide(c *ui.Context) {
 				}
 			})
 			if row.Clicked() {
-				a.skills.side, a.skills.sel = id, ""
+				a.skills.side, a.skills.tool, a.skills.sel = id, "", ""
 			}
 		}
 		count := func(id string) int {
@@ -477,7 +487,7 @@ func (a *app) skillsSide(c *ui.Context) {
 			if n == 0 {
 				continue
 			}
-			on := a.skills.side == id
+			on := a.skills.side == id && a.skills.tool == ""
 			col := faint(c.Theme())
 			if p, ok := a.skills.repoMap[rp.Root]; ok {
 				col = a.mapColor(p)
@@ -488,7 +498,7 @@ func (a *app) skillsSide(c *ui.Context) {
 				})
 			}).Tooltip("只在这个项目里加载：" + tildePath(rp.Root, a.skills.env.Home))
 			if row.Clicked() {
-				a.skills.side, a.skills.sel = id, ""
+				a.skills.side, a.skills.tool, a.skills.sel = id, "", ""
 			}
 		}
 		if n := count("plugin"); n > 0 {
@@ -522,7 +532,7 @@ func (a *app) skillsSide(c *ui.Context) {
 				if on {
 					a.skills.tool = ""
 				} else {
-					a.skills.tool = tl.ID
+					a.skills.tool, a.skills.side = tl.ID, ""
 				}
 			}
 		}
@@ -626,10 +636,10 @@ func (a *app) skillsView(c *ui.Context) {
 		}
 	})
 	a.skillsSuggest(c)
-	// What narrows the page, each with its ✕, and the words looked for.
+	// What narrows the page, with its ✕, and the words looked for.
 	ui.Row(c.Key("skills-filters")).Gap(6).GapY(6).Wrap().AlignItems(ui.Center).FillWidth().Margin(10, 0, 2).Children(func() {
 		if a.skills.side != "" {
-			name := map[string]string{"needs": "要处理", "unused": "30 天没用过", "global": "全局", "plugin": "插件带的", "others": "别的电脑上的"}[a.skills.side]
+			name := map[string]string{"needs": "要处理", "unused": "30 天没用过", "global": "全局", "plugin": "插件带的", "bundled": "工具自带的", "others": "别的电脑上的"}[a.skills.side]
 			for _, rp := range a.skills.env.Repos {
 				if a.skills.side == "repo:"+rp.Root {
 					name = "项目 " + rp.Name
@@ -1185,6 +1195,9 @@ func (a *app) skillMenu(m *ui.Menu, e *skills.Entry) {
 			a.later(func() { a.plat.ShowInFolder(dir) })
 		}
 	}
+	if m.Item("引用到导图…").Chosen() {
+		a.later(func() { a.skillPlace(e) })
+	}
 	if mark, ok := skillMarkOffer(e); ok {
 		m.Separator()
 		if m.Item(mark).Chosen() {
@@ -1468,7 +1481,7 @@ func (a *app) skillDetail(c *ui.Context, e *skills.Entry) {
 		ui.Column(c).Padding(20, 22, 32).Gap(6).FillWidth().Children(func() {
 			ui.Row(c).Gap(6).AlignItems(ui.Center).FillWidth().Children(func() {
 				ui.Text(c, e.Name).Font("monospace").FontSize(17).FontWeight(700).Wrap().Grow(1).Shrink(1).Basis(0).MinWidth(0).Selectable()
-				more := iconButton(c, iconMore, "操作 "+e.Name, "在编辑器中打开、停用、删除…", 28, true)
+				more := iconButton(c, iconMore, "操作 "+e.Name, "在编辑器中打开、引用到导图、停用、删除…", 28, true)
 				more.Menu(func(m *ui.Menu) { a.skillMenu(m, e) })
 				if iconButton(c, iconClose, "关闭", "关闭（Esc）", 28, true).Clicked() {
 					a.skills.sel = ""
@@ -1498,6 +1511,7 @@ func (a *app) skillDetail(c *ui.Context, e *skills.Entry) {
 			if !(len(e.Copies) == 0 && len(e.Others) > 0) {
 				a.skillCopies(c, e)
 			}
+			a.skillUses(c, e)
 			if e.Stored {
 				ui.Column(c.Key("other-computers")).Gap(8).FillWidth().Margin(14, 0, 0).Children(func() {
 					ui.Text(c, "别的电脑").FontSize(textSmall).FontWeight(700)

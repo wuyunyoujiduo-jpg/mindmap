@@ -205,8 +205,10 @@ Built to the draft https://claude.ai/artifact/SUEZAk4SLoJ76BxsM9LXDE,
 then made the place 技能 (0.99.2): its left column the parts (要处理, 30
 天没用过), the scopes (全局, each project by its map's dot, 插件, 别的电脑)
 and the tools, by their two letters, those with no skill folded under one
-row; what is chosen there said as chips with a ✕ over the list, as
-收集's. The page is headed as the others, the one copy said in a quiet
+row; one row of it is chosen at a time, a scope or a tool (the two
+chosen together, two chips over the list, read to the user as one kind
+of condition said twice, 0.100.8), and said as a chip with a ✕ over the
+list, as 收集's. The page is headed as the others, the one copy said in a quiet
 line, then, in a pale block, one key in the accent for all that needs no
 judgment (一键优化, what it does a line each under its name) and the way
 to what does (去看看), then a table: a skill's name in the monospace (it is a

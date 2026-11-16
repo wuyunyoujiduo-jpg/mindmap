@@ -229,7 +229,7 @@ func TestSkillsTableFetched(t *testing.T) {
 
 // What every tool keeps a copy of is taken in by one click: one copy in
 // MyMind, links in its place, all of it back by one 撤销; the left column
-// narrows by a tool and a part together.
+// narrows by one thing, a tool or a part.
 func TestSkillsTakeAll(t *testing.T) {
 	a, tt := newTestApp(t)
 	home := os.Getenv("HOME")
@@ -272,23 +272,35 @@ func TestSkillsTakeAll(t *testing.T) {
 	if a.notice != "一键优化做了 3 处：收进 3 个技能，各工具里只留一份链接" || slices.Contains(tt.Texts(), "一键优化") {
 		t.Fatalf("after: %q", tt.Texts())
 	}
-	// The left column: a tool and a part, together, each with its ✕.
+	// The left column holds one choice, a tool or a part, with its ✕
+	// over the list: the one chosen takes the other's place.
 	if err := tt.Click("kiro"); err != nil {
 		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.skills.tool != "kiro" || !tt.HasText("frontend-design") || tt.HasText("keys") {
+		t.Fatalf("kiro's: %q", tt.Texts())
 	}
 	if err := tt.Click("要处理"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if !tt.HasText("都好好的") {
-		t.Fatalf("kiro's to look at: %q", tt.Texts())
+	if a.skills.tool != "" || a.skills.side != "needs" || !tt.HasText("keys") || tt.HasText("frontend-design") || tt.HasText("去掉 kiro") {
+		t.Fatalf("to look at, tool %q side %q: %q", a.skills.tool, a.skills.side, tt.Texts())
 	}
-	if err := tt.Click("去掉 要处理"); err != nil {
+	if err := tt.Click("kiro"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if !tt.HasText("frontend-design") || tt.HasText("keys") {
-		t.Fatalf("kiro's: %q", tt.Texts())
+	if a.skills.tool != "kiro" || a.skills.side != "" || tt.HasText("去掉 要处理") {
+		t.Fatalf("kiro again, side %q: %q", a.skills.side, tt.Texts())
+	}
+	if err := tt.Click("去掉 kiro"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.skills.tool != "" || !tt.HasText("keys") || !tt.HasText("frontend-design") {
+		t.Fatalf("all: %q", tt.Texts())
 	}
 	a.noticeUndo()
 	tt.Frame()

@@ -110,7 +110,7 @@ func ParseOutline(text string) []*Node {
 }
 
 // trailingLinks takes the links written at a line's end, after a space,
-// as "<clip:id>", "<mindmap:map#id>" or "<https://…>", off its title, as
+// as "<clip:id>", "<mindmap:map#id>", "<skill:name>" or "<https://…>", off its title, as
 // the AI writes them in outlines; "List<String>" stays a title.
 func trailingLinks(line string) (string, []string) {
 	var links []string
@@ -120,7 +120,7 @@ func trailingLinks(line string) (string, []string) {
 			break
 		}
 		l := line[i+2 : len(line)-1]
-		if strings.ContainsAny(l, " <>") || !(strings.HasPrefix(l, "clip:") || strings.HasPrefix(l, "mindmap:") ||
+		if strings.ContainsAny(l, " <>") || !(strings.HasPrefix(l, "clip:") || strings.HasPrefix(l, "mindmap:") || strings.HasPrefix(l, "skill:") ||
 			strings.HasPrefix(l, "http://") || strings.HasPrefix(l, "https://")) {
 			break
 		}

@@ -14,8 +14,9 @@ import (
 )
 
 // Links of nodes: to web pages, to the project's code, opened in the
-// editor at their line, and to other nodes, of this map or another, which
-// the node linked to lists back.
+// editor at their line, to other nodes, of this map or another, which
+// the node linked to lists back, to clips, and to the AI agents' skills
+// (skilllinks.go).
 
 // Kinds of links.
 const (
@@ -23,6 +24,7 @@ const (
 	linkFile
 	linkNode
 	linkClip
+	linkSkill
 )
 
 // nodeScheme starts links to nodes: "mindmap:folder/map#id".
@@ -40,6 +42,8 @@ func (a *app) parseLink(link string) (kind int, target string, line int) {
 	switch {
 	case strings.HasPrefix(link, clipScheme):
 		return linkClip, strings.TrimPrefix(link, clipScheme), 0
+	case strings.HasPrefix(link, skillScheme):
+		return linkSkill, strings.TrimPrefix(link, skillScheme), 0
 	case strings.HasPrefix(link, nodeScheme):
 		rel, id, _ := strings.Cut(strings.TrimPrefix(link, nodeScheme), "#")
 		path := a.path
@@ -112,6 +116,8 @@ func (a *app) openLink(link string) {
 		a.plat.OpenURL(target)
 	case linkClip:
 		a.showClip(target)
+	case linkSkill:
+		a.showSkill(target)
 	case linkNode:
 		path, id, _ := strings.Cut(target, "#")
 		if path != a.path {
@@ -189,6 +195,11 @@ func (a *app) linkLabel(link string) (icon, label string) {
 			return "📚", c.Label()
 		}
 		return "📚", "（资料已不存在）"
+	case linkSkill:
+		if a.skills.report != nil && a.skillNamed(target) == nil {
+			return "🧩", "（技能已不存在）"
+		}
+		return "🧩", target
 	}
 	rel, err := filepath.Rel(a.projectDir(), target)
 	if err != nil || strings.HasPrefix(rel, "..") {
@@ -260,7 +271,7 @@ func (a *app) linksSection(c *ui.Context, n *model.Node) {
 				row := ui.Row(c.Key(fmt.Sprint("link", i))).Gap(6).AlignItems(ui.Center).Padding(3, 6).Radius(6).
 					Background(t.Surface).Border(1, t.Border)
 				if gone {
-					row.Border(1, t.Danger.Alpha(0.5)).Tooltip("链接的资料或节点已不存在，可以删掉这个链接")
+					row.Border(1, t.Danger.Alpha(0.5)).Tooltip("链接的资料、节点或技能已不存在，可以删掉这个链接")
 				}
 				row.Children(func() {
 					open := ui.Row(c).Gap(6).Grow(1).Basis(0).MinWidth(0).Cursor(ui.CursorPointer).Tooltip(l).Label("打开 " + label)
@@ -310,6 +321,10 @@ func (a *app) linksSection(c *ui.Context, n *model.Node) {
 				if len(a.lib.Clips) > 0 && ghostButton(c, "链接到资料…", "链接到收集里的一条").Clicked() {
 					a.linkFrom = n.ID
 					a.openPalette(paletteClip)
+				}
+				if a.skillsToLink() && ghostButton(c, "链接到技能…", "引用一个 AI 技能：做这件事时用它").Clicked() {
+					a.linkFrom = n.ID
+					a.openPalette(paletteSkill)
 				}
 			})
 			if back := a.backlinks(n.ID); len(back) > 0 {

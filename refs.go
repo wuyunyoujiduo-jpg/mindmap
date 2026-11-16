@@ -15,15 +15,16 @@ import (
 )
 
 // Material and maps are related one way only: a node's links, to a clip
-// ("clip:id"), a node of any map ("mindmap:map#id"), or a whole map (its
-// first canvas's root). Where a clip is used, and what links to a node or
-// a map, are worked out from the maps, in one index of every link.
+// ("clip:id"), a node of any map ("mindmap:map#id"), a whole map (its
+// first canvas's root), or a skill of the AI agents ("skill:name"). Where
+// a clip or a skill is used, and what links to a node or a map, are
+// worked out from the maps, in one index of every link.
 
 // refs is the index of the links of every map.
 type refs struct {
 	sig string
-	// to lists the nodes linking to a target: "clip:id", "node:path#id",
-	// and "map:path" for any node of a map, from other maps.
+	// to lists the nodes linking to a target: "clip:id", "skill:name",
+	// "node:path#id", and "map:path" for any node of a map, from other maps.
 	to map[string][]backlink
 	// nodeAt is the map of each node, by its ID, to find a node linked to
 	// after its map was renamed or moved.
@@ -75,10 +76,14 @@ func (a *app) refIndex() *refs {
 	// links to other thoughts are told by clipMentions, and are no use of
 	// a clip on a map (clipBacklinks).
 	for _, cl := range a.lib.Clips {
-		if !strings.Contains(cl.Text, "<"+nodeScheme) {
+		if !strings.Contains(cl.Text, "<"+nodeScheme) && !strings.Contains(cl.Text, "<"+skillScheme) {
 			continue
 		}
 		for _, link := range tokenLinks(cl.Text) {
+			if strings.HasPrefix(link, skillScheme) {
+				r.to[link] = append(r.to[link], backlink{title: cl.Label(), clip: cl.ID})
+				continue
+			}
 			path, id, ok := a.nodeOfLink(link)
 			if !ok {
 				continue
@@ -96,6 +101,10 @@ func (a *app) addRef(r *refs, path, sheet string, n *model.Node, link string) {
 	b := backlink{path: path, sheet: sheet, id: n.ID, title: n.Title}
 	if id, ok := strings.CutPrefix(link, clipScheme); ok {
 		r.to[clipScheme+id] = append(r.to[clipScheme+id], b)
+		return
+	}
+	if strings.HasPrefix(link, skillScheme) {
+		r.to[link] = append(r.to[link], b)
 		return
 	}
 	rest, ok := strings.CutPrefix(link, nodeScheme)

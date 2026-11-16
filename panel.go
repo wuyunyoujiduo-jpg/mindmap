@@ -206,7 +206,7 @@ func (a *app) nodePanel(c *ui.Context) {
 					add("＋ 标签", "给这个主题打标签", "tags")
 				}
 				if !links {
-					add("＋ 链接", "链接到网址、文件、其他主题或资料", "links")
+					add("＋ 链接", "链接到网址、文件、其他主题、资料或 AI 技能", "links")
 				}
 				if !image {
 					add("＋ 图片", "给主题配一张图片（也可以选中后 ⌘V 粘贴）", "image")

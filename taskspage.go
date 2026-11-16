@@ -265,6 +265,10 @@ func (a *app) postponeToToday(items []taskItem) {
 // addTask adds a task written in a line, with its day in words, to the
 // inbox; day, when not nil, is the day it goes on when the line says none.
 func (a *app) addTask(line string, day *time.Time) {
+	// What the line links to ([[: a skill to do it with, a clip, a topic)
+	// is the task's links, not words of its title.
+	links := tokenLinks(line)
+	line = strings.TrimSpace(refToken.ReplaceAllString(line, ""))
 	line, remind := parseRemind(line)
 	line, rep, first := parseRepeat(line, a.now())
 	title, due, prio := parseTaskLine(line, a.now())
@@ -284,6 +288,7 @@ func (a *app) addTask(line string, day *time.Time) {
 	n := model.NewNode(title)
 	n.SetStatus(model.StatusTodo, a.now())
 	n.Task.Due, n.Task.Priority, n.Task.Repeat, n.Task.Remind = due, prio, rep, remind
+	n.Links = links
 	path := a.inboxPath()
 	if err := a.ensureInbox(); err != nil {
 		a.tell("没有加上：" + err.Error())

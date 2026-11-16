@@ -142,7 +142,7 @@ const instructions = `MyMind is where the user keeps track of their projects: on
 - Before working, call project_brief: the tasks in hand and to do, recent decisions, what recent sessions did, the map's first levels.
 - As you work: update_node to mark a task doing or done; capture for a follow-up or a problem you notice (it goes to a branch the user sorts, 待整理: do not rearrange the user's map to make room for it); log_decision when you choose between real alternatives (what, why, what you did not choose) and not for the obvious.
 - Before you finish: log_session, a sentence or two on what was done, with what is left as todos.
-- Write in the user's language. Never write secrets. Node IDs appear as {id:…}. Always pass a short "summary" on the tools that take one; the user reviews changes in the app.
+- Write in the user's language. Never write secrets. Node IDs appear as {id:…}, a node's links after its title as <…>: <skill:name> names a skill of yours the user wants that node done with, so use it when you work on it. Always pass a short "summary" on the tools that take one; the user reviews changes in the app.
 
 The finer tools remain for when the user asks you to build or reshape a map: read_map, add_nodes, move_node, delete_node, create_map. The user also keeps a library of collected notes, links, pictures and files: search it with search_library when the task may build on what they collected.
 
@@ -205,7 +205,7 @@ var tools = []tool{
 	{"add_nodes", "Add nodes", "Add nodes under a node, written as a Markdown outline: a line a node, nested by two-space indentation; '- [ ] text' makes a task to do and '- [x] text' a done one.",
 		schema([]string{"parent_id", "outline", "summary"}, map[string]any{"map": mapProp,
 			"parent_id": str("The id of the node to add under; use the root's id for top-level branches."),
-			"outline":   str("The nodes, as a Markdown list; links at a line's end, after a space, as <clip:id> or <mindmap:map#id>, are linked to its node."), "summary": summaryProp}), nil},
+			"outline":   str("The nodes, as a Markdown list; links at a line's end, after a space, as <clip:id>, <mindmap:map#id> or <skill:name>, are linked to its node."), "summary": summaryProp}), nil},
 	{"update_node", "Update a node", "Change a node: its title, note (replace or append), tags, and task status, priority and dates. Fields left out stay as they are.",
 		schema([]string{"id", "summary"}, map[string]any{"map": mapProp, "id": str("The node's id."),
 			"title": str("A new title."), "note": str("A new note, replacing the old one (Markdown)."),
@@ -213,7 +213,7 @@ var tools = []tool{
 			"add_tags":    map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
 			"remove_tags": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
 			"add_links": map[string]any{"type": "array", "items": map[string]any{"type": "string"},
-				"description": "Links to add: web pages (PRs, issues, docs); files of the code as path or path:line, relative to the project folder or absolute; a clip of the library as clip:<id>; a map or a node of one as mindmap:<map path>#<node id> (the root's id for the whole map)."},
+				"description": "Links to add: web pages (PRs, issues, docs); files of the code as path or path:line, relative to the project folder or absolute; a clip of the library as clip:<id>; a map or a node of one as mindmap:<map path>#<node id> (the root's id for the whole map); a skill of the AI agents to do it with as skill:<its folder's name>."},
 			"remove_links": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
 			"status":       statusProp,
 			"priority":     map[string]any{"type": "string", "enum": []string{"none", "low", "medium", "high"}},
