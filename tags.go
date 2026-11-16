@@ -1,6 +1,7 @@
 package main
 
 import (
+	"regexp"
 	"slices"
 	"strings"
 
@@ -212,6 +213,10 @@ func (a *app) tagPicker(c *ui.Context, n *model.Node) {
 		if in.Focused() {
 			in.Background(t.Background).InsetShadow(0, 0, 0, 1.5, t.Accent)
 		}
+		if a.tagFocus { // asked for by the 标签 menu's 新建标签…
+			a.tagFocus = false
+			in.Focus()
+		}
 		if in.Submitted() {
 			if tag := a.addTag(a.tagDraft); tag != "" && !slices.Contains(n.Tags, tag) {
 				a.toggleTag(n, tag)
@@ -238,8 +243,70 @@ func (a *app) tagMenu(m *ui.Menu, n *model.Node) {
 			m.Item("还没有标签").Disabled(true)
 		}
 		m.Separator()
-		if m.Item("管理标签…").Chosen() {
-			a.selected, a.panelTab, a.aiOpen = n.ID, tabNode, false
+		// A new tag is written in the right column's field, which shows
+		// though it was put away: before, 管理标签… only chose that column's
+		// page, and with the column put away nothing came of it.
+		if m.Item("新建标签…").Chosen() {
+			a.later(func() {
+				a.selected, a.multi, a.panelTab, a.aiOpen = n.ID, nil, tabNode, false
+				if a.panelOff {
+					a.togglePanel()
+				}
+				if a.panelShow == nil {
+					a.panelShow = map[string]bool{}
+				}
+				a.panelShow[n.ID+":tags"] = true // the picker, with its field
+				a.tagFocus = true
+			})
 		}
+		m.Item("在标题里写 #标签 也能加").Disabled(true)
 	})
+}
+
+// titleTag is a #tag in a topic's title: # at its start or after a space,
+// then what is up to a space or a mark. A # in a word (C#, a link's
+// #part) is no tag, nor # and a number alone (#12, an issue's).
+var titleTag = regexp.MustCompile(`(^|\s)#([^\s#，。,.!！?？;；:：、（）()\[\]{}"'“”]+)`)
+
+// titleTags takes the #tags out of a title: what is left of it, its words
+// closed up, and the tags.
+func titleTags(title string) (string, []string) {
+	var tags []string
+	out := titleTag.ReplaceAllStringFunc(title, func(m string) string {
+		sub := titleTag.FindStringSubmatch(m)
+		tag := sub[2]
+		if strings.Trim(tag, "0123456789") == "" {
+			return m
+		}
+		if !slices.Contains(tags, tag) {
+			tags = append(tags, tag)
+		}
+		return sub[1]
+	})
+	if len(tags) == 0 {
+		return title, nil
+	}
+	return strings.Join(strings.Fields(out), " "), tags
+}
+
+// titleTagBegun is the tag being written at a title's end: after a # at
+// its start or after a space, with no space since.
+func titleTagBegun(title string) (string, bool) {
+	i := strings.LastIndex(title, "#")
+	if i < 0 || i > 0 && !strings.ContainsAny(title[i-1:i], " \t") || strings.ContainsAny(title[i:], " \t\n　") {
+		return "", false
+	}
+	return title[i+1:], true
+}
+
+// tagOffers are the tags, of the maps and of 收集, that begin with part
+// and are not it: n at most, those of the map first.
+func (a *app) tagOffers(part string, n int) []string {
+	var out []string
+	for _, tag := range append(a.allTags(), a.recentTags(part, n)...) {
+		if len(out) < n && strings.HasPrefix(tag, part) && tag != part && !slices.Contains(out, tag) {
+			out = append(out, tag)
+		}
+	}
+	return out
 }

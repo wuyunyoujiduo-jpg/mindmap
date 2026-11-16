@@ -1007,12 +1007,51 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 			// A picture pasted, not text, goes on the node, as on the canvas.
 			in.OnPaste(func(text string) bool { return text == "" && a.pasteImage() })
 			in.HandleInput(func(ev ui.InputEvent) bool {
+				if ev.Kind == ui.InputKeyDown && ev.Key == ui.KeyTab && ev.Mods == 0 && a.editing == n.ID {
+					// A tag begun: Tab writes the first offered.
+					if part, ok := titleTagBegun(a.editText); ok {
+						if offers := a.tagOffers(part, 1); len(offers) > 0 {
+							a.editText = a.editText[:len(a.editText)-len(part)] + offers[0] + " "
+							a.editFocus = false // the caret to the end
+							return true
+						}
+					}
+					return false
+				}
 				if ev.Kind != ui.InputKeyDown || ev.Key != ui.KeyEnter || ev.Mods&^ui.Shift != 0 || a.editing != n.ID {
 					return false
 				}
 				a.commitEdit()
 				return true
 			})
+			// A #tag being written: the tags that begin so, under the
+			// title, a click (or Tab) writing one; what is written after a
+			// # becomes the topic's tag when the title is kept.
+			if part, ok := titleTagBegun(a.editText); ok {
+				offers := a.tagOffers(part, 6)
+				a.tagOffered = true
+				ui.Popover(c, in, &a.tagOffered, func() {
+					ui.Row(c.Key("tag-offers")).Gap(6).Padding(8, 10).AlignItems(ui.Center).MaxWidth(420).Wrap().KeepFocus().Children(func() {
+						for _, tag := range offers {
+							chip := softTag(c, "#"+tag).Cursor(ui.CursorPointer).KeepFocus().Label("用标签 " + tag).Tooltip("用这个标签（Tab）")
+							if chip.Clicked() {
+								a.editText = a.editText[:len(a.editText)-len(part)] + tag + " "
+								a.editFocus = false // the caret to the end
+							}
+						}
+						say := "写下标签名，记下后成为这个主题的标签"
+						switch {
+						case len(offers) > 0:
+							say = ""
+						case part != "":
+							say = "新标签「" + part + "」：记下后加上"
+						}
+						if say != "" {
+							ui.Text(c, say).FontSize(textCaption).TextColor(t.TextMuted).NoWrap()
+						}
+					})
+				})
+			}
 			if strings.ContainsAny(a.editText, "\r\n\t") { // pasted lines join
 				a.editText = strings.Join(strings.Fields(strings.ReplaceAll(a.editText, "\r", "\n")), " ")
 			}
@@ -1190,6 +1229,11 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 
 // nodeMenu is a node's context menu. Its actions wait until the map is
 // built, as they change the nodes being walked.
+// nodeMenu is what can be done with a topic, under the pointer's other
+// key. The things done every day stand at its head and alone; the rest is
+// in a submenu of its kind (插入, 任务, AI, 展开/折叠, 图片), and what a key
+// does as well and nobody looks for here (编辑标题, F2 and a double click)
+// is not in it: the user found it too long, with some thirty rows.
 func (a *app) nodeMenu(m *ui.Menu, n *model.Node, depth int) {
 	if !a.isSelected(n.ID) {
 		a.selected, a.multi = n.ID, nil
@@ -1200,20 +1244,28 @@ func (a *app) nodeMenu(m *ui.Menu, n *model.Node, depth int) {
 	if m.Item("添加同级节点").Shortcut(0, ui.KeyEnter).Chosen() {
 		a.later(func() { a.addSibling() })
 	}
-	if m.Item("在上方添加同级节点").Shortcut(ui.Shift, ui.KeyEnter).Chosen() {
-		a.later(func() { a.addSiblingAt(false) })
-	}
-	if m.Item("连线到…").Shortcut(ui.Cmd|ui.Shift, ui.KeyL).Chosen() {
-		a.later(func() { a.startRelation(n) })
-	}
-	if m.Item("编辑标题").Shortcut(0, ui.KeyF2).Chosen() {
-		a.later(func() { a.startEdit(n.ID) })
-	}
+	a.annotationMenu(m, n, depth)
+	m.Separator()
 	if m.Item("编辑备注…").Chosen() {
 		a.noteEditing = n.ID
 	}
 	a.tagMenu(m, n)
-	a.annotationMenu(m, n, depth)
+	if m.Item("作为任务").Checked(n.Task != nil).Chosen() {
+		a.later(func() { a.toggleTask(n) })
+	}
+	if n.Task != nil {
+		m.Submenu("任务状态", func(m *ui.Menu) {
+			for _, s := range model.Statuses {
+				if m.Item(s.Label()).Checked(n.Task.Status == s).Chosen() {
+					a.later(func() { a.setStatus(n, s) })
+				}
+			}
+			m.Separator()
+			if m.Item("在看板中显示").Chosen() {
+				a.later(func() { a.showOnBoard(n.ID) })
+			}
+		})
+	}
 	m.Separator()
 	if m.Item("复制").Shortcut(ui.Cmd, ui.KeyC).Chosen() {
 		a.later(func() { a.copyNodes(false) })
@@ -1224,20 +1276,22 @@ func (a *app) nodeMenu(m *ui.Menu, n *model.Node, depth int) {
 	if m.Item("粘贴为子节点").Chosen() {
 		a.later(func() { a.paste() })
 	}
-	if m.Item("AI 拆解成任务").Chosen() {
-		a.later(a.aiBreakDown)
-	}
-	if a.diaOf(n.ID) != nil {
-		if m.Item("看图解").Chosen() {
-			a.later(func() { a.openDia(n.ID, "") })
+	m.Separator()
+	m.Submenu("AI", func(m *ui.Menu) {
+		if m.Item("拆解成任务").Chosen() {
+			a.later(a.aiBreakDown)
 		}
-	} else if diaWorth(n) && m.Item("AI 画成图解").Chosen() {
-		a.later(func() { a.drawDia(n.ID, "") })
-	}
+		if a.diaOf(n.ID) != nil {
+			if m.Item("看图解").Chosen() {
+				a.later(func() { a.openDia(n.ID, "") })
+			}
+		} else if m.Item("画成图解").Disabled(!diaWorth(n)).Chosen() {
+			a.later(func() { a.drawDia(n.ID, "") })
+		}
+	})
 	if depth > 0 && m.Item("移到其他导图…").Chosen() {
 		a.later(func() { a.openPalette(paletteMove) })
 	}
-	m.Separator()
 	if a.shownRoot() == n && a.focusNode() != nil {
 		if m.Item("退出聚焦").Shortcut(0, ui.KeyEscape).Chosen() {
 			a.later(func() { a.focusOn("") })
@@ -1247,48 +1301,34 @@ func (a *app) nodeMenu(m *ui.Menu, n *model.Node, depth int) {
 		a.later(func() { a.focusOn(id) })
 	}
 	if len(n.Children) > 0 {
-		if m.Item("展开全部下级").Chosen() {
-			a.later(func() { a.setCollapsedBelow(n, false) })
-		}
-		if m.Item("折叠全部下级").Chosen() {
-			a.later(func() { a.setCollapsedBelow(n, true) })
-		}
+		m.Submenu("展开/折叠", func(m *ui.Menu) {
+			label := "折叠"
+			if n.Collapsed {
+				label = "展开"
+			}
+			if m.Item(label).Chosen() {
+				a.later(func() { a.toggleCollapse(n.ID) })
+			}
+			if m.Item("展开全部下级").Chosen() {
+				a.later(func() { a.setCollapsedBelow(n, false) })
+			}
+			if m.Item("折叠全部下级").Chosen() {
+				a.later(func() { a.setCollapsedBelow(n, true) })
+			}
+		})
 	}
 	if n.Image != nil {
-		if m.Item("查看大图").Chosen() {
-			a.lightbox = n.ID
-		}
-		if img := n.Image; m.Item("复制图片").Chosen() {
-			a.copyImage(img)
-		}
-		if m.Item("删除图片").Chosen() {
-			a.later(func() { a.removeImage(n) })
-		}
-	} else if m.Item("粘贴图片").Shortcut(ui.Cmd, ui.KeyV).Chosen() {
-		a.later(func() { a.pasteImage() })
-	}
-	m.Separator()
-	if m.Item("作为任务").Checked(n.Task != nil).Chosen() {
-		a.later(func() { a.toggleTask(n) })
-	}
-	m.Submenu("任务状态", func(m *ui.Menu) {
-		for _, s := range model.Statuses {
-			if m.Item(s.Label()).Checked(n.Task != nil && n.Task.Status == s).Chosen() {
-				a.later(func() { a.setStatus(n, s) })
+		m.Submenu("图片", func(m *ui.Menu) {
+			if m.Item("查看大图").Chosen() {
+				a.lightbox = n.ID
 			}
-		}
-	})
-	if n.Task != nil && m.Item("在看板中显示").Chosen() {
-		a.later(func() { a.showOnBoard(n.ID) })
-	}
-	if len(n.Children) > 0 {
-		label := "折叠"
-		if n.Collapsed {
-			label = "展开"
-		}
-		if m.Item(label).Chosen() {
-			a.later(func() { a.toggleCollapse(n.ID) })
-		}
+			if img := n.Image; m.Item("复制图片").Chosen() {
+				a.copyImage(img)
+			}
+			if m.Item("删除图片").Chosen() {
+				a.later(func() { a.removeImage(n) })
+			}
+		})
 	}
 	m.Separator()
 	label := "删除"

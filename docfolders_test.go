@@ -306,8 +306,8 @@ func TestWideProjectsAndWall(t *testing.T) {
 }
 
 // TestInboxStaysTheInbox: the inbox is the map of its name at the top of
-// the folder, so it is neither renamed nor put in a folder, and its menu
-// says what it is.
+// the folder, where what has no place goes: it is neither renamed, put in
+// a folder nor deleted, and its menu says what it is.
 func TestInboxStaysTheInbox(t *testing.T) {
 	a, tt := newTestApp(t)
 	a.addTask("买墨水", nil)
@@ -325,14 +325,11 @@ func TestInboxStaysTheInbox(t *testing.T) {
 	if strings.Contains(menu, "重命名") || strings.Contains(menu, "移动到") || !strings.Contains(menu, "默认的收件箱") {
 		t.Fatalf("the inbox's menu: %q", menu)
 	}
-	if err := tt.ChooseMenuItem("移到废纸篓…"); err != nil {
-		t.Fatal(err)
+	if strings.Contains(menu, "移到废纸篓") {
+		t.Fatalf("the inbox can be deleted: %q", menu)
 	}
-	tt.Frame()
-	if !tt.HasText("里面还没归位的 1 个任务会一起移走，可以在废纸篓中找回。下次有任务没说放哪，会再建一个空的收件箱。") {
-		t.Fatalf("what deleting it does is not said: %q", tt.Texts())
-	}
-	a.confirmDelete = false
+	tt.Key(0, ui.KeyEscape)
+	a.deleteMap(a.inboxPath())
 	a.rename(a.inboxPath(), "杂事")
 	a.moveMap(a.inboxPath(), dir)
 	if _, err := os.Stat(a.inboxPath()); err != nil {

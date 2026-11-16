@@ -320,8 +320,16 @@ by AI, and an AI assistant.
     keep a thing in place is measured, not a figure: one font's figure
     pushed the bar's keys out of it on CI's (`TestToolbarFitsNarrowWindow`).
   - What the app finds by its name and place (the inbox, `inboxPath`)
-    says so in its menu and is neither renamed nor moved there: the user
-    asked whether it could be, seeing that it could.
+    says so in its menu and is neither renamed, moved nor deleted there:
+    the user asked whether it could be, seeing that it could, and chose
+    it to be always there, as where what has no place goes.
+  - A menu is short: what is done every day at its head, the rest in a
+    submenu of its kind, and what a key or a double click does that no
+    one looks for here left out (`nodeMenu`; the user found some thirty
+    rows too many). An item that does nothing seen where it is chosen is
+    a fault: 管理标签… chose the page of a column that was put away.
+  - A tag is made where words are written, by #: in a topic's title too
+    (`titleTags`, the tags offered under it as it is written).
 - The app's icon is drawn by `tools/icon/`; `resources/icon.png` is the
   desk (`tools/icon/desk.py`: a white note on the app's violet-blue, three lines
   each led by a dot of a map's color, the last ticked, the AI's spark), and

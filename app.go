@@ -466,6 +466,8 @@ type app struct {
 	noticeUndo            func()    // what takes back what the notice says, if it can be
 	exportCam             *camera   // set while the canvas is drawn into an image
 	tagDraft              string    // a tag being typed in the node panel
+	tagFocus              bool      // the node panel's field of a new tag takes the focus
+	tagOffered            bool      // the tags offered under a title being written show
 	tagAdding             bool      // the sidebar's new-tag field is shown
 	tagNew                string
 	tagRenaming           string // the tag renamed in the sidebar
@@ -679,6 +681,10 @@ func (a *app) newMapIn(dir string) {
 
 // deleteMap moves a map file to the trash.
 func (a *app) deleteMap(path string) {
+	if path == a.inboxPath() {
+		a.tell("收件箱是兜底的导图，不能删：里面的任务归位后，它就空了")
+		return
+	}
 	if path == a.path {
 		a.dirty = false // nothing to save of a map being deleted
 	}
@@ -906,12 +912,31 @@ func (a *app) commitEdit() {
 	if n == nil {
 		return
 	}
-	title := a.editText
+	// The #tags written in it are its tags, out of its words (the user
+	// asked to make a tag by writing #): as in a thought of 收集.
+	title, tags := titleTags(a.editText)
 	if title == "" {
 		title = cmpOr(n.Title, "新主题")
 	}
-	if title != n.Title {
-		a.mutate("", func() { n.Title = title })
+	var adds []string
+	for _, tag := range tags {
+		if !slices.Contains(n.Tags, tag) {
+			adds = append(adds, tag)
+		}
+	}
+	if title != n.Title || len(adds) > 0 {
+		a.mutate("", func() {
+			n.Title = title
+			if len(adds) > 0 {
+				n.Tags = append(slices.Clone(n.Tags), adds...)
+			}
+		})
+		for _, tag := range adds {
+			a.addTag(tag)
+		}
+		if len(adds) > 0 {
+			a.tell("已加标签 " + "#" + strings.Join(adds, " #"))
+		}
 	}
 	a.canvas.Focus()
 }

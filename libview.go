@@ -572,22 +572,14 @@ func clipColor(kind string) ui.Color {
 
 // clipMenu is the menu of a clip.
 func (a *app) clipMenu(m *ui.Menu, clip *library.Clip) {
+	// In parts, as the topics' menu: opening it, where it goes, copying
+	// it, and deleting it apart at the foot. Twelve rows in one list were
+	// too many to read, the user found.
 	if clip.URL != "" && m.Item("打开链接").Chosen() {
 		a.plat.OpenURL(clip.URL)
 	}
 	if p := a.lib.FilePath(clip); p != "" && m.Item("打开文件").Chosen() {
 		a.plat.OpenPath(p)
-	}
-	if m.Item("生成分享卡片…").Chosen() {
-		a.openCard(clip)
-	}
-	if m.Item("复制资料链接").Chosen() {
-		a.plat.CopyText(clipScheme + clip.ID)
-		a.tell("已复制，可以粘贴到节点的链接里")
-	}
-	if m.Item("复制内容").Chosen() {
-		a.plat.CopyText(clipCopyText(clip))
-		a.tell("已复制")
 	}
 	star := "加星标"
 	if clip.Starred {
@@ -597,9 +589,7 @@ func (a *app) clipMenu(m *ui.Menu, clip *library.Clip) {
 		clip.Starred = !clip.Starred
 		a.saveClip(clip)
 	}
-	if m.Item("AI 重新整理").Disabled(providerKey(a.cfg) == "").Chosen() {
-		a.organizeClip(clip.ID)
-	}
+	m.Separator()
 	if a.doc != nil && m.Item("加到当前导图").Chosen() {
 		a.clipIntoMap(clip)
 	}
@@ -618,6 +608,23 @@ func (a *app) clipMenu(m *ui.Menu, clip *library.Clip) {
 	}
 	if m.Item("转成任务").Chosen() {
 		a.later(func() { a.clipToTask(clip) })
+	}
+	m.Separator()
+	m.Submenu("复制", func(m *ui.Menu) {
+		if m.Item("复制内容").Chosen() {
+			a.plat.CopyText(clipCopyText(clip))
+			a.tell("已复制")
+		}
+		if m.Item("复制资料链接").Chosen() {
+			a.plat.CopyText(clipScheme + clip.ID)
+			a.tell("已复制，可以粘贴到节点的链接里")
+		}
+		if m.Item("生成分享卡片…").Chosen() {
+			a.openCard(clip)
+		}
+	})
+	if m.Item("AI 重新整理").Disabled(providerKey(a.cfg) == "").Chosen() {
+		a.organizeClip(clip.ID)
 	}
 	m.Separator()
 	if m.Item("删除").Chosen() {

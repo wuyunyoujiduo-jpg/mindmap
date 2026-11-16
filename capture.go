@@ -560,14 +560,3 @@ func (a *app) generalSettings(c *ui.Context) {
 	a.updateSettings(c)
 	a.iconSettings(c)
 }
-
-// inboxWaiting is how many of the inbox's tasks are not done.
-func (a *app) inboxWaiting() int {
-	n := 0
-	for _, it := range a.taskItems() {
-		if it.path == a.inboxPath() && !it.done() {
-			n++
-		}
-	}
-	return n
-}

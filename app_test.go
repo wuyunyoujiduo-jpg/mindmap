@@ -4033,3 +4033,89 @@ func TestViewTabsStayWithASet(t *testing.T) {
 		}
 	}
 }
+
+// TestTagsWrittenInATitle: a #tag written in a topic's title is its tag
+// when the title is kept, those there are offered as it is written, and
+// the 标签 menu's 新建标签… brings the field of a new tag though the right
+// column was put away.
+func TestTagsWrittenInATitle(t *testing.T) {
+	for _, c := range []struct {
+		in, title string
+		tags      []string
+	}{
+		{"看看首页 #性能 #新标签", "看看首页", []string{"性能", "新标签"}},
+		{"#优化 加载慢", "加载慢", []string{"优化"}},
+		{"修 issue #12 和 C# 的事", "修 issue #12 和 C# 的事", nil},
+		{"https://x.com/a#b", "https://x.com/a#b", nil},
+		{"#性能，再看", "，再看", []string{"性能"}},
+	} {
+		title, tags := titleTags(c.in)
+		if title != c.title || !slices.Equal(tags, c.tags) {
+			t.Errorf("%q: %q %v, want %q %v", c.in, title, tags, c.title, c.tags)
+		}
+	}
+
+	a, tt := newTestApp(t)
+	if err := clickNode(t, tt, a, "支持导出图片"); err != nil {
+		t.Fatal(err)
+	}
+	n, _ := a.selectedNode()
+	a.startEdit(n.ID)
+	tt.Frame()
+	tt.Frame()
+	tt.Key(ui.Cmd, ui.KeyA)
+	tt.Type("导出 PNG #性")
+	tt.Frame()
+	if !tt.HasText("#性能") {
+		t.Fatalf("no tag offered: %q", tt.Texts())
+	}
+	snapshot(t, tt, "title-tag-offers")
+	tt.Key(0, ui.KeyTab)
+	tt.Frame()
+	if a.editText != "导出 PNG #性能 " {
+		t.Fatalf("Tab wrote %q", a.editText)
+	}
+	tt.Type("#对外")
+	tt.Frame()
+	if !tt.HasText("新标签「对外」：记下后加上") {
+		t.Fatalf("a new tag not said: %q", tt.Texts())
+	}
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if n.Title != "导出 PNG" || !n.HasTag("性能") || !n.HasTag("对外") || a.libraryIndex("对外") < 0 {
+		t.Fatalf("title %q, tags %v", n.Title, n.Tags)
+	}
+	id := n.ID
+	a.undo()
+	n, _ = a.doc.Find(id)
+	if n.Title != "支持导出图片" || n.HasTag("对外") {
+		t.Fatalf("not undone in one step: %q %v", n.Title, n.Tags)
+	}
+
+	// 新建标签… with the right column put away.
+	a.panelOff = true
+	tt.Frame()
+	cam := a.cam()
+	b := a.boxes.Boxes[n.ID]
+	tt.RightClickAt(a.vp.X+cam.X+(b.X+b.W/2)*cam.Zoom, a.vp.Y+cam.Y+(b.Y+b.H/2)*cam.Zoom)
+	menu := strings.Join(tt.Menu(), "|")
+	for _, gone := range []string{"编辑标题", "连线到…", "在上方添加同级节点", "AI 拆解成任务", "展开全部下级"} {
+		if strings.Contains(menu, gone) {
+			t.Fatalf("%q still at the menu's top: %q", gone, menu)
+		}
+	}
+	if err := tt.ChooseMenuItem("标签", "新建标签…"); err != nil {
+		t.Fatalf("%v; menu %q", err, tt.Menu())
+	}
+	tt.Frame()
+	tt.Frame()
+	if a.panelOff || !tt.HasText("新标签") {
+		t.Fatalf("no field of a new tag: off %v", a.panelOff)
+	}
+	tt.Type("要评审")
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if !n.HasTag("要评审") {
+		t.Fatalf("the field had not the focus: %v", n.Tags)
+	}
+}

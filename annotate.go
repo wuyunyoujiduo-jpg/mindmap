@@ -606,7 +606,14 @@ func (a *app) annotationsSection(c *ui.Context, n *model.Node) {
 // annotationMenu is the part of a node's menu that adds these.
 func (a *app) annotationMenu(m *ui.Menu, n *model.Node, depth int) {
 	m.Submenu("插入", func(m *ui.Menu) {
-		if m.Item("关联线到…").Chosen() {
+		if depth > 0 && m.Item("上方的同级节点").Shortcut(ui.Shift, ui.KeyEnter).Chosen() {
+			a.later(func() { a.addSiblingAt(false) })
+		}
+		if n.Image == nil && m.Item("粘贴的图片").Shortcut(ui.Cmd, ui.KeyV).Chosen() {
+			a.later(func() { a.pasteImage() })
+		}
+		m.Separator()
+		if m.Item("关联线到…").Shortcut(ui.Cmd|ui.Shift, ui.KeyL).Chosen() {
 			a.later(func() { a.startRelation(n) })
 		}
 		if m.Item("概要").Disabled(len(n.Children) == 0 || n.Summary != nil).Chosen() {

@@ -109,13 +109,12 @@ func (a *app) mapMenu(m *ui.Menu, path string) {
 		// another name or in a folder it is a map as any other, and the next
 		// task with no place makes a new one. So its menu says what it is and
 		// offers neither: the user asked whether it could be renamed at all.
+		// Nor is it put in the trash: it is where what has no place goes,
+		// and is to be there always (the user, 0.96.6).
 		m.Item("默认的收件箱：没说放哪的任务先到这里").Disabled(true)
 		m.Separator()
 		if m.Item("在 Finder 中显示").Chosen() {
 			a.plat.ShowInFolder(path)
-		}
-		if m.Item("移到废纸篓…").Chosen() {
-			a.deletePath, a.confirmDelete = path, true
 		}
 		return
 	}

@@ -246,6 +246,10 @@ func (a *app) sideKeys(list ui.Element) {
 		}
 		a.renaming, a.renameText = items[at], mapName(items[at])
 	case list.Shortcut(0, ui.KeyBackspace), list.Shortcut(ui.Cmd, ui.KeyBackspace), list.Shortcut(0, ui.KeyDelete):
+		if items[at] == a.inboxPath() {
+			a.tell("收件箱是兜底的导图，不能删：里面的任务归位后，它就空了")
+			break
+		}
 		a.deletePath, a.confirmDelete = items[at], true
 	}
 }

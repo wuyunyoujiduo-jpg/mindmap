@@ -1679,6 +1679,7 @@ func (a *app) taskMenu(m *ui.Menu, it taskItem) {
 			}
 		}
 	})
+	m.Separator()
 	if m.Item("移到导图…").Chosen() {
 		a.later(func() { a.moveTaskTo(it) })
 	}
@@ -1688,6 +1689,7 @@ func (a *app) taskMenu(m *ui.Menu, it taskItem) {
 	if m.Item("改成灵感（去掉任务）").Chosen() {
 		a.later(func() { a.taskToMemo(it, false) })
 	}
+	m.Separator()
 	if m.Item("在导图中打开").Chosen() {
 		a.later(func() { a.libOpen = false; a.goToNode(it.path, it.sheet, it.node.ID) })
 	}

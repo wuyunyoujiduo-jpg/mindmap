@@ -434,13 +434,6 @@ func (a *app) deleteConfirm(c *ui.Context) {
 			says = fmt.Sprintf("里面的 %d 张导图会一起移走，可以在废纸篓中找回。", n)
 		}
 	}
-	if a.deletePath != "" && a.deletePath == a.inboxPath() {
-		// The inbox's tasks go with it, and it is made again when needed.
-		says = "可以在废纸篓中找回。下次有任务没说放哪，会再建一个空的收件箱。"
-		if n := a.inboxWaiting(); n > 0 {
-			says = fmt.Sprintf("里面还没归位的 %d 个任务会一起移走，可以在废纸篓中找回。下次有任务没说放哪，会再建一个空的收件箱。", n)
-		}
-	}
 	if ui.AlertDialog(c, &a.confirmDelete, title, says, "取消", "移到废纸篓") == 1 {
 		if folder {
 			a.deleteFolder(a.deletePath)
