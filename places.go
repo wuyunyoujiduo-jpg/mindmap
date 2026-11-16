@@ -11,14 +11,16 @@ import (
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
 
-// The app has three places, and no sidebar: 今天 (what is to do and what
+// The app has four places, and no sidebar: 今天 (what is to do and what
 // was written down), 项目 (the maps, by folder; one opened takes the
-// page) and 收集 (what was collected). A switch at the top of the window
-// goes between them (placesBar).
+// page), 收集 (what was collected) and 技能 (the AI agents' skills,
+// skillsview.go: the user had it after 收集, not on 今天, 0.99.2). A
+// switch at the top of the window goes between them (placesBar).
 const (
 	placeToday = iota
 	placeMaps
 	placeCollect
+	placeSkills
 )
 
 // place is the place shown: a map opened is of 项目.
@@ -26,6 +28,8 @@ func (a *app) place() int {
 	switch {
 	case !a.libOpen || a.projOpen:
 		return placeMaps
+	case a.skillsOpen:
+		return placeSkills
 	case a.libHome || a.tasks.open:
 		return placeToday
 	}
@@ -47,7 +51,7 @@ func (a *app) sideWidth() float32 {
 }
 
 // topBar is the top of the window, on every page: the left column's
-// key, the switch of the three places, the one bar, which takes the room,
+// key, the switch of the places, the one bar, which takes the room,
 // then the AI's key, the search of everything and the settings. It is the
 // window's title bar, and drags it.
 func (a *app) topBar(c *ui.Context) {
@@ -95,6 +99,7 @@ func (a *app) topBar(c *ui.Context) {
 			})
 			part(placeMaps, "项目", "导图：一张就是一个项目（"+keyLabel("CmdOrCtrl+Alt+2")+"）", a.showProjects)
 			part(placeCollect, "收集", "灵感、链接、文档和图片（"+keyLabel("CmdOrCtrl+Alt+3")+"）", func() { a.openList(kindAll, "") })
+			part(placeSkills, "技能", "各个 AI 编程工具的技能：在哪、收进来、链接、同步（"+keyLabel("CmdOrCtrl+Alt+4")+"）", a.showSkills)
 		})
 		// The places and the bar by the keyboard, from every page (the
 		// menu 前往 has them too, and takes the keys first where there is
@@ -107,6 +112,8 @@ func (a *app) topBar(c *ui.Context) {
 			a.later(a.showProjects)
 		case c.Shortcut(ui.Cmd|ui.Alt, ui.Key3):
 			a.later(func() { a.openList(kindAll, "") })
+		case c.Shortcut(ui.Cmd|ui.Alt, ui.Key4):
+			a.later(a.showSkills)
 		case c.Shortcut(ui.Cmd, ui.KeyJ):
 			a.openBar()
 		}

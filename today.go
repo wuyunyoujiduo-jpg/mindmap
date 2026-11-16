@@ -579,12 +579,18 @@ func (a *app) waitingCard(c *ui.Context, w waitingItem, i int) {
 		if has {
 			ui.Row(c.Key("sugg")).Gap(8).AlignItems(ui.Center).FillWidth().Padding(8, 0, 0).
 				Transition(ui.ElementTransition{Duration: motionFast, Ease: easeDetent, Enter: &ui.Motion{Y: -6}}).Children(func() {
-				softTag(c, "→ "+shortPlace(place)).Tooltip(place.label)
+				// The place gives way, cut short, to the keys: a long one took
+				// the row and squeezed 放过去 into two lines, the user saw.
+				where := ui.Box(c.Key("where")).Height(24).Padding(0, 8).Radius(6).AlignItems(ui.Center).Background(t.Accent.Alpha(0.1)).
+					Shrink(1).MinWidth(0).Tooltip(place.label)
+				where.Children(func() {
+					ui.Text(c, "→ "+shortPlace(place)).FontSize(textSmall).TextColor(t.Accent.MixOklab(t.Text, 0.25)).SingleLine().Shrink(1).MinWidth(0)
+				})
 				ui.Spacer(c)
 				if textKey(c, "换一个", "换一个 "+text, "自己选放到哪").Clicked() {
 					a.later(func() { a.placeWaiting(w) })
 				}
-				go_ := ui.Box(c.Key("take")).Height(28).Padding(0, 12).Radius(radiusPill).Center().Cursor(ui.CursorPointer).
+				go_ := ui.Box(c.Key("take")).Height(28).Padding(0, 12).Radius(radiusPill).Center().Shrink(0).Cursor(ui.CursorPointer).
 					Label("放过去 " + text).Transition(easeLook)
 				jewel(go_, t, true)
 				if go_.Clicked() {
@@ -612,7 +618,7 @@ func (a *app) waitingCard(c *ui.Context, w waitingItem, i int) {
 				}
 				press(go_, 0.96)
 				go_.Children(func() {
-					ui.Text(c, "放过去").FontSize(textSmall).FontWeight(700).TextColor(t.AccentText).PassThrough()
+					ui.Text(c, "放过去").FontSize(textSmall).FontWeight(700).TextColor(t.AccentText).NoWrap().PassThrough()
 				})
 			})
 		}

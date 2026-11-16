@@ -53,6 +53,8 @@ func (a *app) view(c *ui.Context) {
 							a.mapTree(c)
 						case placeToday:
 							a.todaySide(c)
+						case placeSkills:
+							a.skillsSide(c)
 						default:
 							a.libSide(c)
 						}
@@ -104,6 +106,8 @@ func (a *app) pageView(c *ui.Context) {
 			if a.libOpen {
 				if a.projOpen {
 					a.projectsView(c)
+				} else if a.skillsOpen {
+					a.skillsPage(c) // 技能: the AI agents' skills
 				} else if a.tasks.open || a.libHome {
 					a.tasksView(c) // 今天: what is to do, and what was written down
 				} else {

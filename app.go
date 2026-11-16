@@ -404,6 +404,7 @@ type app struct {
 
 	tasks        tasksState  // the tasks of all the maps (taskspage.go)
 	skills       skillsState // the skills of the AI agents (skillsview.go)
+	skillsOpen   bool        // 技能 is the place shown
 	libReview    int         // the way 收集 looks back, or reviewOff (memos.go)
 	libWalk      int         // how many times 随机漫步 went on
 	clipTagsFor  int         // the library's version clipTagsList is of

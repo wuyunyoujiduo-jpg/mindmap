@@ -34,7 +34,6 @@ const (
 	tasksReview  // the week looked back on: what was done, what slipped, what was kept
 	tasksLate    // what is late and not done, alone
 	tasksAgents  // what the AI agents reported, by day and project (agents.go)
-	tasksSkills  // the skills of the AI agents on this computer (skillsview.go)
 )
 
 // The lists of the tasks' page, as its tabs show them.
@@ -502,7 +501,7 @@ func (a *app) tasksView(c *ui.Context) {
 	rail := roomy && (a.tasks.sel == "" || a.tasks.sel == a.tasks.selRail)
 	// With room, the list is a table: a column for a task's project and
 	// one for its day, named once over them.
-	plain := a.tasks.view == tasksWaiting || a.tasks.view == tasksReview || a.tasks.view == tasksAgents || a.tasks.view == tasksSkills // a page of its own, not a list of tasks
+	plain := a.tasks.view == tasksWaiting || a.tasks.view == tasksReview || a.tasks.view == tasksAgents // a page of its own, not a list of tasks
 	a.tasks.table = !calendar && !plain && a.todayRoom(c) >= tableRoom
 	listWidth := float32(todayWidth)
 	switch {
@@ -513,8 +512,6 @@ func (a *app) tasksView(c *ui.Context) {
 		listWidth = 4000
 	case roomy:
 		listWidth = 920
-	case a.tasks.view == tasksSkills: // a table: its columns want the room
-		listWidth = 980
 	}
 	ui.Row(c.Key("tasks")).Grow(1).AlignItems(ui.Stretch).Label("任务").Children(func() {
 		ui.Column(c).Grow(3).Basis(0).MinWidth(0).Children(func() {
@@ -559,10 +556,6 @@ func (a *app) tasksView(c *ui.Context) {
 						a.agentsView(c)
 						return
 					}
-					if a.tasks.view == tasksSkills {
-						a.skillsView(c)
-						return
-					}
 					if band { // what the agents reported since it was last looked at
 						a.agentsLine(c)
 						a.diaLine(c)
@@ -576,9 +569,6 @@ func (a *app) tasksView(c *ui.Context) {
 		})
 		if rail {
 			a.waitingRail(c, items)
-		}
-		if a.tasks.view == tasksSkills {
-			a.skillsSheet(c)
 		}
 		for _, it := range all {
 			if it.key() == a.tasks.sel {
@@ -613,8 +603,6 @@ func (a *app) tasksHead(c *ui.Context, all []taskItem) {
 				name = "已逾期"
 			case tasksAgents:
 				name = "AI 动态"
-			case tasksSkills:
-				name = "AI 技能"
 			case tasksWeek, tasksMonth, tasksDay:
 				name = "日程"
 			}
@@ -645,11 +633,7 @@ func (a *app) tasksHead(c *ui.Context, all []taskItem) {
 					})
 					return
 				}
-				day := fmt.Sprintf("%d月%d日 %s", now.Month(), now.Day(), weekdays[now.Weekday()])
-				if a.tasks.view == tasksSkills && a.skills.report != nil {
-					day = fmt.Sprintf("%d 个编程工具", len(a.skills.report.Tools))
-				}
-				ui.Text(c, day).FontSize(textBody).TextColor(ink2(th)).Margin(0, 0, 4).NoWrap()
+				ui.Text(c, fmt.Sprintf("%d月%d日 %s", now.Month(), now.Day(), weekdays[now.Weekday()])).FontSize(textBody).TextColor(ink2(th)).Margin(0, 0, 4).NoWrap()
 			})
 			if path := a.tasks.onMap; path != "" {
 				open, done := 0, 0
@@ -670,10 +654,6 @@ func (a *app) tasksHead(c *ui.Context, all []taskItem) {
 			if a.tasks.view == tasksReview || a.tasks.view == tasksAgents { // its own figures, of the week, head its page
 				return
 			}
-			if a.tasks.view == tasksSkills {
-				a.skillsHeadFigures(c)
-				return
-			}
 			// The day in three figures: the figure in the ink, what it counts faint.
 			figures(c, figure{len(a.dueToday(now)), "要做"}, figure{len(a.doneToday(now)), "做完"}, figure{len(a.waiting()), "等着归位"}).Margin(6, 0, 0).
 				Label(fmt.Sprintf("%d 件要做，做完 %d 件，%d 条等着归位", len(a.dueToday(now)), len(a.doneToday(now)), len(a.waiting())))
@@ -683,15 +663,6 @@ func (a *app) tasksHead(c *ui.Context, all []taskItem) {
 		}
 		if a.tasks.view == tasksWeek || a.tasks.view == tasksMonth || a.tasks.view == tasksDay {
 			a.calendarNav(c)
-		}
-		if a.tasks.view == tasksSkills { // what it is told by is the folders: they are read again
-			if busyClicked(busyKey(c, "重新扫描", "再看一遍各个工具的技能目录", a.skills.busy, true, false), a.skills.busy, true) {
-				a.later(func() {
-					a.skillsRescan()
-					a.tell("扫过了各个工具的技能目录")
-				})
-			}
-			return
 		}
 		mode := 0
 		switch a.tasks.view {

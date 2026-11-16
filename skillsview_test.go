@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
 
@@ -53,15 +54,16 @@ func TestSkillsPage(t *testing.T) {
 		t.Fatal(err)
 	}
 	a.refreshFiles()
-	a.skillsRescan()
-	a.openTasks()
 	tt.Frame()
-	if err := tt.Click("AI 技能"); err != nil {
-		t.Fatalf("no row in the left column: %v", err)
+	if err := tt.Click("技能"); err != nil {
+		t.Fatalf("no place: %v", err)
 	}
 	tt.Frame()
 	tt.Frame()
-	for _, want := range []string{"AI 技能", "2 个编程工具", "Claude Code", "Codex", "code-review", "write-weekly", "项目 · ergora", "有问题", "被全局的盖住", "未收进", "该看的"} {
+	if a.place() != placeSkills {
+		t.Fatal("not on 技能")
+	}
+	for _, want := range []string{"AI 技能", "2 个编程工具", "Claude Code", "Codex", "code-review", "write-weekly", "项目 · ergora", "有问题", "被全局的盖住", "未收进", "全部收进", "还有 2 个要你看一眼"} {
 		if !tt.HasText(want) {
 			t.Fatalf("no %q: %q", want, tt.Texts())
 		}
@@ -112,7 +114,7 @@ func TestSkillsPage(t *testing.T) {
 		t.Fatalf("no new tool: %q", tt.Texts())
 	}
 	snapshot(t, tt, "skills-fresh")
-	if err := tt.Click("把技能链接过去"); err != nil {
+	if err := tt.Click("链接过去"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
@@ -128,7 +130,7 @@ func TestSkillsPage(t *testing.T) {
 	writeSkill(t, cx, "code-review", "按团队的清单审一遍改动，先列会出错的地方")
 	a.skillsRescan()
 	tt.Frame()
-	if !tt.HasText("链接被换掉了") {
+	if !tt.HasText("有一份不一样的") {
 		t.Fatalf("not told: %q", tt.Texts())
 	}
 	if err := tt.Click("看 Codex 的差异"); err != nil {
@@ -175,16 +177,12 @@ func TestSkillsPage(t *testing.T) {
 	}
 }
 
-// With no agent at all, the row is not there; the page says so.
+// With no agent at all, the page says so.
 func TestSkillsNone(t *testing.T) {
-	a, tt := newTestApp(t)
-	a.skillsRescan()
-	a.openTasks()
+	_, tt := newTestApp(t)
 	tt.Frame()
-	if tt.HasText("AI 技能") {
-		t.Fatal("a row with nothing")
-	}
-	a.tasks.view = tasksSkills
+	tt.Key(ui.Cmd|ui.Alt, ui.Key4)
+	tt.Frame()
 	tt.Frame()
 	if !tt.HasText("没有找到 AI 编程工具") {
 		t.Fatalf("no empty state: %q", tt.Texts())
@@ -217,5 +215,72 @@ func TestSkillsTableFetched(t *testing.T) {
 	a.skillsRescan()
 	if _, ok := a.skills.report.Tool("later"); !ok {
 		t.Fatal("the newer table's agent not found")
+	}
+}
+
+// What every tool keeps a copy of is taken in by one click: one copy in
+// MyMind, links in its place, all of it back by one 撤销; the left column
+// narrows by a tool and a part together.
+func TestSkillsTakeAll(t *testing.T) {
+	a, tt := newTestApp(t)
+	home := os.Getenv("HOME")
+	var tools []string
+	for _, tl := range []string{".claude", ".codex", ".kiro", ".trae"} {
+		dir := filepath.Join(home, tl, "skills")
+		tools = append(tools, dir)
+		for _, name := range []string{"pdf", "docx", "frontend-design"} {
+			writeSkill(t, dir, name, "同一份："+name)
+		}
+	}
+	writeSkill(t, filepath.Join(home, ".claude", "skills"), "keys", "TOKEN=abcdefghijklmnop1234")
+	a.showSkills()
+	tt.Frame()
+	tt.Frame()
+	if !tt.HasText("3 个技能还没收进 MyMind") || !tt.HasText("其中 3 个在好几个工具里各存了一份。收进来只留一份，各工具里换成指向它的链接，用起来和现在一样；以后改一处，处处都改了。另有 1 个像含密钥，先不收。") {
+		t.Fatalf("no suggestion: %q", tt.Texts())
+	}
+	snapshot(t, tt, "skills-take-all")
+	if err := tt.Click("全部收进"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Frame()
+	for _, dir := range tools {
+		for _, name := range []string{"pdf", "docx", "frontend-design"} {
+			if !isLink(filepath.Join(dir, name)) {
+				t.Fatalf("%s/%s not a link", dir, name)
+			}
+		}
+	}
+	if isLink(filepath.Join(tools[0], "keys")) {
+		t.Fatal("the one with a key taken in")
+	}
+	if !tt.HasText("收进了 3 个技能，各工具里换成了链接") || tt.HasText("全部收进") {
+		t.Fatalf("after: %q", tt.Texts())
+	}
+	// The left column: a tool and a part, together, each with its ✕.
+	if err := tt.Click("kiro"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.Click("要处理"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !tt.HasText("都好好的") {
+		t.Fatalf("kiro's to look at: %q", tt.Texts())
+	}
+	if err := tt.Click("去掉 要处理"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !tt.HasText("frontend-design") || tt.HasText("keys") {
+		t.Fatalf("kiro's: %q", tt.Texts())
+	}
+	a.noticeUndo()
+	tt.Frame()
+	for _, dir := range tools {
+		if isLink(filepath.Join(dir, "pdf")) {
+			t.Fatalf("%s not put back", dir)
+		}
 	}
 }

@@ -591,6 +591,7 @@ func main() {
 				item("今天", "CmdOrCtrl+Alt+1", a.goToday),
 				item("项目", "CmdOrCtrl+Alt+2", a.showProjects),
 				item("收集", "CmdOrCtrl+Alt+3", a.goCollect),
+				item("技能", "CmdOrCtrl+Alt+4", a.showSkills),
 				item("记一条…", "CmdOrCtrl+J", a.openBar),
 				mygo.Separator(),
 				item("聚焦所选分支", "Alt+Enter", func() { a.focusOn(a.selected) }),

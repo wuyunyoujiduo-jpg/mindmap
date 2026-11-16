@@ -47,7 +47,7 @@ by AI, and an AI assistant.
   - The shell (`view.go`): the window is a quiet gray (`ground`, one of
     `grounds` chosen in the settings, `config.Ground`). One row at its top,
     on every page, a map's too (`topBar` in `places.go`): the left column's
-    key, the switch of the three places, 今天, 项目 and 收集, the one bar,
+    key, the switch of the places, 今天, 项目, 收集 and 技能, the one bar,
     the AI's spark, the search of everything, the settings. Under it one
     white leaf with round corners (`leaf`), everything else on it, cut
     into columns by thin lines: what of the place shows, the page, what is
@@ -390,8 +390,9 @@ by AI, and an AI assistant.
   `agentTools`; Codex's and Grok Build's were written from what is
   published of them, with neither tool at hand to try) give the brief as a session begins and ask for `log_session` when
   the code changed. Writers hold the folder's lock (`lock.go`).
-  The agents' skills are AI 技能, a list of 今天's left column beside
-  AI 动态 (`skillsview.go`, `internal/skills`, the user's, 0.99): which
+  The agents' skills are 技能, the fourth place, after 收集
+  (`skillsview.go`, `internal/skills`, the user's, 0.99; a list of 今天
+  at first, which the user moved: it is not of the day): which
   agents there are (a table, `tools.json`, published on its own by the
   workflow agent-tools and fetched once a day, `skillsTableURL`, and an
   agent the table lacks found by `~/.name/skills/*/SKILL.md`; one found
@@ -404,7 +405,14 @@ by AI, and an AI assistant.
   and a folder. A link in a repository is the user's to commit or not;
   committed, it is said, and `MakeReal` puts the files there. What each
   computer linked is in `.skills/_machines`, which the other offers.
-  Everything done to the folders has its way back (`skills.Undo`). Codex's
+  Everything done to the folders has its way back (`skills.Undo`). What
+  is to do for many at once is offered at the page's head, a click each
+  (`skillsSuggestions`: take all in, copies alike back to links, links
+  to nothing out, what another computer linked, a new tool's links), and
+  what is for the user to judge sent to 要处理: one by one was too slow,
+  the user found, with seventy skills in sixteen tools. Its left column
+  narrows by a part and a tool together (`skillsSide`), the tools with no
+  skill folded: sixteen cards on the page were too many to take in. Codex's
   and the others' folders are as their documentation says (`Checked`
   is Claude Code's alone).
   The app shows the logs as AI 动态, a list of 今天's left column
