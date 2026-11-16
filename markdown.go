@@ -1,6 +1,7 @@
 package main
 
 import (
+	"html"
 	"regexp"
 	"strings"
 
@@ -21,11 +22,17 @@ type mdBlock struct {
 }
 
 var (
-	mdHeading  = regexp.MustCompile(`^(#{1,6})\s+(.*)$`)
-	mdBullet   = regexp.MustCompile(`^(\s*)[-*+]\s+(.*)$`)
+	mdHeading = regexp.MustCompile(`^(#{1,6})\s+(.*)$`)
+	// A bullet, or a dash a converter escaped (\-) at a line's start: a
+	// list pasted as text and written back, which is a list still.
+	mdBullet   = regexp.MustCompile(`^(\s*)(?:[-*+]|\\-)\s+(.*)$`)
 	mdOrdered  = regexp.MustCompile(`^(\s*)(\d+)[.)]\s+(.*)$`)
 	mdRule     = regexp.MustCompile(`^\s*(?:(?:-\s*){3,}|(?:\*\s*){3,}|(?:_\s*){3,})$`)
 	mdTableSep = regexp.MustCompile(`^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$`)
+	// mdIndent is spaces written as entities at a line's start, as a
+	// text pasted from a converter keeps a list item's second line:
+	// "&#32;&#32;都要有出处". It is the item's, not a paragraph of its own.
+	mdIndent = regexp.MustCompile(`^(?:&#32;|&#x20;|&nbsp;|&#160;|\s)+`)
 )
 
 // parseMarkdown splits a Markdown text into blocks.
@@ -78,6 +85,25 @@ func parseMarkdown(src string) []mdBlock {
 			i--
 			blocks = append(blocks, b)
 		default:
+			if ind := mdIndent.FindString(trimmed); ind != "" {
+				// Indented by entities: under the list item before it, blank
+				// lines between or not; else a paragraph, the spaces gone.
+				rest := strings.TrimSpace(trimmed[len(ind):])
+				k := len(blocks) - 1
+				for k >= 0 && blocks[k].kind == "gap" {
+					k--
+				}
+				if k >= 0 && (blocks[k].kind == "li" || blocks[k].kind == "ol") {
+					blocks = blocks[:k+1]
+					sep := ""
+					if t := blocks[k].text; t != "" && rest != "" && t[len(t)-1] < 0x80 && rest[0] < 0x80 {
+						sep = " " // words of a script that spaces them
+					}
+					blocks[k].text += sep + rest
+					continue
+				}
+				trimmed = rest
+			}
 			para(trimmed)
 		}
 	}
@@ -113,6 +139,9 @@ var mdInline = regexp.MustCompile("\\\\[!-/:-@\\[-`{-~]|`[^`]+`|\\*\\*[^*]+\\*\\
 func inlineSpans(text string, size float32, color, accent, codeBg ui.Color, base mdSpanStyle) []ui.Span {
 	var spans []ui.Span
 	add := func(s string, st mdSpanStyle) {
+		if !st.code {
+			s = html.UnescapeString(s) // &#32;, &amp;, &nbsp;: as a page shows them
+		}
 		if s == "" {
 			return
 		}
