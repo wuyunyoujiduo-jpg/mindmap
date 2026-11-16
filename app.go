@@ -459,24 +459,27 @@ type app struct {
 	orgResult             string
 	pluginSince           time.Time
 	pluginResult          string
-	syncChecking          bool                  // the sync's repository is being checked
-	syncByHand            bool                  // the sync going on was asked for: its result is said
-	pluginChecking        bool                  // a newer plugin is being looked for
-	noticeAct             string                // the name of the notice's key, when not 撤销
-	noticeToasted         time.Time             // the notice shown as a toast already
-	noticeUndo            func()                // what takes back what the notice says, if it can be
-	exportCam             *camera               // set while the canvas is drawn into an image
-	tagDraft              string                // a tag being typed in the node panel
-	tagFocus              bool                  // the node panel's field of a new tag takes the focus
-	vids                  map[string]*vidPlayer // the players of the videos shown (video.go)
-	vidFrame              int                   // the frames, for the players not shown to be closed
-	videoMuted            bool                  // the videos play without their sound
-	videoBig              string                // the clip whose video plays larger, over the window
-	grab                  *frameGrab            // a video's pictures being taken for the AI
-	folds                 map[string]bool       // the folded parts opened (foldKey)
-	vidShots              map[string]vidShots   // the pictures taken of the videos, by clip
-	tagOffered            bool                  // the tags offered under a title being written show
-	tagAdding             bool                  // the sidebar's new-tag field is shown
+	syncChecking          bool                     // the sync's repository is being checked
+	syncByHand            bool                     // the sync going on was asked for: its result is said
+	pluginChecking        bool                     // a newer plugin is being looked for
+	noticeAct             string                   // the name of the notice's key, when not 撤销
+	noticeToasted         time.Time                // the notice shown as a toast already
+	noticeUndo            func()                   // what takes back what the notice says, if it can be
+	exportCam             *camera                  // set while the canvas is drawn into an image
+	tagDraft              string                   // a tag being typed in the node panel
+	tagFocus              int                      // frames left for the node panel's field of a new tag to take the focus
+	vids                  map[string]*vidPlayer    // the players of the videos shown (video.go)
+	vidFrame              int                      // the frames, for the players not shown to be closed
+	videoMuted            bool                     // the videos play without their sound
+	videoBig              string                   // the clip whose video plays larger, over the window
+	grabs                 []*frameGrab             // the videos whose pictures are being taken, the first being stepped
+	vidLens               map[string]time.Duration // the videos' lengths, as kept with their posters
+	vidPosterAsked        map[string]bool          // the videos whose poster was asked for in this run
+	folds                 map[string]bool          // the folded parts opened (foldKey)
+	vidShots              map[string]vidShots      // the pictures taken of the videos, by clip
+	tagOffered            bool                     // the tags offered under a title being written show
+	tagCaret              string                   // the topic whose title field has its caret put back at its end, a tag taken
+	tagAdding             bool                     // the sidebar's new-tag field is shown
 	tagNew                string
 	tagRenaming           string // the tag renamed in the sidebar
 	tagRenameText         string
@@ -920,31 +923,14 @@ func (a *app) commitEdit() {
 	if n == nil {
 		return
 	}
-	// The #tags written in it are its tags, out of its words (the user
-	// asked to make a tag by writing #): as in a thought of 收集.
-	title, tags := titleTags(a.editText)
+	// A #word is words of the title unless made a tag as it was written
+	// (takeTitleTag): no rule turns it into one here.
+	title := a.editText
 	if title == "" {
 		title = cmpOr(n.Title, "新主题")
 	}
-	var adds []string
-	for _, tag := range tags {
-		if !slices.Contains(n.Tags, tag) {
-			adds = append(adds, tag)
-		}
-	}
-	if title != n.Title || len(adds) > 0 {
-		a.mutate("", func() {
-			n.Title = title
-			if len(adds) > 0 {
-				n.Tags = append(slices.Clone(n.Tags), adds...)
-			}
-		})
-		for _, tag := range adds {
-			a.addTag(tag)
-		}
-		if len(adds) > 0 {
-			a.tell("已加标签 " + "#" + strings.Join(adds, " #"))
-		}
+	if title != n.Title {
+		a.mutate("", func() { n.Title = title })
 	}
 	a.canvas.Focus()
 }

@@ -329,6 +329,17 @@ func TestInboxStaysTheInbox(t *testing.T) {
 		t.Fatalf("the inbox can be deleted: %q", menu)
 	}
 	tt.Key(0, ui.KeyEscape)
+	tt.Frame()
+	// Nor by the delete key in the directory, where it is chosen.
+	if err := tt.Click(inboxName); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Key(0, ui.KeyBackspace)
+	tt.Frame()
+	if a.confirmDelete || !strings.Contains(a.notice, "兜底") {
+		t.Fatalf("the delete key: asked %v, told %q", a.confirmDelete, a.notice)
+	}
 	a.deleteMap(a.inboxPath())
 	a.rename(a.inboxPath(), "杂事")
 	a.moveMap(a.inboxPath(), dir)

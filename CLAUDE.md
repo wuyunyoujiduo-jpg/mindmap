@@ -258,12 +258,17 @@ by AI, and an AI assistant.
     there is one; the players are the system's (MyGo's `ui/video`),
     opened as shown and closed a frame after (`sweepVideos`). The user
     dropped one in and saw a random name and nothing of it. The AI sees
-    it by a few of its pictures (`grabFrames`, `stepGrab`: a player in a
+    it by a few of its pictures (`queueGrab`, `stepGrab`: a player in a
     Tester, which draws on the CPU, stepped a little at each of the
-    window's frames so that the window goes on).
+    window's frames so that the window goes on; in a queue of their own,
+    the clip queue going on meanwhile, the time counted while the window
+    shows, and a failure not kept). A card shows its poster, taken so
+    and kept in the cache (`posterPath`), and a player only under the
+    pointer: the wall builds all its cards.
     What the AI writes of a clip is as long as what it was made of
     (`applyOrganized`, `summaryLen`, `analysisLen`), and never what it
-    does not know (`fillerSaid`); the details show the user's content and
+    does not know (`dropFiller`: a sentence of the AI's answer at a time,
+    narrow, never of what the user wrote); the details show the user's content and
     note first, the summary above a long content, and fold the analysis
     and the words it is found by (`foldKey`): the user found a line kept
     and a page of the AI's words under it.
@@ -344,8 +349,15 @@ by AI, and an AI assistant.
     one looks for here left out (`nodeMenu`; the user found some thirty
     rows too many). An item that does nothing seen where it is chosen is
     a fault: 管理标签… chose the page of a column that was put away.
-  - A tag is made where words are written, by #: in a topic's title too
-    (`titleTags`, the tags offered under it as it is written).
+  - A tag is made where words are written, by #: in a topic's title too,
+    offered under it as it is written and made one only when chosen (a
+    click or Tab, `titleTagOffer`), else words of the title; on the
+    canvas, in the right column and on the outline's lines alike (the
+    user asked for the two after the first). A Tab taken for a tag is
+    taken only while one is offered: the outline's Tab indents. A rule that
+    made every #word a tag was one the user could not see nor refuse,
+    and the tags went from sight while a title was edited: they show
+    there, each taken off by a click.
 - The app's icon is drawn by `tools/icon/`; `resources/icon.png` is the
   desk (`tools/icon/desk.py`: a white note on the app's violet-blue, three lines
   each led by a dot of a map's color, the last ticked, the AI's spark), and

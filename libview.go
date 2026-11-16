@@ -503,7 +503,10 @@ func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 					ui.Box(c.Key("picture-loading")).Height(110).FillWidth().Radius(8).Background(blockFill(t)).PassThrough()
 				}
 			}
-			sub := cmpOr(clip.Desc, clip.Summary)
+			sub := clip.Desc
+			if sub == "" && summaryShown(clip) { // as the details show it
+				sub = clip.Summary
+			}
 			if sub == "" {
 				sub = cmpOr(clip.Note, clip.Text)
 			}
@@ -799,7 +802,7 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 					ui.Text(c, status).FontSize(textSmall).TextColor(t.Danger).Wrap().Grow(1).Selectable()
 				})
 			}
-			if clip.Summary == "" && clip.Analysis == "" && len(clip.Synonyms) == 0 {
+			if clip.Organized == nil {
 				if a.libNeedKey != clip.ID && !failed {
 					ui.Text(c, "还没整理。点「整理」，AI 会起标题、分类、打标签，内容长的再写摘要。").FontSize(textSmall).TextColor(t.TextMuted).Wrap()
 				}
@@ -840,7 +843,10 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 			}
 		})
 	}
-	if summaryShown(clip) {
+	// Where it goes by what the clip is made of, not by whether it was
+	// summed up yet: it does not move under the pointer as the answer comes.
+	aiFirst := clipContentLen(clip, nil) >= summaryLen && !briefClip(clip)
+	if aiFirst {
 		aiPart()
 	}
 
@@ -962,7 +968,7 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 		}
 	})
 
-	if !summaryShown(clip) {
+	if !aiFirst {
 		aiPart()
 	}
 	a.relatedSection(c, clip)

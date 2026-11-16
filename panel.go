@@ -118,8 +118,13 @@ func (a *app) nodePanel(c *ui.Context) {
 			a.breadcrumbs(c, n)
 
 			title := n.Title
-			if inlineInput(c, &title, textHeadline, true, "无标题", "标题").Margin(0, -6).Changed() {
+			in := inlineInput(c, &title, textHeadline, true, "无标题", "标题").Margin(0, -6)
+			if in.Changed() {
 				a.mutate("title:"+n.ID, func() { n.Title = title })
+			}
+			a.fieldTitleTags(in, n, title, true)
+			if in.Focused() {
+				a.titleTagOffer(c, in, title, func(part, tag string) { a.takeFieldTag(n, part, tag) })
 			}
 
 			// Only what the topic has shows: its task's rows, its tags, its

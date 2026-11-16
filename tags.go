@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
@@ -213,8 +215,8 @@ func (a *app) tagPicker(c *ui.Context, n *model.Node) {
 		if in.Focused() {
 			in.Background(t.Background).InsetShadow(0, 0, 0, 1.5, t.Accent)
 		}
-		if a.tagFocus { // asked for by the 标签 menu's 新建标签…
-			a.tagFocus = false
+		if a.tagFocus > 0 { // asked for by the 标签 menu's 新建标签…
+			a.tagFocus = 0
 			in.Focus()
 		}
 		if in.Submitted() {
@@ -256,47 +258,47 @@ func (a *app) tagMenu(m *ui.Menu, n *model.Node) {
 					a.panelShow = map[string]bool{}
 				}
 				a.panelShow[n.ID+":tags"] = true // the picker, with its field
-				a.tagFocus = true
+				a.tagFocus = 3                   // a few frames: the field not drawn by then, it is not asked for later
 			})
 		}
 		m.Item("在标题里写 #标签 也能加").Disabled(true)
 	})
 }
 
-// titleTag is a #tag in a topic's title: # at its start or after a space,
-// then what is up to a space or a mark. A # in a word (C#, a link's
-// #part) is no tag, nor # and a number alone (#12, an issue's).
-var titleTag = regexp.MustCompile(`(^|\s)#([^\s#，。,.!！?？;；:：、（）()\[\]{}"'“”]+)`)
+// titleTag is a #tag in a topic's title: # at its start or after a space
+// (a full-width one too), then what is up to a space or a mark.
+var titleTag = regexp.MustCompile(`(^|[\s　])#([^\s　#，。,.!！?？;；:：、（）()\[\]{}"'“”<>]+)`)
 
-// titleTags takes the #tags out of a title: what is left of it, its words
-// closed up, and the tags.
-func titleTags(title string) (string, []string) {
-	var tags []string
-	out := titleTag.ReplaceAllStringFunc(title, func(m string) string {
-		sub := titleTag.FindStringSubmatch(m)
-		tag := sub[2]
-		if strings.Trim(tag, "0123456789") == "" {
-			return m
-		}
-		if !slices.Contains(tags, tag) {
-			tags = append(tags, tag)
-		}
-		return sub[1]
-	})
-	if len(tags) == 0 {
-		return title, nil
-	}
-	return strings.Join(strings.Fields(out), " "), tags
+// hexColor is a color written as #ff6600: no tag, though letters lead it.
+var hexColor = regexp.MustCompile(`^(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$`)
+
+// tagWord tells whether what follows a # is a tag: it begins with a
+// letter, of any script, and is no color. #12, #2024Q3, #1号方案 and
+// #ff6600 are words of the title.
+func tagWord(w string) bool {
+	r, _ := utf8.DecodeRuneInString(w)
+	return w != "" && unicode.IsLetter(r) && !(hexColor.MatchString(w) && strings.ContainsAny(w, "0123456789"))
 }
 
-// titleTagBegun is the tag being written at a title's end: after a # at
-// its start or after a space, with no space since.
+// titleTagBegun is the #word being written at a title's end, which may be
+// made a tag: after a # at its start or after a space, with no space nor
+// mark since, and a letter first (no #12, no #ff6600).
 func titleTagBegun(title string) (string, bool) {
 	i := strings.LastIndex(title, "#")
-	if i < 0 || i > 0 && !strings.ContainsAny(title[i-1:i], " \t") || strings.ContainsAny(title[i:], " \t\n　") {
+	if i < 0 {
 		return "", false
 	}
-	return title[i+1:], true
+	if i > 0 {
+		r, _ := utf8.DecodeLastRuneInString(title[:i])
+		if !unicode.IsSpace(r) {
+			return "", false
+		}
+	}
+	part := title[i+1:]
+	if part != "" && (!tagWord(part) || titleTag.FindString("#"+part) != "#"+part) {
+		return "", false
+	}
+	return part, true
 }
 
 // tagOffers are the tags, of the maps and of 收集, that begin with part
@@ -309,4 +311,167 @@ func (a *app) tagOffers(part string, n int) []string {
 		}
 	}
 	return out
+}
+
+// dropUnusedTags takes tags out of the library that no topic of the open
+// map carries: those a title made, taken back.
+func (a *app) dropUnusedTags(tags []string) {
+	if len(tags) == 0 || a.file == nil {
+		return
+	}
+	used := a.file.AllTags()
+	n := len(a.cfg.Tags)
+	a.cfg.Tags = slices.DeleteFunc(a.cfg.Tags, func(t tagDef) bool {
+		return slices.Contains(tags, t.Name) && !slices.Contains(used, t.Name)
+	})
+	if len(a.cfg.Tags) != n {
+		a.cfg.save()
+	}
+}
+
+// titleTagOffers are the tags offered for a #word being written: the tag
+// of that name if there is one, those that begin so, and the word as a
+// new tag.
+func (a *app) titleTagOffers(part string) []string {
+	var out []string
+	if part != "" && slices.Contains(a.allTags(), part) {
+		out = append(out, part)
+	}
+	out = append(out, a.tagOffers(part, 6)...)
+	if part != "" && !slices.Contains(out, part) {
+		out = append(out, part) // a new one, last
+	}
+	return out
+}
+
+// titleTagOffer offers the #word being written at the end of a title
+// field as a tag, under the field: the tags of titleTagOffers, a click
+// taking one (take). The canvas's title, the right column's and the
+// outline's lines have it alike; the user asked for the two after the
+// first. Tab takes the first offered: titleTagTab, in the field's keys.
+func (a *app) titleTagOffer(c *ui.Context, in ui.Element, text string, take func(part, tag string)) {
+	part, ok := titleTagBegun(text)
+	if !ok {
+		return
+	}
+	t := c.Theme()
+	offers := a.titleTagOffers(part)
+	a.tagOffered = true
+	ui.Popover(c, in, &a.tagOffered, func() {
+		ui.Column(c.Key("tag-offers")).Gap(6).Padding(8, 10).MaxWidth(420).KeepFocus().Children(func() {
+			ui.Row(c).Gap(6).Wrap().GapY(6).AlignItems(ui.Center).Children(func() {
+				for i, tag := range offers {
+					label, tip := "#"+tag, "设为标签"
+					if !slices.Contains(a.allTags(), tag) {
+						label = "设为新标签 #" + tag
+					}
+					if i == 0 {
+						tip += "（Tab）"
+					}
+					if softTag(c, label).Cursor(ui.CursorPointer).KeepFocus().Label("设为标签 " + tag).Tooltip(tip).Clicked() {
+						take(part, tag)
+					}
+				}
+			})
+			say := "写标签名，选一个设为标签；不选就当文字"
+			if len(offers) > 0 {
+				say = "点一下或按 Tab 设为标签；不选就当文字"
+			}
+			ui.Text(c, say).FontSize(textCaption).TextColor(t.TextMuted).NoWrap()
+		})
+	})
+}
+
+// titleTagTab is what Tab takes in a title field: the #word being written
+// and the first tag offered for it.
+func (a *app) titleTagTab(text string) (part, tag string, ok bool) {
+	part, ok = titleTagBegun(text)
+	if !ok {
+		return "", "", false
+	}
+	offers := a.titleTagOffers(part)
+	if len(offers) == 0 {
+		return "", "", false
+	}
+	return part, offers[0], true
+}
+
+// takeFieldTag makes the #word written at the end of n's title, in a field
+// that writes the title as it is typed (the right column's, the outline's),
+// the tag tag: the word out of the title and the tag on, one step. The
+// caret goes back to the field's end (tagCaret).
+func (a *app) takeFieldTag(n *model.Node, part, tag string) {
+	title := strings.TrimRight(n.Title[:max(len(n.Title)-len(part)-1, 0)], " 　")
+	a.tagCaret = n.ID
+	a.later(func() { a.putTitleTag(n, tag, &title) })
+}
+
+// putTitleTag puts tag on n, and title as its title when there is one, in
+// one step: 撤销 on its toast takes it back, and a tag it made out of the
+// library too.
+func (a *app) putTitleTag(n *model.Node, tag string, title *string) {
+	if n.HasTag(tag) && title == nil {
+		return
+	}
+	fresh := !slices.Contains(a.allTags(), tag)
+	a.mutate("", func() {
+		if title != nil {
+			n.Title = *title
+		}
+		if !n.HasTag(tag) {
+			n.Tags = append(slices.Clone(n.Tags), tag)
+		}
+	})
+	a.addTag(tag)
+	a.tellUndo("已加标签 #"+tag, func() {
+		a.undo()
+		if fresh {
+			a.dropUnusedTags([]string{tag})
+		}
+	})
+}
+
+// takeTitleTag makes the #word being written in n's title on the canvas
+// the tag tag: the word out of the title being written, the tag on the
+// topic, the title still being written.
+func (a *app) takeTitleTag(n *model.Node, part, tag string) {
+	a.editText = a.editText[:len(a.editText)-len(part)-1] // "#" and the word
+	a.editFocus = false                                   // the caret to the end
+	a.later(func() { a.putTitleTag(n, tag, nil) })
+}
+
+// fieldTitleTags is what a title field that writes as it is typed does
+// for its #words: after a tag is taken the caret goes back to its end,
+// and, for a field with no keys of its own (keys false: the outline's line
+// has, and takes Tab there, outlineTagTab), Tab takes the tag offered and
+// nothing else: a shortcut of Tab took it from the outline's indent.
+func (a *app) fieldTitleTags(in ui.Element, n *model.Node, text string, keys bool) {
+	if a.tagCaret == n.ID && in.Focused() {
+		k := utf8.RuneCountInString(n.Title)
+		in.SetTextSelection(k, k)
+		a.tagCaret = ""
+	}
+	if !keys {
+		return
+	}
+	in.HandleInput(func(ev ui.InputEvent) bool {
+		if ev.Kind != ui.InputKeyDown || ev.Key != ui.KeyTab || ev.Mods != 0 {
+			return false
+		}
+		part, tag, ok := a.titleTagTab(n.Title)
+		if ok {
+			a.takeFieldTag(n, part, tag)
+		}
+		return ok
+	})
+}
+
+// outlineTagTab takes, for Tab on an outline's line, the tag offered for
+// the #word being written: true when it did, the line not to be indented.
+func (a *app) outlineTagTab(n *model.Node, text string) bool {
+	part, tag, ok := a.titleTagTab(text)
+	if ok {
+		a.takeFieldTag(n, part, tag)
+	}
+	return ok
 }
