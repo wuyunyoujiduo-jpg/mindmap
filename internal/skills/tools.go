@@ -104,9 +104,17 @@ func (t Tool) Mark() string {
 	return string(r)
 }
 
+// shared are the folders of the home whose skills folder is several
+// tools', not one tool's: ~/.agents/skills, the Agent Skills' common
+// place, which Codex reads (the table says so of each tool that does).
+// Found as a tool by its folder of skills, it stood in the left column as
+// an agent named agents, which there is not, the user saw.
+var shared = map[string]bool{".agents": true}
+
 // Detect is the tools of the table that are on this computer, by their
 // folders in home, and those found by a folder of skills: in a hidden
-// folder of the home or of ~/.config, as the table's are.
+// folder of the home or of ~/.config, as the table's are, not in a shared
+// one.
 func Detect(home string, table []Tool) []Tool {
 	var out []Tool
 	known := map[string]bool{}
@@ -130,7 +138,7 @@ func Detect(home string, table []Tool) []Tool {
 				continue
 			}
 			rel := filepath.Join(parent, name)
-			if known[rel] || strings.HasPrefix(name, ".mymind") || !isDir(filepath.Join(home, rel)) {
+			if known[rel] || shared[rel] || strings.HasPrefix(name, ".mymind") || !isDir(filepath.Join(home, rel)) {
 				continue
 			}
 			skills := filepath.Join(rel, "skills")

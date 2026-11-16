@@ -43,6 +43,7 @@ type skillsState struct {
 	repoMap   map[string]string // a repository's map, by its root
 	hooks     map[string]bool   // whether the app's hooks are in a tool it connects, by its ID
 	busy      bool              // a scan goes on
+	tidy      bool              // the next scan is the first as the app opens (skillsTidyOnOpen)
 	again     bool              // and another was asked for meanwhile
 	scanned   time.Time
 	counted   time.Time // when the uses were last counted
@@ -182,6 +183,10 @@ func (a *app) skillsRescan() {
 		if s, ok := v.(skillsScan); ok {
 			a.skills.env, a.skills.report, a.skills.repoMap, a.skills.hooks, a.skills.scanned = s.env, s.report, s.repoMap, s.hooks, a.now()
 			a.skillsNoticeTools()
+			if a.skills.tidy { // the first scan of a run: what loses nothing is done by itself
+				a.skills.tidy = false
+				a.skillsTidyOnOpen()
+			}
 		}
 		if a.skills.again {
 			a.skills.again = false
@@ -677,116 +682,50 @@ func tildePath(p, home string) string {
 	return p
 }
 
-// A skillSuggestion is what the page offers to do for many skills at once.
-type skillSuggestion struct {
-	key, title, sub string
-	act, tip        string
-	do              func()
-	main            bool // the key in the accent: the first thing to do
-	// skip is the words of a quiet key beside it that puts it away.
-	skip   string
-	skipDo func()
+// skillsPlan is what can be done without the user's judgment, worked out
+// from the scan, by kind: each a list of changes and what says them.
+type skillsPlan struct {
+	ops    []func() (skills.Undo, error)
+	parts  []string // what is done, by kind: "收进 23 个技能"
+	auto   []func() (skills.Undo, error)
+	autoIs []string // of those, what is done by itself as the app opens
+	fresh  []skills.Tool
+	secret int // not taken in: it looks to hold a key
 }
 
-// skillsSuggestions is what can be done in one click, worked out from the
-// scan: as soon as it is installed, the user has only to click (the
-// user's ask, 0.99.2: one by one was too slow, and the page too full to
-// know where to begin).
-func (a *app) skillsSuggestions() []skillSuggestion {
+// skillsPlanned is the plan of the scan shown.
+func (a *app) skillsPlanned() skillsPlan {
 	r := a.skills.report
 	env := a.skills.env
-	var out []skillSuggestion
-	// What was taken in last, together, given back in one click while it
-	// is recent: its 撤销 is forgotten once the app restarts, as it did
-	// for an update when the user asked for it (0.100.5).
-	if taken, at := r.LastTaken(); len(taken) > 0 && a.now().Sub(at) < 3*24*time.Hour && at.After(a.cfg.SkillsBackSeen) {
-		names := make([]string, 0, len(taken))
-		for _, e := range taken {
-			names = append(names, e.Name)
+	var p skillsPlan
+	add := func(n int, say string, auto bool, ops []func() (skills.Undo, error)) {
+		if len(ops) == 0 {
+			return
 		}
-		head := strings.Join(names, "、")
-		if len(names) > 4 {
-			head = strings.Join(names[:4], "、") + fmt.Sprintf(" 等 %d 个", len(names))
+		p.ops = append(p.ops, ops...)
+		p.parts = append(p.parts, fmt.Sprintf(say, n))
+		if auto {
+			p.auto = append(p.auto, ops...)
+			p.autoIs = append(p.autoIs, fmt.Sprintf(say, n))
 		}
-		out = append(out, skillSuggestion{key: "back", title: fmt.Sprintf("%s 一次收进了 %d 个技能", whenLabel(at, a.now()), len(taken)),
-			sub: head + "。想回到收进之前，就全部放回：各工具里换回各自的文件夹，MyMind 里这份移到回收。只想放回工具自带的，就到它的详情里点「其实是工具自带的」，自己装的留在 MyMind 里随导图同步。",
-			act: "全部放回", tip: "回到收进之前的样子", skip: "不用了", skipDo: func() {
-				a.cfg.SkillsBackSeen = at
-				a.cfg.save()
-			}, do: func() {
-				ops := make([]func() (skills.Undo, error), 0, len(taken))
-				for _, e := range taken {
-					ops = append(ops, func() (skills.Undo, error) { return skills.GiveBack(env, e) })
-				}
-				a.skillsBatch("放回了 %d 个技能，各工具里换回了各自的文件夹", ops)
-			}})
 	}
-	// A tool new here: the skills linked to it.
-	if fresh := a.skillsFresh(); len(fresh) > 0 {
-		var names []string
-		for _, tl := range fresh {
-			names = append(names, tl.Name)
-		}
-		stored := 0
-		for _, e := range r.Entries {
-			if e.Stored && e.Scope == skills.Global {
-				stored++
-			}
-		}
-		s := skillSuggestion{key: "fresh", title: "发现新装的 " + strings.Join(names, "、"),
-			sub: "按它们的技能目录认出来的。", act: "知道了", do: func() {
-				for _, tl := range fresh {
-					a.skillSeen(tl.ID)
-				}
-			}}
-		if stored > 0 {
-			s.sub = fmt.Sprintf("可以把 MyMind 里的 %d 个全局技能链接过去，新开的会话就能用。", stored)
-			s.act, s.tip = "链接过去", "把 MyMind 里的全局技能链接到新装的工具"
-			s.do = func() { a.skillsLinkTo(fresh) }
-		}
-		out = append(out, s)
-	}
-	// Skills each tool keeps a copy of: taken in, one copy and links.
-	var take []*skills.Entry
-	dup, secret := 0, 0
+	// What the user said is a tool's own and MyMind still keeps: back to
+	// the tool, by itself as the app opens.
+	var back []func() (skills.Undo, error)
 	for _, e := range r.Entries {
-		if e.Stored || e.ReadOnly() || skillOwner(r, e) == "" {
-			continue
-		}
-		if e.Secret {
-			secret++
-			continue
-		}
-		take = append(take, e)
-		own := 0
-		for _, cp := range e.Copies {
-			if cp.State == skills.Own {
-				own++
+		if e.Stored && !e.ReadOnly() && a.cfg.SkillsMarked[e.Key] {
+			linked := false
+			for _, cp := range e.Copies {
+				linked = linked || cp.State == skills.Linked
+			}
+			if linked {
+				back = append(back, func() (skills.Undo, error) { return skills.GiveBack(env, e) })
 			}
 		}
-		if own > 1 {
-			dup++
-		}
 	}
-	if len(take) > 0 {
-		sub := "收进来只留一份，各工具里换成指向它的链接，用起来和现在一样；以后改一处，处处都改了。"
-		if dup > 0 {
-			sub = fmt.Sprintf("其中 %d 个在好几个工具里各存了一份。", dup) + sub
-		}
-		if secret > 0 {
-			sub += fmt.Sprintf("另有 %d 个像含密钥，先不收。", secret)
-		}
-		out = append(out, skillSuggestion{key: "take", title: fmt.Sprintf("%d 个技能还没收进 MyMind", len(take)), sub: sub,
-			act: "全部收进", tip: "把它们都收进 MyMind，原处换成链接", main: true, do: func() {
-				ops := make([]func() (skills.Undo, error), 0, len(take))
-				for _, e := range take {
-					owner := skillOwner(r, e)
-					ops = append(ops, func() (skills.Undo, error) { return skills.Adopt(env, e, owner) })
-				}
-				a.skillsBatch("收进了 %d 个技能，各工具里换成了链接", ops)
-			}})
-	}
-	// Copies alike that took a link's place, and links to nothing.
+	add(len(back), "工具自带的 %d 个放回工具", true, back)
+	// Copies alike that took a link's place: a link again, by itself too
+	// (nothing is lost, the content being the same).
 	var same, gone []func() (skills.Undo, error)
 	for _, e := range r.Entries {
 		if e.ReadOnly() {
@@ -801,15 +740,22 @@ func (a *app) skillsSuggestions() []skillSuggestion {
 			}
 		}
 	}
-	if len(same) > 0 {
-		out = append(out, skillSuggestion{key: "same", title: fmt.Sprintf("%d 份复制和 MyMind 里的一模一样", len(same)),
-			sub: "是工具重写技能时把链接换掉了。换回链接，以后改一处就行。", act: "都换成链接",
-			do: func() { a.skillsBatch("%d 份复制换回了链接", same) }})
+	add(len(same), "%d 份一样的复制换回链接", true, same)
+	add(len(gone), "拿掉 %d 个断了的链接", false, gone)
+	// Skills each tool keeps a copy of: taken in, one copy and links.
+	var take []func() (skills.Undo, error)
+	for _, e := range r.Entries {
+		if e.Stored || e.ReadOnly() || skillOwner(r, e) == "" {
+			continue
+		}
+		if e.Secret {
+			p.secret++
+			continue
+		}
+		owner := skillOwner(r, e)
+		take = append(take, func() (skills.Undo, error) { return skills.Adopt(env, e, owner) })
 	}
-	if len(gone) > 0 {
-		out = append(out, skillSuggestion{key: "gone", title: fmt.Sprintf("%d 个链接指向的文件夹没了", len(gone)),
-			sub: "技能在别处被删了，链接留了下来。", act: "都拿掉", do: func() { a.skillsBatch("拿掉了 %d 个断了的链接", gone) }})
-	}
+	add(len(take), "收进 %d 个技能，各工具里只留一份链接", false, take)
 	// What another computer linked and this one has not.
 	var here []func() (skills.Undo, error)
 	for _, e := range r.Entries {
@@ -817,11 +763,62 @@ func (a *app) skillsSuggestions() []skillSuggestion {
 			here = append(here, func() (skills.Undo, error) { return skills.InstallHere(env, e, r.Tools) })
 		}
 	}
-	if len(here) > 0 {
-		out = append(out, skillSuggestion{key: "here", title: fmt.Sprintf("%d 个技能在别的电脑上链接了，这台还没有", len(here)),
-			sub: "随导图同步过来的，链接到和那台一样的工具。", act: "都链接上", do: func() { a.skillsBatch("在这台链接上了 %d 个技能", here) }})
+	add(len(here), "链接上别的电脑上的 %d 个技能", false, here)
+	// A tool new here: the global skills linked to it. Those taken in by
+	// this same click are linked by the next one's scan, which offers it.
+	p.fresh = a.skillsFresh()
+	var link []func() (skills.Undo, error)
+	for _, tl := range p.fresh {
+		for _, e := range r.Entries {
+			if e.Stored && e.Scope == skills.Global && e.Copies[tl.ID] == nil {
+				link = append(link, func() (skills.Undo, error) { return skills.Link(env, e, tl) })
+			}
+		}
 	}
-	// What is for the user to judge, one by one.
+	if len(link) > 0 {
+		names := make([]string, len(p.fresh))
+		for i, tl := range p.fresh {
+			names[i] = tl.Name
+		}
+		add(len(link), "把 %d 个技能链接到新装的 "+strings.Join(names, "、"), false, link)
+	}
+	return p
+}
+
+// skillsOptimize does all of the plan in one click, with one 撤销: the
+// user asked for one key that mends everything (0.100.6), where a card
+// a kind, and one to give back what was taken in, stood at the head.
+func (a *app) skillsOptimize() {
+	p := a.skillsPlanned()
+	for _, tl := range p.fresh {
+		a.skillSeen(tl.ID)
+	}
+	if len(p.ops) == 0 {
+		a.tell("没有要优化的")
+		return
+	}
+	a.skillsBatch("一键优化做了 %d 处："+strings.Join(p.parts, "，"), p.ops)
+}
+
+// skillsTidyOnOpen does by itself, as the app opens, what puts things back
+// as they were meant to be and loses nothing (the user asked for it rather
+// than a card that stayed, 0.100.6): a tool's own given back, copies
+// alike linked again; the links whose folder moved are mended by every
+// scan (skills.Repair). Said in a toast, with 撤销.
+func (a *app) skillsTidyOnOpen() {
+	p := a.skillsPlanned()
+	if len(p.auto) == 0 {
+		return
+	}
+	a.skillsBatch("打开时自动整理了 %d 处："+strings.Join(p.autoIs, "，"), p.auto)
+}
+
+// skillsSuggest shows what can be done at the page's head: one key for
+// all that needs no judgment, and the way to what does.
+func (a *app) skillsSuggest(c *ui.Context) {
+	t := c.Theme()
+	r := a.skills.report
+	p := a.skillsPlanned()
 	look := 0
 	for _, e := range r.Entries {
 		if !skillNeeds(e) || skillElsewhere(e) {
@@ -835,12 +832,67 @@ func (a *app) skillsSuggestions() []skillSuggestion {
 			look++
 		}
 	}
-	if look > 0 {
-		out = append(out, skillSuggestion{key: "look", title: fmt.Sprintf("还有 %d 个要你看一眼", look),
-			sub: "格式不对、和全局同名、内容和 MyMind 的不一样、像含密钥：这些得你来定。", act: "去看看",
-			do: func() { a.skills.side, a.skills.tool, a.skills.sel = "needs", "", "" }})
+	fresh := len(p.fresh) > 0 && len(p.ops) == 0 // new tools, and nothing of MyMind's yet to link to them
+	if len(p.ops) == 0 && look == 0 && !fresh {
+		return
 	}
-	return out
+	raise(ui.Column(c.Key("skills-suggest")).Padding(4, 16).Radius(radiusCard).FillWidth().Margin(10, 0, 0), t).Children(func() {
+		row := func(id, title string, lines []string, act, tip string, main bool, do func()) {
+			ui.Row(c.Key("sugg:"+id)).MinHeight(56).Padding(10, 0).Gap(14).AlignItems(ui.Center).FillWidth().Children(func() {
+				ui.Column(c).Gap(3).Grow(1).Shrink(1).Basis(0).MinWidth(0).Children(func() {
+					ui.Text(c, title).FontSize(textBody).FontWeight(700).Wrap()
+					for _, l := range lines {
+						ui.Text(c, l).FontSize(textCaption).TextColor(t.TextMuted).LineHeight(1.45).Wrap()
+					}
+				})
+				var b ui.Element
+				if main {
+					b = accentButton(c, act, tip)
+				} else {
+					b = key(ui.Box(c.Key("act:"+id)).Height(keyHeight).Padding(0, 14).Radius(radiusPill).Center().Cursor(ui.CursorPointer).
+						Label(act).Tooltip(tip).Shrink(0), t)
+					b.Children(func() { ui.Text(c, act).FontSize(textSmall).NoWrap().PassThrough() })
+				}
+				if b.Clicked() {
+					a.later(do)
+				}
+			})
+		}
+		first := true
+		if len(p.ops) > 0 {
+			lines := make([]string, 0, len(p.parts)+1)
+			for _, part := range p.parts {
+				lines = append(lines, "· "+part)
+			}
+			if p.secret > 0 {
+				lines = append(lines, fmt.Sprintf("像含密钥的 %d 个先不收", p.secret))
+			}
+			row("optimize", "可以一键优化", lines, "一键优化", "上面这些一次做完，一个撤销就能全部撤回", true, a.skillsOptimize)
+			first = false
+		}
+		if fresh {
+			names := make([]string, len(p.fresh))
+			for i, tl := range p.fresh {
+				names[i] = tl.Name
+			}
+			if !first {
+				setLine(c)
+			}
+			row("fresh", "发现新装的 "+strings.Join(names, "、"), []string{"按它们的技能目录认出来的。"}, "知道了", "", false, func() {
+				for _, tl := range p.fresh {
+					a.skillSeen(tl.ID)
+				}
+			})
+			first = false
+		}
+		if look > 0 {
+			if !first {
+				setLine(c)
+			}
+			row("look", fmt.Sprintf("还有 %d 个要你看一眼", look), []string{"格式不对、和全局同名、内容和 MyMind 的不一样、像含密钥：这些得你来定。"},
+				"去看看", "", false, func() { a.skills.side, a.skills.tool, a.skills.sel = "needs", "", "" })
+		}
+	})
 }
 
 // skillOwner is the tool whose copy of its own a skill would be taken in
@@ -852,50 +904,6 @@ func skillOwner(r *skills.Report, e *skills.Entry) string {
 		}
 	}
 	return ""
-}
-
-// skillsSuggest shows the suggestions at the page's head, each with the
-// key that does it.
-func (a *app) skillsSuggest(c *ui.Context) {
-	t := c.Theme()
-	ss := a.skillsSuggestions()
-	if len(ss) == 0 {
-		return
-	}
-	raise(ui.Column(c.Key("skills-suggest")).Padding(4, 16).Radius(radiusCard).FillWidth().Margin(10, 0, 0), t).Children(func() {
-		for i, s := range ss {
-			if i > 0 {
-				setLine(c)
-			}
-			ui.Row(c.Key("sugg:"+s.key)).MinHeight(56).Padding(10, 0).Gap(14).AlignItems(ui.Center).FillWidth().Children(func() {
-				ui.Column(c).Gap(3).Grow(1).Shrink(1).Basis(0).MinWidth(0).Children(func() {
-					ui.Text(c, s.title).FontSize(textBody).FontWeight(700).Wrap()
-					ui.Text(c, s.sub).FontSize(textCaption).TextColor(t.TextMuted).LineHeight(1.45).Wrap()
-				})
-				var b ui.Element
-				if s.main {
-					b = accentButton(c, s.act, s.tip)
-				} else {
-					b = key(ui.Box(c.Key("act:"+s.key)).Height(keyHeight).Padding(0, 14).Radius(radiusPill).Center().Cursor(ui.CursorPointer).
-						Label(s.act).Tooltip(s.tip).Shrink(0), t)
-					b.Children(func() { ui.Text(c, s.act).FontSize(textSmall).NoWrap().PassThrough() })
-				}
-				if b.Clicked() {
-					a.later(s.do)
-				}
-				if s.skip != "" && textKey(c, s.skip, s.skip, "").Clicked() {
-					a.later(s.skipDo)
-				}
-				if s.key == "fresh" && s.act != "知道了" && textKey(c, "知道了", "知道了，不链接", "").Clicked() {
-					a.later(func() {
-						for _, tl := range a.skillsFresh() {
-							a.skillSeen(tl.ID)
-						}
-					})
-				}
-			})
-		}
-	})
 }
 
 // skillsBatch does many changes as one, says how many (done holds a %d)
@@ -952,22 +960,6 @@ func hooksIn(id string) (bool, bool) {
 		}
 	}
 	return false, false
-}
-
-// skillsLinkTo links every global skill of MyMind to the tools, new here.
-func (a *app) skillsLinkTo(tools []skills.Tool) {
-	r := a.skills.report
-	env := a.skills.env
-	var ops []func() (skills.Undo, error)
-	for _, tl := range tools {
-		a.skillSeen(tl.ID)
-		for _, e := range r.Entries {
-			if e.Stored && e.Scope == skills.Global && e.Copies[tl.ID] == nil {
-				ops = append(ops, func() (skills.Undo, error) { return skills.Link(env, e, tl) })
-			}
-		}
-	}
-	a.skillsBatch("链接了 %d 个技能过去，新开的会话生效", ops)
 }
 
 // toolMark is a tool's two letters on a small tile in the ink.

@@ -64,7 +64,7 @@ func TestSkillsPage(t *testing.T) {
 	if a.place() != placeSkills {
 		t.Fatal("not on 技能")
 	}
-	for _, want := range []string{"AI 技能", "2 个编程工具", "Claude Code", "Codex", "code-review", "write-weekly", "项目 · ergora", "有问题", "被全局的盖住", "未收进", "全部收进", "还有 2 个要你看一眼"} {
+	for _, want := range []string{"AI 技能", "2 个编程工具", "Claude Code", "Codex", "code-review", "write-weekly", "项目 · ergora", "有问题", "被全局的盖住", "未收进", "一键优化", "· 收进 5 个技能，各工具里只留一份链接", "还有 2 个要你看一眼"} {
 		if !tt.HasText(want) {
 			t.Fatalf("no %q: %q", want, tt.Texts())
 		}
@@ -111,18 +111,19 @@ func TestSkillsPage(t *testing.T) {
 	writeSkill(t, filepath.Join(home, ".newagent", "skills"), "its-own", "它自己的")
 	a.skillsRescan()
 	tt.Frame()
-	if !tt.HasText("发现新装的 newagent") {
+	if !tt.HasText("· 把 1 个技能链接到新装的 newagent") {
 		t.Fatalf("no new tool: %q", tt.Texts())
 	}
 	snapshot(t, tt, "skills-fresh")
-	if err := tt.Click("链接过去"); err != nil {
+	if err := tt.Click("一键优化"); err != nil {
 		t.Fatal(err)
 	}
+	tt.Frame()
 	tt.Frame()
 	if !isLink(filepath.Join(home, ".newagent", "skills", "code-review")) {
 		t.Fatal("not linked to the new tool")
 	}
-	if tt.HasText("发现新装的 newagent") {
+	if tt.HasText("· 把 1 个技能链接到新装的 newagent") || len(a.skillsFresh()) > 0 {
 		t.Fatal("still new")
 	}
 
@@ -237,11 +238,11 @@ func TestSkillsTakeAll(t *testing.T) {
 	a.showSkills()
 	tt.Frame()
 	tt.Frame()
-	if !tt.HasText("3 个技能还没收进 MyMind") || !tt.HasText("其中 3 个在好几个工具里各存了一份。收进来只留一份，各工具里换成指向它的链接，用起来和现在一样；以后改一处，处处都改了。另有 1 个像含密钥，先不收。") {
+	if !tt.HasText("· 收进 3 个技能，各工具里只留一份链接") || !tt.HasText("像含密钥的 1 个先不收") {
 		t.Fatalf("no suggestion: %q", tt.Texts())
 	}
 	snapshot(t, tt, "skills-take-all")
-	if err := tt.Click("全部收进"); err != nil {
+	if err := tt.Click("一键优化"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
@@ -256,7 +257,7 @@ func TestSkillsTakeAll(t *testing.T) {
 	if isLink(filepath.Join(tools[0], "keys")) {
 		t.Fatal("the one with a key taken in")
 	}
-	if !tt.HasText("收进了 3 个技能，各工具里换成了链接") || tt.HasText("全部收进") {
+	if a.notice != "一键优化做了 3 处：收进 3 个技能，各工具里只留一份链接" || slices.Contains(tt.Texts(), "一键优化") {
 		t.Fatalf("after: %q", tt.Texts())
 	}
 	// The left column: a tool and a part, together, each with its ✕.
@@ -306,7 +307,7 @@ func TestSkillsBundled(t *testing.T) {
 	if n := a.skillsNeedCount(); n != 1 { // release's missing description alone
 		t.Fatalf("要处理 %d", n)
 	}
-	if !tt.HasText("2 个技能还没收进 MyMind") {
+	if !tt.HasText("· 收进 2 个技能，各工具里只留一份链接") {
 		t.Fatalf("a tool's own offered to take in: %q", tt.Texts())
 	}
 	if err := tt.Click("skill-creator"); err != nil {
@@ -341,7 +342,7 @@ func TestSkillsBundled(t *testing.T) {
 	}
 }
 
-// What 全部收进 took in is given back after the app forgot its 撤销 (an
+// What 一键优化 took in is given back after the app forgot its 撤销 (an
 // update restarts it): all at once, or one as its tool's own.
 func TestSkillsGiveBack(t *testing.T) {
 	a, tt := newTestApp(t)
@@ -355,7 +356,7 @@ func TestSkillsGiveBack(t *testing.T) {
 	a.showSkills()
 	tt.Frame()
 	tt.Frame()
-	if err := tt.Click("全部收进"); err != nil {
+	if err := tt.Click("一键优化"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
@@ -383,24 +384,35 @@ func TestSkillsGiveBack(t *testing.T) {
 		t.Fatalf("not left alone: %+v", e)
 	}
 
-	// The rest, at once, from the page's head.
+	// As the app opens, what loses nothing is done by itself: one the user
+	// called a tool's own while MyMind kept it given back, a copy alike
+	// linked again; no card stays at the page's head for it.
 	a.skills.sel = ""
 	tt.Frame()
-	if !strings.Contains(strings.Join(tt.Texts(), "\n"), "一次收进了 2 个技能") {
-		t.Fatalf("no way back: %q", tt.Texts())
+	pdf := a.skills.report.Entry("g/pdf")
+	a.cfg.SkillsMarked["g/pdf"] = true
+	_ = os.Remove(filepath.Join(cx, "my-review"))
+	writeSkill(t, cx, "my-review", "我自己的审查清单") // as MyMind's, alike
+	if pdf == nil || !pdf.Stored {
+		t.Fatal("pdf not in MyMind")
 	}
-	snapshot(t, tt, "skills-give-back")
-	if err := tt.Click("全部放回"); err != nil {
-		t.Fatal(err)
-	}
+	a.skills.tidy = true
+	a.skillsRescan()
 	tt.Frame()
 	tt.Frame()
-	for _, p := range []string{filepath.Join(cc, "pdf"), filepath.Join(cx, "pdf"), filepath.Join(cc, "my-review")} {
+	for _, p := range []string{filepath.Join(cc, "pdf"), filepath.Join(cx, "pdf")} {
 		if isLink(p) || !fileThere(filepath.Join(p, "SKILL.md")) {
 			t.Fatalf("%s not given back", p)
 		}
 	}
-	if strings.Contains(strings.Join(tt.Texts(), "\n"), "一次收进了") {
-		t.Fatal("the way back stays when nothing is left to give back")
+	if !isLink(filepath.Join(cx, "my-review")) {
+		t.Fatal("the copy alike not linked again")
+	}
+	if a.notice != "打开时自动整理了 2 处：工具自带的 1 个放回工具，1 份一样的复制换回链接" {
+		t.Fatalf("said %q", a.notice)
+	}
+	snapshot(t, tt, "skills-tidied")
+	if strings.Contains(strings.Join(tt.Texts(), "\n"), "一次收进了") || tt.HasText("全部放回") {
+		t.Fatal("a card stays for what was taken in")
 	}
 }

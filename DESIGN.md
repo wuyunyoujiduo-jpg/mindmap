@@ -207,8 +207,9 @@ then made the place 技能 (0.99.2): its left column the parts (要处理, 30
 and the tools, by their two letters, those with no skill folded under one
 row; what is chosen there said as chips with a ✕ over the list, as
 收集's. The page is headed as the others, the one copy said in a quiet
-line, then what can be done for many at once, rows in a pale block, each
-with its key (the first thing to do in the accent), then a table: a skill's name in the monospace (it is a
+line, then, in a pale block, one key in the accent for all that needs no
+judgment (一键优化, what it does a line each under its name) and the way
+to what does (去看看), then a table: a skill's name in the monospace (it is a
 folder's), a tool's two letters full where it has the skill and in a
 dashed outline where not, a dot of the accent where a copy took a
 link's place, the state a pill with a dot (the danger's for a fault).

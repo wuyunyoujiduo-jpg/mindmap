@@ -395,7 +395,10 @@ by AI, and an AI assistant.
   at first, which the user moved: it is not of the day): which
   agents there are (a table, `tools.json`, published on its own by the
   workflow agent-tools and fetched once a day, `skillsTableURL`, and an
-  agent the table lacks found by `~/.name/skills/*/SKILL.md`; one found
+  agent the table lacks found by `~/.name/skills/*/SKILL.md`, but for
+  `~/.agents/skills`, the tools' common place and no tool (`shared`:
+  it stood as an agent named agents, the user saw), whose skills are
+  Codex's, which reads it; one found
   since last seen said on the page, `skillsFresh`), each skill every
   session's, a project's (the maps' `Project`s and Claude Code's
   projects) or a plugin's, and what is wrong with it. A skill taken in
@@ -413,15 +416,20 @@ by AI, and an AI assistant.
   was changed, the user asked (0.100.4).
   What was taken in is given back (`skills.GiveBack`: each link a folder
   of its own again, MyMind's copy put away), one by one (其实是工具自带的,
-  which marks it too) or the last batch at once (`LastTaken`, by when its
-  links were made): 全部收进's 撤销 was lost when an update restarted the
-  app, the user found.
+  which marks it too): 全部收进's 撤销 was lost when an update restarted
+  the app, the user found. A card at the page's head offering the last
+  batch back (`LastTaken`), which stayed three days, the user did not
+  want (0.100.6): what puts things back losing nothing is done as the
+  app opens (`skillsTidyOnOpen`: one marked a tool's own given back, a
+  copy alike linked again; links whose folder moved are mended by every
+  scan, `Repair`), said in a toast with 撤销.
   Everything done to the folders has its way back (`skills.Undo`). What
-  is to do for many at once is offered at the page's head, a click each
-  (`skillsSuggestions`: take all in, copies alike back to links, links
-  to nothing out, what another computer linked, a new tool's links), and
-  what is for the user to judge sent to 要处理: one by one was too slow,
-  the user found, with seventy skills in sixteen tools. Its left column
+  is to do with no judgment is one key at the page's head, 一键优化, its
+  parts said under it (`skillsPlanned`: what is given back as the app
+  opens, links to nothing out, take all in, what another computer
+  linked, a new tool's links), one 撤销 for all; what is for the user to
+  judge is sent to 要处理: one by one was too slow, the user found, with
+  seventy skills in sixteen tools, and then a card a kind too many keys. Its left column
   narrows by a part and a tool together (`skillsSide`), the tools with no
   skill folded: sixteen cards on the page were too many to take in. Codex's
   and the others' folders are as their documentation says (`Checked`

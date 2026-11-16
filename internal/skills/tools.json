@@ -1,6 +1,6 @@
 [
   {"id": "claude", "name": "Claude Code", "short": "CC", "home": ".claude", "global": [".claude/skills"], "project": [".claude/skills"], "plugins": ".claude/plugins/cache", "usage": "claude", "checked": true},
-  {"id": "codex", "name": "Codex", "short": "CX", "home": ".codex", "global": [".codex/skills"], "project": [".codex/skills", ".agents/skills"], "bundled": [".codex/skills/.system"]},
+  {"id": "codex", "name": "Codex", "short": "CX", "home": ".codex", "global": [".codex/skills", ".agents/skills"], "project": [".codex/skills", ".agents/skills"], "bundled": [".codex/skills/.system"]},
   {"id": "grok", "name": "Grok Build", "short": "GB", "home": ".grok", "global": [".grok/skills"], "project": [".grok/skills"]},
   {"id": "gemini", "name": "Gemini CLI", "short": "GM", "home": ".gemini", "global": [".gemini/skills"], "project": [".gemini/skills"]},
   {"id": "cursor", "name": "Cursor", "short": "CU", "home": ".cursor", "global": [".cursor/skills"], "project": [".cursor/skills"], "bundled": [".cursor/skills-cursor"]},

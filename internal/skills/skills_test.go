@@ -518,3 +518,20 @@ func TestGiveBack(t *testing.T) {
 		t.Fatalf("not taken back %+v", e)
 	}
 }
+
+// ~/.agents/skills is the tools' common place, not a tool: its skills are
+// Codex's, which reads it.
+func TestSharedFolder(t *testing.T) {
+	w := newWorld(t)
+	skill(t, filepath.Join(w.home, ".agents", "skills"), "find-docs", "finds docs")
+	tools := Detect(w.home, Builtin())
+	for _, tl := range tools {
+		if tl.ID == "agents" {
+			t.Fatal("the common folder taken for a tool")
+		}
+	}
+	e := Scan(w.env).Entry("g/find-docs")
+	if e == nil || e.Copies["codex"] == nil || e.Copies["claude"] != nil {
+		t.Fatalf("find-docs %+v", e)
+	}
+}
