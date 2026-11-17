@@ -175,8 +175,10 @@ func oneLine(s string) string {
 }
 
 // trailingTags takes the tags written at a line's end, each after a space
-// as #tag, off its title. A number is not one: "Issue #42" came in as
-// "Issue" with a tag 42.
+// as #tag, off its title: #42 too, as another program writes a tag. A
+// title's own "Issue #42" is written \#42 (escapeTitle), and comes back a
+// title: a number was taken for no tag at all once, and a file's #42 that
+// was one stayed in its title.
 func trailingTags(line string) (string, []string) {
 	var tags []string
 	for {
@@ -195,9 +197,9 @@ func trailingTags(line string) (string, []string) {
 }
 
 // tagWord tells whether what follows a # at a line's end is read as a
-// tag: a word, not of digits alone.
+// tag: a word, of figures alone too.
 func tagWord(tag string) bool {
-	return tag != "" && !strings.ContainsAny(tag, " \t#") && strings.Trim(tag, "0123456789") != ""
+	return tag != "" && !strings.ContainsAny(tag, " \t#")
 }
 
 // escapeTitle writes a title so that none of its own words is read back
