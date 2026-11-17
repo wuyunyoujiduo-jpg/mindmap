@@ -389,7 +389,8 @@ func TestLateRepeatAndDaysOfTheCalendar(t *testing.T) {
 	it := taskNamed(t, a, "浇花")
 	for n, want := range map[int]bool{-3: false, 0: false, 1: true, 2: true} {
 		d := day.AddDate(0, 0, n)
-		if got := a.comesAgain(it, d, d); got != want {
+		ghost := func(w weekTask) bool { return w.ghost && w.it.key() == it.key() }
+		if got := slices.ContainsFunc(a.hoursLaid(a.taskItems(), []time.Time{d}).allDay[0], ghost); got != want {
 			t.Errorf("a week late, %d days from today: comes again %v", n, got)
 		}
 	}

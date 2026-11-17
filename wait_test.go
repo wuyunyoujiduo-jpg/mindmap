@@ -15,7 +15,7 @@ func TestWaitCards(t *testing.T) {
 	a.embedTotal, a.embedLeft, a.embedSince = 86, 40, a.now().Add(-8*time.Second)
 	a.orgResult = "整理了 9 条资料"
 	a.showLibrary()
-	a.libHome = true
+	a.tasks.open = true
 	tt.Frame()
 	for _, want := range []string{"建立语义索引", "整理了 9 条资料"} {
 		if !tt.HasText(want) {
@@ -41,6 +41,18 @@ func TestWaitCards(t *testing.T) {
 		if err := a.lib.Add(cl, a.now()); err != nil {
 			t.Fatal(err)
 		}
+	}
+	// A file being copied into a map says so while the copy lasts, and no
+	// more once it is done.
+	copied := a.copying("发布会录像.mov")
+	tt.Frame()
+	if !tt.HasText("正在加上附件") || !tt.HasText("发布会录像.mov") {
+		t.Fatalf("a copy going on is not said: %q", tt.Texts())
+	}
+	copied()
+	tt.Frame()
+	if tt.HasText("正在加上附件") || len(a.copies) != 0 {
+		t.Fatalf("a copy done is still said: %q", tt.Texts())
 	}
 	if left := timeLeft(a.now(), a.now().Add(-10*time.Second), 0.5); left != "约剩 15 秒" {
 		t.Fatalf("time left %q", left)

@@ -53,6 +53,20 @@ var holidays struct {
 	sync.RWMutex
 	days  map[string]holidayDay // 2006-01-02 →
 	years map[int]bool          // the years whose notice is known
+	// loads counts the times they were read or forgotten: what is worked
+	// out of the days worked is of them as they stood.
+	loads int
+}
+
+// holidaysLoads tells which reading of the notices stands (holidays.loads),
+// 0 before any.
+func holidaysLoads() int {
+	holidays.RLock()
+	defer holidays.RUnlock()
+	if holidays.days == nil {
+		return -holidays.loads
+	}
+	return holidays.loads
 }
 
 func holidaysDir() string {
@@ -90,6 +104,7 @@ func loadHolidays() {
 	}
 	holidays.Lock()
 	holidays.days, holidays.years = days, years
+	holidays.loads++
 	holidays.Unlock()
 }
 
@@ -139,7 +154,17 @@ func (a *app) holidaysFetch() {
 	if dir == "" || a.cfg.NoHolidays {
 		return
 	}
-	loadHolidays()
+	// It is asked for whenever the app is come back to. What was kept is
+	// read once, and again once something was fetched or the settings
+	// forgot it; and whether a year is due is looked for once an hour: every
+	// year's file was read and parsed each time, before any was found due.
+	if holidaysLoads() <= 0 {
+		loadHolidays()
+	}
+	if at := a.memo.holidaysAt; !at.IsZero() && !a.now().Before(at) && a.now().Sub(at) < time.Hour {
+		return
+	}
+	a.memo.holidaysAt = a.now()
 	y := a.now().Year()
 	var want []int
 	for _, year := range []int{y - 1, y, y + 1} {
@@ -197,6 +222,7 @@ func holidayYearsSaid() string {
 func clearHolidays() {
 	holidays.Lock()
 	holidays.days, holidays.years = nil, nil
+	holidays.loads++
 	holidays.Unlock()
 }
 

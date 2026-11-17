@@ -17,16 +17,16 @@ colors:
   success: "#30A46C"
 
 typography:
-  page-title:  { fontSize: 22px, fontWeight: 700, letterSpacing: -0.5px }
+  page-title:  { fontSize: 26px, fontWeight: 700, letterSpacing: -0.7px }
   write:       { fontSize: 16px, fontWeight: 400 }
   row:         { fontSize: 14.5px, fontWeight: 400 }   # 700 when chosen
   body:        { fontSize: 14px, fontWeight: 400 }
   part-name:   { fontSize: 13px, fontWeight: 700 }
   caption:     { fontSize: 12px, fontWeight: 400 }
   side-head:   { fontSize: 12px, fontWeight: 700, letterSpacing: 0.4px }
-  count:       { fontSize: 12px, features: tnum }
+  count:       { fontSize: 11px, features: tnum }      # the left column's tablets (sideCount)
 
-rounded: { small: 7px, row: 8px, key: 9px, card: 12px }
+rounded: { small: 7px, row: 8px, key: 9px, card: 12px }   # on the leaf; what else has a corner: Corners, below
 
 motion:   # transitions.dev's scale; design.go's motion* and easeDetent
   micro: 80ms
@@ -34,6 +34,7 @@ motion:   # transitions.dev's scale; design.go's motion* and easeDetent
   fast: 250ms     # what opens from a key, tabs' pill, an icon's swap, a row to its place
   medium: 350ms   # a panel closing
   slow: 400ms     # a panel opening, an empty state coming, what was loading shown
+  breath: 900ms   # a skeleton's breath, the one length off the scale (Motion, below)
   ease: "cubic-bezier(0.22, 1, 0.36, 1)"
 ---
 
@@ -55,15 +56,48 @@ these tokens.
 | A single accent for everything that acts | the violet-blue: keys that act, what is chosen, links, the focus |
 | Ink `#1d1d1f`, gray `#86868b`, parchment `#f5f5f7` | the same ink and gray; the ground a shade cooler |
 | Weights 400 and 600; 500 absent; headlines 600, not 700 | two weights, 400 and 700: asked for 600, Chinese is drawn regular; at 700 PingFang draws its Semibold, which is Apple's 600 |
-| Negative tracking on headlines, never on small text | page titles at -0.5; small names of parts +0.4 |
-| No shadow on cards, buttons or text | none on the leaf; only what floats over the page has one |
+| Negative tracking on headlines, never on small text | page titles at -0.7; small names of parts +0.4 |
+| No shadow on cards, buttons or text | none on the leaf; only what floats over the page has one (two things drawn with the shadow's tool are not shadows: Lines, below) |
 | No gradient as decoration | none in the UI (the icons' own shading is theirs) |
 | A press scales the control down | `press`, on every key |
-| Don't mix radii grammars | 7, 8, 9, 12 and nothing between |
+| Don't mix radii grammars | 7, 8, 9, 12 on the leaf and nothing between; what floats, pictures, tags and dots have their own (Corners, below) |
 
 Not taken: full-bleed photo tiles, the black global nav, pill CTAs (the
 user found small round corners right), 17px body (a desktop app's rows
 are 14 to 16).
+
+## Corners
+
+On the leaf a corner is one of four: 7 a small thing's (`radiusSmall`),
+8 a row's (`radiusRow`), 9 a key's, a tab's and a field's (`radiusPill`),
+12 a card's and the leaf's own (`radiusCard`). What else has a corner is
+of another kind, and each kind has its own, which the app has had for
+many versions and the user has seen so:
+
+- **A dot or a mark** is round: half its side (1 to 5 for a dot of 2 to
+  10; 999 where the side is not known).
+- **A small tag on a row** (a word on a tint, smaller than a key: a tag
+  in a note, a link's site, a holiday's mark, a key's name in the cheat
+  sheet): 6, or 4 where it is one line of the smallest type: a smaller
+  thing than a key, a smaller corner.
+- **A picture** shown whole in a page (a clip's, a video's, a slide's):
+  10.
+- **What floats** has a corner by its size, larger than anything on the
+  leaf, which with its shadow tells it from the leaf: a popover and a
+  toast 14, a job's card and the AI's window 16, a dialog 20 (`modal`).
+
+A new thing takes the corner of its kind; a corner not listed here is a
+fault.
+
+## Lines
+
+A hairline round a card is drawn as a shadow of half a point with no
+blur and no offset (`paper`, `wallCard`): MyGo's border takes room and
+its shadow does not, and it is a line, not a shadow. The white pill of a
+track of tabs (`slidePill`) has that line and, under it, a shadow of one
+point at 7%: it lies on its track, the one thing on the leaf that is
+raised, and has been drawn so for many versions. Nothing else on the
+leaf has either.
 
 ## Icons
 
@@ -97,10 +131,17 @@ are 14 to 16).
   column, left and right to the card beside), and the space bar ticks a
   task off; never
   while something is written in (`FocusTakesText`).
-- **The places** are ⌥⌘1, ⌥⌘2, ⌥⌘3 and the bar ⌘J, said on their tips
-  and in the menu 前往 (⌘1–5 are a map's views and ⌘K the commands,
-  older than these: 0.84.0 gave the places ⌘1–3 and the bar ⌘K, which
-  the menu took first).
+- **The places** are ⌥⌘1 to ⌥⌘4 (今天, 项目, 收集, 技能) and the bar ⌘J,
+  said on their tips and in the menu 前往 (⌘1–6 are a map's views and
+  ⌘K the commands, older than these: 0.84.0 gave the places ⌘1–3 and
+  the bar ⌘K, which the menu took first).
+- **Words of no one device**: a tip, a placeholder and an empty state
+  say what a thing does (记下, 只看这一天), never the key or the press
+  that does it (回车记下, 双击, 右键): a phone is to come. The keys are
+  the cheat sheet's (`shortcuts`) and the menus', which may name them;
+  the places' tips name theirs by `keyLabel`, as the system writes them.
+  What only the pointer's other key did has a ⋯ too (a tag's row in a
+  map's panel, `tagRow`).
 - **The canvas takes a topic anywhere**: a double click on the bare
   canvas makes a floating topic there, as its menu does (`canvasMenu`,
   which says the double click, and puts a clip of 收集 there as a topic
@@ -121,6 +162,12 @@ other length in a file: `rg "time.Millisecond"` should find only
 sliding), a toast rises and fades (MyGo's own), what opens from a key
 grows from 0.96 (modal), a panel slides in (panel reveal), an icon swaps
 by a fade (icon swap).
+
+One length is off the scale: a skeleton breathes in 900 ms
+(`skeletonShapes`). It is no transition, nothing going from a place to
+another, but a pulse that goes on while something loads, slower than
+anything that moves so that it reads as waiting; it has been so since
+the skeletons were drawn, and no other length is to join it.
 
 ## States
 
@@ -223,8 +270,8 @@ project loads.
 Built to the draft https://claude.ai/artifact/5Nw4Mn4q4ozd9rpUNGh8AP.
 
 - **Head**: the page's name at 26/700, -0.7; the day beside it in `ink2`;
-  under it the day in three figures, the figure at 600 in the ink, what
-  it counts in the muted ink.
+  under it the day in three figures, the figure at 700 in the ink
+  (`figures`), what it counts in the muted ink.
 - **A group's name**: 12/700, +0.3, muted (the danger's color when late):
   the tasks are what is read. A row is 54 high, its line faint; a late
   day is a small pale tag of the danger's color.
@@ -236,17 +283,31 @@ Built to the draft https://claude.ai/artifact/5Nw4Mn4q4ozd9rpUNGh8AP.
   many it holds, faint.
 - **Pills on a row**: a priority has its color; a state is gray with a
   dot of its color: one color on a row, not three.
-- **Under today's**: the tasks of the six days after, as 接下来 7 天, so
-  that the page is not half empty and tomorrow is seen coming.
+- **Under today's**: the tasks of the seven days after, as 接下来 7 天,
+  so that the page is not half empty and tomorrow is seen coming.
 - **A task's details**: how it repeats is three keys for the ways most
   used (不重复, 每天, 每周) and one that opens the others (`dropButton`),
   not six chips; 12 between its rows.
 - **A toast** (`toastLook`): a white card at the window's foot, led by a
   small tile, a green tick for what was done, a red cross for what failed;
   its key in the accent.
-- **The week**: a column a day cut by a faint line, not a block each;
-  today's on a breath of the accent, its day in a dot of it, named 今天;
-  the days of rest faint. A task there is a pale block.
+- **The week and the day** are hours, as a calendar's (`weektime.go`,
+  0.103, after TickTick's and Feishu's): the hours down the left, 48 to
+  an hour, a faint line at each; a column a day cut by a faint line,
+  headed by its weekday, its date at 16/700 and the Chinese calendar's
+  day by it, today's in the accent and on a breath of shade down its
+  column, the days of rest faint, 休 and 班 as small tags of the
+  success's and the danger's colors. Over the hours a band of the tasks
+  of the whole day, each a pale block (`taskChip`). A task with a time is
+  a block on its hours, on its map's pastel laid whole on the white with
+  a line of the map's color at its left, side by side with those it
+  meets (`lanes`); one that comes again is the same, faint, after ↻. Now
+  is a line of the danger's color across today, its time in the hours'
+  column. What is being chosen or dragged to is a tint of the accent
+  with its hours said in it (`hourShade`).
+- **The month**: a cell a day cut by hairlines, the days of other months
+  on a faint shade; a few of a day's tasks as pale blocks and how many
+  more.
 - **The AI's key by a heading** (`sparkKey`): the spark and its words in
   the accent, on no block until pointed at.
 
@@ -298,6 +359,13 @@ can be counted, never by habit:
 - Don't add a shadow, a gradient or a glow to anything on the leaf.
 - Don't outline what floats.
 - Don't use weight 500 or 600: Chinese shows neither. Heavy is 700.
+  Three things on the hours ask for 600 and are left so, as they have
+  been seen since the hours were drawn (0.103): now's time in the hours'
+  column and the hours said on a span being chosen, which are figures,
+  where 600 shows, in the caption's size; and a block's title, which is
+  therefore drawn regular where it is Chinese, light on its pastel
+  (`weektime.go`). No fourth is to join them.
 - Don't add a second accent, or a fifth ink.
-- Don't write a length of time outside the scale.
+- Don't write a length of time outside the scale (the breath alone is:
+  Motion).
 - Don't ship a list without its empty state.

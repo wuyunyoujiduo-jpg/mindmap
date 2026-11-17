@@ -33,7 +33,7 @@ const (
 	tasksAgents  // what the AI agents reported, by day and project (agents.go)
 )
 
-// The lists of the tasks' page, as its tabs show them.
+// The lists of the tasks' page, as its left column shows them (todaySide).
 var taskLists = []struct {
 	view       int
 	name, icon string
@@ -52,8 +52,14 @@ type tasksState struct {
 	// repeatOwn is the task whose repeat is being made up in its details.
 	repeatOwn string
 	items     []taskItem
-	read      time.Time // when the items were gathered
-	edits     int       // the open map's edits then
+	// read is when the items were gathered, and gathered the same: what
+	// sets read to another time has them gathered again. of is what they
+	// were gathered of, looked when every map's file was last looked at,
+	// and serial counts the gatherings, for what is worked out of them.
+	read, gathered time.Time
+	of             tasksOf
+	looked         lookedAt
+	serial         int
 	// remindOwn is the task whose time to remind at is being written,
 	// remindText what is written, remindBad that it was not understood.
 	remindOwn, remindText string
@@ -77,7 +83,7 @@ type tasksState struct {
 	// what came since being marked as new.
 	agents        []agentItem
 	agentsRead    time.Time
-	agentsEdits   int
+	agentsOf      tasksOf
 	agentRange    int
 	agentsSeenWas time.Time
 	// allMaps has the left column show every project with tasks, not the
@@ -107,6 +113,16 @@ type tasksState struct {
 	placing  bool
 	placeErr string
 	table    bool // the list has room to be a table, with a column for the project and the day
+	// dueSeen are the tasks due or late as the reminders last looked, by
+	// their keys (reminders.go); nil before the day's first look.
+	dueSeen map[string]bool
+}
+
+// tasksOf is what the tasks were gathered of: the maps as read, the folder
+// as scanned, the open map as edited, and which map is open.
+type tasksOf struct {
+	maps, scans, edits int
+	open               string
 }
 
 func (it taskItem) key() string { return it.path + "#" + it.node.ID }
@@ -198,24 +214,36 @@ func (w taskWhen) put(t *model.Task) {
 // taskDrag is a task dragged to a day.
 type taskDrag struct{ path, id string }
 
-// openTasks shows the tasks in the main area.
+// openTasks shows the tasks in the main area: 今天, gathered anew.
 func (a *app) openTasks() {
-	a.showLibrary()
-	a.tasks.open = true
+	a.goToday()
 	if a.tasks.day.IsZero() {
 		a.tasks.day = today(a.now())
 	}
 	a.tasks.read = time.Time{}
 }
 
-// taskItems are the tasks of all the maps, the open one as it is edited,
-// gathered again each second or as the open map changes.
+// taskItems are the tasks of all the maps, the open one as it is edited.
+// They are gathered again when a map was read anew (every map's file is
+// looked at once a tick, indexed), when the folder was scanned, when the
+// open map changed (a.edits), and when what changed a task asks for it
+// (tasks.read set to another time); else they stand, frame after frame.
+// What is given is not to be changed in place.
 func (a *app) taskItems() []taskItem {
-	now := a.now()
-	if now.Sub(a.tasks.read) < time.Second && a.tasks.edits == a.edits && !a.tasks.read.IsZero() {
+	if at := a.looked(); at != a.tasks.looked || at.tick.IsZero() {
+		a.tasks.looked = at
+		for _, fi := range a.files {
+			if fi.Path != a.path {
+				a.indexed(fi.Path)
+			}
+		}
+	}
+	of := tasksOf{a.memo.maps, a.memo.scans, a.edits, a.path}
+	if of == a.tasks.of && a.tasks.read.Equal(a.tasks.gathered) && !a.tasks.read.IsZero() {
 		return a.tasks.items
 	}
-	a.tasks.read, a.tasks.edits = now, a.edits
+	a.tasks.of, a.tasks.read, a.tasks.gathered = of, a.now(), a.now()
+	a.tasks.serial++
 	var items []taskItem
 	for _, fi := range a.files {
 		f := a.file
@@ -260,6 +288,8 @@ func (a *app) editTask(it taskItem, note string, fn func(n *model.Node)) bool {
 	})
 	if err != nil {
 		a.tell("没有改成：" + err.Error())
+	} else {
+		a.remindOwn(it.key()) // changed here today: the day is not said for it alone
 	}
 	a.tasks.read = time.Time{}
 	return err == nil
@@ -686,7 +716,6 @@ func (a *app) tasksAdd(c *ui.Context, now time.Time) {
 			if tl.prio != model.PriorityNone {
 				pill(c, tl.prio.Label(), t.Background, taskPriorityColor(t, tl.prio))
 			}
-			ui.Text(c, "↩").FontSize(textCaption).TextColor(t.TextMuted)
 		}
 		if in.Submitted() && strings.TrimSpace(a.tasks.add) != "" {
 			line := a.tasks.add
@@ -1201,7 +1230,7 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 				// dropped on it, to its day.
 				box := tray(c, "group:"+g.title)
 				if g.drop != nil {
-					a.dropTaskOn(box, *g.drop)
+					a.dropTaskAt(box, *g.drop, dropDayAlone)
 				}
 				box.Children(func() {
 					ui.Row(c).Height(32).Padding(6, 8, 0).Gap(6).AlignItems(ui.Center).FillWidth().Children(func() {
@@ -1329,24 +1358,7 @@ func (a *app) remindProp(c *ui.Context, it taskItem) {
 			ui.Text(c, "先定个日期，再选几点提醒").FontSize(textSmall).TextColor(faint(t))
 			return
 		}
-		chip := func(key, text, label string, on bool) bool {
-			b := ui.Box(c.Key(key)).Height(28).Padding(0, 12).Radius(radiusPill).Center().Cursor(ui.CursorPointer).Label(label).Shrink(0).
-				Background(t.Text.Alpha(0.05)).Transition(easeLook)
-			switch {
-			case on:
-				b.Background(t.Accent.Alpha(0.14))
-			case b.Hovered():
-				b.Background(t.Text.Alpha(0.09))
-			}
-			press(b, 0.96)
-			b.Children(func() {
-				txt := ui.Text(c, text).FontSize(textSmall).NoWrap().PassThrough().FontFeatures("tnum")
-				if on {
-					txt.FontWeight(700).TextColor(t.Accent.MixOklab(t.Text, 0.3))
-				}
-			})
-			return b.Clicked()
-		}
+		chip := func(key, text, label string, on bool) bool { return propChip(c, key, text, label, on).Clicked() }
 		if chip("remind:none", "不提醒", "提醒 不提醒", task.Remind == "") {
 			set("")
 		}
@@ -1924,21 +1936,37 @@ func (a *app) moveTaskTo(it taskItem) {
 	a.openPalette(paletteMove)
 }
 
-// dropTaskOn makes el take tasks dropped on it, which go to the day, and
-// say so with the way back (moveTaskDay).
-func (a *app) dropTaskOn(el ui.Element, day time.Time) {
-	t := a.theme()
-	if _, over := ui.DragOver[taskDrag](el); over {
-		el.Background(t.Accent.Alpha(0.12))
+// propChip is a choice among a task's details' few (when it reminds, how
+// it repeats, a date of the month): a small key, on the accent's tint
+// when chosen. The caller acts on its click.
+func propChip(c *ui.Context, key, text, label string, on bool) ui.Element {
+	t := c.Theme()
+	b := ui.Box(c.Key(key)).Height(28).Padding(0, 12).Radius(radiusPill).Center().Cursor(ui.CursorPointer).Label(label).Shrink(0).
+		Background(t.Text.Alpha(0.05)).Transition(easeLook)
+	switch {
+	case on:
+		b.Background(t.Accent.Alpha(0.14))
+	case b.Hovered():
+		b.Background(t.Text.Alpha(0.09))
 	}
-	if d, ok := ui.Drop[taskDrag](el); ok {
-		for _, it := range a.tasks.items {
-			if it.path == d.path && it.node.ID == d.id {
-				a.later(func() { a.moveTaskDay(it, &day) })
-				return
-			}
+	press(b, 0.96)
+	b.Children(func() {
+		txt := ui.Text(c, text).FontSize(textSmall).NoWrap().PassThrough().FontFeatures("tnum")
+		if on {
+			txt.FontWeight(700).TextColor(t.Accent.MixOklab(t.Text, 0.3))
+		}
+	})
+	return b
+}
+
+// dragged is the task a drag carries, as the tasks were last gathered.
+func (a *app) dragged(d taskDrag) (taskItem, bool) {
+	for _, it := range a.tasks.items {
+		if it.path == d.path && it.node.ID == d.id {
+			return it, true
 		}
 	}
+	return taskItem{}, false
 }
 
 // theme is the theme the window was last drawn in.
@@ -1955,20 +1983,7 @@ func (a *app) monthView(c *ui.Context, items []taskItem) {
 	t := c.Theme()
 	first := time.Date(a.tasks.day.Year(), a.tasks.day.Month(), 1, 0, 0, 0, 0, a.tasks.day.Location())
 	start := a.weekOf(first)
-	byDay := map[string][]taskItem{}
-	again := map[string][]taskItem{} // those that come again on a day
-	for _, it := range items {
-		if d := it.date(); d != nil {
-			k := d.Format("2006-01-02")
-			byDay[k] = append(byDay[k], it)
-		}
-		if rp := it.node.Task.Repeat; rp != nil && it.node.Task.Due != nil && !it.done() {
-			for _, d := range rp.Coming(*it.node.Task.Due, it.node.Task.Times, a.now(), start, start.AddDate(0, 0, 41)) {
-				k := d.Format("2006-01-02")
-				again[k] = append(again[k], it)
-			}
-		}
-	}
+	laid := a.monthLaid(items, start)
 	ui.Column(c.Key("month")).Grow(1).Padding(0, 12, 12).Children(func() {
 		ui.Row(c).Shrink(0).Children(func() {
 			for i := range 7 {
@@ -1989,12 +2004,12 @@ func (a *app) monthView(c *ui.Context, items []taskItem) {
 					if !in {
 						cell.Background(t.Text.Alpha(0.02))
 					}
-					a.dropTaskOn(cell, d)
+					a.dropTaskAt(cell, d, dropDayAlone)
 					if cell.DoubleClicked() {
 						day := d
 						a.later(func() { a.tasks.day, a.tasks.view = day, tasksDay })
 					}
-					list := byTime(byDay[d.Format("2006-01-02")], d)
+					list := laid.list[week*7+i]
 					cell.Children(func() {
 						ui.Row(c).Padding(2, 4).Gap(6).AlignItems(ui.Baseline).Children(func() {
 							num := ui.Text(c, fmt.Sprint(d.Day())).FontSize(textSmall)
@@ -2019,7 +2034,7 @@ func (a *app) monthView(c *ui.Context, items []taskItem) {
 							a.taskChip(c, it, false)
 						}
 						if len(list) < 3 {
-							for j, it := range again[d.Format("2006-01-02")] {
+							for j, it := range laid.again[week*7+i] {
 								if len(list)+j < 3 {
 									a.taskGhost(c, it, d)
 								}
@@ -2032,11 +2047,45 @@ func (a *app) monthView(c *ui.Context, items []taskItem) {
 	})
 }
 
-// comesAgain tells whether a task that repeats comes again on a day from
-// from to to, after its day due and after today (Repeat.Coming).
-func (a *app) comesAgain(it taskItem, from, to time.Time) bool {
-	task := it.node.Task
-	return task.Repeat != nil && task.Due != nil && !it.done() && len(task.Repeat.Coming(*task.Due, task.Times, a.now(), from, to)) > 0
+// monthLaid is the tasks of the month's forty-two days put on them: each
+// day's own, as a calendar orders them (byTime), and those that come
+// again on it. As the hours' (hoursLaid), it is worked out once for the
+// tasks as gathered, the project they are narrowed to, the first day and
+// today, not at each frame.
+type monthLaid struct {
+	of          hoursOf
+	list, again [42][]taskItem
+}
+
+// monthLaid puts the tasks on the days from start (monthLaid the type).
+func (a *app) monthLaid(items []taskItem, start time.Time) *monthLaid {
+	of := hoursOf{a.tasks.serial, a.tasks.onMap, start, 42, today(a.now()), holidaysLoads()}
+	if l := &a.memo.month; l.of == of && a.tasks.serial > 0 {
+		return l
+	}
+	a.memo.laid++
+	byDay := map[string][]taskItem{}
+	again := map[string][]taskItem{} // those that come again on a day
+	for _, it := range items {
+		if d := it.date(); d != nil {
+			k := d.Format("2006-01-02")
+			byDay[k] = append(byDay[k], it)
+		}
+		if rp := it.node.Task.Repeat; rp != nil && it.node.Task.Due != nil && !it.done() {
+			for _, d := range rp.Coming(*it.node.Task.Due, it.node.Task.Times, a.now(), start, start.AddDate(0, 0, 41)) {
+				k := d.Format("2006-01-02")
+				again[k] = append(again[k], it)
+			}
+		}
+	}
+	l := monthLaid{of: of}
+	for i := range l.list {
+		d := start.AddDate(0, 0, i)
+		k := d.Format("2006-01-02")
+		l.list[i], l.again[i] = byTime(byDay[k], d), again[k]
+	}
+	a.memo.month = l
+	return &a.memo.month
 }
 
 // taskGhost is a task that repeats on a day it comes again, in the week
@@ -2138,7 +2187,7 @@ func (a *app) ensureInbox() error {
 	path := a.inboxPath()
 	if modTime(path).IsZero() {
 		f := model.NewFile(inboxName)
-		f.Sheets[0].Root.Note = "随手记下的想法和待办，之后整理到对应的导图里（右键主题「移到其他导图…」）。"
+		f.Sheets[0].Root.Note = "随手记下的想法和待办，之后整理到对应的导图里（在主题的菜单里选「移到其他导图…」）。"
 		if err := f.Save(path); err != nil {
 			return err
 		}
@@ -2250,24 +2299,7 @@ func (a *app) repeatProp(c *ui.Context, it taskItem) {
 	case rep.Unit == model.RepeatYear:
 		kind = kindYear
 	}
-	chip := func(key, text, label string, on bool) ui.Element {
-		b := ui.Box(c.Key(key)).Height(28).Padding(0, 12).Radius(radiusPill).Center().Cursor(ui.CursorPointer).Label(label).Shrink(0).
-			Background(t.Text.Alpha(0.05)).Transition(easeLook)
-		switch {
-		case on:
-			b.Background(t.Accent.Alpha(0.14))
-		case b.Hovered():
-			b.Background(t.Text.Alpha(0.09))
-		}
-		press(b, 0.96)
-		b.Children(func() {
-			txt := ui.Text(c, text).FontSize(textSmall).NoWrap().PassThrough().FontFeatures("tnum")
-			if on {
-				txt.FontWeight(700).TextColor(t.Accent.MixOklab(t.Text, 0.3))
-			}
-		})
-		return b
-	}
+	chip := func(key, text, label string, on bool) ui.Element { return propChip(c, key, text, label, on) }
 	// day is a date's small square key, of a grid of the month's dates.
 	day := func(key, text, label string, on bool) ui.Element {
 		return chip(key, text, label, on).Padding(0).Width(30)

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
@@ -38,13 +39,26 @@ func readTaskLine(line string, now time.Time, day *time.Time, at, till string) t
 	// What the line links to is the task's links, not words of its title.
 	tl.links = tokenLinks(line)
 	line = strings.TrimSpace(refToken.ReplaceAllString(line, ""))
-	rest, from, until, nextDay := readClock(line)
-	rest, rep, first := parseRepeat(rest, now)
+	// How it repeats stands at the line's head, and its time is read of
+	// what follows it (每天8点跑步: the time at the head of 8点跑步); where
+	// the line begins with its time, how it repeats is read after that.
+	said, rep, first := parseRepeat(line, now)
+	rest, from, until, nextDay, clock := cutClock(said)
+	after := rep == nil
+	if after {
+		rest, rep, first = parseRepeat(rest, now)
+	}
 	if nextDay && first != nil {
 		// Midnight is the day after's, and a repeat on days of its own
-		// (每周五) says the day: the time is left as words, not read wrong.
+		// (每周五, 每天) says the day: the time is left as words, not read
+		// wrong, and how it repeats stands (每天晚上12点 睡觉 read nothing:
+		// the whole line was read again, as one with no time).
 		from, until, nextDay = "", "", false
-		rest, rep, first = parseRepeat(line, now)
+		if after {
+			rest = strings.TrimSpace(clock + " " + rest)
+		} else {
+			rest = said
+		}
 	}
 	if from == "" {
 		from, until = at, till
@@ -174,6 +188,7 @@ func (a *app) putTask(line string, day *time.Time, at, till string) (taskLine, b
 		return tl, false
 	}
 	a.tasks.read = time.Time{}
+	a.remindOwn(path + "#" + n.ID) // made here today: the day is not said for it alone
 	return tl, true
 }
 
@@ -248,6 +263,18 @@ func parseClock(line string) (rest, from, until string) {
 // its day: 9点到9点 has none, nor has one that goes over midnight, which a
 // day cannot hold; its beginning is kept and nothing wrong is shown.
 func readClock(line string) (rest, from, until string, nextDay bool) {
+	rest, from, until, nextDay, _ = cutClock(line)
+	return rest, from, until, nextDay
+}
+
+// notClock is what, right after a time's words, makes them no time of the
+// task: a time to be done by or about (2点前交报告, 3点左右, 10点多), and
+// so many points of a thing (3点建议). At the line's head they were read
+// as its time, and 前交报告 was a task at two.
+var notClock = regexp.MustCompile(`^(?:前|后|内|钟|左右|多|建议|意见|总结|要求|看法|想法|体会|心得|感想|问题|原因|理由|说明|结论|注意|思考|收获|要点|事项)`)
+
+// cutClock is readClock, with the time's words as the line had them.
+func cutClock(line string) (rest, from, until string, nextDay bool, words string) {
 	for _, m := range remindWord.FindAllStringSubmatchIndex(line, -1) {
 		w := clockAt(line, m)
 		before := line[:m[0]]
@@ -260,6 +287,9 @@ func readClock(line string) (rest, from, until string, nextDay bool) {
 				ew := clockAt(tail, e)
 				end, endAt = &ew, m[1]+j[1]+e[1]
 			}
+		}
+		if notClock.MatchString(line[endAt:]) {
+			continue
 		}
 		after := []rune(line[endAt:])
 		lead := strings.TrimRightFunc(before, unicode.IsSpace)
@@ -301,9 +331,9 @@ func readClock(line string) (rest, from, until string, nextDay bool) {
 				until = clockText(min(stop, 24*60-1))
 			}
 		}
-		return strings.TrimSpace(line[:m[0]] + " " + line[endAt:]), from, until, next
+		return strings.TrimSpace(line[:m[0]] + " " + line[endAt:]), from, until, next, strings.TrimSpace(line[m[0]:endAt])
 	}
-	return line, "", "", false
+	return line, "", "", false, ""
 }
 
 var (
@@ -387,7 +417,10 @@ func parseTaskLine(line string, now time.Time) (string, *time.Time, model.Priori
 			if b := s[m[0]-1]; digit(b) || b == '.' || b == '/' {
 				continue
 			}
-			if m[6] < 0 && !unicode.IsSpace(rune(s[m[1]])) {
+			// What follows the day's own digits: what was found ends after
+			// the spaces behind them, at the line's end past the line (发布
+			// 11月2, as 11月20日 is being typed, took the frame down).
+			if r, _ := utf8.DecodeRuneInString(s[m[5]:]); m[6] < 0 && !unicode.IsSpace(r) {
 				continue
 			}
 			mo, _ := strconv.Atoi(s[m[2]:m[3]])
@@ -443,20 +476,40 @@ var (
 	repeatByMonth = regexp.MustCompile(`^每(?:个)?月`)
 )
 
-// repeatWord cuts a way to repeat off the head of a line, where the line
-// begins with it as a word of its own: the line's end or a space after
-// it. 工作日报 已提交 and 每天都很累 begin with one and say none; they were
-// made tasks of every working day and of every day, 报 已提交 and 都很累.
+// repeatWord cuts a way to repeat off the head of a line. It needs no
+// space after it, Chinese being written without (每天喝水, 每周五写周报,
+// 工作日9点 站会): it is no way to repeat only where the next character
+// goes on with it into other words, 工作日报 已提交 and 每天都很累, which
+// were made tasks of every working day and of every day (and then, a space
+// asked for, 每天喝水 read nothing).
 func repeatWord(s, word string) (rest string, ok bool) {
 	rest, ok = strings.CutPrefix(s, word)
 	if !ok {
 		return s, false
 	}
-	if r := []rune(rest); len(r) > 0 && !unicode.IsSpace(r[0]) {
+	goesOn := repeatGoesOn
+	if strings.HasSuffix(word, "工作日") {
+		goesOn = workdayGoesOn
+	}
+	if r, _ := utf8.DecodeRuneInString(rest); rest != "" && strings.ContainsRune(goesOn, r) {
 		return s, false
 	}
 	return strings.TrimSpace(rest), true
 }
+
+const (
+	// repeatGoesOn is what, after 每天, 每周五, 每月, 每年 and their like,
+	// makes a sentence of it: 每天都很累, 每年的今天.
+	repeatGoesOn = "都也还就在的会要是很没不又总只才"
+	// workdayGoesOn is what makes another word of 工作日: 工作日报, 工作日志.
+	workdayGoesOn = "报志记程常历里的"
+)
+
+// repeatCount is so many times a week, a month or a year (每周一次, 每月
+// 两次, 每年 3 次), and a part of one (每周末, 每月初, 每月底): no way to
+// repeat, though it begins as one does. 回 is a time only at a word's
+// end: 每周五回家 is every Friday.
+var repeatCount = regexp.MustCompile(`^每(?:周|星期|礼拜|个?月|年)\s*(?:(?:[一两二三四五六七八九十几]|\d+\s*)(?:次|回(?:\s|的|$))|[末初底])`)
 
 // parseRepeat reads how a task repeats where its line begins with it:
 // 每天, 工作日, 法定工作日, 每周, 每周五, 每月, 每月15号, 每月最后一天, 每年,
@@ -465,32 +518,47 @@ func repeatWord(s, word string) (rest string, ok bool) {
 // nil where the line says none.
 func parseRepeat(line string, now time.Time) (rest string, rep *model.Repeat, first *time.Time) {
 	s := strings.TrimSpace(line)
+	if repeatCount.MatchString(s) {
+		return line, nil, nil
+	}
 	day := today(now)
 	wd := int(day.Weekday())
 	if wd == 0 {
 		wd = 7
 	}
-	// found cuts what a pattern found off the line's head, as repeatWord.
+	// The line begins with one way to repeat at most, the longest that
+	// fits: where what follows that one goes on into other words, it says
+	// none, and no shorter one is read of it (每周五都要开会 is not 每周).
+	none := false
+	word := func(w string) (string, bool) {
+		if none || !strings.HasPrefix(s, w) {
+			return s, false
+		}
+		rest, ok := repeatWord(s, w)
+		none = !ok
+		return rest, ok
+	}
+	// found cuts what a pattern found off the line's head, as word.
 	found := func(re *regexp.Regexp) ([]string, string, bool) {
 		m := re.FindStringSubmatch(s)
 		if m == nil {
 			return nil, s, false
 		}
-		rest, ok := repeatWord(s, m[0])
+		rest, ok := word(m[0])
 		return m, rest, ok
 	}
-	if rest, ok := repeatWord(s, "每天"); ok {
+	if rest, ok := word("每天"); ok {
 		return rest, &model.Repeat{Unit: model.RepeatDay}, &day
 	}
-	for _, word := range []string{"每个法定工作日", "法定工作日"} {
-		if rest, ok := repeatWord(s, word); ok {
+	for _, w := range []string{"每个法定工作日", "法定工作日"} {
+		if rest, ok := word(w); ok {
 			r := &model.Repeat{Unit: model.RepeatWorkday}
 			first := r.Next(nil, day.AddDate(0, 0, -1)) // today, if worked
 			return rest, r, &first
 		}
 	}
-	for _, word := range []string{"每个工作日", "工作日"} {
-		if rest, ok := repeatWord(s, word); ok {
+	for _, w := range []string{"每个工作日", "工作日"} {
+		if rest, ok := word(w); ok {
 			if wd > 5 { // on a weekend: from Monday
 				day = day.AddDate(0, 0, 8-wd)
 			}
@@ -509,12 +577,12 @@ func parseRepeat(line string, now time.Time) (rest string, rep *model.Repeat, fi
 			return rest, r, &t
 		}
 	}
-	if rest, ok := repeatWord(s, "每月最后一天"); ok {
+	if rest, ok := word("每月最后一天"); ok {
 		r := &model.Repeat{Unit: model.RepeatMonth, MonthDays: []int{-1}}
 		t := r.Next(nil, day.AddDate(0, 0, -1))
 		return rest, r, &t
 	}
-	if rest, ok := repeatWord(s, "每年"); ok {
+	if rest, ok := word("每年"); ok {
 		return rest, &model.Repeat{Unit: model.RepeatYear}, nil // its day is the line's, or today
 	}
 	if m, rest, ok := found(repeatEvery); ok {

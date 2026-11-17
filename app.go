@@ -273,6 +273,7 @@ type app struct {
 	relatedClips   []library.Hit
 	relatedNodes   []place
 	index          map[string]indexEntry // maps read for the search, by path
+	memo           memo                  // what is worked out once for many frames (palette.go)
 	// The maps' AI analyses (mapanalysis.go), by key; the map analyzed.
 	mapMetas       map[string]*model.Analysis
 	mapMetaMod     time.Time
@@ -337,7 +338,6 @@ type app struct {
 	libSel        string // the clip shown
 	libQuery      string
 	libKind       int               // kindAll, kindMaps, kindDocs or kindLinks
-	libHome       bool              // 今天 is shown, not the list
 	barOpen       bool              // the one bar is open, a card to write in (bar.go)
 	barKind       int               // what the bar keeps its words as, chosen by hand: barAuto, barATask, barThought
 	keptLast      string            // the clip last left in 收集 from what waits: said there, with the way back
@@ -499,6 +499,7 @@ type app struct {
 	orgResult             string
 	pluginSince           time.Time
 	pluginResult          string
+	copies                []*copyJob               // the files being copied into a map (copying)
 	syncChecking          bool                     // the sync's repository is being checked
 	syncByHand            bool                     // the sync going on was asked for: its result is said
 	pluginChecking        bool                     // a newer plugin is being looked for
@@ -614,6 +615,7 @@ func (a *app) openDir(dir string) {
 }
 
 func (a *app) refreshFiles() {
+	a.memo.scans++ // the maps' files are looked at anew (indexed)
 	tree, err := model.ScanFolder(a.dir)
 	if err != nil {
 		a.tree, a.files = model.Folder{Path: a.dir, Name: filepath.Base(a.dir)}, nil
@@ -1002,6 +1004,7 @@ func (a *app) reload() {
 }
 
 func modTime(path string) time.Time {
+	fileLooks++
 	info, err := os.Stat(path)
 	if err != nil {
 		return time.Time{}

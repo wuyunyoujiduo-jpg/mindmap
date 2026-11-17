@@ -12,11 +12,11 @@ import (
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
 )
 
-// The desk is the page the app opens on, laid out as the work goes: write
-// it down, do what is for today, and put what was written where it
-// belongs. On top the line to write in; on the left what is to do today
-// and the maps; on the right what waits for a place, with where the AI
-// would put it.
+// What 今天 has beside its tasks (taskspage.go): the keeping of what is
+// written in the one bar (saveHomeLine), today's figures, and what waits
+// for a place: a band under today's tasks or a column beside them, and
+// the list 等着归位 where each is a card with what can be done with it.
+// (It began as the desk, a page of its own the app opened on.)
 
 var weekdays = []string{"周日", "周一", "周二", "周三", "周四", "周五", "周六"}
 
@@ -49,7 +49,7 @@ func titleAndSite(title string) (string, string) {
 
 var linkInTitle = regexp.MustCompile(`https?://\S+`)
 
-// saveHomeLine keeps what was typed in the desk's line.
+// saveHomeLine keeps what was typed in the one bar.
 func (a *app) saveHomeLine() {
 	text := strings.TrimSpace(a.homeDraft)
 	if text == "" {
@@ -104,30 +104,44 @@ func (a *app) saveHomeLine() {
 	}
 }
 
+// dayKey is what today's tasks were worked out of: the tasks as gathered
+// (tasksState.serial) and the day.
+type dayKey struct {
+	tasks int
+	day   time.Time
+}
+
+// todays works out today's tasks once for the tasks as gathered and the
+// day, not at each asking: the page's head asked four times a frame.
+func (a *app) todays(now time.Time) {
+	items := a.taskItems()
+	day := today(now)
+	if key := (dayKey{a.tasks.serial, day}); key != a.memo.dayFor {
+		a.memo.dayFor, a.memo.due, a.memo.done = key, nil, nil
+		for _, it := range items {
+			if d := it.date(); d != nil && countsAsTask(it) && d.Before(day.AddDate(0, 0, 1)) {
+				a.memo.due = append(a.memo.due, it)
+			}
+			if it.doneOn(now) {
+				a.memo.done = append(a.memo.done, it)
+			}
+		}
+	}
+}
+
 // dueToday are the tasks of today and those overdue, to do: as the left
 // column counts 今天 and as its list shows them (countsAsTask: an idea
 // with a day among them; the head left those out, and said one less).
 func (a *app) dueToday(now time.Time) []taskItem {
-	day := today(now)
-	var due []taskItem
-	for _, it := range a.taskItems() {
-		if d := it.date(); d != nil && countsAsTask(it) && d.Before(day.AddDate(0, 0, 1)) {
-			due = append(due, it)
-		}
-	}
-	return due
+	a.todays(now)
+	return a.memo.due
 }
 
 // doneToday are the tasks ticked off today, one that repeats and was done
 // a time among them (doneOn).
 func (a *app) doneToday(now time.Time) []taskItem {
-	var done []taskItem
-	for _, it := range a.taskItems() {
-		if it.doneOn(now) {
-			done = append(done, it)
-		}
-	}
-	return done
+	a.todays(now)
+	return a.memo.done
 }
 
 // siteChip is the site of a link taken out of a title, small beside it.
@@ -151,10 +165,22 @@ type waitingItem struct {
 // (Clip.ToPlace) that no topic links to yet. A clip waits for nothing by
 // itself: it is at home in 收集, found by its tags and the search. Before
 // 0.88 every clip of the week waited, and the page read as a debt.
+//
+// It is worked out once for the tasks as gathered, the folder as scanned
+// and the library as it stands (waitKey), not at each asking: a frame of
+// 今天 asked four or five times, each a look through every map's links.
+// What is given is not to be changed in place.
 func (a *app) waiting() []waitingItem {
+	items := a.taskItems()
+	key := waitKey{a.tasks.serial, a.memo.scans, a.lib, a.lib.Version}
+	if key == a.memo.waitFor {
+		return a.memo.waitList
+	}
+	a.memo.waited++
 	var out []waitingItem
-	for _, it := range a.taskItems() {
-		if it.path == a.inboxPath() && !it.done() {
+	inbox := a.inboxPath()
+	for _, it := range items {
+		if it.path == inbox && !it.done() {
 			out = append(out, waitingItem{task: &it})
 		}
 	}
@@ -163,7 +189,15 @@ func (a *app) waiting() []waitingItem {
 			out = append(out, waitingItem{clip: cl})
 		}
 	}
+	a.memo.waitFor, a.memo.waitList = key, out
 	return out
+}
+
+// waitKey is what waiting was worked out of.
+type waitKey struct {
+	tasks, scans int
+	lib          *library.Library
+	version      int
 }
 
 // shortPlace is a place as a chip says it: the map and the topic.
@@ -175,7 +209,7 @@ func shortPlace(p taskPlace) string {
 	return parts[0] + " › " + parts[len(parts)-1]
 }
 
-// homeWaitingCount is how many waiting things the desk shows.
+// homeWaitingCount is how many waiting things the list 等着归位 shows.
 const homeWaitingCount = 6
 
 // homeWaiting is 刚记下的: what was written down lately, each a card with
@@ -301,7 +335,7 @@ func (a *app) waitingOnToday(shown []taskItem) []waitingItem {
 			listed[it.key()] = true // today's and the late are above already
 		}
 	}
-	return slices.DeleteFunc(a.waiting(), func(w waitingItem) bool { return w.task != nil && listed[w.task.key()] })
+	return slices.DeleteFunc(slices.Clone(a.waiting()), func(w waitingItem) bool { return w.task != nil && listed[w.task.key()] })
 }
 
 // railRoom is the least room today's page needs to stand what waits

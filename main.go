@@ -1,5 +1,8 @@
-// MyMind is a desktop mind map for managing projects: nodes carry notes,
-// tags and tasks with dates, shown as a map, a board and an agenda.
+// MyMind is a desktop app of four places: 今天, the tasks of every map by
+// their days; 项目, mind maps for managing projects, whose topics carry
+// notes, tags and tasks and show as a map, an outline, a board and a
+// diagram; 收集, clips and thoughts organized by AI; and 技能, the AI
+// agents' skills. An AI assistant floats over them all.
 package main
 
 import (
@@ -480,8 +483,8 @@ func main() {
 			MinWidth:  900,
 			MinHeight: 560,
 			StateKey:  "main",
-			// A sidebar of glass, and the toolbar as the title bar, the
-			// window's controls over the sidebar's top.
+			// The top row is the window's title bar, the window's controls
+			// at its left end (topBar).
 			TitleBarStyle: mygo.TitleBarHiddenInset,
 			Vibrancy:      mygo.VibrancySidebar,
 			Content:       ui.View(a.view),

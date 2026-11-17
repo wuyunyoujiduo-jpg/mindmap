@@ -17,6 +17,38 @@ import (
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/versions"
 )
 
+// The folders of the maps' code chosen on this computer are the settings'
+// (config.Projects, projectOf): the server, which is this program, reads
+// them as they are kept, and keeps one an agent gives it (set_baseline's
+// project_dir) where the app keeps one chosen in it. With no settings yet,
+// the app never run here, it is kept while the server runs, and no file
+// of settings is made of that alone.
+func init() {
+	heldProjects, holdProject := mcp.ProjectsHere, mcp.KeepProjectHere
+	mcp.ProjectsHere = func() map[string]string {
+		here := heldProjects()
+		for path, dir := range loadConfig().Projects {
+			here[path] = dir
+		}
+		return here
+	}
+	mcp.KeepProjectHere = func(path, dir string) {
+		holdProject(path, dir)
+		if _, err := os.Stat(configPath()); err != nil {
+			return
+		}
+		c := loadConfig()
+		if c.Projects[path] == dir {
+			return
+		}
+		if c.Projects == nil {
+			c.Projects = map[string]string{}
+		}
+		c.Projects[path] = dir
+		c.save()
+	}
+}
+
 // serveMCP runs the MCP server on the maps folder of the settings, or the
 // one --dir names.
 func serveMCP(args []string) error {

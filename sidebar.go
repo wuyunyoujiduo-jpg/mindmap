@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 
@@ -41,6 +42,17 @@ func (a *app) rowMore(c *ui.Context, hover bool, label string, menu func(m *ui.M
 	more.Menu(menu)
 }
 
+// trashWord is where what is deleted goes, by the name the system has for
+// it, as revealWord: 废纸篓 is the Mac's alone, and Windows' is 回收站.
+func trashWord() string { return trashOn(runtime.GOOS) }
+
+func trashOn(goos string) string {
+	if goos == "darwin" {
+		return "废纸篓"
+	}
+	return "回收站"
+}
+
 // folderMenu is what can be done with a folder of the list.
 func (a *app) folderMenu(m *ui.Menu, path string) {
 	if m.Item("在此新建导图").Chosen() {
@@ -53,11 +65,11 @@ func (a *app) folderMenu(m *ui.Menu, path string) {
 	if m.Item("重命名").Chosen() {
 		a.renaming, a.renameText = path, filepath.Base(path)
 	}
-	if m.Item("在 Finder 中显示").Chosen() {
+	if m.Item(revealWord()).Chosen() {
 		a.plat.ShowInFolder(path)
 	}
 	m.Separator()
-	if m.Item("移到废纸篓…").Chosen() {
+	if m.Item("移到" + trashWord() + "…").Chosen() {
 		a.deletePath, a.confirmDelete = path, true
 	}
 }
@@ -99,7 +111,7 @@ func (a *app) deleteFolder(dir string) {
 			_ = a.open(a.files[0].Path)
 		}
 	}
-	a.tell("已把文件夹「" + filepath.Base(dir) + "」移到废纸篓")
+	a.tell("已把文件夹「" + filepath.Base(dir) + "」移到" + trashWord())
 }
 
 // mapMenu is what can be done with a map of the list.
@@ -113,7 +125,7 @@ func (a *app) mapMenu(m *ui.Menu, path string) {
 		// and is to be there always (the user, 0.96.6).
 		m.Item("默认的收件箱：没说放哪的任务先到这里").Disabled(true)
 		m.Separator()
-		if m.Item("在 Finder 中显示").Chosen() {
+		if m.Item(revealWord()).Chosen() {
 			a.plat.ShowInFolder(path)
 		}
 		return
@@ -142,10 +154,10 @@ func (a *app) mapMenu(m *ui.Menu, path string) {
 		}
 	})
 	m.Separator()
-	if m.Item("在 Finder 中显示").Chosen() {
+	if m.Item(revealWord()).Chosen() {
 		a.plat.ShowInFolder(path)
 	}
-	if m.Item("移到废纸篓…").Chosen() {
+	if m.Item("移到" + trashWord() + "…").Chosen() {
 		a.deletePath, a.confirmDelete = path, true
 	}
 }
@@ -342,7 +354,7 @@ func (a *app) tagList(c *ui.Context) {
 	if len(tags) > 0 {
 		title = fmt.Sprintf("本导图标签 %d", len(tags))
 	}
-	sectionCard(c, iconTag, tileBlue, title, nil, func() {
+	section(c, iconTag, title, nil, func() {
 		if len(tags) > 8 {
 			ui.TextInput(c.Key("tag-query"), &a.tagQuery).Placeholder("筛选标签").Margin(2, 6, 4)
 		}
@@ -370,7 +382,7 @@ func (a *app) tagList(c *ui.Context) {
 			a.tagAdding = true
 		}
 		if len(tags) == 0 {
-			ui.Text(c, "标签在所有导图间共用。选中主题后，在右侧「主题」或右键菜单里打标签。").
+			ui.Text(c, "标签在所有导图间共用。选中主题后，在它的面板或菜单里打标签，也可以在标题里写 #。").
 				FontSize(12).TextColor(t.TextMuted).Wrap().Margin(2, 12)
 		}
 	})
@@ -392,7 +404,7 @@ func (a *app) tagRow(c *ui.Context, tag string, count int) {
 	}
 	active := a.tagFilter == tag
 	row := ui.Row(c).Padding(4, 8, 4, 12).Gap(8).Radius(radiusSmall).AlignItems(ui.Center).
-		Cursor(ui.CursorPointer).Label("筛选标签 " + tag).Tooltip("点击筛选，右键重命名、改颜色或删除")
+		Cursor(ui.CursorPointer).Label("筛选标签 " + tag).Tooltip("只看带这个标签的主题")
 	switch {
 	case active:
 		row.Background(tagColor(tag).Alpha(0.18))
@@ -406,7 +418,10 @@ func (a *app) tagRow(c *ui.Context, tag string, count int) {
 			a.tagFilter = tag
 		}
 	}
-	row.ContextMenu(func(m *ui.Menu) {
+	// What can be done with a tag is one menu, under the ⋯ the pointer
+	// shows at its row's end and under the pointer's other key: that key
+	// alone was the way to it, and a tip said so.
+	menu := func(m *ui.Menu) {
 		if m.Item("重命名").Chosen() {
 			a.tagRenaming, a.tagRenameText = tag, tag
 		}
@@ -428,16 +443,27 @@ func (a *app) tagRow(c *ui.Context, tag string, count int) {
 		if m.Item("删除（从所有导图的主题上移除）").Chosen() {
 			a.later(func() { a.deleteTag(tag) })
 		}
-	})
+	}
+	row.ContextMenu(menu)
+	hover := row.Hovered()
 	row.Children(func() {
 		ui.Box(c).Size(8, 8).Radius(999).Background(tagColor(tag))
 		text := ui.Text(c, tag).FontSize(13).Grow(1).SingleLine()
 		if active {
 			text.Bold()
 		}
+		// Under the pointer its count gives way to the ⋯, which lies over
+		// the row's end and takes no room of it: the row is as it was.
 		if count > 0 {
-			ui.Text(c, fmt.Sprint(count)).FontSize(11).TextColor(t.TextMuted)
+			ui.Text(c, fmt.Sprint(count)).FontSize(11).TextColor(t.TextMuted).Opacity(1 - b2f(hover))
 		}
+		ui.Box(c.Key("more")).Absolute().Top(0).Bottom(0).Right(2).Center().Children(func() {
+			more := iconButton(c, iconMore, "标签菜单 "+tag, "重命名、改颜色、删除…", 22, true)
+			if !hover {
+				more.Opacity(0) // its menu, if open, stays
+			}
+			more.Menu(menu)
+		})
 	})
 }
 
@@ -464,7 +490,7 @@ func sideTile(c *ui.Context, ic icon, col ui.Color) {
 	ui.Box(c).Size(18, 18).Shrink(0).PassThrough().Draw(func(p *ui.Painter, r ui.Rect) {
 		switch ic {
 		case iconMap:
-			drawRailIcon(p, r, 17, railMap, t.TextMuted)
+			drawRailMap(p, r, 17, t.TextMuted)
 			p.FillPath(new(ui.Path).Circle(r.X+r.W*0.29, r.Y+r.H/2, 2.6), col) // its topic, in its color
 		default:
 			drawIcon(p, r, 15, ic, t.TextMuted)

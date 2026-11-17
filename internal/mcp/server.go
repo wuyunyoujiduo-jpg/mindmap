@@ -287,8 +287,8 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 			return "", err
 		}
 		text := readMap(s.rel(path), f, get("sheet"))
-		if f.Project != "" || f.Baseline != nil {
-			text += BaselineText(path, f)
+		if project := s.projectOf(path, f); project != "" || f.Baseline != nil {
+			text += baselineText(path, f, project)
 		}
 		return text, nil
 	case "search":
@@ -316,7 +316,7 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 		case "delete_node":
 			msg, err = deleteNode(f, get("id"))
 		case "set_baseline":
-			msg, err = setBaseline(path, f, get("project_dir"), get("commit"), s.Now())
+			msg, err = setBaseline(path, f, s.projectOf(path, f), get("project_dir"), get("commit"), s.Now())
 		}
 		if err != nil {
 			return "", err
@@ -326,7 +326,7 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 			if id := get("id"); id != "" && name != "delete_node" {
 				e.Nodes = []string{id}
 			}
-			s.log(f, model.LogEdit, firstLine(summary), e)
+			s.log(path, f, model.LogEdit, firstLine(summary), e)
 		}
 		if err := s.write(path, before, f, get("summary")); err != nil {
 			return "", err

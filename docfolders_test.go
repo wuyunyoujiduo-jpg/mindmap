@@ -116,15 +116,15 @@ func TestFolderRenameAndDelete(t *testing.T) {
 	if err := tt.RightClick("归档项目"); err != nil { // a right click opens the same menu
 		t.Fatal(err)
 	}
-	if err := tt.ChooseMenuItem("移到废纸篓…"); err != nil {
+	if err := tt.ChooseMenuItem("移到" + trashWord() + "…"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if !a.confirmDelete || !tt.HasText("把文件夹「归档项目」移到废纸篓？") || !tt.HasText("里面的 1 张导图会一起移走，可以在废纸篓中找回。") {
+	if !a.confirmDelete || !tt.HasText("把文件夹「归档项目」移到"+trashWord()+"？") || !tt.HasText("里面的 1 张导图会一起移走，可以在"+trashWord()+"中找回。") {
 		t.Fatalf("not asked: %q", tt.Texts())
 	}
 	snapshot(t, tt, "folder-delete")
-	if err := tt.Click("移到废纸篓"); err != nil {
+	if err := tt.Click("移到" + trashWord()); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
@@ -189,7 +189,7 @@ func TestMapTree(t *testing.T) {
 	}
 	a.cfg.HideTree = false
 	a.showLibrary()
-	a.libHome = true
+	a.tasks.open = true
 	tt.Frame()
 	if a.treeShown() {
 		t.Fatal("the directory shows in 今天")
@@ -322,7 +322,7 @@ func TestInboxStaysTheInbox(t *testing.T) {
 	if strings.Contains(menu, "重命名") || strings.Contains(menu, "移动到") || !strings.Contains(menu, "默认的收件箱") {
 		t.Fatalf("the inbox's menu: %q", menu)
 	}
-	if strings.Contains(menu, "移到废纸篓") {
+	if strings.Contains(menu, "移到"+trashWord()) {
 		t.Fatalf("the inbox can be deleted: %q", menu)
 	}
 	tt.Key(0, ui.KeyEscape)

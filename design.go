@@ -7,17 +7,19 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// The app's look, in a few pieces used everywhere. It is flat and exact,
-// as TickTick's is (the user's reference for the style, not for the
-// layout, which is the app's own): the window is a quiet gray, and what is
-// read and worked on is on one white leaf with round corners (leaf); on
-// the leaf a card is a pale block (raise, blockFill), a list is rows with a
-// thin line between them, a field is a pale block that turns white with
-// the accent's line when written in. Nothing has a shadow but what floats
-// over the page (lifted). Corners are small and alike, not pills. Type
-// does the ranking: a page's name large and bold, a part's name smaller
-// and bold, words on things small and gray. One color, the accent, flat:
-// the key that acts, what is chosen, links, the AI.
+// The app's look, in a few pieces used everywhere; DESIGN.md says it token
+// by token. It is flat and exact, as TickTick's is (the user's reference
+// for the style, not for the layout, which is the app's own): the window
+// is a quiet gray, and what is read and worked on is on one white leaf
+// with round corners (leaf); on the leaf a lone card is a pale block
+// (raise, blockFill), things of a kind are cards apart, white with a
+// hairline (wallCard), a list is rows with a thin line between them, a
+// field is a pale block that turns white with the accent's line when
+// written in. Nothing has a shadow but what floats over the page (lifted).
+// Corners are small and alike, not pills. Type does the ranking: a page's
+// name large and bold, a part's name smaller and bold, words on things
+// small and gray. One color, the accent, flat: the key that acts, what is
+// chosen, links, the AI.
 
 // Corners: a card's, a row's in a card, and a small thing's.
 const (
@@ -37,15 +39,16 @@ const (
 	textBody     = 14
 	textTitle    = 16
 	textHeadline = 20
-	textPage     = 22 // a page's name
+	textPage     = 22 // a large heading on a page (a page's own name is 26, pageHead)
 )
 
-// toolbarHeight is the toolbar's, which is the window's title bar.
+// toolbarHeight is the top row's, which is the window's title bar, and a
+// map's own bar's under it.
 const toolbarHeight = 52
 
 // pageWidth is the most a page takes, in the middle of the room it has:
-// the desk, the tasks and 收集 are columns of this width, so that their
-// headings and what is under them start at the same place.
+// 今天, 项目 and 收集 are columns of this width, so that their headings
+// and what is under them start at the same place.
 const pageWidth = 1080
 
 // pageColumn is a page's column, in the middle of the room it has; grow
@@ -126,9 +129,9 @@ func pageHead(c *ui.Context, key, title, sub string, fs []figure, right func()) 
 }
 
 // captureBox is the box of a line to write something down in, the same
-// on the desk, the tasks and 收集: a white card with a thin line, a plus
-// before what the caller builds. The caller outlines it in the accent
-// while its field has the focus (captureFocus).
+// on 今天's lists and in 收集: a pale block, a plus before what the caller
+// builds. The caller turns it white in the accent's line while its field
+// has the focus (captureFocus).
 func captureBox(c *ui.Context, key string) ui.Element {
 	t := c.Theme()
 	return ui.Row(c.Key(key)).MinHeight(44).Padding(4, 8, 4, 14).Gap(10).Radius(radiusRow+2).AlignItems(ui.Center).FillWidth().Shrink(0).
@@ -146,10 +149,6 @@ func captureFocus(c *ui.Context, box, field ui.Element) {
 func focusHalo(el ui.Element, t *ui.Theme) ui.Element {
 	return el.Border(1.5, t.Accent).NoShadow()
 }
-
-// soft is what a card has under it: nothing. A card on the leaf is told
-// by its fill alone.
-func soft(el ui.Element, t *ui.Theme) ui.Element { return el }
 
 // lifted is the shadow of what floats over the page, the one thing that
 // has one: a bar on the canvas, a popup, a sheet, a dialog. A hairline at
@@ -175,7 +174,7 @@ func floated(el ui.Element, t *ui.Theme) ui.Element {
 type pillMatch struct{ group string }
 
 // slidePill is the white pill under the part chosen of a group (a
-// segmented control, a row of tabs, the sidebar): built first in that
+// segmented control, a row of tabs, the places' switch): built first in that
 // part, it fills it, and slides there from the part chosen before.
 func slidePill(c *ui.Context, group string, radius float32) {
 	t := c.Theme()
@@ -198,8 +197,8 @@ func pillColor(t *ui.Theme) ui.Color {
 	return ui.Hex("#FFFFFF")
 }
 
-// ground is the window's own color, which the rail and the maps' list
-// stand on and the leaf lies on.
+// ground is the window's own color, which the top row stands on and the
+// leaf lies on.
 func ground(t *ui.Theme) ui.Color {
 	if t.Dark {
 		return ui.Hex("#0E0E10")
@@ -208,21 +207,19 @@ func ground(t *ui.Theme) ui.Color {
 }
 
 // A groundLook is a color the window's ground may take, in the light
-// theme, with the leaf and the trays that go with it. The ink's has the
-// rail dark, its words light.
+// theme, with the leaf and the trays that go with it.
 type groundLook struct {
 	key, name          string
 	ground, tray, leaf string
-	dark               bool // the rail's words are light on it
 }
 
 // grounds are the grounds to choose from in the settings; the first, the
 // leaf's own white, is the one taken until another is chosen.
 var grounds = []groundLook{
-	{"", "浅灰", "#F5F5F7", "#EBEBEE", "#FFFFFF", false},
-	{"violet", "淡紫", "#F4F3FB", "#E9E8F5", "#FFFFFF", false},
-	{"blue", "淡蓝", "#F1F5FA", "#E6EBF2", "#FFFFFF", false},
-	{"cream", "米色", "#F7F4EE", "#EFE9DF", "#FFFFFF", false},
+	{"", "浅灰", "#F5F5F7", "#EBEBEE", "#FFFFFF"},
+	{"violet", "淡紫", "#F4F3FB", "#E9E8F5", "#FFFFFF"},
+	{"blue", "淡蓝", "#F1F5FA", "#E6EBF2", "#FFFFFF"},
+	{"cream", "米色", "#F7F4EE", "#EFE9DF", "#FFFFFF"},
 }
 
 // groundKey is the ground chosen (config.Ground), set as each frame begins.

@@ -11,11 +11,11 @@ import (
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
 
-// The app has four places, and no sidebar: 今天 (what is to do and what
-// was written down), 项目 (the maps, by folder; one opened takes the
-// page), 收集 (what was collected) and 技能 (the AI agents' skills,
-// skillsview.go: the user had it after 收集, not on 今天, 0.99.2). A
-// switch at the top of the window goes between them (placesBar).
+// The app has four places: 今天 (what is to do and what was written
+// down), 项目 (the maps, by folder; one opened takes the page), 收集 (what
+// was collected) and 技能 (the AI agents' skills, skillsview.go: the user
+// had it after 收集, not on 今天, 0.99.2). A switch in the top row goes
+// between them (topBar), and each has its own left column (side.go).
 const (
 	placeToday = iota
 	placeMaps
@@ -30,7 +30,7 @@ func (a *app) place() int {
 		return placeMaps
 	case a.skillsOpen:
 		return placeSkills
-	case a.libHome || a.tasks.open:
+	case a.tasks.open:
 		return placeToday
 	}
 	return placeCollect
@@ -52,8 +52,8 @@ func (a *app) sideWidth() float32 {
 
 // topBar is the top of the window, on every page: the left column's
 // key, the switch of the places, the one bar, which takes the room,
-// then the AI's key, the search of everything and the settings. It is the
-// window's title bar, and drags it.
+// then the AI's key, the screenshot's, the search of everything and the
+// settings. It is the window's title bar, and drags it.
 func (a *app) topBar(c *ui.Context) {
 	t := c.Theme()
 	bar := c.TitleBar()
@@ -93,12 +93,9 @@ func (a *app) topBar(c *ui.Context) {
 					}
 				})
 			}
-			part(placeToday, "今天", "今天要做的，和刚记下的（"+keyLabel("CmdOrCtrl+Alt+1")+"）", func() {
-				a.showLibrary()
-				a.libHome = true
-			})
+			part(placeToday, "今天", "今天要做的，和刚记下的（"+keyLabel("CmdOrCtrl+Alt+1")+"）", a.goToday)
 			part(placeMaps, "项目", "导图：一张就是一个项目（"+keyLabel("CmdOrCtrl+Alt+2")+"）", a.showProjects)
-			part(placeCollect, "收集", "灵感、链接、文档和图片（"+keyLabel("CmdOrCtrl+Alt+3")+"）", func() { a.openList(kindAll, "") })
+			part(placeCollect, "收集", "灵感、链接、文档和图片（"+keyLabel("CmdOrCtrl+Alt+3")+"）", a.goCollect)
 			part(placeSkills, "技能", "各个 AI 编程工具的技能：在哪、收进来、链接、同步（"+keyLabel("CmdOrCtrl+Alt+4")+"）", a.showSkills)
 		})
 		// The places and the bar by the keyboard, from every page (the
@@ -107,11 +104,11 @@ func (a *app) topBar(c *ui.Context) {
 		// beside them.
 		switch {
 		case c.Shortcut(ui.Cmd|ui.Alt, ui.Key1):
-			a.later(func() { a.showLibrary(); a.libHome = true })
+			a.later(a.goToday)
 		case c.Shortcut(ui.Cmd|ui.Alt, ui.Key2):
 			a.later(a.showProjects)
 		case c.Shortcut(ui.Cmd|ui.Alt, ui.Key3):
-			a.later(func() { a.openList(kindAll, "") })
+			a.later(a.goCollect)
 		case c.Shortcut(ui.Cmd|ui.Alt, ui.Key4):
 			a.later(a.showSkills)
 		case c.Shortcut(ui.Cmd, ui.KeyJ):
@@ -208,20 +205,12 @@ func (a *app) projectsView(c *ui.Context) {
 		el.ContextMenu(func(m *ui.Menu) { a.mapMenu(m, path) })
 		n := counts[path]
 		// The map itself, small: its face, by which it is told from the others.
-		file := a.file
-		if path != a.path {
-			file = a.indexed(path)
-		}
-		var sheet *model.Document
-		topics := 0
-		if file != nil && len(file.Sheets) > 0 {
-			sheet = file.Sheets[0]
-			topics = countTopics(sheet.Root) - 1
-		}
+		face := a.mapFaceOf(path)
+		topics := face.topics
 		el.Children(func() {
 			ui.Box(c.Key("face")).Height(116).FillWidth().Radius(radiusCard - 4).Background(t.Text.Alpha(0.028)).PassThrough().
 				Draw(func(pt *ui.Painter, r ui.Rect) {
-					pt.Clip(r, radiusCard-4, func() { drawMapFace(pt, r, sheet, col) })
+					pt.Clip(r, radiusCard-4, func() { face.draw(pt, r, col) })
 				})
 			ui.Row(c).Padding(0, 4, 0, 8).Gap(6).AlignItems(ui.Center).FillWidth().Children(func() {
 				ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(2).Children(func() {
@@ -269,7 +258,7 @@ func (a *app) projectsView(c *ui.Context) {
 		case path != "" && draggedOver(b):
 			b.Background(t.Accent.Alpha(0.18))
 		case on:
-			soft(b.Background(pillColor(t)), t)
+			b.Background(pillColor(t))
 		case b.Hovered():
 			b.Background(t.Text.Alpha(0.09))
 		}
@@ -393,9 +382,6 @@ func (a *app) projectsView(c *ui.Context) {
 								a.later(func() { a.newMapIn(at.Path) })
 							}
 						})
-						if a.projFolder == "" {
-							a.removeMapMeta(a.tree.Path)
-						}
 						return
 					}
 					ui.Grid(c.Key("maps")).Columns(cols).Gap(16).FillWidth().Children(func() {
@@ -419,7 +405,7 @@ func (a *app) projectsView(c *ui.Context) {
 					if m.Item("打开其他文件夹…").Shortcut(ui.Cmd, ui.KeyO).Chosen() {
 						a.pickWorkspace()
 					}
-					if m.Item("在 Finder 中显示").Chosen() {
+					if m.Item(revealWord()).Chosen() {
 						a.plat.ShowInFolder(a.dir)
 					}
 				})
@@ -436,15 +422,16 @@ func (a *app) projectsView(c *ui.Context) {
 
 // deleteConfirm asks before a map or a folder goes to the trash.
 func (a *app) deleteConfirm(c *ui.Context) {
-	title, says := "把「"+mapName(a.deletePath)+"」移到废纸篓？", "可以在废纸篓中找回。"
+	trash := trashWord()
+	title, says := "把「"+mapName(a.deletePath)+"」移到"+trash+"？", "可以在"+trash+"中找回。"
 	folder := a.deletePath != "" && !strings.HasSuffix(a.deletePath, model.Ext)
 	if folder {
-		title = "把文件夹「" + filepath.Base(a.deletePath) + "」移到废纸篓？"
+		title = "把文件夹「" + filepath.Base(a.deletePath) + "」移到" + trash + "？"
 		if n := len(a.mapsIn(a.deletePath)); n > 0 {
-			says = fmt.Sprintf("里面的 %d 张导图会一起移走，可以在废纸篓中找回。", n)
+			says = fmt.Sprintf("里面的 %d 张导图会一起移走，可以在%s中找回。", n, trash)
 		}
 	}
-	if ui.AlertDialog(c, &a.confirmDelete, title, says, "取消", "移到废纸篓") == 1 {
+	if ui.AlertDialog(c, &a.confirmDelete, title, says, "取消", "移到"+trash) == 1 {
 		if folder {
 			a.deleteFolder(a.deletePath)
 		} else {
@@ -465,30 +452,65 @@ func countTopics(n *model.Node) int {
 	return k
 }
 
-// drawMapFace draws a map small, as the face of its card: its center and
-// its first two levels, laid out as the map itself is (a mind map, a logic
-// chart, an org chart, a timeline…) by the canvas's own layout, each
-// branch in a color, so that a map is told at a glance from another by
-// its shape.
-func drawMapFace(p *ui.Painter, r ui.Rect, doc *model.Document, col ui.Color) {
+// mapFace is a map's face on its card: its center and its first two
+// levels, laid out as the map itself is (a mind map, a logic chart, an org
+// chart, a timeline…) by the canvas's own layout, each branch in a color,
+// so that a map is told at a glance from another by its shape; and how
+// many topics it holds. It is worked out once for the map as read (file:
+// a map read anew is another; of the open map, as edited, edits), not
+// as each card is drawn: every card of 项目 counted its map's topics and
+// laid its face out at each frame.
+type mapFace struct {
+	file   *model.File
+	edits  int
+	topics int
+	// What is drawn: the layout of its first levels, how deep and of which
+	// branch each box is; none of a map with no canvas.
+	laid          bool
+	structure     model.Structure
+	lr            layout.Result
+	depth, branch map[string]int
+}
+
+// mapFaceOf is the face of the map at path (mapFace).
+func (a *app) mapFaceOf(path string) *mapFace {
+	file, edits := a.file, a.edits
+	if path != a.path {
+		file, edits = a.indexed(path), 0
+	}
+	if f := a.memo.faces[path]; f != nil && f.file == file && f.edits == edits {
+		return f
+	}
+	f := &mapFace{file: file, edits: edits}
+	if file != nil && len(file.Sheets) > 0 {
+		f.topics = countTopics(file.Sheets[0].Root) - 1
+		f.lay(file.Sheets[0])
+	}
+	if a.memo.faces == nil || len(a.memo.faces) > 2*len(a.files)+16 { // those of maps gone go with them
+		a.memo.faces = map[string]*mapFace{}
+	}
+	a.memo.faces[path] = f
+	a.memo.faced++
+	return f
+}
+
+// lay lays out the face of a canvas.
+func (f *mapFace) lay(doc *model.Document) {
 	if doc == nil || doc.Root == nil {
-		rw, rh := float32(52), float32(18)
-		p.Fill(ui.Rect{X: r.X + r.W/2 - rw/2, Y: r.Y + r.H/2 - rh/2, W: rw, H: rh}, col, rh/2)
 		return
 	}
 	// A copy of what shows: seven branches at most, four topics on each.
 	small := &model.Document{Structure: doc.Structure, Root: &model.Node{ID: "r"}}
-	depth := map[string]int{"r": 0}
-	branch := map[string]int{}
+	f.depth, f.branch = map[string]int{"r": 0}, map[string]int{}
 	for i, k := range doc.Root.Children {
 		if i == 7 {
 			break
 		}
 		kid := &model.Node{ID: fmt.Sprint("b", i), Title: k.Title}
-		depth[kid.ID], branch[kid.ID] = 1, i
+		f.depth[kid.ID], f.branch[kid.ID] = 1, i
 		for j := range min(len(k.Children), 4) {
 			g := &model.Node{ID: fmt.Sprint("b", i, "-", j)}
-			depth[g.ID], branch[g.ID] = 2, i
+			f.depth[g.ID], f.branch[g.ID] = 2, i
 			kid.Children = append(kid.Children, g)
 		}
 		small.Root.Children = append(small.Root.Children, kid)
@@ -504,7 +526,17 @@ func drawMapFace(p *ui.Painter, r ui.Rect, doc *model.Document, col ui.Color) {
 	}
 	o := layoutOptions(doc.Structure)
 	o.Margin, o.GapX, o.GapY = 0, 20, 7
-	lr := layout.Compute(small, measure, o)
+	f.laid, f.structure, f.lr = true, doc.Structure, layout.Compute(small, measure, o)
+}
+
+// draw draws the face in r, in the map's color.
+func (f *mapFace) draw(p *ui.Painter, r ui.Rect, col ui.Color) {
+	if !f.laid {
+		rw, rh := float32(52), float32(18)
+		p.Fill(ui.Rect{X: r.X + r.W/2 - rw/2, Y: r.Y + r.H/2 - rh/2, W: rw, H: rh}, col, rh/2)
+		return
+	}
+	lr := f.lr
 	if lr.Width <= 0 || lr.Height <= 0 {
 		return
 	}
@@ -512,11 +544,12 @@ func drawMapFace(p *ui.Painter, r ui.Rect, doc *model.Document, col ui.Color) {
 	z := min((r.W-28)/lr.Width, (r.H-24)/lr.Height, 1.7)
 	ox := r.X + (r.W-lr.Width*z)/2
 	oy := r.Y + (r.H-lr.Height*z)/2
-	tint := func(id string) ui.Color { return ui.Hex(mapPalette[(colorIndex(col)+branch[id]+1)%len(mapPalette)]) }
-	drawEdges(p, lr, doc.Structure, ox, oy, z, 1.4, ui.Rect{}, func(to string) ui.Color { return tint(to).Alpha(0.7) })
+	first := colorIndex(col)
+	tint := func(id string) ui.Color { return mapColors[(first+f.branch[id]+1)%len(mapColors)] }
+	drawEdges(p, lr, f.structure, ox, oy, z, 1.4, ui.Rect{}, func(to string) ui.Color { return tint(to).Alpha(0.7) })
 	for id, b := range lr.Boxes {
 		box := ui.Rect{X: ox + b.X*z, Y: oy + b.Y*z, W: b.W * z, H: b.H * z}
-		switch depth[id] {
+		switch f.depth[id] {
 		case 0:
 			p.Fill(box, col, box.H/2)
 		case 1:
@@ -529,12 +562,7 @@ func drawMapFace(p *ui.Painter, r ui.Rect, doc *model.Document, col ui.Color) {
 
 // colorIndex is a map's color's place among the maps' colors, or 0.
 func colorIndex(col ui.Color) int {
-	for i, hex := range mapPalette {
-		if ui.Hex(hex) == col {
-			return i
-		}
-	}
-	return 0
+	return max(slices.Index(mapColors, col), 0)
 }
 
 // A wide window's second column on 项目: projRailRoom is the room the
@@ -690,10 +718,13 @@ func (a *app) projectsRail(c *ui.Context) {
 // openBar opens the one bar to write in, from wherever.
 func (a *app) openBar() { a.barOpen, a.writeRefocus = true, "home-line" }
 
-// goToday, goCollect go to those places (showProjects is 项目's).
+// goToday, goCollect go to those places (showProjects is 项目's): the
+// one way to each, for the switch of the places, its keys and the menu
+// 前往. 今天 is the tasks' page (tasksState.open: it had a second flag
+// beside, and the two were one page).
 func (a *app) goToday() {
 	a.showLibrary()
-	a.libHome = true
+	a.tasks.open = true
 }
 
 func (a *app) goCollect() { a.openList(kindAll, "") }

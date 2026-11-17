@@ -10,8 +10,8 @@ import (
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
 )
 
-// writeCard is the card to write a note in, on the desk and in 收集: a
-// white card, the one thing outlined in the accent while written in, with
+// writeCard is the card to write a note in, the one bar open and 收集's:
+// a white card, the one thing outlined in the accent while written in, with
 // what a note can take under the words, as flomo's: a tag (those used
 // last are offered as one is written), a picture, bold, a list with
 // points or with numbers, another note to refer to (offered after an @),
@@ -128,7 +128,7 @@ func (a *app) writeCard(c *ui.Context, w writeCard) {
 			if !w.inline {
 				ui.Box(c).Width(1).Height(16).Margin(0, 4).Background(hairline(t))
 			}
-			tool("加粗", "B", 0, "加粗：点一下开始，写完再点一下结束（**粗体**）", func() { *w.draft += "**" })
+			tool("加粗", "B", 0, "加粗：在要加粗的字前后各加一次（**粗体**）", func() { *w.draft += "**" })
 			tool("圆点列表", "", iconLevels, "列表：每行一个点", func() { line("- ") })
 			tool("编号列表", "1.", 0, "编号列表：1. 2. 3.", func() {
 				n := 1
@@ -193,11 +193,9 @@ func (a *app) writeCard(c *ui.Context, w writeCard) {
 			}
 		}
 		sendKey := func() {
-			tip := "记下（⌘回车）"
-			if w.enterSaves {
-				tip = "记下（回车；Shift+回车换行）"
-			}
-			send := ui.Box(c.Key("send")).Size(52-(32-size)*2, size).Shrink(0).Radius(radiusPill).Center().Label(w.sendLabel).Tooltip(tip).
+			// What it does, not the key that does it too: the keys are the
+			// cheat sheet's (shortcuts), and a phone has none.
+			send := ui.Box(c.Key("send")).Size(52-(32-size)*2, size).Shrink(0).Radius(radiusPill).Center().Label(w.sendLabel).Tooltip(cmpOr(w.sendLabel, "记下")).
 				Background(t.Text.Alpha(0.12)).Transition(easeLook)
 			press(send, 0.94)
 			if text != "" {
@@ -229,9 +227,6 @@ func (a *app) writeCard(c *ui.Context, w writeCard) {
 				reads()
 				offers()
 				ui.Spacer(c)
-				if !w.enterSaves && text != "" {
-					ui.Text(c, "⌘↩").FontSize(textCaption).TextColor(t.TextMuted)
-				}
 				sendKey()
 			})
 		}

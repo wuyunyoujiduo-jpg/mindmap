@@ -151,9 +151,6 @@ func (a *app) showOnBoard(id string) {
 	a.boardReveal = id
 }
 
-// keyIssueColumn is the board's column of 重点问题: the nodes marked with
-// the red flag, which stay in their status's column too. A card dropped
-// on it is marked.
 // boardHead is a column's heading over a hairline: its mark, its name,
 // how many.
 func boardHead(c *ui.Context, mark func(), name string, n int) {
@@ -165,6 +162,9 @@ func boardHead(c *ui.Context, mark func(), name string, n int) {
 	})
 }
 
+// keyIssueColumn is the board's column of 重点问题: the nodes marked with
+// the red flag, which stay in their status's column too. A card dropped
+// on it is marked.
 func (a *app) keyIssueColumn(c *ui.Context) {
 	t := c.Theme()
 	col := a.keyIssues()

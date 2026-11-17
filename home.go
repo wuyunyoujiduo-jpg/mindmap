@@ -16,10 +16,7 @@ var (
 	tileBlue   = ui.Hex("#5B83C9")
 	tileOrange = ui.Hex("#D08A55")
 	tileGreen  = ui.Hex("#5FA37E")
-	tilePurple = ui.Hex("#8C79C9")
 	tilePink   = ui.Hex("#C77796")
-	tileYellow = ui.Hex("#C9A443")
-	tileTeal   = ui.Hex("#4E9E9A")
 )
 
 // tile is an icon of a kind of thing, drawn as a line in a quiet shade of
@@ -71,12 +68,6 @@ func kindTile(kind string) icon {
 func (a *app) openList(kind int, cat string) {
 	a.showLibrary()
 	a.libKind, a.libCat, a.libTag, a.libQuery, a.libDay = kind, cat, "", "", time.Time{}
-}
-
-// sectionCard is a card of a detail or a panel: a head of a tile and a
-// title in its color, with what right builds at its end, then body.
-func sectionCard(c *ui.Context, ic icon, col ui.Color, title string, right func(), body func()) {
-	section(c, ic, title, right, body)
 }
 
 // midEllipsis cuts a name too long for width points in its middle,

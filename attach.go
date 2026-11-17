@@ -33,9 +33,11 @@ func (a *app) attachFile(n *model.Node, path string) error {
 	name := filepath.Base(path)
 	file := model.NewID() + strings.ToLower(filepath.Ext(name))
 	id, of := n.ID, a.path
+	copied := a.copying(name) // a card at the window's foot, if the copy lasts (wait.go)
 	a.async(func() (any, error) {
 		return nil, copyFile(path, filepath.Join(dir, file))
 	}, func(_ any, err error) {
+		copied()
 		if err == nil {
 			err = a.editMapAt(of, "加上附件 "+name, func(f *model.File) error {
 				n := f.Node(id)

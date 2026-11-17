@@ -856,7 +856,7 @@ func TestThoughtLinksToATopic(t *testing.T) {
 	a, tt := newTestApp(t)
 	login := find(t, a, "登录")
 	a.showLibrary()
-	a.libHome = true
+	a.tasks.open = true
 	a.barOpen = true
 	a.homeDraft = "上线前要再看一遍 [[登录"
 	tt.Frame()

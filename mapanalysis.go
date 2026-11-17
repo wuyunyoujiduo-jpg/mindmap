@@ -242,7 +242,7 @@ func (a *app) mapAnalysisSection(c *ui.Context) {
 	// bare spinner, there from the first frame).
 	other := a.mapWorking != "" && a.mapWorking != a.path
 	spin := waitShown(c, "map-analysis-other", other)
-	sectionCard(c.Key("map-analysis"), iconSparkle, tilePurple, "AI 分析", func() {
+	section(c.Key("map-analysis"), iconSparkle, "AI 分析", func() {
 		switch {
 		case a.mapWorking == a.path: // said in the card, by its steps
 		case other:

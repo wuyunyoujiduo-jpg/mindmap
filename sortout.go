@@ -485,7 +485,7 @@ func (a *app) takeClipPlace(cl *library.Clip) bool {
 	// The way back: the topic made goes; the clip was never moved.
 	path, id := p.path, n.ID
 	a.tellUndo("已放到「"+p.label+"」下", func() {
-		err := a.editMapAt(path, "撤回放进的资料", func(f *model.File) error {
+		err := a.editMapAt(path, "撤销放进的资料", func(f *model.File) error {
 			d := f.SheetOf(id)
 			if d == nil {
 				return errors.New("那个主题已不存在")
@@ -494,7 +494,7 @@ func (a *app) takeClipPlace(cl *library.Clip) bool {
 			return err
 		})
 		if err != nil {
-			a.tell("没有撤回：" + err.Error())
+			a.tell("没有撤销：" + err.Error())
 		}
 	})
 	return true

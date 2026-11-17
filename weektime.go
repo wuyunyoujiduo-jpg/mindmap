@@ -70,6 +70,80 @@ type hourStretch struct {
 	to  float32
 }
 
+// hoursLaid is the tasks of some days put on them: those of the whole day,
+// those with a time in their lanes, and the earliest minute any begins at.
+// It is worked out once for the tasks as gathered, the project they are
+// narrowed to, the days and today (of): the pointer moving over the hours
+// is a frame each, and each put every task on its day anew and asked of
+// every one that repeats, for every day, when it comes again.
+type hoursLaid struct {
+	of            hoursOf
+	allDay, timed [][]weekTask
+	earliest      int
+}
+
+// hoursOf is what the tasks were put on the days of; holidays is the
+// reading of the notices, by which 法定工作日 comes again.
+type hoursOf struct {
+	tasks    int
+	onMap    string
+	first    time.Time
+	days     int
+	today    time.Time
+	holidays int
+}
+
+// hoursLaid puts the tasks on the days (hoursLaid the type).
+func (a *app) hoursLaid(items []taskItem, days []time.Time) *hoursLaid {
+	now := a.now()
+	of := hoursOf{a.tasks.serial, a.tasks.onMap, days[0], len(days), today(now), holidaysLoads()}
+	if l := &a.memo.hours; l.of == of && a.tasks.serial > 0 {
+		return l
+	}
+	a.memo.laid++
+	allDay := make([][]weekTask, len(days))
+	timed := make([][]weekTask, len(days))
+	earliest := 24 * 60
+	add := func(i int, it taskItem, ghost bool) {
+		task := it.node.Task
+		if task.Time == "" || task.Due == nil {
+			allDay[i] = append(allDay[i], weekTask{it: it, ghost: ghost})
+			return
+		}
+		from := clockMinutes(task.Time)
+		to := from + slotMinutes
+		if task.EndTime != "" && clockMinutes(task.EndTime) > from {
+			to = max(clockMinutes(task.EndTime), from+stretchStep)
+		}
+		timed[i] = append(timed[i], weekTask{it: it, ghost: ghost, from: from, to: min(to, 24*60)})
+		earliest = min(earliest, from)
+	}
+	for i, d := range days {
+		for _, it := range byTime(items, d) {
+			add(i, it, false)
+		}
+	}
+	// Those that come again, asked once for all the days and not a day at
+	// a time; on each day as the tasks come, after its own.
+	last := days[len(days)-1]
+	for _, it := range items {
+		task := it.node.Task
+		if task.Repeat == nil || task.Due == nil || it.done() {
+			continue
+		}
+		for _, d := range task.Repeat.Coming(*task.Due, task.Times, now, days[0], last) {
+			if i := slices.IndexFunc(days, func(day time.Time) bool { return sameDay(day, d) }); i >= 0 {
+				add(i, it, true)
+			}
+		}
+	}
+	for i := range timed {
+		timed[i] = lanes(timed[i])
+	}
+	a.memo.hours = hoursLaid{of, allDay, timed, earliest}
+	return &a.memo.hours
+}
+
 // weekView is the week of the day shown, as hours.
 func (a *app) weekView(c *ui.Context, items []taskItem) {
 	start := a.weekOf(a.tasks.day)
@@ -83,34 +157,8 @@ func (a *app) weekView(c *ui.Context, items []taskItem) {
 // hoursView is days as hours: the week's seven, or the day's one.
 func (a *app) hoursView(c *ui.Context, items []taskItem, days []time.Time) {
 	now := a.now()
-	allDay := make([][]weekTask, len(days))
-	timed := make([][]weekTask, len(days))
-	earliest := 24 * 60
-	for i, d := range days {
-		add := func(it taskItem, ghost bool) {
-			task := it.node.Task
-			if task.Time == "" || task.Due == nil {
-				allDay[i] = append(allDay[i], weekTask{it: it, ghost: ghost})
-				return
-			}
-			from := clockMinutes(task.Time)
-			to := from + slotMinutes
-			if task.EndTime != "" && clockMinutes(task.EndTime) > from {
-				to = max(clockMinutes(task.EndTime), from+stretchStep)
-			}
-			timed[i] = append(timed[i], weekTask{it: it, ghost: ghost, from: from, to: min(to, 24*60)})
-			earliest = min(earliest, from)
-		}
-		for _, it := range byTime(items, d) {
-			add(it, false)
-		}
-		for _, it := range items {
-			if a.comesAgain(it, d, d) {
-				add(it, true)
-			}
-		}
-		timed[i] = lanes(timed[i])
-	}
+	laid := a.hoursLaid(items, days)
+	allDay, timed, earliest := laid.allDay, laid.timed, laid.earliest
 	// Days newly shown open at their first hours: seven, or earlier for
 	// what is earlier, or with now in sight.
 	start, end := days[0], days[len(days)-1].AddDate(0, 0, 1)
@@ -173,7 +221,7 @@ func (a *app) weekHead(c *ui.Context, days []time.Time, now time.Time) {
 			col := ui.Column(c.Key(fmt.Sprint("week-day:", i))).Grow(1).Basis(0).MinWidth(0).Padding(6, 10, 10).Gap(4).
 				BorderWidth(0, 0, 0, 1).BorderColor(t.Border.Alpha(0.55))
 			if len(days) > 1 {
-				col.Cursor(ui.CursorPointer).Tooltip("双击只看这一天")
+				col.Cursor(ui.CursorPointer).Tooltip("只看这一天")
 				if col.DoubleClicked() {
 					day := d
 					a.later(func() { a.tasks.day, a.tasks.view = day, tasksDay })
@@ -231,7 +279,7 @@ func (a *app) weekAllDay(c *ui.Context, days []time.Time, allDay [][]weekTask) {
 			if sameDay(d, a.now()) {
 				col.Background(t.Text.Alpha(0.025))
 			}
-			a.dropTaskAt(col, d, -1)
+			a.dropTaskAt(col, d, dropWholeDay)
 			list := allDay[i]
 			col.Children(func() {
 				for j, w := range list {
@@ -257,7 +305,7 @@ func (a *app) weekAllDay(c *ui.Context, days []time.Time, allDay [][]weekTask) {
 				// The blank under them: a click writes a task of the day.
 				blank := ui.Box(c.Key("allday-blank")).FillWidth().Grow(1).MinHeight(22).Radius(radiusSmall).
 					Cursor(ui.CursorPointer).Label(fmt.Sprintf("新建全天任务 %d月%d日", d.Month(), d.Day())).
-					Tooltip("点一下，新建这天的全天任务").Background(t.Text.Alpha(0)).Transition(easeLook)
+					Tooltip("新建这天的全天任务").Background(t.Text.Alpha(0)).Transition(easeLook)
 				if blank.Hovered() {
 					blank.Background(t.Text.Alpha(0.04))
 				}
@@ -335,11 +383,15 @@ func (a *app) weekDay(c *ui.Context, i int, d time.Time, timed []weekTask, now t
 	col.Children(func() {
 		// The blank, under all: pressed, it chooses where to write a task.
 		blank = ui.Box(c.Key("blank")).Absolute().Top(0).Left(0).Right(0).Bottom(0).
-			Label(fmt.Sprintf("时间格 %d月%d日", d.Month(), d.Day())).Tooltip("点空白时间格新建任务，按住往下拖选时长")
-		for h := 1; h < 24; h++ {
-			ui.Box(c.Key(fmt.Sprint("line:", h))).Absolute().Top(float32(h * hourHeight)).Left(0).Right(0).Height(1).
-				Background(hairline(t).Alpha(0.6)).PassThrough()
-		}
+			Label(fmt.Sprintf("时间格 %d月%d日", d.Month(), d.Day())).Tooltip("在这个时间新建任务；选多长，就是多长")
+		// The hours' lines, drawn in one box: a box a line was 161 of them
+		// a week, each built and keyed at every frame.
+		line := hairline(t).Alpha(0.6)
+		ui.Box(c.Key("lines")).Absolute().Top(0).Left(0).Right(0).Bottom(0).PassThrough().Draw(func(p *ui.Painter, r ui.Rect) {
+			for h := 1; h < 24; h++ {
+				p.Fill(ui.Rect{X: r.X, Y: r.Y + float32(h*hourHeight), W: r.W, H: 1}, line, 0)
+			}
+		})
 		for _, w := range timed {
 			if a.weekBlock(c, w, d) {
 				onBlock = true
@@ -353,11 +405,9 @@ func (a *app) weekDay(c *ui.Context, i int, d time.Time, timed []weekTask, now t
 		if dragOver {
 			from := at / slotMinutes * slotMinutes
 			long := slotMinutes
-			for _, it := range a.tasks.items {
-				if dd, ok := ui.DragOver[taskDrag](col); ok && it.path == dd.path && it.node.ID == dd.id {
-					if task := it.node.Task; task.Time != "" && task.EndTime != "" {
-						long = max(clockMinutes(task.EndTime)-clockMinutes(task.Time), stretchStep)
-					}
+			if dd, ok := ui.DragOver[taskDrag](col); ok {
+				if it, ok := a.dragged(dd); ok && it.node.Task.Time != "" && it.node.Task.EndTime != "" {
+					long = max(clockMinutes(it.node.Task.EndTime)-clockMinutes(it.node.Task.Time), stretchStep)
 				}
 			}
 			a.hourShade(c, from, min(from+long, 24*60), "移到 "+strings.TrimPrefix(clockText(from), "0"))
@@ -525,7 +575,7 @@ func (a *app) weekBlock(c *ui.Context, w weekTask, d time.Time) bool {
 	}
 	// Its foot, drawn: when it ends, by the quarter hour.
 	foot := ui.Box(c.Key("foot:" + it.key())).Absolute().Top(top + height - 4).Height(8).LeftPercent(left).WidthPercent(width).
-		Cursor(ui.CursorResizeNS).ZIndex(2).Label("调整结束时间 " + it.node.Title).Tooltip("往下拖，做得更久")
+		Cursor(ui.CursorResizeNS).ZIndex(2).Label("调整结束时间 " + it.node.Title).Tooltip("调整结束时间")
 	if _, dy, ok := foot.Dragged(); ok {
 		if a.tasks.stretch == nil || a.tasks.stretch.key != it.key() {
 			a.tasks.stretch = &hourStretch{key: it.key(), to: float32(w.to)}
@@ -596,8 +646,17 @@ func lanes(ws []weekTask) []weekTask {
 	return ws
 }
 
-// dropTaskAt makes el take tasks dropped on it, which go to the day, of
-// the whole day (at -1) or at the minute at.
+// Where a task dropped on a day goes, when not at a minute of it.
+const (
+	dropWholeDay = -1 // of the whole day: its time goes
+	dropDayAlone = -2 // to the day, its time of day kept: the lists' groups, the month's cells
+)
+
+// dropTaskAt makes el take tasks dropped on it, which go to the day: at
+// the minute at, of the whole day (dropWholeDay), or the day alone
+// changed (dropDayAlone); each said with the way back. It is the one way a
+// task is dropped on a day, of the lists, the month and the hours (the
+// first two had a copy of it).
 func (a *app) dropTaskAt(el ui.Element, day time.Time, at int) {
 	t := a.theme()
 	if _, over := ui.DragOver[taskDrag](el); over {
@@ -608,53 +667,56 @@ func (a *app) dropTaskAt(el ui.Element, day time.Time, at int) {
 	}
 }
 
-// moveTaskWhen puts the task dragged on the day: of the whole day (at -1),
-// or at the minute at, keeping how long it takes; with the way back.
+// moveTaskWhen puts the task dragged on the day: at the minute at,
+// keeping how long it takes, of the whole day or the day alone changed
+// (dropWholeDay, dropDayAlone); with the way back.
 func (a *app) moveTaskWhen(d taskDrag, day time.Time, at int) {
-	for _, it := range a.tasks.items {
-		if it.path != d.path || it.node.ID != d.id {
-			continue
-		}
-		was := whenOf(it.node.Task) // the move takes its start off when that is after the new day
-		a.later(func() {
-			ok := a.editTask(it, "改任务时间", func(n *model.Node) {
-				if n.Task == nil {
-					n.SetStatus(model.StatusTodo, a.now())
-				}
-				day := day
-				n.Task.Due = &day
-				if n.Task.Start != nil && n.Task.Start.After(day) {
-					n.Task.Start = nil
-				}
-				if at < 0 { // of the whole day: it reminds no more at the hour it had
-					setTaskTime(n.Task, "", "")
-					return
-				}
-				long := 0
-				if n.Task.Time != "" && n.Task.EndTime != "" {
-					long = clockMinutes(n.Task.EndTime) - clockMinutes(n.Task.Time)
-				}
-				until := ""
-				if long > 0 && at+long < 24*60 {
-					until = clockText(at + long)
-				}
-				setTaskTime(n.Task, clockText(at), until)
-			})
-			if !ok {
-				return
-			}
-			when := fmt.Sprintf("%d月%d日", day.Month(), day.Day())
-			if at >= 0 {
-				when += " " + strings.TrimPrefix(clockText(at), "0")
-			} else {
-				when += " 全天"
-			}
-			a.tellUndo("已移到 "+when+"：「"+it.node.Title+"」", func() {
-				a.editTask(it, "撤销移动", func(n *model.Node) { was.put(n.Task) })
-			})
-		})
+	it, ok := a.dragged(d)
+	if !ok {
 		return
 	}
+	if at == dropDayAlone {
+		a.later(func() { a.moveTaskDay(it, &day) })
+		return
+	}
+	was := whenOf(it.node.Task) // the move takes its start off when that is after the new day
+	a.later(func() {
+		ok := a.editTask(it, "改任务时间", func(n *model.Node) {
+			if n.Task == nil {
+				n.SetStatus(model.StatusTodo, a.now())
+			}
+			day := day
+			n.Task.Due = &day
+			if n.Task.Start != nil && n.Task.Start.After(day) {
+				n.Task.Start = nil
+			}
+			if at < 0 { // of the whole day: it reminds no more at the hour it had
+				setTaskTime(n.Task, "", "")
+				return
+			}
+			long := 0
+			if n.Task.Time != "" && n.Task.EndTime != "" {
+				long = clockMinutes(n.Task.EndTime) - clockMinutes(n.Task.Time)
+			}
+			until := ""
+			if long > 0 && at+long < 24*60 {
+				until = clockText(at + long)
+			}
+			setTaskTime(n.Task, clockText(at), until)
+		})
+		if !ok {
+			return
+		}
+		when := fmt.Sprintf("%d月%d日", day.Month(), day.Day())
+		if at >= 0 {
+			when += " " + strings.TrimPrefix(clockText(at), "0")
+		} else {
+			when += " 全天"
+		}
+		a.tellUndo("已移到 "+when+"：「"+it.node.Title+"」", func() {
+			a.editTask(it, "撤销移动", func(n *model.Node) { was.put(n.Task) })
+		})
+	})
 }
 
 func absInt(n int) int {

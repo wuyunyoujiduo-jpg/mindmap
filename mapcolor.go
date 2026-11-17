@@ -8,24 +8,39 @@ import (
 )
 
 // Each map has a color of its own, which marks what is its: its card on
-// the desk, its tasks in the lists, what was put on it. It is the map's
+// 项目, its tasks in the lists, what was put on it. It is the map's
 // own (File.Color) or, until one is chosen, one of the palette by its
 // name, the same each time.
 
-// mapColor is the color of the map at path.
+// mapColors are the maps' colors (mapPalette), read once: a frame asks
+// for a map's color at every dot of it.
+var mapColors = func() []ui.Color {
+	var cols []ui.Color
+	for _, hex := range mapPalette {
+		cols = append(cols, ui.Hex(hex))
+	}
+	return cols
+}()
+
+// mapColor is the color of the map at path. It looks at no file: a map
+// not open is as it was last read (indexed), which a tick brings up to
+// date.
 func (a *app) mapColor(path string) ui.Color {
 	f := a.file
 	if path != a.path {
 		f = a.indexed(path)
 	}
 	if f != nil && f.Color != "" {
+		if i := slices.Index(mapPalette, f.Color); i >= 0 {
+			return mapColors[i]
+		}
 		return ui.Hex(f.Color)
 	}
 	var h uint32 = 2166136261
 	for _, b := range []byte(mapName(path)) {
 		h = (h ^ uint32(b)) * 16777619
 	}
-	return ui.Hex(mapPalette[h%uint32(len(mapPalette))])
+	return mapColors[h%uint32(len(mapColors))]
 }
 
 // setMapColor gives the open map a color.
@@ -52,7 +67,7 @@ func mapDot(c *ui.Context, col ui.Color, size float32) ui.Element {
 }
 
 // mapSwitchMenu is the menu of the map's name: the maps opened last, to
-// go to; the maps' list beside the rail; a new map; the search of all.
+// go to; 项目, where all of them are; the search of all; a new map.
 func (a *app) mapSwitchMenu(m *ui.Menu) {
 	files := a.recentFiles() // those starred first, then the last opened
 	slices.SortStableFunc(files, func(x, y model.FileInfo) int { return b2i(a.starred(y.Path)) - b2i(a.starred(x.Path)) })
