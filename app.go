@@ -459,6 +459,7 @@ type app struct {
 	vaultUntil  time.Time
 	vaultAsk    vaultAsk
 	drafts      map[string]draft
+	marking     mark // the part of a field chosen, to be made a secret
 	copied      string
 	copiedUntil time.Time
 	wallShown   int // how many clips 收集's wall shows, when more than wallStep

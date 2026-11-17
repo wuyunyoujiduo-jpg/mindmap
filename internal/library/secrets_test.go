@@ -26,3 +26,50 @@ func TestMask(t *testing.T) {
 		}
 	}
 }
+
+// What the user marks is a secret where no rule tells one.
+func TestMarked(t *testing.T) {
+	const line = "https://ttc.ttcttc.net/#/login wuy@gmail.com  ||ttc13!||"
+	if got := Mask(line); got != "https://ttc.ttcttc.net/#/login wuy@gmail.com  "+masked || !HasSecret(line) || !Marked(line) {
+		t.Errorf("marked: %q", got)
+	}
+	if got := Secrets(line); len(got) != 1 || got[0] != "ttc13!" {
+		t.Errorf("the secret marked: %q", got)
+	}
+	seal := func(p string) (string, bool) { return "⟦mm1.aaaaaa." + strings.Repeat("A", len(p)) + "⟧", true }
+	sealed := SealIn(line, seal)
+	if strings.Contains(sealed, "ttc13") || !strings.HasSuffix(sealed, "||⟦mm1.aaaaaa.AAAAAA⟧||") {
+		t.Fatalf("sealed: %q", sealed)
+	}
+	if SealIn(sealed, seal) != sealed || Unsealed(sealed) || Mask(sealed) != Mask(line) {
+		t.Errorf("sealed twice, or shown otherwise: %q, %q", SealIn(sealed, seal), Mask(sealed))
+	}
+	// What a rule would find in it is the mark's, whole.
+	in := "||password: abcdefgh ok||"
+	if got := Secrets(in); len(got) != 1 || got[0] != "password: abcdefgh ok" {
+		t.Errorf("a rule inside a mark: %q", got)
+	}
+	// Not the || of a program, nor an empty pair.
+	for _, plain := range []string{"if a||b||c { }", "x || y || z", "(a)||b||c", "||||", "|| 空的 ||", "第一行||\n||第二行"} {
+		if Marked(plain) || HasSecret(plain) || Mask(plain) != plain {
+			t.Errorf("%q → %q", plain, Mask(plain))
+		}
+	}
+	if !CanMark("ttc13!") || CanMark("  ") || CanMark("a|b") || CanMark("a\nb") {
+		t.Error("CanMark")
+	}
+}
+
+// A token put for one secret is not searched for another: its letters
+// may look like a key.
+func TestSealedOnce(t *testing.T) {
+	seal := func(p string) (string, bool) { return "⟦mm1.aaaaaa.x-sk-" + strings.Repeat("B", 20) + "⟧", true }
+	got := SealIn("OPENAI_API_KEY=sk-abcdefghijklmnopqrstuv", seal)
+	if got != "OPENAI_API_KEY=⟦mm1.aaaaaa.x-sk-"+strings.Repeat("B", 20)+"⟧" {
+		t.Errorf("sealed: %q", got)
+	}
+	// One secret two rules find is sealed whole, once.
+	if got := Mask("API_KEY=sk-abcdefghijklmnopqrstuv.suffix1 后面"); got != "API_KEY="+masked+" 后面" {
+		t.Errorf("two rules, one secret: %q", got)
+	}
+}

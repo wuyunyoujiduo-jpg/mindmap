@@ -597,13 +597,22 @@ func (a *app) clipMenu(m *ui.Menu, clip *library.Clip) {
 		a.saveClip(clip)
 	}
 	// A password that nothing tells from a word: the whole of it sealed.
-	if a.vault.On() && (clip.Kind == library.KindText || clip.Kind == library.KindLink) {
-		if clip.Locked {
+	// It is here with no second password set too, and leads to setting
+	// one: looked for here, it was not to be found (the user asked how).
+	if clip.Kind == library.KindText || clip.Kind == library.KindLink {
+		switch {
+		case clip.Locked && a.vault.On():
 			if m.Item("取消整条加密").Chosen() {
 				a.later(func() { a.lockWhole(clip, false) })
 			}
-		} else if m.Item("整条加密").Chosen() {
-			a.later(func() { a.lockWhole(clip, true) })
+		case a.vault.On():
+			if m.Item("整条加密").Chosen() {
+				a.later(func() { a.lockWhole(clip, true) })
+			}
+		default:
+			if m.Item("整条加密…").Chosen() {
+				a.later(func() { a.askVault(askSetup, func() { a.lockWhole(clip, true) }) })
+			}
 		}
 	}
 	m.Separator()
@@ -881,6 +890,7 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 			changed(text)
 			a.fieldTyped(clip, "text", text, clip.Text)
 		}
+		a.markKey(c, clip, "text", in, text, changed)
 		if library.HasSecret(clip.Text) {
 			keys = true
 			a.secretKeys(c, clip)
@@ -922,10 +932,17 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 		note, write := a.fieldText(clip, "note", clip.Note)
 		if !write {
 			ui.Text(c.Key("clip-note-dots"), note).FontSize(textBody).LineHeight(1.55).Wrap()
-		} else if inlineArea(c.Key("clip-note"), &note, textBody, 1, 10, "为什么收藏它、想怎么用…", "资料备注").Margin(0, -8).Changed() {
-			clip.Note = note
-			a.saveClip(clip)
-			a.fieldTyped(clip, "note", note, clip.Note)
+		} else {
+			in := inlineArea(c.Key("clip-note"), &note, textBody, 1, 10, "为什么收藏它、想怎么用…", "资料备注").Margin(0, -8)
+			set := func(note string) {
+				clip.Note = note
+				a.saveClip(clip)
+			}
+			if in.Changed() {
+				set(note)
+				a.fieldTyped(clip, "note", note, clip.Note)
+			}
+			a.markKey(c, clip, "note", in, note, set)
 		}
 		if !keys { // the secret is here, or in the title
 			a.secretKeys(c, clip)

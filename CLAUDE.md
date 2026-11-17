@@ -479,7 +479,17 @@ by AI, and an AI assistant.
   password is changed with the one now or the code, and the code is new
   with it (the user's); the key stays, so nothing is sealed again. What
   no rule tells from a word is sealed whole from its menu (整条加密,
-  `Clip.Locked`), and not given to the AI. The keys' files
+  `Clip.Locked`), and not given to the AI; or the part of it chosen in
+  the details is said to be one (`markKey`: a key under the field while
+  a part is chosen, and the field's menu), written between marks,
+  ||ttc13!|| (`library.MarkOpen`, `marked`), which stay round the
+  secret or its token so that it is one still when shown and kept
+  again. The user had a line of an address, a name and a short password
+  and asked how to hide it: there was no way, and 整条加密 was not in the
+  menu with no password set, where it now leads to setting one (0.101.1).
+  The secrets of a text are found in it as it is and replaced at once
+  (`eachSecret`): put one by one, a token's letters were searched by
+  the next rule. The keys' files
   (`.library/vault/`) are never deleted, a vault turned off is marked so
   (`TurnOff`): another computer may have sealed with a key meanwhile;
   two set up apart leave two keys, each opening its own; a copy is kept

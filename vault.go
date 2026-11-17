@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/egoist/mygo/ui"
 
@@ -213,6 +214,9 @@ func (a *app) vaultTick(c *ui.Context, now time.Time) {
 	if a.secretShown != "" && a.secretShown != a.libSel {
 		a.hideSecrets()
 	}
+	if a.marking.id != a.libSel {
+		a.marking = mark{}
+	}
 	for key := range a.drafts {
 		if !strings.HasPrefix(key, a.libSel+"\x00") || a.libSel == "" {
 			a.hideSecrets()
@@ -335,7 +339,7 @@ func (a *app) copyOpened(text string, sealed bool) {
 // sealedOut is a clip's words as they go elsewhere, to a map's topic or a
 // task: what is sealed in them in dots. The secret stays in the clip.
 func sealedOut(s string) string {
-	if vault.Has(s) {
+	if vault.Has(s) || library.Marked(s) {
 		return library.Mask(s)
 	}
 	return s
@@ -627,7 +631,7 @@ func (a *app) vaultView(c *ui.Context) {
 func (a *app) vaultSettings(c *ui.Context) {
 	v := a.vault
 	if !v.On() {
-		note := "只加密密钥本身，其余文字照常搜索、让 AI 整理。存的时候不问密码。"
+		note := "只加密密钥本身，其余文字照常搜索、让 AI 整理。存的时候不问密码。规则认不出的密码，在详情里选中它点「把选中的设为密码」。"
 		n := 0
 		for _, cl := range a.lib.Clips {
 			if cl.Unsealed() {
@@ -662,7 +666,7 @@ func (a *app) vaultSettings(c *ui.Context) {
 			state += "，" + a.vaultUntil.Format("15:04") + " 锁上"
 		}
 	}
-	rowsField(c, "给密钥加密", "只加密密钥本身，其余文字照常搜索、让 AI 整理。规则认不出的，在那一条的菜单里选「整条加密」。图片、文件本身和链接地址不加密。", func() {
+	rowsField(c, "给密钥加密", "只加密密钥本身，其余文字照常搜索、让 AI 整理。规则认不出的，在详情里选中它点「把选中的设为密码」，或在那一条的菜单里选「整条加密」。图片、文件本身和链接地址不加密。", func() {
 		setRow(c, "已开启", fmt.Sprintf("%d 条里的密钥已加密 · %s", a.sealedCount(), state), func() {
 			if v.Unlocked() {
 				if button(c, "现在锁上").Clicked() {
@@ -749,6 +753,78 @@ func (a *app) secretKeys(c *ui.Context, clip *library.Clip) {
 				a.later(a.openVaultSettings)
 			}
 		})
+	}
+}
+
+// A mark is the part of a clip's field chosen in it, which its key makes
+// a secret.
+type mark struct {
+	id, field string
+	from, to  int // in runes
+}
+
+// markKey gives a field of a clip's details the way to say a part of it
+// is a secret, where no rule tells one (the user had a line of an
+// address, a name and a password, and asked how to hide the password):
+// the part chosen, by a key that shows under the field while one is, and
+// by the field's menu. The part is written between marks (library.MarkOpen)
+// and kept, sealed when a second password is set; the field shows it in
+// dots at once, which is what was asked for.
+func (a *app) markKey(c *ui.Context, clip *library.Clip, field string, in ui.Element, text string, set func(string)) {
+	from, to := in.TextSelection()
+	from, to = min(from, to), max(from, to)
+	chosen := mark{clip.ID, field, from, to}
+	// The part chosen stays the one to mark when the field is left for
+	// the key: a click on the key takes the field's focus first.
+	if in.Focused() {
+		a.marking = mark{}
+		if from != to {
+			a.marking = chosen
+		}
+	}
+	do := func(m mark) {
+		a.later(func() { a.markSecret(clip, field, text, m, set) })
+	}
+	in.ContextMenu(func(m *ui.Menu) {
+		m.EditItems()
+		m.Separator()
+		if m.Item("设为密码").Disabled(from == to).Chosen() {
+			do(chosen)
+		}
+	})
+	if m := a.marking; m.id == clip.ID && m.field == field {
+		ui.Row(c.Key("mark-"+field)).Margin(0, 0, 0, -8).Children(func() {
+			if ghostButton(c, "把选中的设为密码", "选中的这一段会遮住；设了二次密码的话会加密保存").Clicked() {
+				do(m)
+			}
+		})
+	}
+}
+
+// markSecret makes the part m of a field's text a secret.
+func (a *app) markSecret(clip *library.Clip, field, text string, m mark, set func(string)) {
+	a.marking = mark{}
+	r := []rune(text)
+	from, to := max(0, min(m.from, len(r))), max(0, min(m.to, len(r)))
+	for from < to && unicode.IsSpace(r[from]) { // a word chosen with the space by it
+		from++
+	}
+	for to > from && unicode.IsSpace(r[to-1]) {
+		to--
+	}
+	part := string(r[from:to])
+	if !library.CanMark(part) {
+		if strings.TrimSpace(part) != "" {
+			a.tell("一次选一行里的一段，里面不能有 | 号")
+		}
+		return
+	}
+	set(string(r[:from]) + library.MarkOpen + part + library.MarkClose + string(r[to:]))
+	a.hideSecrets() // in dots at once
+	if a.vault.On() {
+		a.tell("已设为密码，加密保存了")
+	} else {
+		a.tellAct("已设为密码，遮住了；设置二次密码后会加密", "去设置", a.openVaultSettings)
 	}
 }
 

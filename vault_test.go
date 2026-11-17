@@ -250,3 +250,143 @@ func TestSecretsAreSealed(t *testing.T) {
 		t.Fatalf("turned off: %s", file(cl))
 	}
 }
+
+// A part of a clip's content is made a secret by the user, where no rule
+// tells one: chosen in the field, it is in dots at once, and sealed once
+// a second password is set.
+func TestMarkedSecret(t *testing.T) {
+	vault.Quick()
+	a, tt := newTestApp(t)
+	const line = "https://ttc.ttcttc.net/#/login wuy@gmail.com  ttc13!"
+	cl := &library.Clip{Kind: library.KindText, Text: line}
+	if err := a.lib.Add(cl, a.now()); err != nil {
+		t.Fatal(err)
+	}
+	file := func() string {
+		data, _ := os.ReadFile(filepath.Join(a.lib.Dir, "clips", cl.ID+".json"))
+		return string(data)
+	}
+	a.openList(kindAll, "")
+	a.libSel = cl.ID
+	tt.Frame()
+	if tt.HasText("把选中的设为密码") || tt.HasText("显示密钥") {
+		t.Fatalf("a key with nothing chosen: %q", tt.Texts())
+	}
+	// All of it chosen: the key shows under the field, and stays when the
+	// field is left for it.
+	if err := tt.Click("资料内容"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Key(ui.Cmd, ui.KeyA)
+	tt.Frame()
+	tt.Frame()
+	if !tt.HasText("把选中的设为密码") {
+		t.Fatalf("no key for what is chosen: %q", tt.Texts())
+	}
+	snapshot(t, tt, "vault-mark")
+	// The password alone, as a part chosen would be.
+	r := []rune(line)
+	a.markSecret(cl, "text", line, mark{cl.ID, "text", len(r) - 7, len(r)}, func(s string) { a.setMemoText(cl, s) })
+	tt.Frame()
+	tt.Frame()
+	const marked = "https://ttc.ttcttc.net/#/login wuy@gmail.com  ||ttc13!||"
+	if cl.Text != marked || !cl.Secret() {
+		t.Fatalf("marked: %q", cl.Text)
+	}
+	shows := func(s string) bool {
+		for _, x := range tt.Texts() {
+			if strings.Contains(x, s) {
+				return true
+			}
+		}
+		return false
+	}
+	if shows("ttc13") || shows("||") || !shows("wuy@gmail.com  ••••••••") || !tt.HasText("显示密钥") || !tt.HasText("复制密钥") {
+		t.Fatalf("not in dots: %q", tt.Texts())
+	}
+	snapshot(t, tt, "vault-marked")
+	// Copied, it is the password, without its marks.
+	a.copySecret(cl)
+	if got := a.plat.(*fakePlatform).copied; got != "ttc13!" {
+		t.Fatalf("copied %q", got)
+	}
+
+	// The key chooses all that is chosen in the field, by a click.
+	other := &library.Clip{Kind: library.KindText, Text: "plumtree"}
+	if err := a.lib.Add(other, a.now()); err != nil {
+		t.Fatal(err)
+	}
+	a.libSel = other.ID
+	tt.Frame()
+	if err := tt.Click("资料内容"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Key(ui.Cmd, ui.KeyA)
+	tt.Frame()
+	tt.Frame()
+	if err := tt.Click("把选中的设为密码"); err != nil {
+		t.Fatalf("%v: %q", err, tt.Texts())
+	}
+	tt.Frame()
+	tt.Frame()
+	if other.Text != "||plumtree||" || shows("plumtree") || tt.HasText("把选中的设为密码") {
+		t.Fatalf("by the key: %q, %q", other.Text, tt.Texts())
+	}
+
+	// 整条加密 with no password set leads to setting one, and is done then.
+	a.clipMenuDo(t, tt, cl, "整条加密…")
+	if !tt.HasText("设置二次密码") {
+		t.Fatalf("no window to set a password: %q", tt.Texts())
+	}
+	a.closeVaultAsk()
+
+	// A password set, what was marked is sealed, its marks round the token.
+	if _, err := a.vault.Setup("correct horse", a.now()); err != nil {
+		t.Fatal(err)
+	}
+	a.vaultSweep()
+	if f := file(); strings.Contains(f, "ttc13") || !strings.Contains(f, "||⟦mm1.") || !strings.Contains(f, "wuy@gmail.com") {
+		t.Fatalf("the file: %s", f)
+	}
+	a.lockVault()
+	a.libSel = cl.ID
+	tt.Frame()
+	if shows("ttc13") || shows("mm1") || shows("||") || !shows("wuy@gmail.com  ••••••••") {
+		t.Fatalf("sealed, in the details: %q", tt.Texts())
+	}
+	// Shown and kept again, it is marked still, and sealed still.
+	if err := a.vault.Unlock("correct horse"); err != nil {
+		t.Fatal(err)
+	}
+	a.showSecrets(cl)
+	tt.Frame()
+	if got, _ := a.fieldText(cl, "text", cl.Text); got != marked {
+		t.Fatalf("shown: %q", got)
+	}
+	a.setMemoText(cl, marked+" 下月换")
+	if f := file(); strings.Contains(f, "ttc13") || !strings.Contains(f, "下月换") {
+		t.Fatalf("kept again: %s", f)
+	}
+	// On a map's topic it is in dots: the secret stays in the clip.
+	if s := sealedOut(cl.Text); strings.Contains(s, "mm1") || strings.Contains(s, "||") {
+		t.Fatalf("out of the clip: %q", s)
+	}
+}
+
+// clipMenuDo chooses an item of a clip's menu in its details.
+func (a *app) clipMenuDo(t *testing.T, tt *ui.Tester, cl *library.Clip, item string) {
+	t.Helper()
+	a.libSel = cl.ID
+	tt.Frame()
+	if err := tt.Click("资料菜单"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if err := tt.ChooseMenuItem(item); err != nil {
+		t.Fatalf("%v: %q", err, tt.Menu())
+	}
+	tt.Frame()
+	tt.Frame()
+}

@@ -2,6 +2,7 @@ package library
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/vault"
@@ -18,9 +19,32 @@ import (
 // and the clip in memory is as the one in its file. Mask puts dots for a
 // token too, and the details open it when the vault is unlocked.
 
+// MarkOpen and MarkClose are what the user writes round a word to say it
+// is a secret, where no rule tells: ||ttc13!||, as a spoiler is written
+// elsewhere. The marks stay in the text, round the secret or its token,
+// so that it is one still when shown and kept again; Mask takes them off
+// with it. Not between words of a program, a||b||c: the mark opens a
+// text or follows what is no letter.
+const MarkOpen, MarkClose = "||", "||"
+
+// marked is the first of the patterns: what the user marked is not cut
+// by what another finds in it.
+var marked = regexp.MustCompile(`(?P<keep>(?:^|[^A-Za-z0-9_)\]|])\|\|)[^\s|](?:[^|\n]*[^\s|])?(?P<tail>\|\|)`)
+
+// Marked reports whether s holds a secret marked by hand.
+func Marked(s string) bool { return strings.Contains(s, MarkOpen) && marked.MatchString(s) }
+
+// CanMark reports whether a part of a text can be marked a secret: of
+// one line, with none of the marks' own sign, and not marked already.
+func CanMark(part string) bool {
+	return strings.TrimSpace(part) != "" && !strings.ContainsAny(part, "|\n") && !vault.Has(part)
+}
+
 // secretPatterns are the shapes of a secret; of each match the part named
-// keep, if any, stays (a line's name before its value).
+// keep, if any, stays (a line's name before its value), and the part
+// named tail (a mark's end).
 var secretPatterns = []*regexp.Regexp{
+	marked,
 	// A private key, the whole block.
 	regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|\z)`),
 	// Tokens told by how they begin.
@@ -49,23 +73,68 @@ func Mask(s string) string {
 	if vault.Has(s) {
 		s = vault.Token.ReplaceAllString(s, masked)
 	}
-	return eachSecret(s, func(string) string { return masked })
+	s = eachSecret(s, func(string) string { return masked })
+	if strings.Contains(s, MarkOpen) {
+		s = strings.ReplaceAll(s, MarkOpen+masked+MarkClose, masked)
+	}
+	return s
 }
 
 // eachSecret is s with each thing that looks like a secret replaced by
-// what with makes of it.
+// what with makes of it. The secrets are found in s as it is, all of
+// them, and replaced at once: what is put for one is not searched by the
+// next pattern, which would find a key in the letters of a token.
 func eachSecret(s string, with func(secret string) string) string {
-	for _, re := range secretPatterns {
-		keep := re.SubexpIndex("keep")
-		s = re.ReplaceAllStringFunc(s, func(m string) string {
-			if keep < 0 {
-				return with(m)
-			}
-			k := re.FindStringSubmatch(m)[keep]
-			return k + with(m[len(k):])
-		})
+	type span struct {
+		from, to int
+		fixed    bool // marked by hand: taken as it is
 	}
-	return s
+	var spans []span
+	for _, re := range secretPatterns {
+		keep, tail := re.SubexpIndex("keep"), re.SubexpIndex("tail")
+		for _, m := range re.FindAllStringSubmatchIndex(s, -1) {
+			sp := span{m[0], m[1], re == marked}
+			if keep >= 0 && m[2*keep] >= 0 {
+				sp.from = m[2*keep+1]
+			}
+			if tail >= 0 && m[2*tail] >= 0 {
+				sp.to = m[2*tail]
+			}
+			// One that meets another found before is one secret with it;
+			// one that meets a marked one is left to the mark.
+			joined := false
+			for i := range spans {
+				o := &spans[i]
+				if sp.from >= o.to || sp.to <= o.from {
+					continue
+				}
+				if !o.fixed {
+					o.from, o.to = min(o.from, sp.from), max(o.to, sp.to)
+				}
+				joined = true
+				break
+			}
+			if !joined {
+				spans = append(spans, sp)
+			}
+		}
+	}
+	if len(spans) == 0 {
+		return s
+	}
+	slices.SortFunc(spans, func(a, b span) int { return a.from - b.from })
+	var b strings.Builder
+	at := 0
+	for _, sp := range spans {
+		if sp.from < at { // two grown into each other
+			continue
+		}
+		b.WriteString(s[at:sp.from])
+		b.WriteString(with(s[sp.from:sp.to]))
+		at = sp.to
+	}
+	b.WriteString(s[at:])
+	return b.String()
 }
 
 // HasSecret reports whether s holds what looks like a secret, or one
@@ -154,6 +223,9 @@ func Secrets(s string) []string {
 // mayHoldSecret is a quick no for most texts: the patterns are tried only
 // on one that has a word they all need.
 func mayHoldSecret(s string) bool {
+	if strings.Contains(s, MarkOpen) && len(s) > len(MarkOpen+MarkClose) {
+		return true
+	}
 	if len(s) < 12 {
 		return false
 	}
