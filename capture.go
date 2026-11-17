@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -295,7 +296,7 @@ func (a *app) moveToMap(path, sheet, id string) {
 	err := a.editMapAt(path, "从「"+mapName(a.path)+"」移来", func(f *model.File) error {
 		d := f.SheetOf(id)
 		if d == nil {
-			return errors.New("目标节点已不存在")
+			return errors.New("目标主题已不存在")
 		}
 		target, _ := d.Find(id)
 		title = target.Title
@@ -315,26 +316,36 @@ func (a *app) moveToMap(path, sheet, id string) {
 	m.there = true
 	a.moveDiasTo(m.nodes, path) // what was drawn of them goes with them
 	a.deleteSelection()
-	if a.movedOut = append(a.movedOut, m); len(a.movedOut) > movedKept {
-		a.movedOut = a.movedOut[len(a.movedOut)-movedKept:]
-	}
+	a.followMove(m)
 	a.tellUndo(fmt.Sprintf("已移到「%s」的「%s」下", mapName(path), title), func() { a.moveHome(m) })
 }
 
-// movedOut is a branch, or several, moved from a map to a topic of
+// movedOut is a branch, or several, moved between the open map and
 // another while the app runs. The two maps are two files, and the history
 // takes back the steps of one: an undo that brought the branch back here
 // left it there too, the same topics by the same IDs in both maps. So a
-// move is followed (movesFollow): the branch back here by an undo, it is
-// taken out there; gone from here again by a redo, it is put there again.
-// (Forgetting the map's steps at a move, as the other map's are, would
-// have cost every undo of what was done before it.)
+// move is followed (movesFollow), by its own step of the map's history
+// (model.History.Step): that step undone, the branch is taken out of the
+// other map; made again, it is put there again. (Forgetting the map's
+// steps at a move, as the other map's are, would have cost every undo of
+// what was done before it.)
+//
+// By its step, and not by whether the branch is here: followed so, any
+// undo or redo while the branch was away for another reason, deleted
+// here, or moved on to a third map, put it into the other map again. A
+// move whose step is gone, too old or with another recorded after its
+// undo, is followed no more.
 type movedOut struct {
-	from, to string        // the maps
-	under    string        // the topic of the other map it went under
-	nodes    []*model.Node // the topics as they were moved, with their IDs
+	from, to string        // the map whose steps are followed, and the other
+	into     bool          // the move was from the other map into this one: a task put here, a branch brought back by 撤销
+	under    string        // the topic of the other map it went under, or was under
+	nodes    []*model.Node // the topics with their IDs: as moved, then as the other map had them when they last left it
 	homes    []movedHome   // where each was here
 	there    bool          // they are in the other map
+	// The move's step, and the history it is of: the map's steps are
+	// begun anew when its file changed while it was not open.
+	hist *model.History
+	step uint64
 }
 
 // movedHome is where a topic moved away was: on which canvas, under which
@@ -348,41 +359,178 @@ type movedHome struct {
 // movedKept is how many moves are followed.
 const movedKept = 32
 
-// movesFollow has the branches moved from the open map to others follow
-// an undo or a redo of it.
+// A map renamed or moved, as one is by itself when its central topic is
+// retitled, is followed by the moves kept of it and by where topics were
+// cut (sidebar.go's pathFollowers): left at the old path, ⌘Z and the
+// toast's 撤销 found no map to take the branch out of, and it stayed in
+// both.
+func init() {
+	pathFollowers = append(pathFollowers, func(a *app, follow func(string) string) {
+		for _, m := range a.movedOut {
+			m.from, m.to = follow(m.from), follow(m.to)
+		}
+		a.clipFrom = follow(a.clipFrom)
+	})
+}
+
+// branch names what a move moved, between which maps: the moves of the
+// same topics between the same two are of one branch, which is in one of
+// them.
+func (m *movedOut) branch() string {
+	ids := []string{m.from, m.to}
+	for _, n := range m.nodes {
+		ids = append(ids, n.ID)
+	}
+	return strings.Join(ids, "\n")
+}
+
+// followMove keeps a move just made, by the open map's last step, to
+// follow that map's undo and redo. The moves kept of the same branch say
+// where it is as this one does.
+func (a *app) followMove(m *movedOut) {
+	m.hist, m.step = a.hist, a.hist.LastStep()
+	for _, o := range a.movedOut {
+		if o.branch() == m.branch() {
+			o.there, o.nodes = m.there, m.nodes
+		}
+	}
+	if a.movedOut = append(a.movedOut, m); len(a.movedOut) > movedKept {
+		a.movedOut = a.movedOut[len(a.movedOut)-movedKept:]
+	}
+}
+
+// movesFollow has the branches moved between the open map and others
+// follow an undo or a redo of it: each where the map's steps, as they
+// stand now, have it.
 func (a *app) movesFollow() {
 	if a.file == nil {
 		return
 	}
-	for _, m := range slices.Clone(a.movedOut) {
+	// This map's moves whose step is still among its steps, in the order
+	// they were made.
+	var mine []*movedOut
+	a.movedOut = slices.DeleteFunc(a.movedOut, func(m *movedOut) bool {
 		if m.from != a.path {
+			return false
+		}
+		if m.hist != a.hist || a.hist.Step(m.step) == 0 {
+			return true
+		}
+		mine = append(mine, m)
+		return false
+	})
+	// Where each branch is to be: as the last of its moves still made put
+	// it or, with none made, as it was before the first of them.
+	by := map[string]*movedOut{}
+	var order []string
+	for _, m := range mine {
+		k := m.branch()
+		made := a.hist.Step(m.step) > 0
+		switch o := by[k]; {
+		case o == nil:
+			by[k], order = m, append(order, k)
+		case made:
+			by[k] = m
+		}
+	}
+	for _, k := range order {
+		m := by[k]
+		made := a.hist.Step(m.step) > 0
+		want := made != m.into // in the other map
+		if want == m.there {
 			continue
 		}
-		here := slices.ContainsFunc(m.nodes, func(n *model.Node) bool { return a.file.Node(n.ID) != nil })
-		switch {
-		case here && m.there:
-			if a.leaveOther(m) {
-				a.tell(fmt.Sprintf("这一支也从「%s」里拿回来了", mapName(m.to)))
+		var said string
+		if want {
+			if !a.joinOther(m) {
+				// The other map is gone, or does not read: the step is
+				// taken back as it came, and the branch stays here, where
+				// it was in neither.
+				a.stepAgain(made)
+				a.tell(fmt.Sprintf("没能放回「%s」（那张导图不在了或读不了），这一支留在这张导图里", mapName(m.to)))
+				return
 			}
-		case !here && !m.there:
-			if a.joinOther(m) {
-				a.tell(fmt.Sprintf("这一支又移到了「%s」", mapName(m.to)))
+			said = fmt.Sprintf("这一支又移到了「%s」", mapName(m.to))
+		} else {
+			switch a.leaveOther(m, true) {
+			case leftAsMoved:
+				said = fmt.Sprintf("这一支也从「%s」里拿回来了", mapName(m.to))
+			case leftChanged:
+				said = fmt.Sprintf("这一支也从「%s」里拿回来了，连同在那边改过的", mapName(m.to))
 			}
+		}
+		for _, o := range mine {
+			if o.branch() == k {
+				o.there, o.nodes = m.there, m.nodes
+			}
+		}
+		if said != "" {
+			a.tell(said)
 		}
 	}
 }
 
-// leaveOther takes a branch moved to another map out of it. One that is
-// no longer there, deleted or taken elsewhere since, is this move's no
-// more, and is followed no longer.
-func (a *app) leaveOther(m *movedOut) bool {
+// stepAgain takes back the step just undone or made again, with nothing
+// following it: undone when it was made, made again when it was undone.
+func (a *app) stepAgain(made bool) {
+	var s model.State
+	var ok bool
+	if made {
+		s, ok = a.hist.Undo(a.state())
+	} else {
+		s, ok = a.hist.Redo(a.state())
+	}
+	if ok {
+		a.restore(s)
+	}
+}
+
+// What leaveOther found of a branch in the other map.
+const (
+	leftNothing = iota // it was not there: nothing done
+	leftAsMoved        // taken out, the same as it was moved
+	leftChanged        // taken out, changed there since: it is here as it was there
+)
+
+// leaveOther takes a branch out of the other map, as it comes back to
+// this one. The branch is here as the other map had it: what was changed
+// of it there since the move, a title, a topic added under it, comes back
+// with it, where the branch as it was moved came back and the rest was in
+// neither map. With here, the open map has the branch already, as an undo
+// left it, and it is made so there; else what m keeps of it is, for the
+// one who puts it back. One that is no longer there, deleted or taken
+// elsewhere since, is this move's no more.
+func (a *app) leaveOther(m *movedOut, here bool) int {
 	f := a.mapFile(m.to)
 	if f == nil {
-		return false // not read: not known to be gone
+		if _, err := os.Stat(m.to); errors.Is(err, os.ErrNotExist) {
+			m.there = false // the map itself is gone
+		}
+		return leftNothing // else not read: not known to be gone
 	}
-	if !slices.ContainsFunc(m.nodes, func(n *model.Node) bool { return f.Node(n.ID) != nil }) {
-		a.movedOut = slices.DeleteFunc(a.movedOut, func(o *movedOut) bool { return o == m })
-		return false
+	found, changed := false, false
+	for i, n := range m.nodes {
+		there := f.Node(n.ID)
+		if there == nil {
+			continue
+		}
+		found = true
+		c := there.Clone()
+		c.Pos = n.Pos // where it floated here, if it did
+		if sameBranch(c, n) {
+			continue
+		}
+		changed = true
+		copyAssets(c, model.AssetsDir(m.to), model.AssetsDir(m.from))
+		m.nodes = slices.Clone(m.nodes)
+		m.nodes[i] = c
+		if here && m.from == a.path {
+			a.replaceTopic(c)
+		}
+	}
+	if !found {
+		m.there = false
+		return leftNothing
 	}
 	err := a.editMapAt(m.to, "移回「"+mapName(m.from)+"」", func(f *model.File) error {
 		for _, n := range m.nodes {
@@ -393,16 +541,51 @@ func (a *app) leaveOther(m *movedOut) bool {
 		return nil
 	})
 	if err != nil {
-		return false
+		return leftNothing
 	}
 	m.there = false
 	a.moveDiasTo(m.nodes, m.from)
-	return true
+	if changed {
+		return leftChanged
+	}
+	return leftAsMoved
+}
+
+// sameBranch tells whether two branches are the same, topic by topic.
+func sameBranch(x, y *model.Node) bool {
+	bx, _ := json.Marshal(x)
+	by, _ := json.Marshal(y)
+	return string(bx) == string(by)
+}
+
+// replaceTopic puts a topic in the place of the open map's topic of its
+// ID, with all under it: outside the map's steps, as part of the one just
+// undone or made again.
+func (a *app) replaceTopic(c *model.Node) {
+	d := a.file.SheetOf(c.ID)
+	if d == nil {
+		return
+	}
+	n, p := d.Find(c.ID)
+	switch {
+	case p == nil:
+		if i := slices.Index(d.Floating, n); i >= 0 {
+			d.Floating[i] = c
+		}
+	case p.SummaryTopic() == n:
+		p.Summary.Topic = c
+	default:
+		if i := slices.Index(p.Children, n); i >= 0 {
+			p.Children[i] = c
+		}
+	}
+	a.edits++
 }
 
 // joinOther puts a branch moved to another map, and taken out of it by an
 // undo, there again: under the topic it went under, or the map's middle
-// when that is gone.
+// when that is gone. It reports whether it could: not into a map that is
+// gone.
 func (a *app) joinOther(m *movedOut) bool {
 	err := a.editMapAt(m.to, "从「"+mapName(m.from)+"」移来", func(f *model.File) error {
 		target := f.Node(m.under)
@@ -431,11 +614,21 @@ func (a *app) joinOther(m *movedOut) bool {
 
 // moveHome is the 撤销 of a move to another map, by the topics' IDs: they
 // are put back where they were here, a step of this map, and taken out of
-// the other.
+// the other, as the other map has them now. The step is a move of its
+// own, into this map, followed as the move out is: undone, the branch is
+// in the other map again.
 func (a *app) moveHome(m *movedOut) {
-	if a.mapFile(m.from) == nil {
+	home := a.mapFile(m.from)
+	if home == nil {
 		return
 	}
+	a.leaveOther(m, false) // gone from there since, it is put back as it was moved
+	// Back already, by ⌘Z before the toast was gone: nothing to put back,
+	// and no step to make of it, whose undo would be a move of nothing.
+	if !slices.ContainsFunc(m.nodes, func(n *model.Node) bool { return home.Node(n.ID) == nil }) {
+		return
+	}
+	open := m.from == a.path
 	err := a.editMapAt(m.from, "从「"+mapName(m.to)+"」移回", func(f *model.File) error {
 		for i, n := range m.nodes {
 			if f.Node(n.ID) != nil {
@@ -463,8 +656,14 @@ func (a *app) moveHome(m *movedOut) {
 		}
 		return nil
 	})
-	if err == nil {
-		a.leaveOther(m)
+	if err != nil {
+		// Not put back here: it is not left in neither map.
+		a.joinOther(m)
+		a.tell("没有撤销：" + err.Error())
+		return
+	}
+	if open && m.from == a.path {
+		a.followMove(&movedOut{from: m.from, to: m.to, into: true, under: m.under, nodes: m.nodes, homes: m.homes})
 	}
 }
 

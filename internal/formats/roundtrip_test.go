@@ -40,6 +40,20 @@ func sampleMap() *model.File {
 	_, _ = d.AddChild(sum.ID, "概要下的一条")
 	g, _ := d.AddChild(d.Root.ID, "")
 	_, _ = d.AddChild(g.ID, "没有标题的主题下面")
+	// Titles whose own words look like the outline's marks: a #word at
+	// the end, a number after a #, 〔概要〕 and 〔自由主题 at the head, and
+	// those with a \ before them already.
+	w, _ := d.AddChild(d.Root.ID, "像记号的标题")
+	for _, title := range []string{"Issue #42", "修复 #bug", `写作 \#转义`, `两道 \\#转义`, "〔概要〕不是概要", "〔自由主题 1,2〕不是自由主题",
+		`\〔概要〕带反斜杠`, "#开头 的标题", "标题 #一 #二"} {
+		_, _ = d.AddChild(w.ID, title)
+	}
+	tagged, _ := d.AddChild(w.ID, "标题 #像标签")
+	tagged.Tags = []string{"真标签"}
+	doing, _ := d.AddChild(w.ID, "任务 #像标签")
+	doing.Task = &model.Task{Status: model.StatusDoing, Due: &due}
+	marked, _ := d.AddChild(w.ID, "〔概要〕任务不是概要")
+	marked.Task = &model.Task{Status: model.StatusTodo}
 	d.Root.AddSummary("全图的概要")
 	fl := d.AddFloating("漂着的想法", model.Point{X: 320, Y: -120.5})
 	fl.Tags = []string{"待定"}
@@ -51,6 +65,7 @@ func sampleMap() *model.File {
 	second.Root.Title = "第二张画布"
 	_, _ = second.AddChild(second.Root.ID, "它的主题")
 	second.AddFloating("第二张上漂着的", model.Point{X: 10, Y: 20})
+	second.AddFloating("〔概要〕漂着的 #像标签", model.Point{X: 30, Y: 40})
 	return f
 }
 
@@ -87,6 +102,12 @@ func TestMarkdownRoundTrip(t *testing.T) {
 	// And written out again it is the same text.
 	if again := model.MarkdownFile(g); again != text {
 		t.Fatalf("written again:\n%s\nwas:\n%s", again, text)
+	}
+	// Another program's file: a number after a # is words of the title.
+	h := ParseMarkdown("# 缺陷\n\n- Issue #42\n- 修复 #登录\n", "x")
+	if r := h.Sheets[0].Root; len(r.Children) != 2 || r.Children[0].Title != "Issue #42" || len(r.Children[0].Tags) != 0 ||
+		r.Children[1].Title != "修复" || len(r.Children[1].Tags) != 1 {
+		t.Fatalf("read %+v", r.Children)
 	}
 	// One canvas copied (复制当前画布为 Markdown) has its floating topics.
 	if one := model.Markdown(f.Sheets[0]); !strings.Contains(one, "漂着的想法") || !strings.Contains(one, "它下面的任务") {

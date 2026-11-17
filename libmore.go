@@ -199,7 +199,7 @@ func (a *app) nodeRelatedSection(c *ui.Context, n *model.Node) {
 				clip := h.Clip
 				ui.Row(c.Key("nc" + clip.ID)).Gap(6).AlignItems(ui.Center).Children(func() {
 					ui.Box(c).Grow(1).Shrink(1).MinWidth(0).Children(func() { a.clipLink(c, clip) })
-					if ui.Link(c, "挂上", "").FontSize(11).Label("挂上 " + clip.Label()).Tooltip("把这条资料挂到节点上").Clicked() {
+					if ui.Link(c, "挂上", "").FontSize(11).Label("挂上 " + clip.Label()).Tooltip("把这条资料挂到主题上").Clicked() {
 						attach(clipScheme + clip.ID)
 					}
 				})
@@ -215,7 +215,7 @@ func (a *app) nodeRelatedSection(c *ui.Context, n *model.Node) {
 						ui.Text(c, "🔗").FontSize(12).Shrink(0)
 						ui.Text(c, p.title).FontSize(12).TextColor(t.Accent).MaxLines(1)
 					})
-					if ui.Link(c, "挂上", "").FontSize(11).Label("挂上 " + p.title).Tooltip("链接到另一张导图的这个节点").Clicked() {
+					if ui.Link(c, "挂上", "").FontSize(11).Label("挂上 " + p.title).Tooltip("链接到另一张导图的这个主题").Clicked() {
 						attach(a.nodeLinkTo(p.path, p.id))
 					}
 				})
@@ -225,15 +225,35 @@ func (a *app) nodeRelatedSection(c *ui.Context, n *model.Node) {
 	})
 }
 
-// relatedOfCached is relatedOf, worked out again as the node, the clips
-// or the maps change, or a query's vector comes.
+// relatedPause is how long the writing of a topic's title rests before
+// what the topic may be about is looked for again.
+const relatedPause = 400 * time.Millisecond
+
+// relatedRuns counts the times relatedOf was worked out, for the tests.
+var relatedRuns int
+
+// relatedOfCached is relatedOf, worked out again as what it is made of
+// changes: the topic's title, tags and links, the clips, the other maps,
+// or a query's vector that comes. Not as anything else of the open map
+// does: a note written, or a topic dragged, a frame a change, looked
+// through the clips and the maps at each. And as the topic's own title is
+// written, once the writing rests (relatedPause), with what was found
+// before shown until then; relatedWait is how long until, for the page to
+// ask for a frame then.
 func (a *app) relatedOfCached(n *model.Node) ([]library.Hit, []place) {
 	q := strings.TrimSpace(n.Title + " " + strings.Join(n.Tags, " "))
-	key := fmt.Sprint(n.ID, q, len(n.Links), a.lib.Version, a.refIndex().sig, a.qvecs[q] != nil)
-	if a.relatedKey != key {
-		a.relatedKey = key
-		a.relatedClips, a.relatedNodes = a.relatedOf(n)
+	key := fmt.Sprint(n.ID, "\n", q, "\n", n.Links, a.lib.Version, a.otherMapsSig(), a.qvecs[q] != nil)
+	a.relatedWait = 0
+	if a.relatedKey == key {
+		return a.relatedClips, a.relatedNodes
 	}
+	if wait := relatedPause - a.now().Sub(a.changed); a.relatedNode == n.ID && wait > 0 {
+		a.relatedWait = wait
+		return a.relatedClips, a.relatedNodes
+	}
+	a.relatedKey, a.relatedNode = key, n.ID
+	a.relatedClips, a.relatedNodes = a.relatedOf(n)
+	relatedRuns++
 	return a.relatedClips, a.relatedNodes
 }
 
@@ -270,7 +290,7 @@ func (a *app) clipPlacesSection(c *ui.Context, clip *library.Clip) {
 				a.later(func() { a.markToPlace(clip) })
 			}
 		}
-		if softButton(c, "放到导图…", "挂到某张导图的某个节点上").Height(28).Clicked() {
+		if softButton(c, "放到导图…", "挂到某张导图的某个主题上").Height(28).Clicked() {
 			a.later(place)
 		}
 	}, func() {
@@ -291,7 +311,7 @@ func (a *app) clipPlacesSection(c *ui.Context, clip *library.Clip) {
 			}
 			places := a.placesOf(clip)
 			if len(places) == 0 {
-				ui.Text(c, "挂到导图的节点上，资料就和项目、主题串起来了").FontSize(12).TextColor(t.TextMuted).Wrap()
+				ui.Text(c, "挂到导图的主题上，资料就和项目串起来了").FontSize(12).TextColor(t.TextMuted).Wrap()
 				return
 			}
 			for i, p := range places {

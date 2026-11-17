@@ -5,11 +5,13 @@ import (
 	"net/url"
 	"regexp"
 	"slices"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 	"path/filepath"
 	"strings"
 
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/versions"
 )
@@ -22,6 +24,9 @@ import (
 
 // refs is the index of the links of every map.
 type refs struct {
+	// sig is another whenever a map or the library changed, in its links
+	// or not: what else is worked out from the maps is worked out again
+	// then (the places a clip may go to).
 	sig string
 	// to lists the nodes linking to a target: "clip:id", "skill:name",
 	// "node:path#id", and "map:path" for any node of a map, from other maps.
@@ -29,47 +34,114 @@ type refs struct {
 	// nodeAt is the map of each node, by its ID, to find a node linked to
 	// after its map was renamed or moved.
 	nodeAt map[string]string
+
+	// What each map says, by its path, and what the index was made of:
+	// a map that changed is read again alone, and the index made again
+	// only when what it links to did.
+	maps    map[string]*mapRefs
+	dir     string
+	path    string // the open map, which a link with no map named is to
+	lib     *library.Library
+	libVer  int
+	version int
 }
 
-// refIndex is the index of the links, made again as the maps change.
+// mapRefs is what a map says to the index: its links, and its topics.
+type mapRefs struct {
+	// As of which state of the map: its file's time or, for the open map,
+	// its count of changes.
+	open  bool
+	mod   time.Time
+	edits int
+	file  *model.File
+	links []refLink
+	ids   []string
+}
+
+// refLink is a link of a topic: on which canvas, of which topic, to what.
+type refLink struct {
+	sheet, id, title, link string
+}
+
+// refScans counts the maps read for the index, for the tests.
+var refScans int
+
+// refIndex is the index of the links, brought up to date as the maps
+// change: only the maps that changed are read again, the open one as it
+// is edited, the others by their files' times; and the index is made
+// again only when a link, a linking topic's title or the topics there are
+// changed. (Made whole of every map at every change of the open one, a
+// key typed with a topic's page showing read sixty maps again.)
 func (a *app) refIndex() *refs {
-	a.mapClips()                                         // brings mapClipsSig up to date
-	sig := fmt.Sprint(a.mapClipsSig, "|", a.lib.Version) // the thoughts link too
-	if a.refs != nil && a.refs.sig == sig {
-		return a.refs
+	r := a.refs
+	if r == nil || r.dir != a.dir {
+		r = &refs{dir: a.dir, nodeAt: map[string]string{}, maps: map[string]*mapRefs{}}
+		a.refs = r
 	}
-	r := &refs{sig: sig, to: map[string][]backlink{}, nodeAt: map[string]string{}}
+	changed, read := false, false
 	for _, fi := range a.files {
-		f := a.mapFile(fi.Path)
-		if f == nil {
+		open := fi.Path == a.path && a.file != nil
+		m := r.maps[fi.Path]
+		if m != nil && m.open == open && (open && m.edits == a.edits && m.file == a.file || !open && m.mod.Equal(fi.Modified)) {
 			continue
 		}
-		for _, d := range f.Sheets {
-			walk := func(n *model.Node) {
-				var walk func(n *model.Node)
-				walk = func(n *model.Node) {
-					r.nodeAt[n.ID] = fi.Path
-					for _, l := range n.Links {
-						a.addRef(r, fi.Path, d.ID, n, l)
-					}
-					// The links written in its note ([[…) are links of it too.
-					if strings.Contains(n.Note, "](") {
-						for _, m := range noteLink.FindAllStringSubmatch(n.Note, -1) {
-							if !slices.Contains(n.Links, m[1]) {
-								a.addRef(r, fi.Path, d.ID, n, m[1])
-							}
-						}
-					}
-					for _, c := range n.Children {
-						walk(c)
-					}
+		now := a.mapRefsOf(fi.Path)
+		now.open, now.mod, now.edits = open, fi.Modified, a.edits
+		if open {
+			now.file = a.file
+		}
+		r.maps[fi.Path], read = now, true
+		if m != nil && slices.Equal(m.links, now.links) && slices.Equal(m.ids, now.ids) {
+			continue // changed, but not in what it links to
+		}
+		changed = true
+		if m != nil {
+			for _, id := range m.ids {
+				if r.nodeAt[id] == fi.Path {
+					delete(r.nodeAt, id)
 				}
-				walk(n)
 			}
-			walk(d.Root)
-			for _, fl := range d.Floating {
-				walk(fl)
+		}
+		for _, id := range now.ids {
+			r.nodeAt[id] = fi.Path
+		}
+	}
+	if len(r.maps) > len(a.files) { // maps that are gone, or were renamed
+		here := map[string]bool{}
+		for _, fi := range a.files {
+			here[fi.Path] = true
+		}
+		for path, m := range r.maps {
+			if here[path] {
+				continue
 			}
+			for _, id := range m.ids {
+				if r.nodeAt[id] == path {
+					delete(r.nodeAt, id)
+				}
+			}
+			delete(r.maps, path)
+			changed = true
+		}
+	}
+	if r.lib != a.lib || r.libVer != a.lib.Version || r.path != a.path { // the thoughts link too
+		r.lib, r.libVer, r.path, changed = a.lib, a.lib.Version, a.path, true
+	}
+	if changed || read || r.sig == "" {
+		r.version++
+		r.sig = fmt.Sprint(r.dir, "|", r.version)
+	}
+	if !changed && r.to != nil {
+		return r
+	}
+	r.to = map[string][]backlink{}
+	for _, fi := range a.files {
+		m := r.maps[fi.Path]
+		if m == nil {
+			continue
+		}
+		for _, l := range m.links {
+			a.addRef(r, backlink{path: fi.Path, sheet: l.sheet, id: l.id, title: l.title}, l.link)
 		}
 	}
 	// A thought's links to topics and maps: what it links to says so. Its
@@ -93,12 +165,47 @@ func (a *app) refIndex() *refs {
 			r.to["map:"+path] = append(r.to["map:"+path], b)
 		}
 	}
-	a.refs = r
 	return r
 }
 
-func (a *app) addRef(r *refs, path, sheet string, n *model.Node, link string) {
-	b := backlink{path: path, sheet: sheet, id: n.ID, title: n.Title}
+// mapRefsOf reads what a map says to the index: every link of its topics,
+// those written in a note too, and its topics' IDs.
+func (a *app) mapRefsOf(path string) *mapRefs {
+	refScans++
+	m := &mapRefs{}
+	f := a.mapFile(path)
+	if f == nil {
+		return m
+	}
+	for _, d := range f.Sheets {
+		var walk func(n *model.Node)
+		walk = func(n *model.Node) {
+			m.ids = append(m.ids, n.ID)
+			for _, l := range n.Links {
+				m.links = append(m.links, refLink{d.ID, n.ID, n.Title, l})
+			}
+			// The links written in its note ([[…) are links of it too.
+			if strings.Contains(n.Note, "](") {
+				for _, nl := range noteLink.FindAllStringSubmatch(n.Note, -1) {
+					if !slices.Contains(n.Links, nl[1]) {
+						m.links = append(m.links, refLink{d.ID, n.ID, n.Title, nl[1]})
+					}
+				}
+			}
+			for _, c := range n.Children {
+				walk(c)
+			}
+		}
+		walk(d.Root)
+		for _, fl := range d.Floating {
+			walk(fl)
+		}
+	}
+	return m
+}
+
+func (a *app) addRef(r *refs, b backlink, link string) {
+	path := b.path
 	if id, ok := strings.CutPrefix(link, clipScheme); ok {
 		r.to[clipScheme+id] = append(r.to[clipScheme+id], b)
 		return
@@ -185,7 +292,7 @@ func (a *app) attachTo(path, nodeID, link, what string) error {
 	err := a.editMapAt(path, "挂上"+what, func(f *model.File) error {
 		n := f.Node(nodeID)
 		if n == nil {
-			return fmt.Errorf("节点已不存在")
+			return fmt.Errorf("主题已不存在")
 		}
 		title = n.Title
 		for _, l := range n.Links {
@@ -364,8 +471,8 @@ func (a *app) mapMaterialSection(c *ui.Context) {
 			}
 			if len(gone) > 0 {
 				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, fmt.Sprintf("%d 个链接指向已不存在的资料或节点", len(gone))).FontSize(12).TextColor(t.Danger).Grow(1).Wrap()
-					if button(c, "清理").FontSize(11).Tooltip("从节点上去掉这些失效的链接（可撤销）").Clicked() {
+					ui.Text(c, fmt.Sprintf("%d 个链接指向已不存在的资料或主题", len(gone))).FontSize(12).TextColor(t.Danger).Grow(1).Wrap()
+					if button(c, "清理").FontSize(11).Tooltip("从主题上去掉这些失效的链接（可撤销）").Clicked() {
 						dead := map[string]bool{}
 						for _, l := range gone {
 							dead[l] = true

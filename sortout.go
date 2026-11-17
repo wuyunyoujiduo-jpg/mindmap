@@ -281,10 +281,32 @@ func (a *app) moveNodeAcross(fromPath, id, toPath, toID string) error {
 			return put(f)
 		})
 	}
+	// Where it is in its map, for a step of the open map taken back to
+	// put it there again (movesFollow).
+	was := ""
+	if d := src.SheetOf(id); d != nil {
+		if _, p := d.Find(id); p != nil {
+			was = p.ID
+		}
+	}
 	if err := a.editMapAt(toPath, "从「"+mapName(fromPath)+"」移来", put); err != nil {
 		return err
 	}
-	return a.editMapAt(fromPath, "移到「"+mapName(toPath)+"」", take)
+	if err := a.editMapAt(fromPath, "移到「"+mapName(toPath)+"」", take); err != nil {
+		return err
+	}
+	// One of the two is the open map, and its half of the move a step of
+	// its history: ⌘Z there brought the task back while it stayed in the
+	// other map too, or took it out of the one map that had it. The move
+	// is followed as a branch moved to another map is (movedOut), by the
+	// open map's step.
+	switch a.path {
+	case fromPath:
+		a.followMove(&movedOut{from: fromPath, to: toPath, under: toID, nodes: []*model.Node{n.Clone()}, there: true})
+	case toPath:
+		a.followMove(&movedOut{from: toPath, to: fromPath, into: true, under: was, nodes: []*model.Node{n.Clone()}})
+	}
+	return nil
 }
 
 // placeBar is the inbox's line of the AI: a button that asks it where

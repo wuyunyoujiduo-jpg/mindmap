@@ -201,7 +201,7 @@ func TestNodeRelated(t *testing.T) {
 	// off.
 	a.panelTab = tabCanvas
 	tt.Frame()
-	for _, want := range []string{"本图资料", "链接了 1 张别的导图", "1 个链接指向已不存在的资料或节点"} {
+	for _, want := range []string{"本图资料", "链接了 1 张别的导图", "1 个链接指向已不存在的资料或主题"} {
 		if !tt.HasText(want) {
 			t.Fatalf("no %q: %q", want, tt.Texts())
 		}

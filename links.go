@@ -131,7 +131,7 @@ func (a *app) openLink(link string) {
 		if d := a.file.SheetOf(id); d != nil {
 			a.goToNode(a.path, d.ID, id)
 		} else {
-			a.saveErr = "链接的节点已不存在"
+			a.saveErr = "链接的主题已不存在"
 		}
 	case linkFile:
 		if _, err := os.Stat(target); err != nil {
@@ -189,7 +189,7 @@ func (a *app) linkLabel(link string) (icon, label string) {
 				return "🔗", n.Title
 			}
 		}
-		return "🔗", "（节点已不存在）"
+		return "🔗", "（主题已不存在）"
 	case linkClip:
 		if c := a.lib.Find(target); c != nil {
 			return "📚", c.Label()
@@ -271,7 +271,7 @@ func (a *app) linksSection(c *ui.Context, n *model.Node) {
 				row := ui.Row(c.Key(fmt.Sprint("link", i))).Gap(6).AlignItems(ui.Center).Padding(3, 6).Radius(6).
 					Background(t.Surface).Border(1, t.Border)
 				if gone {
-					row.Border(1, t.Danger.Alpha(0.5)).Tooltip("链接的资料、节点或技能已不存在，可以删掉这个链接")
+					row.Border(1, t.Danger.Alpha(0.5)).Tooltip("链接的资料、主题或技能已不存在，可以删掉这个链接")
 				}
 				row.Children(func() {
 					open := ui.Row(c).Gap(6).Grow(1).Basis(0).MinWidth(0).Cursor(ui.CursorPointer).Tooltip(l).Label("打开 " + label)
@@ -314,7 +314,7 @@ func (a *app) linksSection(c *ui.Context, n *model.Node) {
 						}
 					})
 				}
-				if ghostButton(c, "链接到节点…", "链接到这张导图里的节点").Clicked() {
+				if ghostButton(c, "链接到主题…", "链接到这张导图里的主题").Clicked() {
 					a.linkFrom = n.ID
 					a.openPalette(paletteLink)
 				}

@@ -196,6 +196,32 @@ func (a *app) settleSummaries(were []string) {
 	}
 }
 
+// healSummaries does so for a map as it is opened or read again, whose
+// file may have such a summary already: written before the app saw to
+// them, or left so by a merge. It is done there, and not in the first
+// change made to the map: no step of the user's holds it, and no 撤销 of
+// theirs takes it back with what they did. The map is marked changed only
+// when one was mended. quiet says nothing of it, where what read the map
+// again has its own word to say.
+func (a *app) healSummaries(quiet bool) {
+	if a.file == nil {
+		return
+	}
+	made := a.file.SettleSummaries()
+	if len(made) == 0 {
+		return
+	}
+	a.dirty, a.changed = true, a.now()
+	if quiet {
+		return
+	}
+	if len(made) > 1 {
+		a.tell(fmt.Sprintf("%d 个概要没有可概括的子主题，之前看不见，现在是所在主题的子主题", len(made)))
+		return
+	}
+	a.tell("概要「" + cmpOr(made[0].Title, "未命名") + "」没有可概括的子主题，之前看不见，现在是所在主题的子主题")
+}
+
 // rootSummaryShown tells whether a structure draws the summary of the
 // topic in the canvas's middle: those that grow one way do, a logic chart,
 // a bracket chart and an org chart; a mind map, with branches on both
@@ -298,7 +324,7 @@ func (a *app) floatDropped(id string, x, y float32) {
 		return // a summary's topic stays by what it sums up
 	}
 	a.selected, a.multi = id, nil
-	a.tellUndo("已设为自由主题，拖回节点上可以挂回去", back)
+	a.tellUndo("已设为自由主题，拖回主题上可以挂回去", back)
 }
 
 // floatNode takes a node out of the tree, as a floating topic beside where
@@ -321,14 +347,14 @@ func (a *app) floatNode(n *model.Node) {
 		a.tellUndo("已设为自由主题：它在整张导图上，退出聚焦就能看到", back)
 		return
 	}
-	a.tellUndo("已设为自由主题，拖回节点上可以挂回去", back)
+	a.tellUndo("已设为自由主题，拖回主题上可以挂回去", back)
 }
 
 // Relations: a node's menu starts one, and a click on another ends it.
 
 func (a *app) startRelation(n *model.Node) {
 	a.relFrom, a.relTo = n.ID, nil
-	a.tell("点击另一个节点，连上关联线（Esc 取消）")
+	a.tell("点击另一个主题，连上关联线（Esc 取消）")
 }
 
 func (a *app) endRelation(to string) {
@@ -536,7 +562,7 @@ func (a *app) relationHandle(c *ui.Context) {
 	const size = 14
 	h := ui.Box(c.Key("rel-handle")).Absolute().Left(mx-size/2).Top(my-size/2).Size(size, size).Radius(999).
 		Background(t.Background).Border(2.5, ui.Hex("#6366f1")).Cursor(ui.CursorGrab).
-		Label("拖动改变连线形状").Tooltip("拖动改变形状 · Delete 删除")
+		Label("拖动改变关联线形状").Tooltip("拖动改变形状 · Delete 删除")
 	if dx, dy, ok := h.Dragged(); ok {
 		id := rel.ID
 		a.mutate("bend:"+id, func() {
@@ -554,7 +580,7 @@ func (a *app) relationHandle(c *ui.Context) {
 		h.Cursor(ui.CursorGrabbing)
 	}
 	h.ContextMenu(func(m *ui.Menu) {
-		if m.Item("删除连线").Chosen() {
+		if m.Item("删除关联线").Chosen() {
 			a.later(func() { a.removeRelation(rel.ID) })
 		}
 		if m.Item("恢复默认弧度").Disabled(rel.Bend == nil).Chosen() {
@@ -754,7 +780,7 @@ func (a *app) annotationsSection(c *ui.Context, n *model.Node) {
 // annotationMenu is the part of a node's menu that adds these.
 func (a *app) annotationMenu(m *ui.Menu, n *model.Node, depth int) {
 	m.Submenu("插入", func(m *ui.Menu) {
-		if depth > 0 && m.Item("上方的同级节点").Shortcut(ui.Shift, ui.KeyEnter).Chosen() {
+		if depth > 0 && m.Item("上方的同级主题").Shortcut(ui.Shift, ui.KeyEnter).Chosen() {
 			a.later(func() { a.addSiblingAt(false) })
 		}
 		if n.Image == nil && m.Item("粘贴的图片").Shortcut(ui.Cmd, ui.KeyV).Chosen() {
@@ -777,7 +803,7 @@ func (a *app) annotationMenu(m *ui.Menu, n *model.Node, depth int) {
 		if depth > 0 && !a.doc.IsFloating(n.ID) && !a.doc.IsSummaryTopic(n.ID) && m.Item("设为自由主题").Chosen() {
 			a.later(func() { a.floatNode(n) })
 		}
-		if a.doc.IsFloating(n.ID) && m.Item("挂到节点下…").Chosen() {
+		if a.doc.IsFloating(n.ID) && m.Item("挂到主题下…").Chosen() {
 			a.later(func() { a.openPalette(paletteMove) })
 		}
 	})

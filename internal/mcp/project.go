@@ -149,7 +149,7 @@ func (s *Server) inbox() (string, *model.File, error) {
 	path := filepath.Join(s.Dir, model.FileName(InboxName))
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		f := model.NewFile(InboxName)
-		f.Sheets[0].Root.Note = "随手记下的想法和待办，之后整理到对应的导图里（右键节点「移到其他导图…」）。"
+		f.Sheets[0].Root.Note = "随手记下的想法和待办，之后整理到对应的导图里（右键主题「移到其他导图…」）。"
 		return path, f, nil
 	}
 	f, err := model.Load(path)

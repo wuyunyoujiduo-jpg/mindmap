@@ -31,7 +31,7 @@ const (
 
 // paletteItem is a line of the palette.
 type paletteItem struct {
-	kind   string // "命令", "节点", "导图"
+	kind   string // "命令", "主题", "导图"
 	title  string
 	detail string // a shortcut, or where a node is
 	run    func()
@@ -65,10 +65,10 @@ func (a *app) commands() []command {
 		{"快速切换导图", "⌘P", func() { a.openPalette(paletteMaps) }, nil},
 		{"快捷键速查", "⌘?", func() { a.cheatsOpen = true }, nil},
 		{"打开 AI 助手", "", func() { a.aiOpen = true }, hasDoc},
-		{"添加子节点", "Tab", a.addChild, hasDoc},
-		{"添加同级节点", "↩", a.addSibling, hasDoc},
-		{"在上方添加同级节点", "⇧↩", func() { a.addSiblingAt(false) }, hasDoc},
-		{"关联线到…（所选节点连到另一个节点）", "⌘⇧L", func() {
+		{"添加子主题", "Tab", a.addChild, hasDoc},
+		{"添加同级主题", "↩", a.addSibling, hasDoc},
+		{"在上方添加同级主题", "⇧↩", func() { a.addSiblingAt(false) }, hasDoc},
+		{"关联线到…（所选主题连到另一个主题）", "⌘⇧L", func() {
 			if n, _ := a.selectedNode(); n != nil {
 				a.startRelation(n)
 			}
@@ -77,8 +77,8 @@ func (a *app) commands() []command {
 			n, _ := a.selectedNode()
 			return n != nil && n.Task != nil
 		}},
-		{"复制节点", "⌘C", func() { a.copyNodes(false) }, hasDoc},
-		{"粘贴为子节点", "⌘V", func() { a.paste() }, hasDoc},
+		{"复制主题", "⌘C", func() { a.copyNodes(false) }, hasDoc},
+		{"粘贴为子主题", "⌘V", func() { a.paste() }, hasDoc},
 		{"聚焦所选分支", "⌥↩", func() { a.focusOn(a.selected) }, hasDoc},
 		{"图解：把所选主题这一支画成流程、状态、判定表和名词", "", func() {
 			if a.diaOf(a.selected) != nil {
@@ -389,7 +389,7 @@ func (a *app) nodeItems(path string, f *model.File, q string, limit int, act fun
 				title += "　— " + snippet(n.Note, q)
 			}
 			sheet, id := d.ID, n.ID
-			items = append(items, paletteItem{"节点", title, where, func() { act(path, sheet, id) }, nil})
+			items = append(items, paletteItem{"主题", title, where, func() { act(path, sheet, id) }, nil})
 			return true
 		})
 	}
@@ -508,11 +508,11 @@ func (a *app) paletteView(c *ui.Context) {
 		placeholder := map[int]string{
 			paletteAll:    "搜索导图、主题、灵感和资料，#标签 按标签找，或输入命令…",
 			paletteMaps:   "切换到导图…",
-			paletteSearch: "搜索所有导图里的节点、备注和标签…",
-			paletteLink:   "输入关键词，选择要链接到的节点…",
-			paletteMove:   "移到哪个节点下？输入关键词查找，或选择导图的中心主题…",
+			paletteSearch: "搜索所有导图里的主题、备注和标签…",
+			paletteLink:   "输入关键词，选择要链接到的主题…",
+			paletteMove:   "移到哪个主题下？输入关键词查找，或选择导图的中心主题…",
 			paletteClip:   "在收集里查找要链接的资料…",
-			paletteAttach: "把资料挂到哪个节点？输入关键词查找，或选择建议的节点…",
+			paletteAttach: "把资料挂到哪个主题？输入关键词查找，或选择建议的主题…",
 			paletteSkill:  "查找要链接的 AI 技能…",
 		}[a.paletteMode]
 		if a.paletteMode == paletteAttach && strings.HasPrefix(a.attachRef, skillScheme) {
@@ -608,16 +608,16 @@ var shortcuts = []struct {
 		{"⌘T", "新建画布"}, {"⌘1–6", "导图 / 大纲 / 看板 / 时间线 / 总览 / 图解"}, {"⌘↩", "开始演说"}, {"⌘?", "快捷键速查"},
 	}},
 	{"今天和收集", [][2]string{
-		{"⌥⌘1 / ⌥⌘2 / ⌥⌘3 / ⌥⌘4", "今天 / 项目 / 收集 / 技能"}, {"⌘J", "记一条灵感或任务"}, {"[[", "写灵感或节点备注时：链接到灵感、资料、导图或主题"}, {"↑ ↓", "在任务或卡片间移动，详情跟着换"},
+		{"⌥⌘1 / ⌥⌘2 / ⌥⌘3 / ⌥⌘4", "今天 / 项目 / 收集 / 技能"}, {"⌘J", "记一条灵感或任务"}, {"[[", "写灵感或主题备注时：链接到灵感、资料、导图或主题"}, {"↑ ↓", "在任务或卡片间移动，详情跟着换"},
 		{"← →", "收集里到旁边一栏的卡片"}, {"Space", "勾掉选中的任务"}, {"Esc", "关闭右侧的详情"},
 	}},
-	{"编辑节点", [][2]string{
-		{"Tab", "添加子节点"}, {"↩ / ⇧↩", "在下方 / 上方添加同级节点"}, {"Space / F2", "编辑标题"}, {"Delete", "删除"},
+	{"编辑主题", [][2]string{
+		{"Tab", "添加子主题"}, {"↩ / ⇧↩", "在下方 / 上方添加同级主题"}, {"Space / F2", "编辑标题"}, {"Delete", "删除"},
 		{"⌘C / ⌘X / ⌘V", "复制 / 剪切 / 粘贴（可跨导图，也可粘贴文本大纲）"}, {"⌘Z / ⌘⇧Z", "撤销 / 重做"},
-		{"⌘↑ / ⌘↓", "上移 / 下移（也可拖到兄弟节点的上沿或下沿）"}, {"⌘⇧L", "关联线：连到另一个节点"}, {"⌘/", "折叠 / 展开"}, {"⇧ 或 ⌘ + 点击", "多选节点"},
+		{"⌘↑ / ⌘↓", "上移 / 下移（也可拖到同级主题的上沿或下沿）"}, {"⌘⇧L", "关联线：连到另一个主题"}, {"⌘/", "折叠 / 展开"}, {"⇧ 或 ⌘ + 点击", "多选主题"},
 	}},
 	{"浏览", [][2]string{
-		{"← → ↑ ↓", "在节点间移动"}, {"⌥↩", "聚焦所选分支"}, {"Esc", "取消多选 / 退出聚焦"},
+		{"← → ↑ ↓", "在主题间移动"}, {"⌥↩", "聚焦所选分支"}, {"Esc", "取消多选 / 退出聚焦"},
 		{"⌥1–9 / ⌥0", "展开到第 N 层 / 全部展开"}, {"⌘= / ⌘- / ⌘0", "放大 / 缩小 / 实际大小"}, {"⌘⇧0", "回到中心"},
 		{"双指捏合 / ⌘ + 滚轮", "缩放"},
 	}},

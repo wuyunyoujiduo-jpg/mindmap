@@ -94,7 +94,7 @@ func (f *fakePlatform) Trash(path string) error {
 var testNow = time.Date(2026, 10, 10, 9, 0, 0, 0, time.Local)
 
 // newTestApp opens an app on a fresh folder, which gets the guide map.
-func newTestApp(t *testing.T) (*app, *ui.Tester) {
+func newTestApp(t testing.TB) (*app, *ui.Tester) {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
@@ -1994,7 +1994,7 @@ func TestMultiSelect(t *testing.T) {
 		t.Fatalf("selected %d", got)
 	}
 	tt.Frame()
-	if !tt.HasText("已选 3 个节点") {
+	if !tt.HasText("已选 3 个主题") {
 		t.Fatalf("no batch panel: %q", tt.Texts())
 	}
 	snapshot(t, tt, "multi")
@@ -2376,7 +2376,7 @@ func TestLinks(t *testing.T) {
 	snapshot(t, tt, "links")
 
 	// Linking to another node, through the palette, and back.
-	clickInPanel(t, tt, "链接到节点…")
+	clickInPanel(t, tt, "链接到主题…")
 	if a.paletteMode != paletteLink {
 		t.Fatal("not choosing a node")
 	}
@@ -3248,7 +3248,7 @@ func TestSelectBendDeleteRelation(t *testing.T) {
 	}
 	snapshot(t, tt, "relation-selected")
 	// Its handle bends it.
-	h, ok := tt.Find("拖动改变连线形状")
+	h, ok := tt.Find("拖动改变关联线形状")
 	if !ok {
 		t.Fatal("no handle")
 	}

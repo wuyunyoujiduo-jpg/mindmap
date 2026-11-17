@@ -288,8 +288,8 @@ func (a *app) multiPanel(c *ui.Context) {
 	t := c.Theme()
 	sel := a.selection()
 	ui.Column(c).Padding(12, 16).Gap(14).Children(func() {
-		ui.Textf(c, "已选 %d 个节点", len(sel)).FontSize(15).Bold()
-		ui.Text(c, "按住 ⇧ 或 ⌘ 点击节点加入或移出选择；Esc 取消多选。").FontSize(12).TextColor(t.TextMuted).Wrap()
+		ui.Textf(c, "已选 %d 个主题", len(sel)).FontSize(15).Bold()
+		ui.Text(c, "按住 ⇧ 或 ⌘ 点击主题加入或移出选择；Esc 取消多选。").FontSize(12).TextColor(t.TextMuted).Wrap()
 		ui.Field(c, "任务状态", func() {
 			ui.Row(c).Wrap().Gap(6).Children(func() {
 				for _, s := range model.Statuses {
@@ -350,14 +350,14 @@ func (a *app) copyNodes(cut bool) {
 			pairIDs(a.clipCut, c, n) // the clipboard's ID to the one it had
 		}
 	}
-	a.clipAssets = model.AssetsDir(a.path)
+	a.clipAssets, a.clipFrom = model.AssetsDir(a.path), a.path
 	a.clipText = model.MarkdownNodes(nodes)
 	a.plat.CopyText(a.clipText)
 	if cut {
 		a.deleteSelection()
-		a.tell("已剪切 " + itoa(len(nodes)) + " 个节点")
+		a.tell("已剪切 " + itoa(len(nodes)) + " 个主题")
 	} else {
-		a.tell("已复制 " + itoa(len(nodes)) + " 个节点")
+		a.tell("已复制 " + itoa(len(nodes)) + " 个主题")
 	}
 }
 
@@ -404,12 +404,16 @@ func (a *app) paste() bool {
 // still finds them, where a cut and a paste, which is how a branch is
 // moved by the keys, left every such link pointing at nothing. Pasted
 // again they are copies; and copies the first time too when one of those
-// IDs is in the map, the cut having been undone. carry, run once they are
-// in the map, has what was drawn of them follow them (carryDias).
+// IDs is in the map, the cut having been undone, or when the map is not
+// the one they were cut from: that map's steps outlive its being left,
+// and ⌘Z there brought the topics back by the IDs another map had by
+// then, one 图解 and one place in the links' index serving both. carry,
+// run once they are in the map, has what was drawn of them follow them
+// (carryDias).
 func (a *app) clipNodes() (nodes []*model.Node, carry func()) {
 	cut := a.clipCut
 	a.clipCut = nil // moved once
-	same := cut != nil
+	same := cut != nil && a.clipFrom == a.path
 	for _, had := range cut {
 		if a.file.Node(had) != nil {
 			same = false

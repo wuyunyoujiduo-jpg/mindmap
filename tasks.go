@@ -185,7 +185,7 @@ func (a *app) keyIssueColumn(c *ui.Context) {
 			ui.Box(c).Size(14, 14).Draw(func(p *ui.Painter, r ui.Rect) { drawMarker(p, r, keyMarker) })
 		}, "重点问题", len(col))
 		if len(col) == 0 {
-			ui.Text(c, "节点打上红旗，或把卡片拖到这里").FontSize(12).TextColor(t.TextMuted).Margin(8, 4).Wrap()
+			ui.Text(c, "主题打上红旗，或把卡片拖到这里").FontSize(12).TextColor(t.TextMuted).Margin(8, 4).Wrap()
 			ui.Spacer(c)
 			return
 		}

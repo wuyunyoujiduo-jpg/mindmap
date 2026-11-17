@@ -112,7 +112,7 @@ func (a *app) timelineView(c *ui.Context) {
 		})
 		ui.Divider(c)
 		if len(rows) == 0 && len(unplanned) == 0 {
-			ui.Text(c, "没有任务。在节点详情里用「＋ 任务」把它设为任务并设置日期后，会显示在这里。").TextColor(t.TextMuted).Margin(24)
+			ui.Text(c, "没有任务。在主题详情里用「＋ 任务」把它设为任务并设置日期后，会显示在这里。").TextColor(t.TextMuted).Margin(24)
 			return
 		}
 		ui.ScrollBoth(c.Key("timeline")).Grow(1).TrackScroll(&a.tlScroll).Children(func() {

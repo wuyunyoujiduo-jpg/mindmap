@@ -270,7 +270,7 @@ func clipTall(clip *library.Clip, cols int) float32 {
 func (a *app) libraryDialogs(c *ui.Context) {
 	gone := "删除后无法恢复。"
 	if n := len(a.clipBacklinks(a.libSel)); n > 0 {
-		gone = fmt.Sprintf("它挂在 %d 个节点上，删除后这些链接会失效。删除后无法恢复。", n)
+		gone = fmt.Sprintf("它挂在 %d 个主题上，删除后这些链接会失效。删除后无法恢复。", n)
 	}
 	// What nothing links to goes at once, with a way back; what a topic
 	// links to is asked about first, for the links would break.
@@ -688,7 +688,7 @@ func (a *app) clipMenu(m *ui.Menu, clip *library.Clip) {
 		}
 		if m.Item("复制资料链接").Chosen() {
 			a.plat.CopyText(clipScheme + clip.ID)
-			a.tell("已复制，可以粘贴到节点的链接里")
+			a.tell("已复制，可以粘贴到主题的链接里")
 		}
 		if m.Item("生成分享卡片…").Chosen() {
 			a.openCard(clip)

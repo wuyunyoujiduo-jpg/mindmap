@@ -15,6 +15,44 @@ import (
 // again, shows it as it was. This is kept apart from the maps, in the
 // app's own folder, so their files change only when they do.
 
+// A step of undo is a copy of the whole map, so the steps are bounded by
+// what they hold as well as by their number: two hundred of a map of five
+// thousand topics were 245 MB, and every map opened kept its own until the
+// app closed. A map's steps are at most histSteps and, beyond the last
+// histKeep, what fits in histBytes; and of the maps not open, only the
+// histMaps left last keep theirs.
+const (
+	histSteps = 200
+	histBytes = 48 << 20
+	histKeep  = 30
+	histMaps  = 3
+)
+
+func newHistory() *model.History { return model.NewHistory(histSteps).Budget(histBytes, histKeep) }
+
+// keepHistory keeps the open map's steps for when it is come back to, and
+// forgets those of the maps left longest ago.
+func (a *app) keepHistory() {
+	a.hists[a.path] = a.hist
+	if a.histAt == nil {
+		a.histAt = map[string]time.Time{}
+	}
+	a.histAt[a.path] = a.modTime
+	used := a.histUsed[:0:0]
+	for _, p := range a.histUsed {
+		if p != a.path && a.hists[p] != nil { // some were dropped meanwhile (editMapAt)
+			used = append(used, p)
+		}
+	}
+	a.histUsed = append(used, a.path)
+	// The open map is the last of them, and not counted.
+	for len(a.histUsed) > histMaps+1 {
+		delete(a.hists, a.histUsed[0])
+		delete(a.histAt, a.histUsed[0])
+		a.histUsed = a.histUsed[1:]
+	}
+}
+
 // camState is a canvas's camera as remembered.
 type camState struct {
 	X        float32 `json:"x"`
@@ -84,11 +122,7 @@ func (a *app) rememberView() {
 		}
 	}
 	a.views[a.path] = v
-	a.hists[a.path] = a.hist
-	if a.histAt == nil {
-		a.histAt = map[string]time.Time{}
-	}
-	a.histAt[a.path] = a.modTime
+	a.keepHistory()
 }
 
 // restoreView shows the map just opened as it was left: its canvas, view,
@@ -100,7 +134,7 @@ func (a *app) restoreView(f *model.File) {
 	// back to before that change and saved so, with nothing said.
 	a.hist = a.hists[a.path]
 	if a.hist == nil || !a.histAt[a.path].Equal(a.modTime) {
-		a.hist = model.NewHistory(200)
+		a.hist = newHistory()
 	}
 	sheet := f.Sheets[0].ID
 	if v := a.views[a.path]; v != nil {
@@ -143,6 +177,9 @@ func (a *app) renameViews(follow func(string) string) {
 	at := map[string]time.Time{}
 	for p, t := range a.histAt {
 		at[follow(p)] = t
+	}
+	for i, p := range a.histUsed {
+		a.histUsed[i] = follow(p)
 	}
 	a.views, a.hists, a.histAt = views, hists, at
 }

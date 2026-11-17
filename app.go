@@ -136,6 +136,7 @@ type app struct {
 	hist      *model.History
 	hists     map[string]*model.History // of the maps opened, while the app runs
 	histAt    map[string]time.Time      // each as its file was when it was left (restoreView)
+	histUsed  []string                  // the maps left with steps kept, the last left last (histMaps)
 	views     map[string]*fileView      // how each map was left
 	versions  versions.Store            // past versions of the maps
 	lastSnap  map[string]time.Time      // when each map was last kept as a version
@@ -171,7 +172,10 @@ type app struct {
 	clipText   string
 	// clipCut is, of topics cut, the ID each had by its ID on the
 	// clipboard: pasted, what was drawn of them follows them (carryDias).
-	clipCut map[string]string
+	// clipFrom is the map they were cut from, the one map where a paste
+	// gives them back by those IDs (clipNodes).
+	clipCut  map[string]string
+	clipFrom string
 	// movedOut are the branches moved to other maps while the app runs:
 	// an undo that brings one back here takes it out there (movesFollow).
 	movedOut []*movedOut
@@ -264,6 +268,8 @@ type app struct {
 	placesKey      string                // what placesList was worked out for
 	placesList     []place
 	relatedKey     string // what relatedClips and relatedNodes were worked out for
+	relatedNode    string // the topic they are of, and how long until they are worked out again (relatedOfCached)
+	relatedWait    time.Duration
 	relatedClips   []library.Hit
 	relatedNodes   []place
 	index          map[string]indexEntry // maps read for the search, by path
@@ -311,14 +317,19 @@ type app struct {
 	mapClipsSig   string
 	mapClipsList  []*library.Clip
 	mapIndex      *library.Index
+	othersIndex   *library.Index // the maps but the open one, for a topic's page (searchOtherMaps)
+	othersSig     uint64
 	outlineFocus  string // the node whose line the outline focuses
 	// The outline's lines selected whole, to copy, cut or delete: from
 	// outlineAnchor to outlineEnd, by dragging across lines or Shift+arrows.
 	outlineBlock              bool
 	outlineAnchor, outlineEnd string
-	outlineRowAt              map[string]ui.Rect // where each line was drawn
-	outlineDragFrom           string             // the line pressed, dragged from
-	outlineDragY              float32            // where the pointer is, dragging
+	outlineRowAt              map[string]ui.Rect       // where each line built was drawn
+	outlineDragFrom           string                   // the line pressed, dragged from
+	outlinePressed            bool                     // it is pressed still, in this frame
+	outlineDragY              float32                  // where the pointer is, dragging
+	outlineLists              map[string]*ui.ListState // the outline's list, of each canvas
+	outlineFocusWas           string                   // the focus a frame before: a line it goes to is scrolled to
 
 	// The library of clips.
 	lib           *library.Library
@@ -529,7 +540,7 @@ func newApp(plat platform, cfg config) *app {
 		cfg:           cfg,
 		panelOff:      !cfg.PanelOpen,
 		now:           clock,
-		hist:          model.NewHistory(200),
+		hist:          newHistory(),
 		hists:         map[string]*model.History{},
 		views:         loadViews(),
 		versions:      versions.Store{Dir: versionsDir()},
@@ -657,6 +668,7 @@ func (a *app) open(path string) error {
 	a.modTime = modTime(path)
 	a.dirty, a.saveErr, a.lastEdit = false, "", ""
 	a.savedAt = time.Time{}
+	a.healSummaries(false) // a summary its file had with no child, mended now and in no step of the user's
 	a.restoreView(f)
 	a.adoptDias()
 	a.cfg.File = path
@@ -905,7 +917,7 @@ func (a *app) flush() {
 		// changes made here are kept as a version to restore.
 		a.keepVersion(versions.Conflict)
 		a.conflict, a.dirty = false, false
-		a.hist = model.NewHistory(200) // its steps are of the changes left, not of the file's version
+		a.hist = newHistory() // its steps are of the changes left, not of the file's version
 	}
 	a.rememberView()
 	a.saveViews()
@@ -1042,6 +1054,7 @@ func (a *app) state() model.State {
 func (a *app) restore(s model.State) {
 	a.edits++
 	a.file, a.doc = s.File, nil
+	a.healSummaries(true) // of a file read again, or a merge's
 	a.editing, a.lastEdit = "", ""
 	if d, _ := a.file.Sheet(s.Sheet); d == nil {
 		s.Sheet = a.file.Sheets[0].ID

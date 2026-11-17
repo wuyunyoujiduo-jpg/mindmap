@@ -19,9 +19,7 @@ func TestLongLines(t *testing.T) {
 			// Through the view, from far above it to far below.
 			p.StrokePath(new(ui.Path).MoveTo(100, -4000).LineTo(100, 4000), 4, red)
 			strokeLong(p, view, polyline{{200, -4000}, {200, 4000}}, 4, red)
-			l := polyline{{300, -4000}}
-			l.cube(350, -4000, 250, 4000, 300, 4000)
-			strokeLong(p, view, l, 4, red)
+			strokeCurve(p, view, curve{{300, -4000}, {350, -4000}, {250, 4000}, {300, 4000}}, 4, red)
 		})
 	}, 400, 300)
 	tt.Frame()

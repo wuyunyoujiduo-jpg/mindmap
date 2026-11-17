@@ -146,7 +146,7 @@ func (a *app) relatedOf(n *model.Node) (clips []library.Hit, nodes []place) {
 			break
 		}
 	}
-	for i, mh := range a.searchMaps(q, nil) {
+	for i, mh := range a.searchOtherMaps(q) { // never the open map, nor made again as it is written in
 		path := strings.TrimPrefix(mh.Clip.ID, "map:")
 		if i == 3 || mh.Coverage < 0.3 {
 			break

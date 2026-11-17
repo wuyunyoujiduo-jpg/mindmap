@@ -42,25 +42,17 @@ func (d *Document) ExpandTo(depth int) {
 	})
 }
 
-// Ancestors reports whether the node with the ID a is above, or is, the
-// node with the ID b.
-func (d *Document) Ancestors(a, b string) bool {
-	for _, n := range d.Path(b) {
-		if n.ID == a {
-			return true
-		}
-	}
-	return false
-}
-
 // ParseOutline makes nodes of text: a line each, nested by indentation,
 // as an outline or a Markdown list is written. Bullets, checkboxes and
 // numbers before a line's text are taken off; a checked box makes a done
 // task and an empty one a task to do, and what its line says of it in
 // brackets at its end, as Markdown writes it, is the task's (taskMarks).
-// Headings ("# ") nest by their level. A quoted line ("> ") is of the note
-// of the line above it; a line that begins 〔概要〕 is the topic of the
-// summary of the node it is under, after that node's children.
+// Headings ("# ") nest by their level. A quoted line ("> ", or ">" alone)
+// is of the note of the line above it, and a quote with no line above it
+// is lines as any, without the mark; a line that begins 〔概要〕 is the
+// topic of the summary of the node it is under, after that node's
+// children. What Markdown wrote with a \ before it, for a title's own
+// words not to be read so, is those words again (unescapeTitle).
 func ParseOutline(text string) []*Node {
 	roots, _ := parseOutline(text, false)
 	return roots
@@ -82,13 +74,18 @@ func parseOutline(text string, written bool) (roots, floating []*Node) {
 	}
 	var stack []level
 	noted := map[*Node]bool{}
+	loose := false // in a quote that no line stands above
 	for _, raw := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
 		line := strings.TrimRight(strings.ReplaceAll(raw, "\t", "    "), " ")
 		trimmed := strings.TrimLeft(line, " ")
 		if trimmed == "" || strings.HasPrefix(trimmed, "---") {
 			continue
 		}
-		if strings.HasPrefix(trimmed, ">") && len(stack) > 0 { // of the note of the line above
+		// A quote is "> " and what follows, or ">" alone, as writeNote
+		// writes a note: every line that began with > was one, and
+		// "会议纪要" over ">= 5 人" came in as a note "= 5 人".
+		quote := trimmed == ">" || strings.HasPrefix(trimmed, "> ")
+		if quote && len(stack) > 0 && !loose { // of the note of the line above
 			n := stack[len(stack)-1].node
 			q := strings.TrimPrefix(strings.TrimLeft(raw, " \t")[1:], " ")
 			if noted[n] {
@@ -97,6 +94,15 @@ func parseOutline(text string, written bool) (roots, floating []*Node) {
 			n.Note += q
 			noted[n] = true
 			continue
+		}
+		// A quote with no line above it is no one's note: its lines are
+		// lines, without the mark, where the first was a topic "> …" and
+		// the rest its note.
+		if loose = quote; quote {
+			line = strings.Repeat(" ", len(line)-len(trimmed)) + strings.TrimSpace(trimmed[1:])
+			if trimmed = strings.TrimLeft(line, " "); trimmed == "" {
+				continue
+			}
 		}
 		indent := len(line) - len(trimmed)
 		if h := len(trimmed) - len(strings.TrimLeft(trimmed, "#")); h > 0 && h <= 6 && strings.HasPrefix(trimmed[h:], " ") {
@@ -137,6 +143,7 @@ func parseOutline(text string, written bool) (roots, floating []*Node) {
 		if written && title == untitled {
 			title = ""
 		}
+		title = unescapeTitle(title)
 		n := NewNode(title)
 		n.Task, n.Links, n.Tags = task, links, tags
 		for len(stack) > 0 && stack[len(stack)-1].indent >= indent {

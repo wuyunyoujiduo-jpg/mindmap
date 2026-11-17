@@ -17,6 +17,7 @@ type outlineRow struct {
 	node    *model.Node
 	depth   int
 	summary bool // the topic of its parent's summary
+	branch  int  // of a main topic: which of them it is, for its color
 }
 
 // outlineRows lists the nodes below the root that the outline shows, in
@@ -26,8 +27,8 @@ func outlineRows(d *model.Document) []outlineRow {
 	var rows []outlineRow
 	var walk func(n *model.Node, depth int)
 	walk = func(n *model.Node, depth int) {
-		for _, c := range n.Children {
-			rows = append(rows, outlineRow{node: c, depth: depth})
+		for i, c := range n.Children {
+			rows = append(rows, outlineRow{node: c, depth: depth, branch: i})
 			if !c.Collapsed {
 				walk(c, depth+1)
 			}
@@ -49,57 +50,140 @@ func outlineRows(d *model.Document) []outlineRow {
 // empty line deletes it, and the arrows move between lines. Dragging across
 // lines, or Shift and the arrows, selects lines whole, which copy as an
 // outline, nested as they are.
+//
+// It is a list (ui.List), which builds the lines in and near the view and
+// no others: built every one at every frame, an outline of five thousand
+// lines took an eighth of a second a frame. The heading is the list's
+// first row. The line with the focus stays built when it is scrolled away
+// (the list sees to that), and a line the focus is sent to that is not
+// built is scrolled to, where the focus finds it.
 func (a *app) outlineView(c *ui.Context) {
-	t := c.Theme()
 	rows := outlineRows(a.doc)
 	if a.outlineBlock && (a.outlineIndex(rows, a.outlineAnchor) < 0 || a.outlineIndex(rows, a.outlineEnd) < 0) {
 		a.outlineBlock = false // lines deleted, or folded away
 	}
-	if a.outlineRowAt == nil {
-		a.outlineRowAt = map[string]ui.Rect{}
-	}
-	ui.Scroll(c.Key("outline:" + a.doc.ID)).Grow(1).ObserveInput(a.stepEnds).Children(func() {
-		col := ui.Column(c.Key("outline-lines")).Padding(32, 40).Gap(4).MaxWidth(860).Margin(0, ui.Auto).FillWidth().
-			FocusBind(&a.outlineFocus, outlineBlockFocus).Label("大纲")
-		a.outlineBlockKeys(col, rows)
-		// Where the pointer is, in the window, which a line dragged from
-		// selects to: the column sees it move over the other lines.
-		if _, y, ok := col.PointerPosition(); ok {
-			a.outlineDragY = col.Bounds().Y + y
+	// Where the lines were drawn: those built in the last frame, and no
+	// others.
+	was := a.outlineRowAt
+	a.outlineRowAt = make(map[string]ui.Rect, len(was))
+	st := a.outlineList(a.doc.ID)
+	if f := a.outlineFocus; f != a.outlineFocusWas {
+		a.outlineFocusWas = f
+		if _, built := was[f]; !built && f != "" && f != outlineBlockFocus {
+			if i := a.outlineIndex(rows, f); i >= 0 {
+				st.ScrollIntoView(i + 1)
+			} else if f == a.doc.Root.ID {
+				st.ScrollIntoView(0)
+			}
 		}
-		col.Children(func() {
-			root := a.doc.Root
-			title := root.Title
-			head := ui.Box(c).Padding(0, 0, 4)
-			head.Children(func() {
-				in := ui.TextInputBase(c.Key("outline-root"), &title).FontSize(26).FontWeight(700).LetterSpacing(-0.7).FillWidth().
-					Placeholder("中心主题").FocusBind(&a.outlineFocus, root.ID)
-				if in.Changed() {
-					a.mutate("title:"+root.ID, func() { root.Title = title })
+	}
+	root := a.doc.Root
+	list := ui.List(c.Key("outline:"+a.doc.ID), st, len(rows)+1).Grow(1).Padding(32, 0).Gap(4).ObserveInput(a.stepEnds).
+		ItemKey(func(i int) any {
+			if i == 0 {
+				return root.ID
+			}
+			return rows[i-1].node.ID
+		}).
+		FocusBind(&a.outlineFocus, outlineBlockFocus).Label("大纲")
+	a.outlineBlockKeys(list, rows)
+	// Where the pointer is, in the window, which a line dragged from
+	// selects to: the list sees it move over the other lines.
+	if _, y, ok := list.PointerPosition(); ok {
+		a.outlineDragY = list.Bounds().Y + y
+	}
+	a.outlinePressed = false
+	list.Rows(func(r ui.ListRow) {
+		c := r.Context
+		// The lines are a column in the page's middle, as wide as reads
+		// well, each row its part of it.
+		ui.Box(c).FillWidth().Children(func() {
+			ui.Column(c).Padding(0, 40).Gap(4).MaxWidth(860).Margin(0, ui.Auto).FillWidth().Children(func() {
+				if r.Index == 0 {
+					a.outlineHead(c, len(rows) == 0)
+					return
 				}
-				if in.Focused() {
-					a.selected = root.ID
-				}
-				if in.Submitted() || in.Shortcut(0, ui.KeyDown) {
-					if len(root.Children) == 0 {
-						a.outlineAdd(root.ID, true)
-					} else {
-						a.outlineFocus = root.Children[0].ID
-					}
-				}
+				a.outlineLine(c.Key(rows[r.Index-1].node.ID), rows, r.Index-1)
 			})
-			ui.Box(c).Height(8)
-			for i, r := range rows {
-				a.outlineLine(c.Key(r.node.ID), rows, i)
-			}
-			if len(rows) == 0 {
-				ui.Text(c, "在标题上按回车，开始写第一行").TextColor(t.TextMuted).Margin(8, 14)
-			}
 		})
 	})
+	a.outlineDrag(c, rows)
 }
 
+// outlineList is the list of a canvas's outline: where it is scrolled to,
+// each canvas its own.
+func (a *app) outlineList(id string) *ui.ListState {
+	if a.outlineLists == nil || len(a.outlineLists) > 64 && a.outlineLists[id] == nil { // of canvases long left
+		a.outlineLists = map[string]*ui.ListState{}
+	}
+	if a.outlineLists[id] == nil {
+		a.outlineLists[id] = &ui.ListState{}
+	}
+	return a.outlineLists[id]
+}
+
+// outlineHead is the outline's first row: the root as a heading, and,
+// with no line under it, how to write the first.
+func (a *app) outlineHead(c *ui.Context, empty bool) {
+	t := c.Theme()
+	root := a.doc.Root
+	title := root.Title
+	head := ui.Box(c).Padding(0, 0, 4)
+	head.Children(func() {
+		in := ui.TextInputBase(c.Key("outline-root"), &title).FontSize(26).FontWeight(700).LetterSpacing(-0.7).FillWidth().
+			Placeholder("中心主题").FocusBind(&a.outlineFocus, root.ID)
+		if in.Changed() {
+			a.mutate("title:"+root.ID, func() { root.Title = title })
+		}
+		if in.Focused() {
+			a.selected = root.ID
+		}
+		if in.Submitted() || in.Shortcut(0, ui.KeyDown) {
+			if len(root.Children) == 0 {
+				a.outlineAdd(root.ID, true)
+			} else {
+				a.outlineFocus = root.Children[0].ID
+			}
+		}
+	})
+	ui.Box(c).Height(8)
+	if empty {
+		ui.Text(c, "在标题上按回车，开始写第一行").TextColor(t.TextMuted).Margin(8, 14)
+	}
+}
+
+// outlineDrag follows a drag from a line: onto others it selects the
+// lines whole; back on the line, its text is selected again. It is seen to
+// once the lines are built, by where they are.
+func (a *app) outlineDrag(c *ui.Context, rows []outlineRow) {
+	from := a.outlineDragFrom
+	if from == "" {
+		return
+	}
+	// Up to where it was let go: the pointer's place may come a frame
+	// after the press it moves with.
+	block := a.outlineBlock
+	if over := a.outlineRowUnder(a.outlineDragY); over != "" && over != from {
+		a.outlineSelect(rows, from, over)
+	} else if over == from && a.outlineBlock {
+		a.outlineBlock, a.multi, a.selected = false, nil, from
+	}
+	if !a.outlinePressed {
+		a.outlineDragFrom = ""
+		if a.outlineBlock {
+			a.outlineFocus = outlineBlockFocus // the drag ended: the lines take the keys
+		}
+	}
+	if a.outlineBlock != block {
+		c.Invalidate() // the lines are drawn again, as selected or not
+	}
+}
+
+// outlineBuilt counts the lines built, for the tests.
+var outlineBuilt int
+
 func (a *app) outlineLine(c *ui.Context, rows []outlineRow, i int) {
+	outlineBuilt++
 	t := c.Theme()
 	n, depth := rows[i].node, rows[i].depth
 	title := n.Title
@@ -127,7 +211,7 @@ func (a *app) outlineLine(c *ui.Context, rows []outlineRow, i int) {
 			case len(n.Children) > 0:
 				ui.Text(c, "▾").FontSize(13).TextColor(t.TextMuted)
 			case depth == 0: // a main topic: a dot of its branch's color
-				ui.Box(c).Size(7, 7).Radius(999).Background(a.branchColor(n.ID))
+				ui.Box(c).Size(7, 7).Radius(999).Background(lookOf(a.doc.Style).branch(rows[i].branch))
 			default:
 				ui.Box(c).Size(5, 5).Radius(999).Background(t.TextMuted.Alpha(0.6))
 			}
@@ -180,23 +264,9 @@ func (a *app) outlineLine(c *ui.Context, rows []outlineRow, i int) {
 				a.later(func() { a.toggleTag(n, tg) })
 			}
 		}
-		// Dragging from the line onto others selects the lines whole; back
-		// on it, its text is selected again.
-		if pressed := in.Pressed(); pressed || a.outlineDragFrom == n.ID {
-			// Up to where it was let go: the pointer's place may come a
-			// frame after the press it moves with.
-			if over := a.outlineRowUnder(rows, a.outlineDragY); over != "" && over != n.ID {
-				a.outlineSelect(rows, n.ID, over)
-			} else if over == n.ID && a.outlineBlock {
-				a.outlineBlock, a.multi, a.selected = false, nil, n.ID
-			}
-			a.outlineDragFrom = n.ID
-			if !pressed {
-				a.outlineDragFrom = ""
-				if a.outlineBlock {
-					a.outlineFocus = outlineBlockFocus // the drag ended: the lines take the keys
-				}
-			}
+		// A drag from the line selects lines whole (outlineDrag).
+		if in.Pressed() {
+			a.outlineDragFrom, a.outlinePressed = n.ID, true
 		}
 		// Lines pasted, as copied from here or another outliner, come in
 		// as lines after this one, nested as they were.
@@ -293,23 +363,30 @@ func (a *app) outlineIndex(rows []outlineRow, id string) int {
 	return slices.IndexFunc(rows, func(r outlineRow) bool { return r.node.ID == id })
 }
 
-// outlineRowUnder is the line at a height of the window, or the first or
-// last when it is above or below them all.
-func (a *app) outlineRowUnder(rows []outlineRow, y float32) string {
-	if len(rows) == 0 {
-		return ""
-	}
-	for _, r := range rows {
-		b, ok := a.outlineRowAt[r.node.ID]
-		if ok && y >= b.Y && y < b.Y+b.H+4 { // the gap below a line is its
-			return r.node.ID
+// outlineRowUnder is the line at a height of the window, of those built,
+// or the first or last of them when it is above or below them all.
+func (a *app) outlineRowUnder(y float32) string {
+	var first, last string
+	var top, bottom float32
+	for id, b := range a.outlineRowAt {
+		if b.W <= 0 || b.H <= 0 {
+			continue // not laid out yet
+		}
+		if y >= b.Y && y < b.Y+b.H+4 { // the gap below a line is its
+			return id
+		}
+		if first == "" || b.Y < top {
+			first, top = id, b.Y
+		}
+		if last == "" || b.Y+b.H > bottom {
+			last, bottom = id, b.Y+b.H
 		}
 	}
-	if b := a.outlineRowAt[rows[0].node.ID]; y < b.Y {
-		return rows[0].node.ID
-	}
-	if b := a.outlineRowAt[rows[len(rows)-1].node.ID]; y >= b.Y+b.H {
-		return rows[len(rows)-1].node.ID
+	switch {
+	case first != "" && y < top:
+		return first
+	case last != "" && y >= bottom:
+		return last
 	}
 	return ""
 }
