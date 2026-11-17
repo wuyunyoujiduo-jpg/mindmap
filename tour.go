@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -22,23 +23,30 @@ var tourCards = []tourCard{
 		"选中节点：Tab 加子节点，回车加同级，空格或双击改标题，Delete 删除。",
 		"不想挂在树上的想法：双击画布空白处放一个自由主题，随意摆；把节点拖到空白处就取出来，拖回节点上就挂回去。",
 		"节点可以设为任务（状态、优先级、日期，可以重复，可以定时提醒）；所有导图的任务都在「今天」里，按列表、周、月来看，左边还有已逾期和本周回顾。",
-		"「项目」里每张导图是一张卡片，左边的目录可以直接在导图之间切换；⌘K 什么都能搜到，搜到的任务可以直接勾掉。⌥⌘1 / 2 / 3 在今天、项目、收集之间切换。",
+		"「项目」里每张导图是一张卡片，左边的目录可以直接在导图之间切换；⌘K 什么都能搜到，搜到的任务可以直接勾掉。⌥⌘1 / 2 / 3 / 4 在今天、项目、收集、技能之间切换。",
 	}, "从模板新建一张导图", func(a *app) { a.templatesOpen = true }},
 	{"📚", "收集：随手记下，需要时再挂到导图上", []string{
 		"顶上的输入栏在每一页都有：直接写是灵感，以「周五」开头是任务，贴链接是收藏，以 ? 开头是问 AI。",
-		"在任何应用里复制后按 ⌃⌥V，直接收藏；⌃⌥Space 快速记一句话；在应用里按 ⌘J 开始记一条。「明天 9点 写周报」这样写，会带上日期和提醒时间。",
+		"在任何应用里复制后按 {clip}，直接收藏；{capture} 快速记一句话；在应用里按 ⌘J 开始记一条。「明天 9点 写周报」这样写，会带上日期和提醒时间。",
 		"记下的东西就留在收集里，用 #标签 和搜索找。和某个项目有关的，可以挂到那张导图上；想晚点再决定的，标为「待归位」，它会在「今天」里等着。",
 		"内容里像密钥或密码的部分会自动遮住，也不会发给 AI；点开详情才看得到。",
 		"写灵感或节点备注时打 [[，可以链接到别的灵感、资料、导图或导图里的主题；被链接的那一边也会显示谁链接了它。",
 	}, "打开收集", func(a *app) { a.showLibrary() }},
 	{"✦", "让 AI 跟上你的项目", []string{
-		"工具栏「✦ AI」：问导图里的内容，让 AI 拆任务、补备注、写周报；修改要你确认才生效。",
+		"顶上一排的 ✦：打开 AI 助手，问导图里的内容，让 AI 拆任务、补备注、写周报；修改要你确认才生效。",
 		"AI 回答时会检索你收集的资料，并说明依据的是哪几条。",
 		"帮助 →「连接 AI 编程工具（MCP）」：让 Claude Code 写代码时读写导图、更新任务进度。",
 	}, "设置 AI 助手", func(a *app) {
 		a.aiOpen, a.ai.settings = true, true
 		a.loadKeyDrafts()
 	}},
+}
+
+// tourKeys puts into a line of the tour the keys it names that the
+// settings can change, {clip} and {capture}, as they are set now: written
+// in, they were the keys of before once one was changed.
+func (a *app) tourKeys(line string) string {
+	return strings.NewReplacer("{clip}", keyLabel(a.clipKey()), "{capture}", keyLabel(a.captureKey())).Replace(line)
 }
 
 // tourView shows the tour's card of a.tourStep.
@@ -63,7 +71,7 @@ func (a *app) tourView(c *ui.Context) {
 				for i, p := range card.points {
 					ui.Row(c.Key(i)).Gap(8).Children(func() {
 						ui.Text(c, "•").TextColor(t.Accent)
-						ui.Text(c, p).FontSize(13).Wrap().Grow(1)
+						ui.Text(c, a.tourKeys(p)).FontSize(13).Wrap().Grow(1)
 					})
 				}
 			})
