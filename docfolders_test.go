@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
@@ -345,5 +346,30 @@ func TestInboxStaysTheInbox(t *testing.T) {
 	}
 	if !strings.Contains(a.notice, "收件箱") {
 		t.Fatalf("not told why: %q", a.notice)
+	}
+}
+
+// 项目's cards are the starred first, then the map changed last first,
+// whichever folder it is in.
+func TestProjectsByLastChange(t *testing.T) {
+	a, _ := newTestApp(t)
+	sub := filepath.Join(a.dir, "子文件夹")
+	os.MkdirAll(sub, 0o755)
+	old := filepath.Join(a.dir, model.FileName("旧的"))
+	fresh := filepath.Join(sub, model.FileName("新改的"))
+	for i, p := range []string{old, fresh} {
+		if err := model.NewFile(mapName(p)).Save(p); err != nil {
+			t.Fatal(err)
+		}
+		at := time.Now().Add(time.Duration(i+1) * time.Hour) // after the guide map, written now
+		os.Chtimes(p, at, at)
+	}
+	a.refreshFiles()
+	var names []string
+	for _, f := range a.projectFiles(a.tree) {
+		names = append(names, mapName(f.Path))
+	}
+	if len(names) < 2 || names[0] != "新改的" || slices.Index(names, "旧的") < slices.Index(names, "新改的") {
+		t.Fatalf("the map changed last is not first: %v", names)
 	}
 }

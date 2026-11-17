@@ -37,6 +37,21 @@ func (a *app) place() int {
 }
 
 // showProjects shows 项目, the maps by folder.
+// projectFiles are the maps of a folder and its folders as 项目's cards
+// stand: those starred first, then the one changed last first, in
+// whichever folder it is (gathered folder by folder, a map of a subfolder
+// edited today stood after every map of the folder above it).
+func (a *app) projectFiles(at model.Folder) []model.FileInfo {
+	files := at.AllFiles()
+	slices.SortStableFunc(files, func(x, y model.FileInfo) int {
+		if s := b2i(a.starred(y.Path)) - b2i(a.starred(x.Path)); s != 0 {
+			return s
+		}
+		return y.Modified.Compare(x.Modified)
+	})
+	return files
+}
+
 func (a *app) showProjects() {
 	a.showLibrary()
 	a.projOpen = true
@@ -370,8 +385,7 @@ func (a *app) projectsView(c *ui.Context) {
 			}
 			ui.Scroll(c.Key("projects-scroll:"+a.projFolder)).Grow(1).Margin(0, -12).Children(func() {
 				ui.Column(c.Key("projects-list")).Padding(6, 12, 32).FillWidth().Children(func() {
-					files := at.AllFiles() // those starred first, then by their names
-					slices.SortStableFunc(files, func(x, y model.FileInfo) int { return b2i(a.starred(y.Path)) - b2i(a.starred(x.Path)) })
+					files := a.projectFiles(at)
 					if len(files) == 0 {
 						says := "还没有导图"
 						if a.projFolder != "" {
