@@ -208,6 +208,11 @@ func (d *Document) Tasks() []TaskNode {
 	if d.Root != nil {
 		walk(d.Root, nil)
 	}
+	// Those of the floating topics too: a task made floating was in no
+	// list, of 今天's, the board's, a reminder's nor an agent's.
+	for _, n := range d.Floating {
+		walk(n, nil)
+	}
 	return out
 }
 

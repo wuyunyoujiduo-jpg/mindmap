@@ -160,7 +160,20 @@ func (r *Repeat) Next(due *time.Time, now time.Time) time.Time {
 	n := r.every()
 	switch r.Unit {
 	case RepeatWeek:
-		days := r.Days
+		// The days as the app writes them, Monday 1 to Sunday 7. A file
+		// written by hand or by an agent may say Sunday as 0, as other
+		// tools do, or a day there is none of: with none of the week's the
+		// search below never ended, and it runs in every frame of the
+		// week and the month.
+		var days []int
+		for _, d := range r.Days {
+			if d == 0 {
+				d = 7
+			}
+			if d >= 1 && d <= 7 {
+				days = append(days, d)
+			}
+		}
 		if len(days) == 0 {
 			days = []int{isoWeekday(from)}
 		}

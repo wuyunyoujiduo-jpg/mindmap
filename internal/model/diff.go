@@ -57,10 +57,43 @@ func Diff(old, new *File) []Change {
 				for _, c := range n.Children {
 					walk(c, n.ID, append(slices.Clip(path), n.Title))
 				}
+				if t := n.SummaryTopic(); t != nil {
+					walk(t, n.ID, append(slices.Clip(path), n.Title))
+				}
 			}
-			walk(d.Root, "", nil)
+			if d.Root != nil {
+				walk(d.Root, "", nil)
+			}
+			for _, n := range d.Floating {
+				walk(n, "", nil)
+			}
 		}
 		return m
+	}
+	// tops calls fn with the topics of d that known has not, the top of
+	// each branch of them alone: under one it does not look, and goes on
+	// with the rest. (Walk, told to leave a branch, leaves the canvas:
+	// one topic added and one removed were all a version showed.)
+	tops := func(d *Document, known map[string]entry, fn func(n *Node)) {
+		var walk func(n *Node)
+		walk = func(n *Node) {
+			if _, ok := known[n.ID]; !ok {
+				fn(n)
+				return
+			}
+			for _, c := range n.Children {
+				walk(c)
+			}
+			if t := n.SummaryTopic(); t != nil {
+				walk(t)
+			}
+		}
+		if d.Root != nil {
+			walk(d.Root)
+		}
+		for _, n := range d.Floating {
+			walk(n)
+		}
 	}
 	before, after := index(old), index(new)
 	out := settingsDiff(old, new)
@@ -87,34 +120,26 @@ func Diff(old, new *File) []Change {
 		if _, ok := oldSheets[d.ID]; !ok {
 			continue
 		}
-		d.Walk(func(n, p *Node, _ int) bool {
-			if _, ok := before[n.ID]; ok {
-				return true
-			}
+		tops(d, before, func(n *Node) {
 			e := after[n.ID]
 			detail := ""
 			if k := n.count() - 1; k > 0 {
 				detail = fmt.Sprintf("连同 %d 个下级", k)
 			}
 			out = append(out, Change{Kind: Added, ID: n.ID, Sheet: e.sheet, Title: n.Title, Where: e.where, Detail: detail})
-			return false
 		})
 	}
 	for _, d := range old.Sheets {
 		if _, ok := newSheets[d.ID]; !ok {
 			continue
 		}
-		d.Walk(func(n, p *Node, _ int) bool {
-			if _, ok := after[n.ID]; ok {
-				return true
-			}
+		tops(d, after, func(n *Node) {
 			e := before[n.ID]
 			detail := ""
 			if k := n.count() - 1; k > 0 {
 				detail = fmt.Sprintf("连同 %d 个下级", k)
 			}
 			out = append(out, Change{Kind: Removed, ID: n.ID, Sheet: e.sheet, Title: n.Title, Where: e.where, Detail: detail})
-			return false
 		})
 	}
 	// Changed: in the newer version's order.

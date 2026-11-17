@@ -67,6 +67,9 @@ func serveHook(args []string) {
 	if len(args) == 0 {
 		return
 	}
+	// Whatever goes wrong here ends quietly: a program that stops with an
+	// error is read by the agent as a hook that forbids it to go on.
+	defer func() { _ = recover() }()
 	var in struct {
 		Cwd     string `json:"cwd"`
 		Active  bool   `json:"stop_hook_active"`

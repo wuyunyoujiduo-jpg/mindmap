@@ -116,6 +116,16 @@ type chatMsg struct {
 	// date with: applying it records it as the map's code baseline.
 	baseline *model.Baseline
 	material []string // the material a new map was made of
+	// sent is where the conversation stood as a message of the user's was
+	// sent, for asking it again; nil in a conversation kept and opened.
+	sent *sentMark
+}
+
+// sentMark is how much of the conversation as sent there was before a
+// message, and the tool calls' answers that went with it.
+type sentMark struct {
+	claude, ds int
+	answers    []toolAnswer
 }
 
 // aiState is the conversation of the AI panel.
@@ -409,7 +419,8 @@ func (a *app) aiSend() {
 		snapshot += "\n\n" + ai.extra
 		ai.extra = ""
 	}
-	ai.msgs = append(ai.msgs, chatMsg{role: "user", text: text, files: files})
+	ai.msgs = append(ai.msgs, chatMsg{role: "user", text: text, files: files,
+		sent: &sentMark{len(ai.claude), len(ai.ds), slices.Clone(ai.answers)}})
 	ai.draft, ai.attach = "", nil
 	a.aiTurn(snapshot, text, files)
 }
@@ -1168,20 +1179,40 @@ func (a *app) canRetryAI(i int) bool {
 	return false
 }
 
-// retryAI asks the last question again: what came after it goes, and it
-// is sent as it was, with what was attached to it.
+// retryAI asks the last question again: what came after it goes, from
+// what the model is sent too (left there, the model read the question,
+// its answer and the question again), and it is sent as it was, with
+// what was attached to it.
 func (a *app) retryAI() {
 	ai := &a.ai
 	if ai.busy {
 		return
 	}
 	for j := len(ai.msgs) - 1; j >= 0; j-- {
-		if m := ai.msgs[j]; m.role == "user" {
-			ai.msgs = ai.msgs[:j]
-			ai.draft, ai.attach = m.text, m.files
-			a.aiSend()
-			return
+		m := ai.msgs[j]
+		if m.role != "user" {
+			continue
 		}
+		answered := slices.ContainsFunc(ai.msgs[j+1:], func(m chatMsg) bool { return m.role == "assistant" })
+		ai.msgs = ai.msgs[:j]
+		switch {
+		case m.sent != nil:
+			ai.claude, ai.ds = ai.claude[:min(m.sent.claude, len(ai.claude))], ai.ds[:min(m.sent.ds, len(ai.ds))]
+			ai.answers = slices.Clone(m.sent.answers)
+		case answered:
+			// A conversation kept and opened: its turns were made anew, a
+			// question one message and its answer another.
+			if n := len(ai.claude); n >= 2 {
+				ai.claude = ai.claude[:n-2]
+			}
+			if n := len(ai.ds); n >= 2 {
+				ai.ds = ai.ds[:n-2]
+			}
+			ai.answers = nil
+		}
+		ai.draft, ai.attach = m.text, m.files
+		a.aiSend()
+		return
 	}
 }
 

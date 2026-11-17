@@ -99,3 +99,15 @@ func TestMarksInAndOut(t *testing.T) {
 		t.Errorf("found %v", f)
 	}
 }
+
+// What an AI reads of a clip, the app's or an agent's, has its secrets
+// in dots: in the lines of a search and in the clip whole.
+func TestAIReadsNoSecret(t *testing.T) {
+	const key = "sk-abcdefghijklmnopqrstuvwx"
+	c := &Clip{ID: "c1", Kind: KindText, Title: "接口", Note: "备用 " + key, Text: strings.Repeat("前言。", 200) + "调接口用 " + key + " 就行"}
+	for name, got := range map[string]string{"brief": Brief(c, "调接口"), "full": Full(c, 50000)} {
+		if strings.Contains(got, "abcdefghijkl") || !strings.Contains(got, masked) {
+			t.Errorf("%s shows the secret: %q", name, got)
+		}
+	}
+}

@@ -73,13 +73,23 @@ cleanup() {
 trap cleanup EXIT
 
 say "下载…"
-# The disk image of this Mac's chip, or the one for both of releases
-# before 0.25.1.
+# The disk image of this Mac's chip (mymind-x.y.z-arm64.dmg; with a dot
+# before the chip in older releases), or the one for both of releases
+# before 0.25.1. Never the other chip's: a release may have Apple
+# silicon's alone, and that one does not start on Intel.
 arch=arm64
 [ "$(uname -m)" = "x86_64" ] && arch=amd64
-gh release download "$tag" -R "$REPO" -p "*.$arch.dmg" -D "$work" 2>/dev/null ||
-	gh release download "$tag" -R "$REPO" -p '*.dmg' -D "$work" || fail "下载失败。"
-dmg="$(ls "$work"/*.dmg | head -n 1)"
+names="$(gh release view "$tag" -R "$REPO" --json assets -q '.assets[].name')" || fail "无法读取版本 $tag 的文件。"
+name="$(printf '%s\n' "$names" | grep -E "[-.]$arch\\.dmg\$" | head -n 1 || true)"
+if [ -z "$name" ]; then
+	if printf '%s\n' "$names" | grep -Eq '[-.](arm64|amd64)\.dmg$'; then
+		fail "版本 $want 没有这台 Mac（$arch）的安装包。"
+	fi
+	name="$(printf '%s\n' "$names" | grep -E '\.dmg$' | head -n 1 || true)"
+fi
+[ -n "$name" ] || fail "版本 $want 没有 macOS 的安装包。"
+gh release download "$tag" -R "$REPO" -p "$name" -D "$work" || fail "下载失败。"
+dmg="$work/$name"
 
 # Quit the app if it runs, so that it saves; it saves as it quits.
 if pgrep -xq "$APP_NAME"; then
@@ -99,8 +109,14 @@ src="$mnt/$APP_NAME.app"
 [ -d "$src" ] || fail "安装包里没有 $APP_NAME.app。"
 sudo=""
 [ -w "$APP_DIR" ] || sudo="sudo"
+# Copied beside the old one first: a copy that fails leaves the old app.
+$sudo rm -rf "$APP.new"
+$sudo ditto "$src" "$APP.new" || {
+	$sudo rm -rf "$APP.new"
+	fail "复制失败，原来的 $APP_NAME 没有动。"
+}
 $sudo rm -rf "$APP"
-$sudo ditto "$src" "$APP"
+$sudo mv "$APP.new" "$APP"
 $sudo xattr -cr "$APP" 2>/dev/null || true
 
 # The app was called MindMap before 0.25.2: the old one goes.

@@ -591,3 +591,29 @@ func TestSharedFolder(t *testing.T) {
 		t.Fatalf("find-docs %+v", e)
 	}
 }
+
+// A tool's skills folder that is a link to the store, whole, is the
+// store read by that tool: nothing is a copy to settle, and nothing is
+// put away from under itself.
+func TestToolFolderLinkedWhole(t *testing.T) {
+	w := newWorld(t)
+	skill(t, w.env.Store, "foo", "does foo")
+	if err := os.Symlink(w.env.Store, filepath.Join(w.home, ".claude", "skills")); err != nil {
+		t.Skip(err)
+	}
+	r := Scan(w.env)
+	e := r.Entry("g/foo")
+	if e == nil || !e.Stored {
+		t.Fatalf("entry %+v", e)
+	}
+	c := e.Copies["claude"]
+	if c == nil || c.State != Native {
+		t.Fatalf("the store through a link: %+v", c)
+	}
+	if _, err := Resolve(w.env, e, "claude", false); err == nil {
+		t.Fatal("settled the store against itself")
+	}
+	if _, err := os.Stat(filepath.Join(w.env.Store, "foo", "SKILL.md")); err != nil {
+		t.Fatal(err)
+	}
+}

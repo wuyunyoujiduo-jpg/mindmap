@@ -31,7 +31,10 @@ func SearchText(l *Library, query, category string, limit int, qv []float32, mod
 }
 
 // Brief describes a clip in a few lines, with the part of its text
-// that matches the query.
+// that matches the query. It is what an AI reads of it, the app's and an
+// agent's alike: what looks like a secret in it, or is one sealed, is
+// dots (Mask), before a part is cut out of it, which could cut a secret
+// in two.
 func Brief(c *Clip, query string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "[%s] %s（%s", c.ID, c.Label(), KindLabel(c.Kind))
@@ -52,18 +55,18 @@ func Brief(c *Clip, query string) string {
 		b.WriteString("  摘要：" + c.Summary + "\n")
 	}
 	if c.Note != "" {
-		b.WriteString("  备注：" + Excerpt(c.Note, query, 200) + "\n")
+		b.WriteString("  备注：" + Excerpt(Mask(c.Note), query, 200) + "\n")
 	}
 	if c.Text != "" {
-		b.WriteString("  片段：" + Excerpt(c.Text, query, 300) + "\n")
+		b.WriteString("  片段：" + Excerpt(Mask(c.Text), query, 300) + "\n")
 	}
-	return b.String()
+	return Mask(b.String())
 }
 
-// Full is a clip with up to n characters of its text.
+// Full is a clip with up to n characters of its text, its secrets in
+// dots as Brief's.
 func Full(c *Clip, n int) string {
 	var b strings.Builder
-	b.WriteString(Brief(c, ""))
 	if c.Name != "" {
 		b.WriteString("  文件：" + c.Name + "\n")
 	}
@@ -80,11 +83,11 @@ func Full(c *Clip, n int) string {
 		b.WriteString("\n备注：\n" + c.Note + "\n")
 	}
 	if c.Text != "" {
-		text := []rune(c.Text)
+		text := []rune(Mask(c.Text))
 		if len(text) > n {
 			text = append(text[:n], []rune("…（后略）")...)
 		}
 		b.WriteString("\n全文：\n" + string(text) + "\n")
 	}
-	return b.String()
+	return Brief(c, "") + Mask(b.String())
 }

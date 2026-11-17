@@ -129,3 +129,29 @@ func TestAIReturnSends(t *testing.T) {
 		t.Fatalf("Return did not send: %d, draft %q", len(fake.requests), a.ai.draft)
 	}
 }
+
+// Asking a question again sends it once: the answer it had, and the
+// question as first sent, are no longer what the model is given.
+func TestAIRetrySendsOnce(t *testing.T) {
+	a, tt := newTestApp(t)
+	fake := &fakeClaude{replies: []string{claudeText("一"), claudeText("二"), claudeText("三")}}
+	a.sendAI = fake.send
+	a.cfg.AIKey = "sk-ant-test"
+	a.ai.draft = "先问一句"
+	a.aiSend()
+	tt.Frame()
+	a.ai.draft = "再问一句"
+	a.aiSend()
+	tt.Frame()
+	if n := len(fake.requests[1].Messages); n != 3 {
+		t.Fatalf("the second question: %d messages", n)
+	}
+	a.retryAI()
+	tt.Frame()
+	if n := len(fake.requests[2].Messages); n != 3 {
+		t.Fatalf("asked again: %d messages sent, 3 wanted (a question, its answer, the question again)", n)
+	}
+	if n := len(a.ai.msgs); n != 4 || a.ai.msgs[3].text != "三" {
+		t.Fatalf("the conversation after: %+v", a.ai.msgs)
+	}
+}

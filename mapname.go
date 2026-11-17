@@ -47,8 +47,8 @@ func follows(name, followed string) bool {
 // still follows it; save calls it. nameTitle is the topic its name was
 // given after.
 func (a *app) followTitle() {
-	if a.file == nil || a.path == "" {
-		return
+	if a.file == nil || a.path == "" || a.path == a.inboxPath() {
+		return // the inbox is found by its name, whatever its central topic is called
 	}
 	title, name := rootTitle(a.file), mapName(a.path)
 	followed := a.nameTitle

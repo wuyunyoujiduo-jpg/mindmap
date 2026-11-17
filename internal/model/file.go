@@ -177,7 +177,25 @@ func (f *File) AddSheet(after int) *Document {
 func (f *File) DuplicateSheet(index int) *Document {
 	d := f.Sheets[index].Clone()
 	d.ID = NewID()
-	d.Root.renew()
+	// Every topic anew, the floating ones too, and the relations between
+	// the copies: with the IDs of the canvas copied, a floating topic was
+	// found on the first canvas, and a relation joined nothing here.
+	ids := map[string]string{}
+	d.Walk(func(n, _ *Node, _ int) bool {
+		id := NewID()
+		ids[n.ID], n.ID = id, id
+		return true
+	})
+	for i := range d.Relations {
+		r := &d.Relations[i]
+		r.ID = NewID()
+		if to, ok := ids[r.From]; ok {
+			r.From = to
+		}
+		if to, ok := ids[r.To]; ok {
+			r.To = to
+		}
+	}
 	d.Title += " 副本"
 	f.Sheets = slices.Insert(f.Sheets, index+1, d)
 	return d

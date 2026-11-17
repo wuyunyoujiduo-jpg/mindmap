@@ -198,10 +198,11 @@ func (a *app) restoreVersion(f *model.File) {
 func whenLabel(t, now time.Time) string {
 	y1, m1, d1 := t.Date()
 	y2, m2, d2 := now.Date()
+	y3, m3, d3 := now.AddDate(0, 0, -1).Date() // yesterday, across a month's end too
 	switch {
 	case y1 == y2 && m1 == m2 && d1 == d2:
 		return "今天 " + t.Format("15:04")
-	case y1 == y2 && m1 == m2 && d1 == d2-1:
+	case y1 == y3 && m1 == m3 && d1 == d3:
 		return "昨天 " + t.Format("15:04")
 	case y1 == y2:
 		return fmt.Sprintf("%d月%d日 %s", m1, d1, t.Format("15:04"))

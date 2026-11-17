@@ -327,7 +327,10 @@ func Scan(env Env) *Report {
 		}
 		for _, c := range e.Copies {
 			switch {
-			case c.Target == "" && e.StorePath != "" && filepath.Clean(c.Path) == filepath.Clean(e.StorePath):
+			// By where it leads, not by how it is written: a tool's folder
+			// that is a link to the store whole is the store, and settled
+			// as a copy alike it was put away from under itself.
+			case c.Target == "" && e.StorePath != "" && samePath(c.Path, e.StorePath):
 				c.State = Native
 			case c.Target != "" && !exists(c.Target):
 				c.State = Dangling

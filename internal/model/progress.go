@@ -102,7 +102,10 @@ func (n *Node) SetStatus(s Status, now time.Time) {
 		return
 	}
 	m := n.Markers[i]
-	switch s {
+	// As the task is now, not as it was asked to be: one that repeats,
+	// done, is to do again on its next day, and a marker left at done had
+	// the next change of a marker tick it off once more.
+	switch n.Task.Status {
 	case StatusIdea:
 		n.putStatusMarker(i, ideaMarker)
 	case StatusDone:

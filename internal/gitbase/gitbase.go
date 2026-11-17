@@ -5,12 +5,14 @@ package gitbase
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // Head is the commit checked out in a repository.
@@ -36,11 +38,23 @@ func IsRepo(dir string) bool {
 	}
 }
 
+// gitTime is how long git is waited for: a hook of an agent's session
+// and a frame of the window call it, and neither is to hang on it.
+const gitTime = 15 * time.Second
+
 func git(dir string, args ...string) (string, error) {
-	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	ctx, cancel := context.WithTimeout(context.Background(), gitTime)
+	defer cancel()
+	// Names as they are, not quoted in octal where they are Chinese; and
+	// no lock taken to read, which the agent's own git may hold.
+	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir, "-c", "core.quotepath=false"}, args...)...)
+	cmd.Env = append(os.Environ(), "GIT_OPTIONAL_LOCKS=0")
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb
 	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			return "", errors.New("git 没有在 15 秒内答复")
+		}
 		if msg := strings.TrimSpace(errb.String()); msg != "" {
 			return "", errors.New(msg)
 		}
@@ -139,6 +153,11 @@ func Short(commit string) string { return short(commit) }
 // Patch is what changed in the code from base to the working tree, as a
 // diff of at most max bytes; lock files and the like are left out.
 func Patch(dir, base string, max int) (string, error) {
+	// A commit as a map's file names it, which anything may have written:
+	// one that begins with a dash is an option to git, not a commit.
+	if strings.HasPrefix(base, "-") {
+		return "", fmt.Errorf("%q 不是 commit", base)
+	}
 	out, err := git(dir, "diff", "-M", "--no-color", base, "--", ".",
 		":(exclude)*.lock", ":(exclude)go.sum", ":(exclude)package-lock.json", ":(exclude)pnpm-lock.yaml",
 		":(exclude)*.min.js", ":(exclude)*.svg", ":(exclude)*.png", ":(exclude)*.jpg")

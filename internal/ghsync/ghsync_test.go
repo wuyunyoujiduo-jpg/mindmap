@@ -451,6 +451,16 @@ func TestNewerMapAnalysis(t *testing.T) {
 	if newer, ok := newerClip(filepath.Join(dir, filepath.FromSlash(p)), p, []byte(`{"path":"a.mindmap.json","updated":"2026-10-02T00:00:00Z","node":"abc123"}`)); !ok || newer {
 		t.Fatalf("diagram: newer %v ok %v", newer, ok)
 	}
+	// A set says when it was drawn, not updated: the one drawn later is
+	// the newer, and with no time on either none is.
+	os.WriteFile(filepath.Join(dir, filepath.FromSlash(p)), []byte(`{"map":"a.mindmap.json","drawn":"2026-10-02T00:00:00Z","node":"abc123"}`), 0o644)
+	if newer, ok := newerClip(filepath.Join(dir, filepath.FromSlash(p)), p, []byte(`{"map":"a.mindmap.json","drawn":"2026-10-09T00:00:00Z","node":"abc123"}`)); !ok || !newer {
+		t.Fatalf("diagram drawn later: newer %v ok %v", newer, ok)
+	}
+	os.WriteFile(filepath.Join(dir, filepath.FromSlash(p)), []byte(`{"node":"abc123"}`), 0o644)
+	if _, ok := newerClip(filepath.Join(dir, filepath.FromSlash(p)), p, []byte(`{"node":"abc123","x":1}`)); ok {
+		t.Fatal("no time on either: one was taken as the newer")
+	}
 }
 
 func TestMerged(t *testing.T) {
@@ -697,5 +707,35 @@ func TestManyTexts(t *testing.T) {
 	}
 	if used := 5000 - f.left; f.uploads != 1 || used > 7 {
 		t.Fatalf("%d uploads, %d calls", f.uploads, used)
+	}
+}
+
+// What cannot be read is not deleted from the repository, and so not
+// from the other computer; a folder that is a link is read where it
+// leads.
+func TestUnreadableIsNotDeleted(t *testing.T) {
+	f, cfg := setup(t)
+	a := t.TempDir()
+	put(t, a, "项目.mindmap.json", `{"v":1}`)
+	put(t, a, "客户/甲.mindmap.json", `{"v":1}`)
+	put(t, a, "客户/乙.mindmap.json", `{"v":1}`)
+	sync1(t, a, cfg)
+
+	// Through a link to the folder: the same files, nothing to do.
+	link := filepath.Join(t.TempDir(), "maps")
+	if err := os.Symlink(a, link); err == nil {
+		if res := sync1(t, link, cfg); res.Deleted != 0 || f.files()["客户/甲.mindmap.json"] == "" {
+			t.Fatalf("through a link: %+v, repository %v", res, f.files())
+		}
+	}
+
+	if os.Geteuid() == 0 {
+		t.Skip("root reads everything")
+	}
+	os.Chmod(filepath.Join(a, "项目.mindmap.json"), 0)
+	os.Chmod(filepath.Join(a, "客户"), 0)
+	t.Cleanup(func() { os.Chmod(filepath.Join(a, "客户"), 0o755) })
+	if res := sync1(t, a, cfg); res.Deleted != 0 || f.files()["项目.mindmap.json"] == "" || f.files()["客户/乙.mindmap.json"] == "" {
+		t.Fatalf("unreadable: %+v, repository %v", res, f.files())
 	}
 }

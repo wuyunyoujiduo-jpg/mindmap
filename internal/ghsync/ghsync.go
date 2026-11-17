@@ -28,6 +28,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -271,6 +272,11 @@ func Clean(s string) string {
 // made again, as the library's vectors, nor hidden files (the skills'
 // trash among them).
 func Included(rel string) bool {
+	// On Windows a name of the repository with a backslash or a colon is
+	// no file's name: joined to the folder, a\..\..\x leaves it.
+	if runtime.GOOS == "windows" && strings.ContainsAny(rel, `\:`) {
+		return false
+	}
 	parts := strings.Split(rel, "/")
 	for i, p := range parts {
 		if strings.HasPrefix(p, ".") && !(i == 0 && (p == ".library" || p == ".skills") && len(parts) > 1) {
@@ -352,18 +358,44 @@ func blobSHA(data []byte) string {
 func scan(dir string, s *state, mounts map[string]string) (files map[string]string, skipped []string, err error) {
 	files = map[string]string{}
 	hashes := map[string]cached{}
-	walk := func(root, prefix string, top bool) error {
-		return filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return nil
+	// What cannot be read is not gone: it is as it was when both sides
+	// last agreed, so that the sync neither deletes it from the repository
+	// (and then from the other computer) nor sends it. A file locked by
+	// another program, a folder whose permission was lost, a file the
+	// cloud has not brought down were all read as deleted.
+	asBefore := func(rel string, dir bool) {
+		if !dir {
+			if sha, ok := s.Base[rel]; ok {
+				files[rel] = sha
 			}
+			return
+		}
+		for path, sha := range s.Base {
+			if strings.HasPrefix(path, rel+"/") {
+				files[path] = sha
+			}
+		}
+	}
+	walk := func(root, prefix string, top bool) error {
+		// A folder that is a link is walked where it leads: WalkDir does
+		// not follow its root, and found such a folder empty.
+		if r, err := filepath.EvalSymlinks(root); err == nil {
+			root = r
+		}
+		return filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 			rel, _ := filepath.Rel(root, p)
 			rel = filepath.ToSlash(rel)
 			if rel == "." {
-				return nil
+				return err // the folder itself not read: no sync, rather than one of nothing
 			}
 			if prefix != "" {
 				rel = prefix + "/" + rel
+			}
+			if err != nil {
+				if !errors.Is(err, fs.ErrNotExist) {
+					asBefore(rel, d == nil || d.IsDir())
+				}
+				return nil
 			}
 			if d.IsDir() {
 				if _, mounted := mounts[rel]; top && mounted { // its own folder is elsewhere
@@ -379,6 +411,9 @@ func scan(dir string, s *state, mounts map[string]string) (files map[string]stri
 			}
 			info, err := d.Info()
 			if err != nil {
+				if !errors.Is(err, fs.ErrNotExist) {
+					asBefore(rel, false)
+				}
 				return nil
 			}
 			if info.Size() > MaxFile {
@@ -391,6 +426,9 @@ func scan(dir string, s *state, mounts map[string]string) (files map[string]stri
 			}
 			data, err := os.ReadFile(p)
 			if err != nil {
+				if !errors.Is(err, fs.ErrNotExist) {
+					asBefore(rel, false)
+				}
 				return nil
 			}
 			sha := blobSHA(data)
@@ -711,14 +749,29 @@ func newerClip(full, p string, data []byte) (newer, ok bool) {
 		!strings.HasPrefix(p, ".library/diagrams/") || path.Ext(p) != ".json" {
 		return false, false
 	}
-	var theirs, ours struct {
+	// A clip and a map's analysis say when they were updated, a set of
+	// diagrams when it was drawn.
+	type stamp struct {
 		Updated time.Time `json:"updated"`
+		Drawn   time.Time `json:"drawn"`
 	}
+	when := func(s stamp) time.Time {
+		if s.Updated.IsZero() {
+			return s.Drawn
+		}
+		return s.Updated
+	}
+	var theirs, ours stamp
 	mine, err := os.ReadFile(full)
 	if err != nil || json.Unmarshal(mine, &ours) != nil || json.Unmarshal(data, &theirs) != nil {
 		return false, false
 	}
-	return theirs.Updated.After(ours.Updated), true
+	// With no time on either, neither is known to be the newer: a copy
+	// is kept, as of any other file, and not this side's taken unsaid.
+	if when(ours).IsZero() && when(theirs).IsZero() {
+		return false, false
+	}
+	return when(theirs).After(when(ours)), true
 }
 
 // merge merges a file changed on both sides into the folder, by

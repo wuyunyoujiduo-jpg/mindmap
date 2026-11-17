@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/zip"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -28,21 +29,33 @@ func zipFolder(dir, dst string, skip ...string) error {
 		return err
 	}
 	zw := zip.NewWriter(out)
-	err = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+	// A folder that is a link is walked where it leads: WalkDir does not
+	// follow its root, and the backup of such a folder was an empty file
+	// said to be done.
+	root := dir
+	if r, err := filepath.EvalSymlinks(dir); err == nil {
+		root = r
+	}
+	files := 0
+	err = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil // what cannot be read is left out
 		}
+		rel, rerr := filepath.Rel(root, path)
+		if rerr != nil {
+			return nil
+		}
 		if d.IsDir() {
-			if path != dir && slices.Contains(skip, path) {
+			// What the sync remembers of the folder (.sync) is not of the
+			// backup: put back with it, files as they were then read as
+			// changed in the repository alone, and the next sync brought
+			// back what the backup was restored to be rid of.
+			if path != root && (rel == ".sync" || slices.Contains(skip, filepath.Join(dir, rel))) {
 				return filepath.SkipDir
 			}
 			return nil
 		}
 		if !d.Type().IsRegular() || strings.HasSuffix(path, ".tmp") {
-			return nil
-		}
-		rel, err := filepath.Rel(dir, path)
-		if err != nil {
 			return nil
 		}
 		info, err := d.Info()
@@ -64,9 +77,13 @@ func zipFolder(dir, dst string, skip ...string) error {
 			return nil
 		}
 		defer f.Close()
+		files++
 		_, err = io.Copy(w, f)
 		return err
 	})
+	if err == nil && files == 0 {
+		err = errors.New("文件夹里没有可以备份的文件")
+	}
 	if cerr := zw.Close(); err == nil {
 		err = cerr
 	}
