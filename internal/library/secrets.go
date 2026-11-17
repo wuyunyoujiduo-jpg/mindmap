@@ -19,25 +19,28 @@ import (
 // and the clip in memory is as the one in its file. Mask puts dots for a
 // token too, and the details open it when the vault is unlocked.
 
-// MarkOpen and MarkClose are what the user writes round a word to say it
-// is a secret, where no rule tells: ||ttc13!||, as a spoiler is written
-// elsewhere. The marks stay in the text, round the secret or its token,
-// so that it is one still when shown and kept again; Mask takes them off
-// with it. Not between words of a program, a||b||c: the mark opens a
-// text or follows what is no letter.
-const MarkOpen, MarkClose = "||", "||"
+// MarkOpen and MarkClose stand round a part of a text the user said is
+// a secret, where no rule tells one: ⟦密:ttc13!⟧. They are put by the
+// app alone, when the user chooses a part and asks (the details' key),
+// and are of signs no text has by itself: a mark that can be written,
+// || as a spoiler's, would have made a secret of words that were written
+// so already, a rule the user could neither see nor refuse (the user
+// asked just that, and it was changed before it shipped). The marks stay
+// in the text, round the secret or its token, so that it is one still
+// when shown and kept again; Mask takes them off with it.
+const MarkOpen, MarkClose = "⟦密:", "⟧"
 
 // marked is the first of the patterns: what the user marked is not cut
 // by what another finds in it.
-var marked = regexp.MustCompile(`(?P<keep>(?:^|[^A-Za-z0-9_)\]|])\|\|)[^\s|](?:[^|\n]*[^\s|])?(?P<tail>\|\|)`)
+var marked = regexp.MustCompile(`(?P<keep>⟦密:)[^⟦⟧]+(?P<tail>⟧)`)
 
 // Marked reports whether s holds a secret marked by hand.
 func Marked(s string) bool { return strings.Contains(s, MarkOpen) && marked.MatchString(s) }
 
-// CanMark reports whether a part of a text can be marked a secret: of
-// one line, with none of the marks' own sign, and not marked already.
+// CanMark reports whether a part of a text can be marked a secret: not
+// empty, and with none marked or sealed in it already.
 func CanMark(part string) bool {
-	return strings.TrimSpace(part) != "" && !strings.ContainsAny(part, "|\n") && !vault.Has(part)
+	return strings.TrimSpace(part) != "" && !strings.ContainsAny(part, "⟦⟧")
 }
 
 // secretPatterns are the shapes of a secret; of each match the part named

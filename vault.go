@@ -767,9 +767,9 @@ type mark struct {
 // is a secret, where no rule tells one (the user had a line of an
 // address, a name and a password, and asked how to hide the password):
 // the part chosen, by a key that shows under the field while one is, and
-// by the field's menu. The part is written between marks (library.MarkOpen)
-// and kept, sealed when a second password is set; the field shows it in
-// dots at once, which is what was asked for.
+// by the field's menu. The part is put between marks (library.MarkOpen),
+// which the app alone writes, and kept, sealed when a second password is
+// set; the field shows it in dots at once, which is what was asked for.
 func (a *app) markKey(c *ui.Context, clip *library.Clip, field string, in ui.Element, text string, set func(string)) {
 	from, to := in.TextSelection()
 	from, to = min(from, to), max(from, to)
@@ -815,7 +815,7 @@ func (a *app) markSecret(clip *library.Clip, field, text string, m mark, set fun
 	part := string(r[from:to])
 	if !library.CanMark(part) {
 		if strings.TrimSpace(part) != "" {
-			a.tell("一次选一行里的一段，里面不能有 | 号")
+			a.tell("选中的这一段里已经有设为密码的内容了")
 		}
 		return
 	}

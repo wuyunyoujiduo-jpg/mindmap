@@ -481,10 +481,13 @@ by AI, and an AI assistant.
   no rule tells from a word is sealed whole from its menu (整条加密,
   `Clip.Locked`), and not given to the AI; or the part of it chosen in
   the details is said to be one (`markKey`: a key under the field while
-  a part is chosen, and the field's menu), written between marks,
-  ||ttc13!|| (`library.MarkOpen`, `marked`), which stay round the
+  a part is chosen, and the field's menu), put between marks,
+  ⟦密:ttc13!⟧ (`library.MarkOpen`, `marked`), which stay round the
   secret or its token so that it is one still when shown and kept
-  again. The user had a line of an address, a name and a short password
+  again. The marks are the app's alone to write, of signs no text has:
+  first they were ||, to be typed too, and the user asked at once what
+  became of words written so already; they would have been hidden, a
+  rule not seen nor refused, as every #word a tag had been. The user had a line of an address, a name and a short password
   and asked how to hide it: there was no way, and 整条加密 was not in the
   menu with no password set, where it now leads to setting one (0.101.1).
   The secrets of a text are found in it as it is and replaced at once

@@ -29,7 +29,7 @@ func TestMask(t *testing.T) {
 
 // What the user marks is a secret where no rule tells one.
 func TestMarked(t *testing.T) {
-	const line = "https://ttc.ttcttc.net/#/login wuy@gmail.com  ||ttc13!||"
+	const line = "https://ttc.ttcttc.net/#/login wuy@gmail.com  ⟦密:ttc13!⟧"
 	if got := Mask(line); got != "https://ttc.ttcttc.net/#/login wuy@gmail.com  "+masked || !HasSecret(line) || !Marked(line) {
 		t.Errorf("marked: %q", got)
 	}
@@ -38,24 +38,26 @@ func TestMarked(t *testing.T) {
 	}
 	seal := func(p string) (string, bool) { return "⟦mm1.aaaaaa." + strings.Repeat("A", len(p)) + "⟧", true }
 	sealed := SealIn(line, seal)
-	if strings.Contains(sealed, "ttc13") || !strings.HasSuffix(sealed, "||⟦mm1.aaaaaa.AAAAAA⟧||") {
+	if strings.Contains(sealed, "ttc13") || !strings.HasSuffix(sealed, "⟦密:⟦mm1.aaaaaa.AAAAAA⟧⟧") {
 		t.Fatalf("sealed: %q", sealed)
 	}
 	if SealIn(sealed, seal) != sealed || Unsealed(sealed) || Mask(sealed) != Mask(line) {
 		t.Errorf("sealed twice, or shown otherwise: %q, %q", SealIn(sealed, seal), Mask(sealed))
 	}
-	// What a rule would find in it is the mark's, whole.
-	in := "||password: abcdefgh ok||"
-	if got := Secrets(in); len(got) != 1 || got[0] != "password: abcdefgh ok" {
+	// What a rule would find in it is the mark's, whole; and a mark holds
+	// lines.
+	in := "⟦密:password: abcdefgh ok\n第二行⟧"
+	if got := Secrets(in); len(got) != 1 || got[0] != "password: abcdefgh ok\n第二行" {
 		t.Errorf("a rule inside a mark: %q", got)
 	}
-	// Not the || of a program, nor an empty pair.
-	for _, plain := range []string{"if a||b||c { }", "x || y || z", "(a)||b||c", "||||", "|| 空的 ||", "第一行||\n||第二行"} {
+	// No words a text has by itself are a mark: not the || of a spoiler or
+	// a program, which the first try took for one.
+	for _, plain := range []string{"看这个 ||剧透|| 吧", "if a||b||c { }", "x || y || z", "⟦⟧", "⟦密:⟧", "[[链接]] 和 {{模板}}"} {
 		if Marked(plain) || HasSecret(plain) || Mask(plain) != plain {
 			t.Errorf("%q → %q", plain, Mask(plain))
 		}
 	}
-	if !CanMark("ttc13!") || CanMark("  ") || CanMark("a|b") || CanMark("a\nb") {
+	if !CanMark("ttc13!") || !CanMark("a|b\nc") || CanMark("  ") || CanMark("a⟦b") || CanMark(sealed) {
 		t.Error("CanMark")
 	}
 }

@@ -290,7 +290,7 @@ func TestMarkedSecret(t *testing.T) {
 	a.markSecret(cl, "text", line, mark{cl.ID, "text", len(r) - 7, len(r)}, func(s string) { a.setMemoText(cl, s) })
 	tt.Frame()
 	tt.Frame()
-	const marked = "https://ttc.ttcttc.net/#/login wuy@gmail.com  ||ttc13!||"
+	const marked = "https://ttc.ttcttc.net/#/login wuy@gmail.com  ⟦密:ttc13!⟧"
 	if cl.Text != marked || !cl.Secret() {
 		t.Fatalf("marked: %q", cl.Text)
 	}
@@ -302,7 +302,7 @@ func TestMarkedSecret(t *testing.T) {
 		}
 		return false
 	}
-	if shows("ttc13") || shows("||") || !shows("wuy@gmail.com  ••••••••") || !tt.HasText("显示密钥") || !tt.HasText("复制密钥") {
+	if shows("ttc13") || shows("密:") || !shows("wuy@gmail.com  ••••••••") || !tt.HasText("显示密钥") || !tt.HasText("复制密钥") {
 		t.Fatalf("not in dots: %q", tt.Texts())
 	}
 	snapshot(t, tt, "vault-marked")
@@ -313,6 +313,15 @@ func TestMarkedSecret(t *testing.T) {
 	}
 
 	// The key chooses all that is chosen in the field, by a click.
+	// Words written between two || are words: nothing the user wrote is
+	// taken for a mark.
+	spoiler := &library.Clip{Kind: library.KindText, Text: "看这个 ||剧透|| 吧"}
+	if err := a.lib.Add(spoiler, a.now()); err != nil {
+		t.Fatal(err)
+	}
+	if spoiler.Secret() || library.Mask(spoiler.Text) != spoiler.Text {
+		t.Fatalf("words taken for a secret: %q", library.Mask(spoiler.Text))
+	}
 	other := &library.Clip{Kind: library.KindText, Text: "plumtree"}
 	if err := a.lib.Add(other, a.now()); err != nil {
 		t.Fatal(err)
@@ -331,7 +340,7 @@ func TestMarkedSecret(t *testing.T) {
 	}
 	tt.Frame()
 	tt.Frame()
-	if other.Text != "||plumtree||" || shows("plumtree") || tt.HasText("把选中的设为密码") {
+	if other.Text != "⟦密:plumtree⟧" || shows("plumtree") || tt.HasText("把选中的设为密码") {
 		t.Fatalf("by the key: %q, %q", other.Text, tt.Texts())
 	}
 
@@ -347,13 +356,13 @@ func TestMarkedSecret(t *testing.T) {
 		t.Fatal(err)
 	}
 	a.vaultSweep()
-	if f := file(); strings.Contains(f, "ttc13") || !strings.Contains(f, "||⟦mm1.") || !strings.Contains(f, "wuy@gmail.com") {
+	if f := file(); strings.Contains(f, "ttc13") || !strings.Contains(f, "⟦密:⟦mm1.") || !strings.Contains(f, "wuy@gmail.com") {
 		t.Fatalf("the file: %s", f)
 	}
 	a.lockVault()
 	a.libSel = cl.ID
 	tt.Frame()
-	if shows("ttc13") || shows("mm1") || shows("||") || !shows("wuy@gmail.com  ••••••••") {
+	if shows("ttc13") || shows("mm1") || shows("密:") || !shows("wuy@gmail.com  ••••••••") {
 		t.Fatalf("sealed, in the details: %q", tt.Texts())
 	}
 	// Shown and kept again, it is marked still, and sealed still.
@@ -365,12 +374,13 @@ func TestMarkedSecret(t *testing.T) {
 	if got, _ := a.fieldText(cl, "text", cl.Text); got != marked {
 		t.Fatalf("shown: %q", got)
 	}
+	snapshot(t, tt, "vault-mark-shown")
 	a.setMemoText(cl, marked+" 下月换")
 	if f := file(); strings.Contains(f, "ttc13") || !strings.Contains(f, "下月换") {
 		t.Fatalf("kept again: %s", f)
 	}
 	// On a map's topic it is in dots: the secret stays in the clip.
-	if s := sealedOut(cl.Text); strings.Contains(s, "mm1") || strings.Contains(s, "||") {
+	if s := sealedOut(cl.Text); strings.Contains(s, "mm1") || strings.Contains(s, "密:") {
 		t.Fatalf("out of the clip: %q", s)
 	}
 }
