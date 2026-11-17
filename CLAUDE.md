@@ -662,4 +662,11 @@ by AI, and an AI assistant.
     is a breath of the accent (`todayFill`), a day of another month
     faint figures. The small calendar is the app's own (`datepick.go`),
     MyGo's having no way to mark a day.
+- 0.106.1: 项目's cards by when each map last changed, starred or not
+  (`projectFiles`; the user's: a star keeps a map at the head of 快捷访问,
+  not of 项目). The release's scripts run under the Mac's bash 3.2,
+  which takes the first byte of a character not ASCII for part of a name:
+  a name before Chinese is written in braces, `${name}`
+  (`tools/check-release.sh` refuses it otherwise; the pruning stopped so
+  on 0.106.0's release).
 - The user writes in Chinese; the app's texts are Chinese.
