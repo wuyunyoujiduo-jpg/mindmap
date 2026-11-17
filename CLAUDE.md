@@ -433,13 +433,11 @@ by AI, and an AI assistant.
   it stood as an agent named agents, the user saw), whose skills are
   Codex's, which reads it; one found
   since last seen said on the page, `skillsFresh`), each skill every
-  session's, a project's (the maps' `Project`s and Claude Code's
-  projects) or a plugin's, and what is wrong with it. A skill taken in
+  session's or a plugin's, and what is wrong with it. A skill taken in
   is kept once, in the maps folder's `.skills` (`~/.mymind-skills` with
   none), synced by ghsync, and the agents' folders hold links to it (a
   junction on Windows): the user asked for one copy and not one an agent
-  and a folder. A link in a repository is the user's to commit or not;
-  committed, it is said, and `MakeReal` puts the files there. Since
+  and a folder. Since
   0.100.7 (the user's choice) the store is `~/.agents/skills`, the
   agents' common place (`skillsStore`), which Codex reads itself
   (`Env.Reads`, a copy `Native`: no link, which would have it read a
@@ -447,8 +445,8 @@ by AI, and an AI assistant.
   beside it (put away, turned off: a skill turned off must leave a folder
   Codex reads) is `~/.agents/.mymind` (`Env.Keep`). A project's skills,
   in its repository, are not looked at nor touched (the user's choice:
-  the repository's to keep; `Env.Repos` left empty, though the package
-  still knows them: `ProjectStore`, `linkIn`'s links from inside). The
+  the repository's to keep), and the code that knew them is gone
+  (0.106.2, the user's). The
   store goes with the maps by a mount of the sync (`Config.Mounts`, at
   `.skills`, the path it had), and the maps folder's `.skills` of before
   is moved there as a folder is opened (`skillsMigrate`, `Migrate`,
