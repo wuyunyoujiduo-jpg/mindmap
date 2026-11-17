@@ -54,7 +54,7 @@ func TestAddSiblingAndDelete(t *testing.T) {
 	if next != m["b"].ID {
 		t.Fatalf("next after deleting last: %q", next)
 	}
-	next, _ = d.Delete(m["a2"].ID)
+	d.Delete(m["a2"].ID)
 	next, _ = d.Delete(m["a1"].ID)
 	if next != m["a"].ID {
 		t.Fatalf("next after deleting only child: %q", next)

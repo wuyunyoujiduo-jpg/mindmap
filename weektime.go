@@ -456,14 +456,14 @@ func (a *app) weekBlock(c *ui.Context, w weekTask, d time.Time) bool {
 		key = "again:" + it.key() + d.Format("0102")
 	}
 	left, width := 100*float32(w.lane)/float32(w.lanes), 100/float32(w.lanes)
-	bg, ink := tinted(t, a.mapColor(it.path))
+	_, ink := tinted(t, a.mapColor(it.path))
 	// Its pastel laid on the page's white, whole: the hours' lines are not
 	// to be seen through it.
 	strength := float32(0.14) // tinted's
 	if t.Dark {
 		strength = 0.22
 	}
-	bg = t.Background.MixOklab(a.mapColor(it.path), strength)
+	bg := t.Background.MixOklab(a.mapColor(it.path), strength)
 	b := ui.Column(c.Key(key)).Absolute().Top(top+1).Height(height).LeftPercent(left).WidthPercent(width).
 		Padding(3, 6).Radius(radiusSmall).Clip().Cursor(ui.CursorPointer).Background(bg).ZIndex(1).
 		BorderWidth(0, 0, 0, 3).BorderColor(a.mapColor(it.path)).Transition(easeLook)

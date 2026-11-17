@@ -475,3 +475,8 @@ func TestSkillsMigrate(t *testing.T) {
 		t.Fatalf("synced from %q", got)
 	}
 }
+
+func fileThere(p string) bool {
+	fi, err := os.Stat(p)
+	return err == nil && !fi.IsDir()
+}

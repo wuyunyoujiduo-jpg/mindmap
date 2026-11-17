@@ -199,60 +199,59 @@ type app struct {
 	paletteShown int // the line last scrolled into view
 	cheatsOpen   bool
 	// The window of past versions.
-	historyOpen     bool
-	mcpOpen         bool // the window on connecting AI agents
-	linkDraft       string
-	captureText     string
-	captureWhere    int
-	captureErr      string
-	captureKeyDraft string
-	settingsOpen    bool
-	cardOpen        bool // the window of a clip's card
-	cardFor         string
-	cardOpts        cardOpts
-	cardShowDate    bool
-	cardShowSource  bool
-	cardSource      string
-	noteEditing     string              // the node whose note the popover over the canvas edits
-	noteDocs        map[string]*noteDoc // the notes edited as rich text, by place
-	settingsTab     int
-	tourStep        int  // the step of the tour shown, 0 for none
-	templatesOpen   bool // the window of templates
-	fromTextOpen    bool // the window to paste text to make nodes of
-	fromText        string
-	trayAt          time.Time // when the menu bar icon was last brought up to date
-	tlWeeks         bool      // the timeline shows weeks rather than days
-	tlDrag          tlDrag
-	tlScroll        ui.ScrollState
-	reminded        map[string]bool // tasks reminded of on remindedDay
-	remindedDay     time.Time
-	remindedAt      time.Time
-	linkFrom        string       // the node a link to a node is being chosen for
-	relFrom         string       // the node a relation line is being drawn from
-	relTo           *[2]float32  // where the pointer draws it to, in the window
-	selRel          string       // the relation line selected
-	justFloated     bool         // a double click just made a floating topic, whose release should not end its editing
-	floatDrag       string       // the floating topic being dragged
-	floatOver       string       // the topic it would go under, let go there
-	floatMoved      [2]float32   // how far the last frame moved it, on the map
-	floatAt         *model.Point // where the clip chosen in the palette goes, as a floating topic
-	pressAt         [2]float32   // where the canvas was last pressed, in its box
-	historyList     []versions.Version
-	historySel      int
-	historyFile     *model.File           // the version chosen
-	historyDiff     []model.Change        // what it changed, or from it to now
-	codeStat        codeStatus            // how far the code has gone since the baseline
-	refs            *refs                 // the links of every map (refs.go)
-	edits           int                   // counts the open map's changes, for what is worked out from it
-	nodeIdx         map[string]*nodeIndex // maps' nodes by their words (matcher.go)
-	qpending        map[string]bool       // queries whose vectors are being made
-	attachRef       string                // the material the palette places (paletteAttach)
-	placesKey       string                // what placesList was worked out for
-	placesList      []place
-	relatedKey      string // what relatedClips and relatedNodes were worked out for
-	relatedClips    []library.Hit
-	relatedNodes    []place
-	index           map[string]indexEntry // maps read for the search, by path
+	historyOpen    bool
+	mcpOpen        bool // the window on connecting AI agents
+	linkDraft      string
+	captureText    string
+	captureWhere   int
+	captureErr     string
+	settingsOpen   bool
+	cardOpen       bool // the window of a clip's card
+	cardFor        string
+	cardOpts       cardOpts
+	cardShowDate   bool
+	cardShowSource bool
+	cardSource     string
+	noteEditing    string              // the node whose note the popover over the canvas edits
+	noteDocs       map[string]*noteDoc // the notes edited as rich text, by place
+	settingsTab    int
+	tourStep       int  // the step of the tour shown, 0 for none
+	templatesOpen  bool // the window of templates
+	fromTextOpen   bool // the window to paste text to make nodes of
+	fromText       string
+	trayAt         time.Time // when the menu bar icon was last brought up to date
+	tlWeeks        bool      // the timeline shows weeks rather than days
+	tlDrag         tlDrag
+	tlScroll       ui.ScrollState
+	reminded       map[string]bool // tasks reminded of on remindedDay
+	remindedDay    time.Time
+	remindedAt     time.Time
+	linkFrom       string       // the node a link to a node is being chosen for
+	relFrom        string       // the node a relation line is being drawn from
+	relTo          *[2]float32  // where the pointer draws it to, in the window
+	selRel         string       // the relation line selected
+	justFloated    bool         // a double click just made a floating topic, whose release should not end its editing
+	floatDrag      string       // the floating topic being dragged
+	floatOver      string       // the topic it would go under, let go there
+	floatMoved     [2]float32   // how far the last frame moved it, on the map
+	floatAt        *model.Point // where the clip chosen in the palette goes, as a floating topic
+	pressAt        [2]float32   // where the canvas was last pressed, in its box
+	historyList    []versions.Version
+	historySel     int
+	historyFile    *model.File           // the version chosen
+	historyDiff    []model.Change        // what it changed, or from it to now
+	codeStat       codeStatus            // how far the code has gone since the baseline
+	refs           *refs                 // the links of every map (refs.go)
+	edits          int                   // counts the open map's changes, for what is worked out from it
+	nodeIdx        map[string]*nodeIndex // maps' nodes by their words (matcher.go)
+	qpending       map[string]bool       // queries whose vectors are being made
+	attachRef      string                // the material the palette places (paletteAttach)
+	placesKey      string                // what placesList was worked out for
+	placesList     []place
+	relatedKey     string // what relatedClips and relatedNodes were worked out for
+	relatedClips   []library.Hit
+	relatedNodes   []place
+	index          map[string]indexEntry // maps read for the search, by path
 	// The maps' AI analyses (mapanalysis.go), by key; the map analyzed.
 	mapMetas       map[string]*model.Analysis
 	mapMetaMod     time.Time
@@ -318,7 +317,6 @@ type app struct {
 	keptLast      string            // the clip last left in 收集 from what waits: said there, with the way back
 	projOpen      bool              // 项目, the maps by folder, is the page shown (places.go)
 	projFolder    string            // the folder whose maps 项目 shows: all of them when empty
-	homeFocus     bool              // the desk's line has the focus
 	writeRefocus  string            // the card to write in that takes the focus back, after a tool of its was clicked
 	writeRefs     map[string]string // the notes referred to in a draft: the @name written, the clip's ID
 	noMotion      bool              // nothing animates: the tests look at where things end
@@ -365,8 +363,6 @@ type app struct {
 	pluginSize    int64
 	pluginCancel  context.CancelFunc
 	pluginGet     pluginGetter
-	clipKeyDraft  string
-	shotKeyDraft  string
 	nameTitle     string // the central topic the open map's name was given after
 	dirID         fileID
 	recordingKey  string // the shortcut being recorded, by its label
@@ -428,7 +424,6 @@ type app struct {
 	// panelShow are the parts of the topic's page opened to add to, by
 	// the node and the part (panel.go).
 	panelShow map[string]bool
-	railNow   float32 // the rail's width as last drawn (rail.go)
 	// clipPlaces are where the AI would put notes and clips, by their
 	// IDs (sortout.go); clipPlacing while it is asked.
 	clipPlaces    map[string]taskPlace
@@ -438,7 +433,6 @@ type app struct {
 	clipPlaceErr  string
 	tagFilter     string
 	taskFilter    int // the tasks a map shows bright alone (taskFilterOpen…)
-	sidebarWidth  float32
 	panelWidth    float32
 	resizingPanel bool
 	// Folders of the sidebar are shown closed but for those opened, which
@@ -447,7 +441,7 @@ type app struct {
 	renameText  string
 	tagQuery    string
 	notice      string           // a passing message in the toolbar, as "已复制"
-	noticeAt    time.Time        // since when it shows, for noticeTime
+	noticeAt    time.Time        // since when it shows
 	libReveal   string           // the clip the keyboard went to, to scroll to once
 	secretsOf   *library.Library // what secretCount counted, and when
 	secretsAt   int
@@ -523,7 +517,6 @@ func newApp(plat platform, cfg config) *app {
 		views:         loadViews(),
 		versions:      versions.Store{Dir: versionsDir()},
 		cams:          map[string]*camera{},
-		sidebarWidth:  220,
 		panelWidth:    300,
 		captureWhere:  captureAuto, // a note, or a task when it says a day
 		bitmaps:       map[string]*ui.Bitmap{},
@@ -653,9 +646,6 @@ func (a *app) currentFolder() string {
 	}
 	return a.dir
 }
-
-// noticeTime is how long a notice shows.
-const noticeTime = 3 * time.Second
 
 // tell shows a passing message in the toolbar.
 func (a *app) tell(msg string) {

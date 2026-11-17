@@ -175,18 +175,6 @@ func (a *app) taskItems() []taskItem {
 	return items
 }
 
-// taskCounts are the tasks due today and those overdue, for the sidebar.
-func (a *app) tasksDue() int {
-	day := today(a.now())
-	n := 0
-	for _, it := range a.taskItems() {
-		if d := it.date(); d != nil && !it.done() && d.Before(day.AddDate(0, 0, 1)) && it.node.Task.Status != model.StatusIdea {
-			n++
-		}
-	}
-	return n
-}
-
 // editTask changes a task in its map, saved as an edit of it.
 func (a *app) editTask(it taskItem, note string, fn func(n *model.Node)) {
 	err := a.editMapAt(it.path, note, func(f *model.File) error {

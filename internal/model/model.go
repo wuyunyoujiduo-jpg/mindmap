@@ -43,16 +43,6 @@ func (s Status) Label() string {
 	return string(s)
 }
 
-// StatusFromLabel is the inverse of Status.Label.
-func StatusFromLabel(label string) Status {
-	for _, s := range Statuses {
-		if s.Label() == label {
-			return s
-		}
-	}
-	return StatusTodo
-}
-
 // Priority orders tasks; 0 is unset.
 type Priority int
 
@@ -77,16 +67,6 @@ func (p Priority) Label() string {
 		return "高"
 	}
 	return "无"
-}
-
-// PriorityFromLabel is the inverse of Priority.Label.
-func PriorityFromLabel(label string) Priority {
-	for _, p := range Priorities {
-		if p.Label() == label {
-			return p
-		}
-	}
-	return PriorityNone
 }
 
 // Task makes a node something to do.

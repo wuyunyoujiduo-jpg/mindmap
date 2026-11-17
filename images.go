@@ -54,20 +54,6 @@ func (a *app) imagePath(img *model.Image) string {
 	return filepath.Join(model.AssetsDir(a.path), img.File)
 }
 
-// bitmap returns a node's picture, decoded once.
-func (a *app) bitmap(img *model.Image) *ui.Bitmap {
-	path := a.imagePath(img)
-	if b, ok := a.bitmaps[path]; ok {
-		return b
-	}
-	var b *ui.Bitmap
-	if data, err := os.ReadFile(path); err == nil {
-		b, _ = ui.DecodeBitmap(data)
-	}
-	a.bitmaps[path] = b // nil, for a file missing or broken, is kept too
-	return b
-}
-
 // attachImage gives a node a picture of data, whose extension is ext,
 // writing it into the map's assets folder.
 func (a *app) attachImage(n *model.Node, data []byte, ext string) error {

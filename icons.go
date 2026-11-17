@@ -443,30 +443,6 @@ func (a *app) notePopover(c *ui.Context, anchor ui.Element, n *model.Node) {
 	}
 }
 
-// iconTextButton is a button of an icon and a word, as the AI's.
-func iconTextButton(c *ui.Context, ic icon, text, label, tip string, active bool) ui.Element {
-	t := c.Theme()
-	b := ui.Row(c.Key(label)).Height(keyHeight).Padding(0, 14, 0, 12).Gap(6).Radius(radiusPill).AlignItems(ui.Center).Cursor(ui.CursorPointer).
-		Label(label).Tooltip(tip).Shrink(0)
-	col, mark := t.Text, t.Text
-	if ic == iconSparkle {
-		mark = t.Accent // the AI's spark is the accent's wherever it is
-	}
-	if active {
-		press(b.Background(t.Accent).Transition(easeLook), 0.96)
-		col, mark = t.AccentText, t.AccentText
-	} else {
-		key(b, t)
-	}
-	b.Children(func() {
-		ui.Box(c).Size(14, 14).PassThrough().Draw(func(p *ui.Painter, r ui.Rect) { drawIcon(p, r, 13, ic, mark) })
-		if text != "" {
-			ui.Text(c, text).FontSize(13).TextColor(col).PassThrough()
-		}
-	})
-	return b
-}
-
 // The rail's icons: one set drawn alike, in lines of one weight with
 // round ends on a 24 grid, each with one part filled, so that they read
 // as a family and stand at a small size.

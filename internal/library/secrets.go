@@ -291,10 +291,7 @@ func SealIn(s string, seal func(plain string) (token string, ok bool)) string {
 // Secrets are the secrets of s, those sealed as their tokens, in the
 // order they were found.
 func Secrets(s string) []string {
-	var all []string
-	for _, t := range vault.Token.FindAllString(s, -1) {
-		all = append(all, t)
-	}
+	all := vault.Token.FindAllString(s, -1)
 	SealIn(s, func(plain string) (string, bool) {
 		all = append(all, plain)
 		return "", false

@@ -120,7 +120,7 @@ func TestSemanticSearch(t *testing.T) {
 		json.NewDecoder(r.Body).Decode(&req)
 		asked = append(asked, req.Input...)
 		if r.Header.Get("Authorization") != "Bearer k" || req.Model != "m" {
-			http.Error(w, `{"error":{"message":"bad key"}}`, 401)
+			http.Error(w, `{"error":{"message":"bad key"}}`, http.StatusUnauthorized)
 			return
 		}
 		var data []map[string]any

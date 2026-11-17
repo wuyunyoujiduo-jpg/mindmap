@@ -248,11 +248,6 @@ func isDirPath(p string) bool {
 	return err == nil && fi.IsDir()
 }
 
-func fileThere(p string) bool {
-	fi, err := os.Stat(p)
-	return err == nil && !fi.IsDir()
-}
-
 // skillsNoticeTools learns the tools found; those not seen before are
 // new, and said so on the page. The first scan learns them all.
 func (a *app) skillsNoticeTools() {

@@ -101,7 +101,7 @@ func newTestApp(t *testing.T) (*app, *ui.Tester) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir()) // the videos' posters
 	dir := t.TempDir()
 	clock = func() time.Time { return testNow }
-	a := newApp(&fakePlatform{}, config{Dir: dir, ShowTree: true, PanelOpen: true})
+	a := newApp(&fakePlatform{}, config{Dir: dir, PanelOpen: true})
 	a.noLocalModel = true // the built-in model only where a test asks for it
 	a.noMotion = true     // what is looked at is where things end, not their way there
 	if a.doc == nil {
@@ -1574,7 +1574,7 @@ func TestPasteImage(t *testing.T) {
 	if len(a.tree.Folders) != 0 {
 		t.Fatalf("assets folder listed: %+v", a.tree.Folders)
 	}
-	if a.bitmap(find(t, a, "前端").Image) == nil {
+	if _, err := os.Stat(a.imagePath(find(t, a, "前端").Image)); err != nil {
 		t.Fatal("picture not found after renaming")
 	}
 }
@@ -2489,7 +2489,7 @@ func TestQuickCaptureAndInbox(t *testing.T) {
 		t.Fatalf("inbox %+v", root.Children)
 	}
 	tt.Frame()
-	if !tt.HasText("收件箱") || a.inboxCount() != 2 {
+	if !tt.HasText("收件箱") {
 		t.Fatalf("no inbox row: %q", tt.Texts())
 	}
 	snapshot(t, tt, "inbox-row")

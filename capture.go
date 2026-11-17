@@ -143,19 +143,6 @@ func (a *app) capture(text string, where int) error {
 	return nil
 }
 
-// inboxCount is how many items wait in the inbox.
-func (a *app) inboxCount() int {
-	path := a.inboxPath()
-	f := a.file
-	if path != a.path {
-		f = a.indexed(path)
-	}
-	if f == nil {
-		return 0
-	}
-	return len(f.Sheets[0].Root.Children)
-}
-
 // captureView is the capture window: where it goes on top, a field, and
 // at the bottom the clipboard, the keys and the one button that saves.
 func (a *app) captureView(c *ui.Context) {
@@ -385,8 +372,6 @@ func (a *app) trayTitle() string {
 // openSettings opens the settings, with the fields as saved.
 func (a *app) openSettings() {
 	a.settingsOpen = true
-	a.captureKeyDraft, a.clipKeyDraft = a.cfg.CaptureKey, a.cfg.ClipKey
-	a.shotKeyDraft = a.cfg.ShotKey
 	a.embedDrafts = [3]string{a.cfg.EmbedURL, a.cfg.EmbedKey, a.cfg.EmbedModel}
 	a.syncDrafts = [2]string{a.cfg.SyncRepo, a.cfg.SyncToken}
 }

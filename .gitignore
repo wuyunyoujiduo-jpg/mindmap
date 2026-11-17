@@ -5,3 +5,5 @@ mygo_windows_*.syso
 resources/mindmap-embed.bin
 
 /mindmap.test
+__pycache__/
+/.claude/worktrees/

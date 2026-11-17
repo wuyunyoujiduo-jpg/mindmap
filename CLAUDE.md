@@ -108,7 +108,7 @@ by AI, and an AI assistant.
     `accentButton`); other keys a shade (`key`, `textKey`); a track of tabs
     a pale block (`well`) with a white pill that slides to what is chosen
     (`slidePill`, a `Match` transition, behind the others' words). Type
-    does the ranking: a page's name large and bold (`pageHeader`), a
+    does the ranking: a page's name large and bold (`pageHead`), a
     part's name small and bold (`trayHead`), words on things small and
     gray. The settings are rows in pale blocks, a name and a word on it at
     the left, what sets it at the right (`rowsField`, `setRow`, `setLine`,
@@ -314,8 +314,8 @@ by AI, and an AI assistant.
   MyGo has (stacked and inset shadows, transitions, poses, the system's
   fonts). Things move as in the drafts (`design.go`: `easeLook` for colors
   and shadows, `rowMotion` for rows that come and go, `press` for what
-  gives under the pointer, `hoverLift` for cards that open, `easeDetent`
-  the curve, `cubic-bezier(.22,1,.36,1)`); nothing may move what
+  gives under the pointer, a card that opens with it (`wallCard`),
+  `easeDetent` the curve, `cubic-bezier(.22,1,.36,1)`); nothing may move what
   is under the pointer away from it on a click, as a part opening on
   focus would. The tests run with no motion (`app.noMotion`).
 - What the user's corrections taught, to design by (each cost a version

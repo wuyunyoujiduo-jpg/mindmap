@@ -61,9 +61,6 @@ func pageColumn(c *ui.Context, key string, grow bool) ui.Element {
 	return col.Shrink(0)
 }
 
-// titleTrack draws the letters of a page's name a little together.
-const titleTrack = -0.5
-
 // The inks, four and no more (DESIGN.md): the theme's Text for what is
 // read first, ink2 for what is read second (a row not chosen), the
 // theme's TextMuted for words on things, faint for counts and small names.
@@ -128,23 +125,6 @@ func pageHead(c *ui.Context, key, title, sub string, fs []figure, right func()) 
 	})
 }
 
-// pageHeader is a page's heading, the same on every page: its name, a
-// word on it, and at the end what right builds. It is the window's title
-// bar there, and drags the window.
-func pageHeader(c *ui.Context, key, title, sub string, right func()) {
-	t := c.Theme()
-	ui.Row(c.Key(key)).Height(pageHeadHeight).Gap(12).AlignItems(ui.Center).Shrink(0).FillWidth().DragWindow().Children(func() {
-		ui.Text(c, title).FontSize(textPage).FontWeight(700).LetterSpacing(titleTrack).NoWrap()
-		if sub != "" {
-			ui.Text(c, sub).FontSize(textBody).TextColor(t.TextMuted).SingleLine().Shrink(1).MinWidth(0)
-		}
-		ui.Spacer(c)
-		if right != nil {
-			right()
-		}
-	})
-}
-
 // captureBox is the box of a line to write something down in, the same
 // on the desk, the tasks and 收集: a white card with a thin line, a plus
 // before what the caller builds. The caller outlines it in the accent
@@ -188,15 +168,6 @@ func floated(el ui.Element, t *ui.Theme) ui.Element {
 		return el.Shadow(0, 0, 0, 1, ui.RGBA(255, 255, 255, 0.12)).Shadow(0, 24, 60, -16, ui.RGBA(0, 0, 0, 0.7))
 	}
 	return el.Shadow(0, 0, 0, 0.5, ui.RGBA(0, 0, 0, 0.14)).Shadow(0, 3, 10, 0, ui.RGBA(0, 0, 0, 0.06)).Shadow(0, 22, 56, -12, ui.RGBA(0, 0, 0, 0.24))
-}
-
-// hoverLift has a card that opens answer the pointer: a shade deeper
-// under it, and it gives when pressed. It does not rise: nothing does.
-func hoverLift(el ui.Element, t *ui.Theme) ui.Element {
-	if el.Hovered() {
-		el.Background(t.Text.Alpha(0.075))
-	}
-	return press(el, 0.985)
 }
 
 // A pillMatch is the identity of the white pill of a group of tabs: the
@@ -266,33 +237,6 @@ func groundNow() groundLook {
 	return grounds[0]
 }
 
-// railInks are the rail's colors on the ground: its words chosen and not,
-// and the shades of the part shown and of the one under the pointer.
-func railInks(t *ui.Theme) (ink, muted, on, hover ui.Color) {
-	return t.Text, t.TextMuted, t.Accent, t.Text.Alpha(0.045)
-}
-
-// sideGround is what the maps' list stands on: the ground, or, where the
-// ground is dark under a light page, the trays' shade, its words being
-// the page's.
-func sideGround(t *ui.Theme) ui.Color {
-	if g := groundNow(); !t.Dark && g.dark {
-		return ui.Hex(g.tray)
-	}
-	return ground(t)
-}
-
-// cardEdge is the thin ring a card is told by.
-func cardEdge(t *ui.Theme) ui.Color {
-	if t.Dark {
-		return ui.RGBA(255, 255, 255, 0.09)
-	}
-	return ui.RGBA(0, 0, 0, 0.08)
-}
-
-// shadowColor is the shadow under a card: hardly there, the ring tells it.
-var shadowColor = ui.RGBA(0, 0, 0, 0.05)
-
 // raise gives an element a card's look on the leaf: a pale block, no
 // line and no shadow; its color goes smoothly where it changes.
 func raise(el ui.Element, t *ui.Theme) ui.Element {
@@ -354,11 +298,6 @@ func chosenCard(el ui.Element, t *ui.Theme) ui.Element {
 	return el.NoShadow().Shadow(0, 0, 0, 1.5, t.Accent)
 }
 
-// whiteCard is a thing among others of its kind, a note, a clip, what
-// waits: white, on the one pale ground they share (blockFill), with
-// nothing round it until the pointer is over it, when a thin line comes.
-// Many pale blocks on the white leaf were dull, each its own island; one
-// ground and white cards read as a stack of paper.
 // wallCard is a card of 收集's wall, which stands by itself on the page:
 // white, told by a hairline inside its edge, darker under the pointer.
 func wallCard(el ui.Element, t *ui.Theme) ui.Element {
@@ -370,14 +309,6 @@ func wallCard(el ui.Element, t *ui.Theme) ui.Element {
 	el.Background(cardColor(t)).InsetShadow(0, 0, 0, 1, t.Text.Alpha(rest))
 	if el.Hovered() {
 		el.InsetShadow(0, 0, 0, 1, t.Text.Alpha(hot))
-	}
-	return press(el.Transition(easeLook), 0.992)
-}
-
-func whiteCard(el ui.Element, t *ui.Theme) ui.Element {
-	el.Background(cardColor(t)).Shadow(0, 0, 0, 0.5, t.Text.Alpha(0))
-	if el.Hovered() {
-		el.Shadow(0, 0, 0, 1, t.Text.Alpha(0.12))
 	}
 	return press(el.Transition(easeLook), 0.992)
 }
@@ -613,11 +544,6 @@ func dateProp(c *ui.Context, name, label string, date *time.Time, now time.Time,
 	})
 }
 
-// card is a soft block of a panel, tinted.
-func card(c *ui.Context, tint ui.Color) ui.Element {
-	return ui.Column(c).Padding(14, 16).Gap(8).Radius(14).Background(tint).FillWidth()
-}
-
 // ghostButton is a button of text with no box until hovered.
 func ghostButton(c *ui.Context, text, tip string) ui.Element {
 	t := c.Theme()
@@ -831,34 +757,6 @@ func tabGroup(c *ui.Context, key string, names []string, chosenTab int) int {
 		}
 	})
 	return out
-}
-
-// pillTab is a tab of a row of them, as a page's lists: its name and
-// count, the one chosen on a shade.
-func pillTab(c *ui.Context, key, name, count string, on bool) ui.Element {
-	t := c.Theme()
-	b := ui.Row(c.Key(key)).Height(30).Padding(0, 13).Gap(6).Radius(radiusPill).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(name).Shrink(0).
-		Background(t.Text.Alpha(0)).Transition(easeLook)
-	if !on && b.Hovered() {
-		b.Background(t.Text.Alpha(0.05))
-	}
-	press(b, 0.97)
-	b.Children(func() {
-		if on {
-			slidePill(c, "tabs", radiusPill)
-			b.ZIndex(-1) // under the others, which the pill slides behind
-		}
-		txt := ui.Text(c, name).FontSize(textBody).PassThrough()
-		if on {
-			txt.FontWeight(700)
-		} else {
-			txt.TextColor(t.TextMuted)
-		}
-		if count != "" {
-			ui.Text(c, count).FontSize(textSmall).TextColor(t.TextMuted).PassThrough()
-		}
-	})
-	return b
 }
 
 // addButton is a button that adds a part to a page: as ghostButton, in

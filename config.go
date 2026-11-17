@@ -31,8 +31,6 @@ type config struct {
 	// Appearance is the look chosen whatever the system's: "light",
 	// "dark", or "" for the system's own.
 	Appearance string `json:"appearance,omitempty"`
-	// ShowTree shows the maps' folders beside the rail (rail.go).
-	ShowTree bool `json:"showTree,omitempty"`
 	// HideTree puts away the maps' directory of 项目 (tree.go), which
 	// shows unless it is set.
 	HideTree bool `json:"hideTree,omitempty"`

@@ -90,11 +90,10 @@ func TestFolderRenameAndDelete(t *testing.T) {
 	tt.Frame()
 
 	// Renamed from the menu: the open map and 快捷访问 follow.
-	row, ok := tt.Find("旧项目")
+	_, ok := tt.Find("旧项目")
 	if !ok {
 		t.Fatalf("no folder row: %q", tt.Texts())
 	}
-	_ = row
 	if err := tt.RightClick("旧项目"); err != nil { // its menu
 		t.Fatal(err)
 	}
@@ -115,7 +114,6 @@ func TestFolderRenameAndDelete(t *testing.T) {
 	snapshot(t, tt, "folder-row")
 
 	// To the trash, once confirmed: with its map, another one opened.
-	row, _ = tt.Find("归档项目")
 	if err := tt.RightClick("归档项目"); err != nil { // a right click opens the same menu
 		t.Fatal(err)
 	}

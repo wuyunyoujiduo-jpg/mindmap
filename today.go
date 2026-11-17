@@ -21,11 +21,6 @@ import (
 
 var weekdays = []string{"周日", "周一", "周二", "周三", "周四", "周五", "周六"}
 
-// dateLabel is a day as 11月9日 周一.
-func dateLabel(d time.Time) string {
-	return fmt.Sprintf("%d月%d日 %s", d.Month(), d.Day(), weekdays[d.Weekday()])
-}
-
 // softTag is a word on a pale wash of the accent, as a tag in a note: it
 // pops in.
 func softTag(c *ui.Context, text string) ui.Element {

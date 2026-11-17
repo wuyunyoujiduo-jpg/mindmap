@@ -69,10 +69,10 @@ func (a *app) parts(n *model.Node) nodeParts {
 // measure sizes a node's box at zoom 1, as nodeView draws it.
 // measureKey is a text measured, with how.
 type measureKey struct {
-	text, font   string
-	size, wrap   float32
-	weight       int
-	italic, bold bool
+	text, font string
+	size, wrap float32
+	weight     int
+	italic     bool
 }
 
 // measureText is c.MeasureText, kept: the layout measures every node of
@@ -204,7 +204,7 @@ func (a *app) titleBox(c *ui.Context, n *model.Node, depth int) (w, h float32) {
 		return st.Width, h
 	}
 	if w > titleMax {
-		w, h = a.measureText(c, titleMax, span)
+		_, h = a.measureText(c, titleMax, span)
 		w = titleMax
 	}
 	// A point to spare: laid out at its very width, a title of glyphs of
@@ -582,14 +582,6 @@ func keepIn(pos, size, length float32) float32 {
 		return max(length-margin-pos-size, margin-pos)
 	}
 	return 0
-}
-
-func mod(x, m float32) float32 {
-	r := float32(math.Mod(float64(x), float64(m)))
-	if r < 0 {
-		r += m
-	}
-	return r
 }
 
 // canvasInput takes the wheel, the touchpad and the keys on the canvas.

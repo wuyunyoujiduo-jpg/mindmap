@@ -339,16 +339,6 @@ func (s *state) save(dir string) error {
 	return writeAtomic(filepath.Join(dir, filepath.FromSlash(stateFile)), data)
 }
 
-// LastSync is when the folder last synced with the repository, zero for
-// never.
-func LastSync(dir string, cfg Config) time.Time {
-	s := loadState(dir, cfg)
-	if s.Commit == "" {
-		return time.Time{}
-	}
-	return s.At
-}
-
 // blobSHA is git's SHA of a file's content.
 func blobSHA(data []byte) string {
 	h := sha1.New()
