@@ -68,7 +68,7 @@ func (a *app) commands() []command {
 		{"添加子节点", "Tab", a.addChild, hasDoc},
 		{"添加同级节点", "↩", a.addSibling, hasDoc},
 		{"在上方添加同级节点", "⇧↩", func() { a.addSiblingAt(false) }, hasDoc},
-		{"连线到…（所选节点连到另一个节点）", "⌘⇧L", func() {
+		{"关联线到…（所选节点连到另一个节点）", "⌘⇧L", func() {
 			if n, _ := a.selectedNode(); n != nil {
 				a.startRelation(n)
 			}
@@ -117,7 +117,9 @@ func (a *app) commands() []command {
 		{"快速记录", keyLabel(a.captureKey()), a.plat.ShowCapture, nil},
 		{"打开收件箱", "", func() { _ = a.open(a.inboxPath()) }, func() bool { _, err := os.Stat(a.inboxPath()); return err == nil }},
 		{"移到其他导图…", "", func() { a.openPalette(paletteMove) }, hasDoc},
-		{"打开收集", "⌘⇧L", a.showLibrary, nil},
+		// No key said: ⌘⇧L, which it said, is the canvas's 关联线, and the
+		// place 收集 has the places' key (⌥⌘3, 前往).
+		{"打开收集", "", a.showLibrary, nil},
 		{"收藏剪贴板到收集", keyLabel(a.clipKey()), a.clipFromShortcut, nil},
 		{"截图", keyLabel(a.shotKey()), a.screenshot, nil},
 		{"AI 整理收集的资料", "", func() { a.showLibrary(); a.organizeAll() }, func() bool { return len(a.lib.Unorganized()) > 0 }},
@@ -567,10 +569,7 @@ func (a *app) paletteView(c *ui.Context) {
 								})
 								if ghostButton(c, "明天", "改到明天").Label("改到明天 " + task.node.Title).Clicked() {
 									d := today(a.now()).AddDate(0, 0, 1)
-									a.later(func() {
-										a.setTaskDay(task, &d)
-										a.tell("「" + task.node.Title + "」改到明天")
-									})
+									a.later(func() { a.moveTaskDay(task, &d) }) // said, with the way back
 								}
 								return
 							}
@@ -615,7 +614,7 @@ var shortcuts = []struct {
 	{"编辑节点", [][2]string{
 		{"Tab", "添加子节点"}, {"↩ / ⇧↩", "在下方 / 上方添加同级节点"}, {"Space / F2", "编辑标题"}, {"Delete", "删除"},
 		{"⌘C / ⌘X / ⌘V", "复制 / 剪切 / 粘贴（可跨导图，也可粘贴文本大纲）"}, {"⌘Z / ⌘⇧Z", "撤销 / 重做"},
-		{"⌘↑ / ⌘↓", "上移 / 下移（也可拖到兄弟节点的上沿或下沿）"}, {"⌘⇧L", "连线到另一个节点"}, {"⌘/", "折叠 / 展开"}, {"⇧ 或 ⌘ + 点击", "多选节点"},
+		{"⌘↑ / ⌘↓", "上移 / 下移（也可拖到兄弟节点的上沿或下沿）"}, {"⌘⇧L", "关联线：连到另一个节点"}, {"⌘/", "折叠 / 展开"}, {"⇧ 或 ⌘ + 点击", "多选节点"},
 	}},
 	{"浏览", [][2]string{
 		{"← → ↑ ↓", "在节点间移动"}, {"⌥↩", "聚焦所选分支"}, {"Esc", "取消多选 / 退出聚焦"},

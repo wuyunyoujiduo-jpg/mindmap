@@ -2444,12 +2444,15 @@ func TestTimeline(t *testing.T) {
 func TestReminders(t *testing.T) {
 	a, tt := newTestApp(t)
 	fp := a.plat.(*fakePlatform)
-	day := today(testNow)
+	// The day's notification is said as a day is first looked at, once:
+	// here the day after the app began.
+	day := today(testNow).AddDate(0, 0, 1)
 	yesterday := day.AddDate(0, 0, -1)
 	a.mutate("", func() {
 		find(t, a, "搜索").Task.Due = &day
 		find(t, a, "列表加载慢").Task.Due = &yesterday
 	})
+	a.now = func() time.Time { return day.Add(9 * time.Hour) }
 	a.remindedAt = time.Time{}
 	tt.Frame()
 	if len(fp.notes) != 1 || !strings.Contains(fp.notes[0], "已逾期：列表加载慢") || !strings.Contains(fp.notes[0], "今天到期：搜索") {

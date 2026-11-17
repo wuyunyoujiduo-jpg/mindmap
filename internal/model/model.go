@@ -111,7 +111,10 @@ func (t *Task) Span() string {
 }
 
 // SetStatus changes the status, noting when the task was done. A task
-// that repeats, done, is to do again on its next day.
+// that repeats, done, is to do again on its next day; when it was last
+// done stays said (DoneAt) as its state changes, until it is done again.
+// One done for its last time and to do after all was done once less: left
+// counted, the next tick made it one more than its count.
 func (t *Task) SetStatus(s Status, now time.Time) {
 	if s == StatusDone && t.Repeat != nil && t.Status != StatusDone {
 		next := t.Repeat.Next(t.Due, now)
@@ -127,22 +130,37 @@ func (t *Task) SetStatus(s Status, now time.Time) {
 		}
 		return
 	}
-	if s == StatusDone && t.Status != StatusDone {
+	switch {
+	case s == StatusDone && t.Status != StatusDone:
 		t.DoneAt = &now
-	} else if s != StatusDone {
+	case s != StatusDone && t.Status == StatusDone:
+		t.DoneAt = nil
+		if t.Repeat != nil && t.Times > 0 {
+			t.Times--
+		}
+	case s != StatusDone && t.Repeat == nil:
 		t.DoneAt = nil
 	}
 	t.Status = s
 }
 
-// Overdue reports whether the task is unfinished past its due day.
+// DayIn is the calendar day a time was written on, as that day in loc. A
+// task's day is kept as the midnight it began with where it was written,
+// which elsewhere is an hour of the day before or after: compared as an
+// instant, a task due today read as late on a computer to the west. It is
+// a day of the calendar, the same day wherever it is read.
+func DayIn(t time.Time, loc *time.Location) time.Time {
+	y, m, d := t.Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, loc)
+}
+
+// Overdue reports whether the task is unfinished past its due day, by the
+// calendar's days where now is.
 func (t *Task) Overdue(now time.Time) bool {
 	if t == nil || t.Due == nil || t.Status == StatusDone {
 		return false
 	}
-	y, m, d := now.Date()
-	today := time.Date(y, m, d, 0, 0, 0, 0, now.Location())
-	return t.Due.Before(today)
+	return DayIn(*t.Due, now.Location()).Before(dayOf(now))
 }
 
 // Node is one topic of the map.

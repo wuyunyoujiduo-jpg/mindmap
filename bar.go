@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -79,21 +81,19 @@ func (a *app) barCard(c *ui.Context, text string) {
 						}
 						return
 					case a.barTask(text):
-						rest, rep, first := parseRepeat(text, now)
-						_, due, _ := parseTaskLine(rest, now)
-						if due == nil {
-							due = first
-						}
-						if due == nil && a.place() == placeToday {
-							d := today(now)
-							due = &d
-						}
 						label, tip = "记为 任务", "现在会记成任务（要做的事，能打勾、定日子、重复）。点一下改成灵感"
-						if due != nil {
-							label += " · " + dayLabel(*due, now)
+						if lines := checklist(text); len(lines) > 1 { // a checklist: a task a line
+							label = fmt.Sprintf("记为 %d 件任务", len(lines))
+							break
 						}
-						if rep != nil {
-							label += " · " + rep.Label()
+						// As it will be kept: its day and time, how it repeats
+						// (readTaskLine, which makes the task too).
+						tl := readTaskLine(text, now, a.barDay(), "", "")
+						if when := tl.day(now); when != "" {
+							label += " · " + when
+						}
+						if tl.repeat != nil {
+							label += " · " + tl.repeat.Label()
 						}
 					case linkInTitle.MatchString(text):
 						label = "收藏链接"
@@ -164,6 +164,16 @@ func (a *app) barTask(text string) bool {
 	// or lines is a note's.
 	note := linkInTitle.MatchString(text) || strings.ContainsAny(text, "\n#") || strings.Contains(text, "**") || strings.Contains(text, "[[") || len(a.writeRefs) > 0
 	return a.place() == placeToday && !note
+}
+
+// barDay is the day a task written in the bar goes on where its line says
+// none: on 今天, today; elsewhere none.
+func (a *app) barDay() *time.Time {
+	if a.place() != placeToday {
+		return nil
+	}
+	d := today(a.now())
+	return &d
 }
 
 // barQuestion tells whether what is written in the bar asks the AI: it

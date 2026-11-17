@@ -571,7 +571,9 @@ func main() {
 				mygo.Separator(),
 				item("快速记录…", "", plat.ShowCapture),
 				item("打开收件箱", "", func() { _ = a.open(a.inboxPath()) }),
-				item("打开收集", "CmdOrCtrl+Shift+L", a.showLibrary),
+				// No key of its own: 前往's 收集 has the places' (⌥⌘3), and
+				// ⌘⇧L, which this took first, is the canvas's 关联线.
+				item("打开收集", "", a.showLibrary),
 				item("收藏剪贴板到收集", "", a.clipFromShortcut),
 				mygo.Separator(),
 				item("导入 XMind…", "CmdOrCtrl+Shift+I", a.askImportXMind),

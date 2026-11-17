@@ -116,6 +116,11 @@ func (a *app) hoursView(c *ui.Context, items []taskItem, days []time.Time) {
 	start, end := days[0], days[len(days)-1].AddDate(0, 0, 1)
 	if !a.tasks.weekAt.Equal(start) || a.tasks.weekDays != len(days) {
 		a.tasks.weekAt, a.tasks.weekDays = start, len(days)
+		// What was being chosen or drawn was of the days shown before: the
+		// days turned with the press held (← and →), its day or its block
+		// is not here to end it, and it stayed, the next press taken as its
+		// own.
+		a.tasks.pick, a.tasks.stretch = nil, nil
 		first := min(weekOpensAt*60, earliest)
 		if !now.Before(start) && now.Before(end) {
 			if m := now.Hour()*60 + now.Minute(); m < first+60 || m > first+9*60 {
@@ -130,6 +135,9 @@ func (a *app) hoursView(c *ui.Context, items []taskItem, days []time.Time) {
 	// Leaving the hours, what was being written is let go.
 	if d := a.tasks.draft; d != nil && (d.day.Before(start) || !d.day.Before(end)) {
 		a.tasks.draft = nil
+	}
+	if p := a.tasks.pick; p != nil && (p.day.Before(start) || !p.day.Before(end)) {
+		a.tasks.pick = nil
 	}
 	ui.Column(c.Key("week")).Grow(1).MinHeight(0).Margin(10, 28, 0).Children(func() {
 		a.weekHead(c, days, now)
@@ -528,12 +536,16 @@ func (a *app) weekBlock(c *ui.Context, w weekTask, d time.Time) bool {
 		a.tasks.stretch = nil
 		end := stretchTo(s.to, w.from)
 		if end != clockMinutes(it.node.Task.EndTime) {
+			was := whenOf(it.node.Task)
 			a.later(func() {
-				a.editTask(it, "改结束时间", func(n *model.Node) {
-					n.Task.EndTime = clockText(end)
-					if end >= 24*60 {
-						n.Task.EndTime = "23:59"
-					}
+				till := clockText(min(end, 24*60-1))
+				if !a.editTask(it, "改结束时间", func(n *model.Node) { n.Task.EndTime = till }) {
+					return
+				}
+				// Said, with the way back, as a move on the hours is.
+				span := strings.TrimPrefix(was.at, "0") + "–" + strings.TrimPrefix(till, "0")
+				a.tellUndo("已改到 "+span+"：「"+it.node.Title+"」", func() {
+					a.editTask(it, "撤销改结束时间", func(n *model.Node) { was.put(n.Task) })
 				})
 			})
 		}
@@ -603,20 +615,9 @@ func (a *app) moveTaskWhen(d taskDrag, day time.Time, at int) {
 		if it.path != d.path || it.node.ID != d.id {
 			continue
 		}
-		task := it.node.Task
-		var was *time.Time
-		if task.Due != nil {
-			w := *task.Due
-			was = &w
-		}
-		var wasStart *time.Time // the move takes it off when it is after the new day
-		if task.Start != nil {
-			w := *task.Start
-			wasStart = &w
-		}
-		wasAt, wasEnd, wasRemind := task.Time, task.EndTime, task.Remind
+		was := whenOf(it.node.Task) // the move takes its start off when that is after the new day
 		a.later(func() {
-			a.editTask(it, "改任务时间", func(n *model.Node) {
+			ok := a.editTask(it, "改任务时间", func(n *model.Node) {
 				if n.Task == nil {
 					n.SetStatus(model.StatusTodo, a.now())
 				}
@@ -625,23 +626,23 @@ func (a *app) moveTaskWhen(d taskDrag, day time.Time, at int) {
 				if n.Task.Start != nil && n.Task.Start.After(day) {
 					n.Task.Start = nil
 				}
-				prev := n.Task.Time
-				if at < 0 {
-					n.Task.Time, n.Task.EndTime = "", ""
+				if at < 0 { // of the whole day: it reminds no more at the hour it had
+					setTaskTime(n.Task, "", "")
 					return
 				}
 				long := 0
 				if n.Task.Time != "" && n.Task.EndTime != "" {
 					long = clockMinutes(n.Task.EndTime) - clockMinutes(n.Task.Time)
 				}
-				n.Task.Time, n.Task.EndTime = clockText(at), ""
+				until := ""
 				if long > 0 && at+long < 24*60 {
-					n.Task.EndTime = clockText(at + long)
+					until = clockText(at + long)
 				}
-				if n.Task.Remind == "" || n.Task.Remind == prev {
-					n.Task.Remind = n.Task.Time
-				}
+				setTaskTime(n.Task, clockText(at), until)
 			})
+			if !ok {
+				return
+			}
 			when := fmt.Sprintf("%d月%d日", day.Month(), day.Day())
 			if at >= 0 {
 				when += " " + strings.TrimPrefix(clockText(at), "0")
@@ -649,9 +650,7 @@ func (a *app) moveTaskWhen(d taskDrag, day time.Time, at int) {
 				when += " 全天"
 			}
 			a.tellUndo("已移到 "+when+"：「"+it.node.Title+"」", func() {
-				a.editTask(it, "撤回移动", func(n *model.Node) {
-					n.Task.Due, n.Task.Start, n.Task.Time, n.Task.EndTime, n.Task.Remind = was, wasStart, wasAt, wasEnd, wasRemind
-				})
+				a.editTask(it, "撤销移动", func(n *model.Node) { was.put(n.Task) })
 			})
 		})
 		return
