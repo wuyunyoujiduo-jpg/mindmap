@@ -249,9 +249,6 @@ func TestClean(t *testing.T) {
 	if k := s.Kinds(); len(k) != 4 {
 		t.Fatalf("kinds %v", k)
 	}
-	if src := s.Sources(); len(src) != 2 {
-		t.Fatalf("sources %v", src)
-	}
 
 	// Too little left is nothing drawn.
 	thin := &Set{Flow: &Graph{Nodes: []Node{{ID: "a", Title: "一步"}}}, Table: &Table{Conds: []string{"x"}, Results: []string{"y"}, Rows: []Row{{When: []string{"1"}}}}}

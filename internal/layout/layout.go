@@ -172,13 +172,3 @@ func split(nodes []*model.Node, height func(*model.Node) float32, o Options) (ri
 	}
 	return nodes[:len(nodes)-1], nodes[len(nodes)-1:]
 }
-
-// Hit returns the ID of the box containing the point, or "".
-func (r Result) Hit(x, y float32) string {
-	for id, b := range r.Boxes {
-		if x >= b.X && x < b.X+b.W && y >= b.Y && y < b.Y+b.H {
-			return id
-		}
-	}
-	return ""
-}

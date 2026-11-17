@@ -42,17 +42,6 @@ func (d *Document) ExpandTo(depth int) {
 	})
 }
 
-// Ancestors reports whether the node with the ID a is above, or is, the
-// node with the ID b.
-func (d *Document) Ancestors(a, b string) bool {
-	for _, n := range d.Path(b) {
-		if n.ID == a {
-			return true
-		}
-	}
-	return false
-}
-
 // ParseOutline makes nodes of text: a line each, nested by indentation,
 // as an outline or a Markdown list is written. Bullets, checkboxes and
 // numbers before a line's text are taken off; a checked box makes a done

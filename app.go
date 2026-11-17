@@ -136,6 +136,7 @@ type app struct {
 	hist      *model.History
 	hists     map[string]*model.History // of the maps opened, while the app runs
 	histAt    map[string]time.Time      // each as its file was when it was left (restoreView)
+	histUsed  []string                  // the maps left with steps kept, the last left last (histMaps)
 	views     map[string]*fileView      // how each map was left
 	versions  versions.Store            // past versions of the maps
 	lastSnap  map[string]time.Time      // when each map was last kept as a version
@@ -529,7 +530,7 @@ func newApp(plat platform, cfg config) *app {
 		cfg:           cfg,
 		panelOff:      !cfg.PanelOpen,
 		now:           clock,
-		hist:          model.NewHistory(200),
+		hist:          newHistory(),
 		hists:         map[string]*model.History{},
 		views:         loadViews(),
 		versions:      versions.Store{Dir: versionsDir()},
@@ -887,7 +888,7 @@ func (a *app) flush() {
 		// changes made here are kept as a version to restore.
 		a.keepVersion(versions.Conflict)
 		a.conflict, a.dirty = false, false
-		a.hist = model.NewHistory(200) // its steps are of the changes left, not of the file's version
+		a.hist = newHistory() // its steps are of the changes left, not of the file's version
 	}
 	a.rememberView()
 	a.saveViews()

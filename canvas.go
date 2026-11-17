@@ -1597,9 +1597,7 @@ func drawEdges(p *ui.Painter, r layout.Result, s model.Structure, ox, oy, z, lin
 			}
 			mid := (x1 - x0) / 2
 			if max(x1-x0, x0-x1, y1-y0, y0-y1) > strokeChunk {
-				l := polyline{{x0, y0}}
-				l.cube(x0+mid, y0, x1-mid, y1, x1, y1)
-				strokeLong(p, view, l, width, color(e.To))
+				strokeCurve(p, view, curve{{x0, y0}, {x0 + mid, y0}, {x1 - mid, y1}, {x1, y1}}, width, color(e.To))
 				continue
 			}
 			var path ui.Path
@@ -1716,6 +1714,49 @@ func (l *polyline) cube(c1x, c1y, c2x, c2y, x, y float32) {
 		*l = append(*l, [2]float32{a*x0 + b*c1x + c*c2x + e*x, a*y0 + b*c1y + c*c2y + e*y})
 	}
 }
+
+// curve is a cubic curve: its ends and, between them, its two controls.
+type curve [4][2]float32
+
+// halves cuts the curve in two at its middle.
+func (c curve) halves() (curve, curve) {
+	mid := func(a, b [2]float32) [2]float32 { return [2]float32{(a[0] + b[0]) / 2, (a[1] + b[1]) / 2} }
+	ab, bc, cd := mid(c[0], c[1]), mid(c[1], c[2]), mid(c[2], c[3])
+	abc, bcd := mid(ab, bc), mid(bc, cd)
+	m := mid(abc, bcd)
+	return curve{c[0], ab, abc, m}, curve{m, bcd, cd, c[3]}
+}
+
+// strokeCurve draws a curve that may be longer than a path can be, as a
+// mind map's branch to a child far above or below: halved until a part is
+// within strokeChunk across, and of the parts only those in view drawn,
+// each a curve of its own. Sampled whole into points, as it was, each of
+// the five hundred branches of a topic with as many children was up to
+// two thousand points a frame, nearly all of them out of view.
+func strokeCurve(p *ui.Painter, view ui.Rect, c curve, width float32, col ui.Color) {
+	// A curve is within the box of its ends and controls.
+	x0, y0, x1, y1 := c[0][0], c[0][1], c[0][0], c[0][1]
+	for _, pt := range c[1:] {
+		x0, y0, x1, y1 = min(x0, pt[0]), min(y0, pt[1]), max(x1, pt[0]), max(y1, pt[1])
+	}
+	if outside(view, x0, y0, x1, y1) {
+		return
+	}
+	if x1-x0 > strokeChunk || y1-y0 > strokeChunk {
+		l, r := c.halves()
+		strokeCurve(p, view, l, width, col)
+		strokeCurve(p, view, r, width, col)
+		return
+	}
+	var path ui.Path
+	path.MoveTo(c[0][0], c[0][1])
+	path.CubeTo(c[1][0], c[1][1], c[2][0], c[2][1], c[3][0], c[3][1])
+	p.StrokePath(&path, width, col)
+	curveParts++
+}
+
+// curveParts counts the parts strokeCurve drew, for the tests.
+var curveParts int
 
 // strokeLong draws a line that may be longer than a path can be: in
 // pieces of at most strokeChunk across, leaving out those outside view.

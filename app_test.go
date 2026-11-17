@@ -94,7 +94,7 @@ func (f *fakePlatform) Trash(path string) error {
 var testNow = time.Date(2026, 10, 10, 9, 0, 0, 0, time.Local)
 
 // newTestApp opens an app on a fresh folder, which gets the guide map.
-func newTestApp(t *testing.T) (*app, *ui.Tester) {
+func newTestApp(t testing.TB) (*app, *ui.Tester) {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())

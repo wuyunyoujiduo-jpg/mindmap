@@ -39,9 +39,6 @@ func TestOneSided(t *testing.T) {
 	if r.Boxes[b.ID].Y != 10+80 {
 		t.Fatalf("b y %v", r.Boxes[b.ID].Y)
 	}
-	if got := r.Hit(r.Boxes[a2.ID].X+5, r.Boxes[a2.ID].Y+5); got != a2.ID {
-		t.Fatalf("hit %q", got)
-	}
 
 	// Collapsing hides the children.
 	a.Collapsed = true

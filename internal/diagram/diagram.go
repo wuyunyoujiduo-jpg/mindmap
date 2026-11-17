@@ -459,37 +459,6 @@ func (g *Graph) PathEdges(ids []string) []int {
 	return out
 }
 
-// Sources are the topics anything of the set was drawn from.
-func (s *Set) Sources() []string {
-	var out []string
-	add := func(ids []string) {
-		for _, id := range ids {
-			if !slices.Contains(out, id) {
-				out = append(out, id)
-			}
-		}
-	}
-	for _, g := range []*Graph{s.Flow, s.State} {
-		if g != nil {
-			for _, n := range g.Nodes {
-				add(n.Src)
-			}
-		}
-	}
-	if s.Table != nil {
-		for _, r := range s.Table.Rows {
-			add(r.Src)
-		}
-		for _, n := range s.Table.Notes {
-			add(n.Src)
-		}
-	}
-	for _, g := range s.Gaps {
-		add(g.Src)
-	}
-	return out
-}
-
 // Parse reads the set of an answer of the AI: the JSON object in it,
 // around which the model may have put words or a fence, taken with what
 // models get wrong of a form: a number where a text was asked, a text

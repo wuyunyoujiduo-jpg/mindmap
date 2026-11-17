@@ -30,9 +30,6 @@ func TestTreeHelpers(t *testing.T) {
 	if a.Collapsed {
 		t.Fatal("expand all")
 	}
-	if !d.Ancestors(a.ID, e.ID) || d.Ancestors(b.ID, e.ID) {
-		t.Fatal("ancestors")
-	}
 }
 
 func TestParseOutline(t *testing.T) {
