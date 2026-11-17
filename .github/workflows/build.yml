@@ -1,10 +1,13 @@
 name: Build
 
-# Every push runs the tests. The macOS app, which takes macOS runner
+# Every push runs the checks. The macOS app, which takes macOS runner
 # minutes, is built only for a tag such as v0.1.0, which publishes a
 # release with the disk image, or when run by hand from the Actions tab,
 # which keeps it as an artifact of the run, or with "release" checked
 # publishes the release of mygo.json's version, creating its tag.
+# A release is checked before anything is built (.github/preflight.sh):
+# from main, under a tag not yet there, of a version above the one the
+# apps are served.
 on:
   push:
     branches: ["**"]
@@ -21,35 +24,62 @@ on:
         type: boolean
         default: false
 
+# To read, but for the jobs that publish the release, which say so.
 permissions:
-  contents: write # creating the release
+  contents: read
+
+# One release at a time: a second waits for the first, and then finds its
+# version published and stops. Any other run is a group of its own.
+concurrency:
+  group: ${{ (startsWith(github.ref, 'refs/tags/') || inputs.release) && 'release' || format('build-{0}', github.run_id) }}
+  cancel-in-progress: false
 
 # Auto-updates (mygo.json's updates): with these secrets, releases also
 # sign the update files and publish them to the public repository
-# mindmap-models: to its release desktop-latest, whose files the app reads
-# from github.com with no API call (mygo.json's updates.url), and, for the
-# versions before 0.30.1, which look through the API for the newest
-# desktop-v<version> release, to that release too.
+# mindmap-models, to its release desktop-latest, whose files the app reads
+# from github.com with no API call (mygo.json's updates.url). The apps
+# before 0.30.1, which look through the API for the newest
+# desktop-v<version> release, have the ones made until now; no more are
+# made (.github/publish-updates.sh).
 #   MYGO_UPDATER_PRIVATE_KEY  the key that signs updates (mygo-update.key)
 #   RELEASES_TOKEN            a token that may write mindmap-models'
 #                             releases (fine-grained: Contents read/write)
 # They are secrets of the environment mymind, which the build jobs use.
 env:
   UPDATES_REPO: wuyunyoujiduo-jpg/mindmap-models
-  RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      # First of all, and the build jobs wait for this job: whether this
+      # release may go out at all.
+      - name: Check the release before it is built
+        if: startsWith(github.ref, 'refs/tags/') || inputs.release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/preflight.sh
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+      - name: gofmt
+        run: |
+          out="$(gofmt -l .)"
+          if [ -n "$out" ]; then
+            echo "$out"
+            echo "::error::这些文件没有用 gofmt 排过版（gofmt -w 文件名）。"
+            exit 1
+          fi
       - run: go vet ./...
-      # The built-in embedding model, made by the Embedding model workflow,
-      # and what Model2Vec gives, which the tests compare against.
-      - name: Get the built-in embedding model
+      - run: go tool mygo vet
+      # The app builds for the Mac and for Windows, whose own job runs
+      # only now and then.
+      - run: GOOS=darwin GOARCH=arm64 go build -o /dev/null .
+      - run: GOOS=windows go build -o /dev/null .
+      # The embedding model, made by the Embedding model workflow, and
+      # what Model2Vec gives, which the tests compare against.
+      - name: Get the embedding model
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release download embed-model --repo "$GITHUB_REPOSITORY" -p mindmap-embed.bin -p reference.json -D "$RUNNER_TEMP/embed"
@@ -64,6 +94,8 @@ jobs:
     runs-on: macos-latest
     # The secrets of auto-updates are the environment mymind's.
     environment: mymind
+    permissions:
+      contents: write # creating the release and its tag
     env:
       RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
     steps:
@@ -71,9 +103,6 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-      - name: Check the tag matches the version in mygo.json
-        if: startsWith(github.ref, 'refs/tags/')
-        run: test "$GITHUB_REF_NAME" = "v$(jq -r .version mygo.json)"
       # With a Developer ID certificate in the repository's secrets, the app
       # is signed and the disk image notarized, so that macOS opens it
       # without asking; without, it is signed ad hoc, as before.
@@ -122,14 +151,12 @@ jobs:
             --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --keychain "$kc"
           jq --arg kc "$kc" '.macos.notarize = {keychainProfile: "mindmap-notary", keychain: $kc}' mygo.json > mygo.signed.json
           mv mygo.signed.json mygo.json
-      - name: Open the draft of the update release
+      # The release the apps read their updates from, made once.
+      - name: Make sure the update release is there
         if: (startsWith(github.ref, 'refs/tags/') || inputs.release) && env.RELEASES_TOKEN != ''
         env:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
         run: |
-          tag="desktop-v$(jq -r .version mygo.json)"
-          gh release view "$tag" --repo "$UPDATES_REPO" >/dev/null 2>&1 ||
-            gh release create "$tag" --repo "$UPDATES_REPO" --draft --target main --title "MyMind $tag" --notes "MyMind $(jq -r .version mygo.json)"
           gh release view desktop-latest --repo "$UPDATES_REPO" >/dev/null 2>&1 ||
             gh release create desktop-latest --repo "$UPDATES_REPO" --target main --latest=false \
               --title "MyMind 自动更新" --notes "MyMind 的自动更新文件：应用从这里读取最新版本，请勿删除。"
@@ -149,31 +176,38 @@ jobs:
           else
             go tool mygo build -platform "$platforms"
           fi
-      - name: Publish the update files
-        if: (startsWith(github.ref, 'refs/tags/') || inputs.release) && env.RELEASES_TOKEN != ''
-        env:
-          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
-        run: bash .github/publish-updates.sh build/darwin-*
       - uses: actions/upload-artifact@v7
         with:
           name: MyMind-macOS
           path: build/*/*.dmg
+      # The release first and the update files after it: the manifests
+      # among them are what has every app download the version, so they go
+      # when nothing else is left to fail. A job run again after it made
+      # the release (the update files were refused, say) adds to that
+      # release, which is this commit's.
       - name: Publish the release
         if: startsWith(github.ref, 'refs/tags/') || inputs.release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="v$(jq -r .version mygo.json)"
-          gh release create "$tag" build/*/*.dmg --target "$GITHUB_SHA" \
-            --repo "$GITHUB_REPOSITORY" --title "MyMind $tag" \
-            --notes-file .github/release-notes.md --generate-notes
-      # Without the Windows job, which publishes it otherwise: the update
-      # release of the apps before 0.30.1.
-      - name: Publish the update release
-        if: inputs.release && !inputs.all && env.RELEASES_TOKEN != ''
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            at="$(gh api "repos/$GITHUB_REPOSITORY/commits/$tag" --jq .sha)"
+            if [ "$at" != "$GITHUB_SHA" ]; then
+              echo "::error::Release $tag 已经有了，而且是另一次提交（$at）的，没有动它。"
+              exit 1
+            fi
+            gh release upload "$tag" build/*/*.dmg --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$tag" build/*/*.dmg --target "$GITHUB_SHA" \
+              --repo "$GITHUB_REPOSITORY" --title "MyMind $tag" \
+              --notes-file .github/release-notes.md --generate-notes
+          fi
+      - name: Publish the update files
+        if: (startsWith(github.ref, 'refs/tags/') || inputs.release) && env.RELEASES_TOKEN != ''
         env:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
-        run: gh release edit "desktop-v$(jq -r .version mygo.json)" --repo "$UPDATES_REPO" --draft=false --latest=false
+        run: bash .github/publish-updates.sh build/darwin-*
 
   # The Windows app and its installer, made on Windows (NSIS), added to the
   # release the macOS job publishes.
@@ -183,6 +217,8 @@ jobs:
     runs-on: windows-latest
     # The secrets of auto-updates are the environment mymind's.
     environment: mymind
+    permissions:
+      contents: write # adding the installer to the release
     env:
       RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
     steps:
@@ -195,15 +231,8 @@ jobs:
         env:
           MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN || github.token }}
-          RELEASE: ${{ startsWith(github.ref, 'refs/tags/') || inputs.release }}
         run: |
           go tool mygo build -platform windows/amd64
-      - name: Publish the update files
-        if: (startsWith(github.ref, 'refs/tags/') || inputs.release) && env.RELEASES_TOKEN != ''
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
-        run: bash .github/publish-updates.sh build/windows-amd64
       - uses: actions/upload-artifact@v7
         with:
           name: MyMind-Windows
@@ -216,12 +245,11 @@ jobs:
         run: |
           tag="v$(jq -r .version mygo.json)"
           gh release upload "$tag" build/windows-amd64/*Setup*.exe --repo "$GITHUB_REPOSITORY" --clobber
-      # The apps check the newest desktop-v release: publishing the draft
-      # offers the version to them. It stays off "latest", which is the
-      # embedding model's.
-      - name: Publish the update release
+      # Last, as in the macOS job: the manifest is what offers the version
+      # to the apps on Windows.
+      - name: Publish the update files
         if: (startsWith(github.ref, 'refs/tags/') || inputs.release) && env.RELEASES_TOKEN != ''
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
-        run: gh release edit "desktop-v$(jq -r .version mygo.json)" --repo "$UPDATES_REPO" --draft=false --latest=false
+        run: bash .github/publish-updates.sh build/windows-amd64

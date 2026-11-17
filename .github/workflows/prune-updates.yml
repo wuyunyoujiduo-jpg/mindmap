@@ -1,0 +1,43 @@
+name: Prune updates
+
+# Takes off mindmap-models' release desktop-latest the archives and deltas
+# that no manifest names any more (.github/prune-updates.sh), apart from a
+# release, which does it too: to see first what would go, which is all
+# this does unless "delete" is checked, and to clear what gathered before
+# releases pruned, of which a release takes off fifty at a time.
+on:
+  workflow_dispatch:
+    inputs:
+      delete:
+        description: "真的删除（不勾选就只列出会删哪些）"
+        type: boolean
+        default: false
+      max:
+        description: "这次最多删多少个"
+        default: "300"
+
+permissions:
+  contents: read
+
+# One at a time. A release may publish meanwhile: what its new manifest
+# names of the files listed here, the manifest read here names too.
+concurrency:
+  group: prune-updates
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    # The token that writes mindmap-models' releases is the environment
+    # mymind's.
+    environment: mymind
+    env:
+      UPDATES_REPO: wuyunyoujiduo-jpg/mindmap-models
+    steps:
+      - uses: actions/checkout@v7
+      - name: Prune
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          DRY_RUN: ${{ !inputs.delete && '1' || '' }}
+          PRUNE_MAX: ${{ inputs.max }}
+        run: bash .github/prune-updates.sh
