@@ -81,7 +81,7 @@ func (a *app) mapTree(c *ui.Context) {
 				if m.Item("打开其他文件夹…").Shortcut(ui.Cmd, ui.KeyO).Chosen() {
 					a.pickWorkspace()
 				}
-				if m.Item("在 Finder 中显示").Chosen() {
+				if m.Item(revealWord()).Chosen() {
 					a.plat.ShowInFolder(a.dir)
 				}
 			})

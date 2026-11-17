@@ -2645,7 +2645,7 @@ func TestAIActions(t *testing.T) {
 	// Breaking a node down sends it alone.
 	a.selected = login.ID
 	a.aiBreakDown()
-	if body := sent(2); !strings.Contains(body, "拆解成") || !strings.Contains(body, "选中的节点及其下级") {
+	if body := sent(2); !strings.Contains(body, "拆解成") || !strings.Contains(body, "选中的主题及其下级") {
 		t.Fatalf("break-down request %s", body)
 	}
 	// Text pasted.

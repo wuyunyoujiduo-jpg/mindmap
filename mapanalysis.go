@@ -556,7 +556,7 @@ func (a *app) searchMapsText(query string, n int) (string, int) {
 				})
 			}
 			if len(lines) > 0 {
-				b.WriteString("  匹配的节点：" + strings.Join(lines, "；") + "\n")
+				b.WriteString("  匹配的主题：" + strings.Join(lines, "；") + "\n")
 			}
 		}
 	}

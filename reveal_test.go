@@ -46,3 +46,24 @@ func TestRevealWord(t *testing.T) {
 	}
 	_ = a
 }
+
+// No key names the Mac's places in words of its own: each says them by
+// revealWord, trashWord or folderAppWord (backup, history, links and the
+// directory said 在 Finder 中显示 on Windows too).
+func TestNoFinderWords(t *testing.T) {
+	files, _ := filepath.Glob("*.go")
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") || f == "shot.go" || f == "sidebar.go" {
+			continue
+		}
+		data, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, w := range []string{`"在 Finder 中显示"`, `"在访达中显示"`, `"Finder"`, `"废纸篓"`, `"回收站"`, `"访达"`} {
+			if strings.Contains(string(data), w) {
+				t.Errorf("%s says %s", f, w)
+			}
+		}
+	}
+}

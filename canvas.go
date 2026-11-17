@@ -365,6 +365,9 @@ func (a *app) canvasView(c *ui.Context) {
 // floating topic dragged twice was one step to undo, and a title written,
 // left and written again.
 func (a *app) stepEnds(ev ui.InputEvent) {
+	if ev.Kind == ui.InputPointerUp && ev.Button == 0 {
+		a.outlineLetGo = true // a drag from an outline's line scrolled away ends (outlineDrag)
+	}
 	if ev.Kind == ui.InputPointerDown || ev.Kind == ui.InputKeyDown && (ev.Key == ui.KeyTab || ev.Key == ui.KeyEscape) {
 		a.lastEdit = ""
 	}

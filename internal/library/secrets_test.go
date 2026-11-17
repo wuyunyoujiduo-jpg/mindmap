@@ -120,6 +120,30 @@ func TestSecretsNotMissed(t *testing.T) {
 		{"家里的密码是Hunter2Hunter2，别外传", "Hunter2Hunter2"},
 		// A word with the name of a secret in it is no name for one.
 		{"password=monkeybusiness", "monkeybusiness"},
+		// After a space in Chinese, with a figure or a sign.
+		{"密码 abc12345", "abc12345"},
+		{"服务器 root 口令 p@ss!word 别外传", "p@ss!word"},
+		{"密钥\tk3y-value-9", "k3y-value-9"},
+		// The short names of a password.
+		{"pwd=abc123", "abc123"},
+		{"mysql -u root --pwd=hunter2hunter2", "hunter2hunter2"},
+		{"pass: hunter22", "hunter22"},
+		{"DB_PASS=s3cr3tpass", "s3cr3tpass"},
+		{"passwd=abc!def", "abc!def"},
+		{"password=abc123", "abc123"},
+		// A bearer's token.
+		{"Authorization: Bearer abcdefghij0123456789", "abcdefghij0123456789"},
+		{"curl -H 'Authorization: bearer Zx9_kQ-0pLmN.r8sT~uv+w/y=='", "Zx9_kQ-0pLmN.r8sT~uv+w/y=="},
+		{"Bearer aBcDeFgHiJkLmNoPqRsT", "aBcDeFgHiJkLmNoPqRsT"},
+		// The password of an address, alone.
+		{"postgres://admin:s3cret@db.example.com:5432/app", "s3cret"},
+		{"REDIS_URL=redis://:hunter2@cache:6379", "hunter2"},
+		{"https://bob:p@ss@example.com/x", "p@ss"},
+		// Letters alone after a password's own name, the last of their line.
+		{"password: correcthorse", "correcthorse"},
+		{"wifi\npassword: Plumtreeroad\n楼下", "Plumtreeroad"},
+		{"账号 bob, password: correcthorse, 服务器在机房", "correcthorse"},
+		{"pwd: correcthorse 记得改", "correcthorse"},
 	} {
 		if got := Secrets(c.in); len(got) != 1 || got[0] != c.secret || !HasSecret(c.in) {
 			t.Errorf("a secret, and not found: %q → %q", c.in, got)
@@ -157,6 +181,33 @@ func TestSecretsNotMissed(t *testing.T) {
 		"token: response.data.token",
 		"password = form.value",
 		"Token: 用GPT4生成的那个",
+		// What is like the forms found since.
+		"密码 Settings 里改",
+		"密码 abc 太短",
+		"密钥 RSA-2048 够用",
+		"密码 SHA256 哈希一下",
+		"修改密码 后重新登录",
+		"PWD=/home/me/projects",
+		"OLDPWD=~/src/app",
+		"bypass=abcdefgh123",
+		"compass: north1234",
+		"passport=E12345678",
+		"Bearer authentication is used",
+		"Bearer YOUR_ACCESS_TOKEN_HERE",
+		"Authorization: Bearer accessTokenValue",
+		"Bearer abc123",
+		"http://example.com:8080/path?a=b@c",
+		"ssh://git@github.com:22/me/repo",
+		"https://bob@example.com/x",
+		"git@github.com:me/repo.git",
+		"mailto:bob@example.com",
+		"password: required",
+		"password: understanding the basics",
+		"The password: understanding it",
+		"password: Encrypted",
+		"pass: everything",
+		"password_hint: rememberit",
+		"password: hunter",
 	} {
 		if got := Mask(plain); got != plain || HasSecret(plain) || len(Found(plain)) != 0 {
 			t.Errorf("no secret, and taken for one: %q → %q", plain, got)

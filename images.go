@@ -109,7 +109,7 @@ func (a *app) imageMenu(m *ui.Menu, img *model.Image) {
 	if m.Item("复制图片").Chosen() {
 		a.copyImage(img)
 	}
-	if m.Item("在访达中显示").Chosen() {
+	if m.Item(revealWord()).Chosen() {
 		a.plat.ShowInFolder(a.imagePath(img))
 	}
 }

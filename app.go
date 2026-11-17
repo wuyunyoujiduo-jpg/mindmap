@@ -340,6 +340,8 @@ type app struct {
 	outlineRowAt              map[string]ui.Rect       // where each line built was drawn
 	outlineDragFrom           string                   // the line pressed, dragged from
 	outlinePressed            bool                     // it is pressed still, in this frame
+	outlineDragSeen           bool                     // its line was built in this frame, and told so
+	outlineLetGo              bool                     // the pointer was let go since, wherever the line is
 	outlineDragY              float32                  // where the pointer is, dragging
 	outlineLists              map[string]*ui.ListState // the outline's list, of each canvas
 	outlineFocusWas           string                   // the focus a frame before: a line it goes to is scrolled to

@@ -50,6 +50,8 @@ func sampleMap() *model.File {
 	}
 	tagged, _ := d.AddChild(w.ID, "标题 #像标签")
 	tagged.Tags = []string{"真标签"}
+	numbered, _ := d.AddChild(w.ID, "Issue #7")
+	numbered.Tags = []string{"42"}
 	doing, _ := d.AddChild(w.ID, "任务 #像标签")
 	doing.Task = &model.Task{Status: model.StatusDoing, Due: &due}
 	marked, _ := d.AddChild(w.ID, "〔概要〕任务不是概要")
@@ -103,10 +105,16 @@ func TestMarkdownRoundTrip(t *testing.T) {
 	if again := model.MarkdownFile(g); again != text {
 		t.Fatalf("written again:\n%s\nwas:\n%s", again, text)
 	}
-	// Another program's file: a number after a # is words of the title.
-	h := ParseMarkdown("# 缺陷\n\n- Issue #42\n- 修复 #登录\n", "x")
-	if r := h.Sheets[0].Root; len(r.Children) != 2 || r.Children[0].Title != "Issue #42" || len(r.Children[0].Tags) != 0 ||
-		r.Children[1].Title != "修复" || len(r.Children[1].Tags) != 1 {
+	// A title's own #42 is written escaped, and so comes back a title.
+	if !strings.Contains(text, `Issue \#42`) || !strings.Contains(text, `Issue \#7 #42`) {
+		t.Fatalf("#42 of a title not escaped:\n%s", text)
+	}
+	// Another program's file: a #42 at a line's end is a tag, as #登录 is;
+	// written \#43, words of the title.
+	h := ParseMarkdown("# 缺陷\n\n- Issue #42\n- 修复 #登录\n- Issue \\#43\n", "x")
+	if r := h.Sheets[0].Root; len(r.Children) != 3 || r.Children[0].Title != "Issue" || len(r.Children[0].Tags) != 1 || r.Children[0].Tags[0] != "42" ||
+		r.Children[1].Title != "修复" || len(r.Children[1].Tags) != 1 ||
+		r.Children[2].Title != "Issue #43" || len(r.Children[2].Tags) != 0 {
 		t.Fatalf("read %+v", r.Children)
 	}
 	// One canvas copied (复制当前画布为 Markdown) has its floating topics.
