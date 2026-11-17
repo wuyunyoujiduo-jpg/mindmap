@@ -47,6 +47,8 @@ var nearPieces = []string{
 	"AKIA0123456789ABCDEF", "AKIA0123456789ABCDEFX", "eyJhbGciOiJI.eyJzdWIiOiIx.SflKxwRJSMeK", "eyJhbGciOiJI.short.SflKxwRJSMeK",
 	"xoxb-1234567890-abc", "xoxz-1234567890-abc", "glpat-abcdefghij0123456789", "github_pat_0123456789abcdefghijkl", "AIza0123456789abcdefghijklmnopqrstuvwxyz",
 	"密码", "口令", "密钥", "是", "这是一个句子", "，", "。", "helloworld", "abc123",
+	"pwd", "PASS", "db_pass", "bypass", "OLDPWD", "/home", "Bearer", "bearer ", "Authorization: Bearer ", "abcdefghij0123456789", "Zx9_kQ-0pLmN.r8sT~uv+w/y==",
+	"postgres://", "redis://:", "admin:", "s3cret@", "@", "/", "?", "#", "a1://", "x_y://", "\t", "SHA-256", "correcthorse", "required",
 	" ", "\n", ",", ";", "(", ")", "_", "-", ".", "K", "ſ", "⟦密:", "⟧", "x", "1", "https://example.com/a?b=c", "-----BEGIN RSA PRIVATE KEY-----", "-----END RSA PRIVATE KEY-----",
 }
 

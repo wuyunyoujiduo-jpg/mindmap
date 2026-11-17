@@ -96,13 +96,22 @@ var secretRules = []rule{
 	{re: regexp.MustCompile(`\bAKIA[0-9A-Z]{16}\b`), near: tokenNear("AKIA")},
 	{re: regexp.MustCompile(`\bAIza[0-9A-Za-z_\-]{30,}`), near: tokenNear("AIza")},
 	{re: regexp.MustCompile(`\beyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}`), near: tokenNear("eyJ")},
-	// A line that names what it holds: KEY=value, "token": "value".
-	{regexp.MustCompile(`(?i)(?P<keep>\b[A-Za-z0-9_.\-]*(?:secret|token|passw(?:or)?d|api[_\-]?key|private[_\-]?key|access[_\-]?key)[A-Za-z0-9_.\-]*["']?\s*[=:]\s*["']?)` + valued), notNamed, namedNear},
+	// A line that names what it holds: KEY=value, "token": "value"; and
+	// the short names of a password, pwd and pass, as a name of their own
+	// or its last part (DB_PASS, --pwd), not as letters of a word (bypass).
+	{regexp.MustCompile(`(?i)(?P<keep>(?:\b[A-Za-z0-9_.\-]*(?:secret|token|passw(?:or)?d|api[_\-]?key|private[_\-]?key|access[_\-]?key)[A-Za-z0-9_.\-]*|\b(?:[A-Za-z0-9_.\-]*[_.\-])?(?:pass|pwd))["']?\s*[=:]\s*["']?)` + valued), notNamed, namedNear},
 	// The same in Chinese, where a shorter value is one: 密码：abc123. After
 	// 是 too when the value comes right after it (密码是abc12345, as the
 	// password of a wifi is written), which a sentence does not (密码是什么
-	// 时候改的).
-	{regexp.MustCompile(`(?P<keep>(?:密码|口令|密钥)(?:\s*[:：=]\s*|是))` + valued), notChinese, chineseNear},
+	// 时候改的); and after a space, where a value has a figure or a sign
+	// (密码 abc12345; 密码 Settings is a word).
+	{regexp.MustCompile(`(?P<keep>(?:密码|口令|密钥)(?:\s*[:：=]\s*|是|[ \t]+))` + valued), notChinese, chineseNear},
+	// A token sent as a bearer's (Authorization: Bearer …), named by no
+	// name of a secret.
+	{regexp.MustCompile(`(?P<keep>\b(?:Bearer|bearer|BEARER)\s+)[A-Za-z0-9\-._~+/]{16,}=*`), notBearer, bearerNear},
+	// The password of an address (postgres://admin:s3cret@host,
+	// redis://:pass@host): the password alone, the name and the place stay.
+	{re: regexp.MustCompile(`(?P<keep>[A-Za-z][A-Za-z0-9+.\-]*://[^\s:/@?#]*:)[^\s/?#]+(?P<tail>@)`), near: addressNear},
 }
 
 // A seek finds the words of a shape in a text: the next of any of them
@@ -210,6 +219,18 @@ func valueEnd(s string, at int) int {
 // password and passwd, api_key and its like), in small letters.
 var nameWords = []string{"secret", "token", "passw", "key"}
 
+// mayName tells whether a name may be one of a secret to the shape of a
+// line that names one: namesSecret, or the short names of a password
+// (pass, pwd), which namesSecret leaves out, for a word with them in it
+// is no name of a secret's value (compass_rose).
+func mayName(name string) bool {
+	if namesSecret(name) {
+		return true
+	}
+	low := strings.ToLower(name)
+	return strings.Contains(low, "pass") || strings.Contains(low, "pwd")
+}
+
 // namesSecret tells whether a name may be one of a secret: whether it has
 // one of nameWords in it, in letters small or large.
 func namesSecret(name string) bool {
@@ -257,7 +278,7 @@ func namedNear(s string) nearby {
 			for lo > at && (wordByte(s[lo-1]) || s[lo-1] == '.' || s[lo-1] == '-') {
 				lo--
 			}
-			if !namesSecret(s[lo:end]) {
+			if !mayName(s[lo:end]) {
 				at = j + 1
 				continue
 			}
@@ -288,10 +309,63 @@ func chineseNear(s string) nearby {
 			e += len("：")
 		case e < len(s) && (s[e] == ':' || s[e] == '='):
 			e++
+		case e > i+len("密码") && e < len(s) && valueByte(s[e]):
+			// After spaces, the value itself.
 		default:
 			return i, i, i + 1, true // a name with no value after it
 		}
 		return i, valueEnd(s, e), i + 1, true
+	}
+}
+
+// bearerNear is where a bearer's token may be: at each Bearer that a
+// word does not run into, with a space after it, to where the value after
+// it ends.
+func bearerNear(s string) nearby {
+	k := newSeek(s, "Bearer", "bearer", "BEARER")
+	return func(at int) (lo, hi, next int, ok bool) {
+		for at <= len(s) {
+			i := k.next(at)
+			if i < 0 {
+				break
+			}
+			e := i + len("Bearer")
+			if i > 0 && wordByte(s[i-1]) || e >= len(s) || !spaceByte(s[e]) {
+				at = i + 1
+				continue
+			}
+			return i, valueEnd(s, e), i + 1, true
+		}
+		return 0, 0, 0, false
+	}
+}
+
+func schemeByte(b byte) bool {
+	return b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || b >= '0' && b <= '9' || b == '+' || b == '.' || b == '-'
+}
+
+// addressNear is where the password of an address may be: at each ://,
+// from where the scheme before it begins to where the address's place
+// ends (a space, a /, a ? or a #), which a password goes no further than.
+func addressNear(s string) nearby {
+	k := newSeek(s, "://")
+	return func(at int) (lo, hi, next int, ok bool) {
+		if at > len(s) {
+			return 0, 0, 0, false
+		}
+		j := k.next(at)
+		if j < 0 {
+			return 0, 0, 0, false
+		}
+		lo = j
+		for lo > at && schemeByte(s[lo-1]) {
+			lo--
+		}
+		hi = j + len("://")
+		for hi < len(s) && !spaceByte(s[hi]) && s[hi] != '/' && s[hi] != '?' && s[hi] != '#' {
+			hi++
+		}
+		return lo, hi, j + 1, true
 	}
 }
 
@@ -325,8 +399,14 @@ func whole(s string) nearby {
 //     where one is written (password = userInput, api_key=some_name,);
 //   - letters alone after a colon: a secret when long or of mixed case
 //     (API_KEY: and thirty-two letters, X-Api-Key: abcdefghijklmnop); a
-//     short word there is a word (password: undefined), and such a
-//     password is marked by hand;
+//     short word there is a word (password: undefined), but after a
+//     password's own name (password, passwd, pwd), where a word of eight
+//     letters or more is the last of its line and none a field of a
+//     password is told by (password: correcthorse; not password:
+//     required, nor The password: understanding it, a sentence going on);
+//   - after pwd or pass, or a name ending in password or passwd, six are
+//     enough with a figure or a sign (pwd=abc123), as in Chinese; a pwd
+//     that is a path is a shell's folder (PWD=/home/me);
 //   - what is named as the secret is (password=password, maxTokensDefault)
 //     or says there is none (undefined, null): never one.
 var (
@@ -434,8 +514,16 @@ func separator(keep string) (sep byte, spaced bool) {
 // notNamed tells whether what a line that names a secret holds is no
 // secret: too short, a thing of a program, or a word of a sentence.
 func notNamed(keep, v, after string) bool {
-	if utf8.RuneCountInString(v) < 8 {
+	pw := passwordName(keep)
+	least := 8
+	if pw != "" && strings.ContainsFunc(v, func(r rune) bool { return r < 0x80 && !unicode.IsLetter(r) }) && strings.ContainsFunc(v, unicode.IsLetter) {
+		least = 6
+	}
+	if utf8.RuneCountInString(v) < least {
 		return true
+	}
+	if pw == "pwd" && strings.ContainsAny(v[:1], "/~$") {
+		return true // the folder a shell is in
 	}
 	if strings.HasSuffix(keep, `"`) || strings.HasSuffix(keep, "'") {
 		return false // in quotes: written out, whatever it looks like
@@ -463,7 +551,56 @@ func notNamed(keep, v, after string) bool {
 		return true
 	}
 	mixed := bare != strings.ToLower(bare) && bare != strings.ToUpper(bare) && !capital.MatchString(bare)
-	return len(bare) < 16 && !mixed
+	if len(bare) < 16 && !mixed {
+		return !aPassword(pw, bare, after)
+	}
+	return false
+}
+
+// passwordName is the name of a password a line names its value by, as
+// the end of its name: password, passwd, pwd or pass; "" for another.
+func passwordName(keep string) string {
+	name := strings.ToLower(strings.TrimRight(keep, " \t\n\r\f\"'=:"))
+	for _, n := range []string{"password", "passwd", "pwd", "pass"} {
+		if strings.HasSuffix(name, n) {
+			return n
+		}
+	}
+	return ""
+}
+
+// fieldWords are words of eight letters or more that a field of a
+// password is told by, in a program's settings or a sentence: no password
+// after password:.
+var fieldWords = []string{
+	"required", "optional", "nullable", "readonly", "writeonly", "encrypted", "unencrypted", "protected", "sensitive",
+	"placeholder", "incorrect", "mismatch", "mismatched", "forgotten", "unchanged", "provided", "minlength", "maxlength",
+	"validate", "validated", "validation", "validator", "confirmed", "confirmation", "strength", "generated", "defaults",
+	"verified", "unverified", "disabled", "redacted", "obscured", "obfuscated", "plaintext", "cleartext", "supported",
+	"unsupported", "accepted", "rejected", "mandatory", "insecure", "settings", "recovery", "expiration",
+	"rotation", "complexity", "requirement", "requirements", "credential", "credentials", "protection", "compromised",
+	"anything", "something", "whatever", "everything", "nothing", "username", "password", "passphrase", "hashed",
+	"invalid", "expired", "changed", "missing", "unknown", "default", "masked", "hidden", "secret", "string",
+}
+
+// aPassword tells whether letters alone after a colon are a password: after
+// a password's own name, eight letters or more, of small letters or with
+// a capital first, none of fieldWords, and the last word of their line.
+func aPassword(pw, v, after string) bool {
+	if pw == "" || pw == "pass" || len(v) < 8 || v != strings.ToLower(v) && !capital.MatchString(v) {
+		return false
+	}
+	if slices.Contains(fieldWords, strings.ToLower(v)) {
+		return false
+	}
+	a := strings.TrimLeft(after, " \t")
+	if a == "" {
+		return true
+	}
+	// A sentence goes on in letters and figures (The password:
+	// understanding it); a line of a password ends, or goes on in another
+	// tongue (password: correcthorse 记得改).
+	return a[0] == '\n' || a[0] == '\r' || a[0] >= 0x80 || strings.IndexByte(",;)]}|", a[0]) >= 0
 }
 
 // notChinese is notNamed for a secret named in Chinese, where a value is
@@ -474,11 +611,28 @@ func notChinese(keep, v, _ string) bool {
 	if utf8.RuneCountInString(v) < 6 || !hasASCII(v) || calls(v, true) {
 		return true
 	}
+	if k := strings.TrimRight(keep, " \t"); k != keep && !strings.HasSuffix(k, "是") && !strings.ContainsAny(k, ":：=") {
+		// After a space alone: of ASCII, with a figure or a sign, and no
+		// name of a cipher (密钥 RSA-2048, 密码 SHA-256).
+		return !strings.ContainsFunc(v, func(r rune) bool { return r < 0x80 && !unicode.IsLetter(r) }) ||
+			strings.ContainsFunc(v, func(r rune) bool { return r >= 0x80 }) || cipher.MatchString(v)
+	}
 	if strings.HasSuffix(keep, "是") && !strings.ContainsFunc(v, func(r rune) bool { return !unicode.IsLetter(r) }) {
 		return true
 	}
 	bare := strings.TrimRight(v, ")]}")
 	return selector.MatchString(bare) && reads(bare)
+}
+
+// cipher is the name of a way to encrypt or to hash (RSA-2048, SHA256),
+// which follows 密钥 and 密码 in a sentence.
+var cipher = regexp.MustCompile(`^[A-Z]{2,}[-_]?[0-9]+$`)
+
+// notBearer tells a word after Bearer that is no token: letters alone as
+// a sentence or a program writes them (authentication, YOUR_ACCESS_TOKEN,
+// accessToken).
+func notBearer(_, v, _ string) bool {
+	return aWord.MatchString(v) && (v == strings.ToLower(v) || v == strings.ToUpper(v) || lowerCamel.MatchString(v) || pascal.MatchString(v) || capital.MatchString(v))
 }
 
 // each gives yield the secrets a rule finds in s, in bytes and in their
@@ -817,7 +971,7 @@ func Secrets(s string) []string {
 // here in the text made small letters, was a pass of its own over every
 // text, and let through any that said "key".
 func mayHoldSecret(s string) bool {
-	if len(s) < 12 {
+	if len(s) < 10 { // pwd=abc123
 		return strings.Contains(s, MarkOpen) && len(s) > len(MarkOpen+MarkClose)
 	}
 	return true

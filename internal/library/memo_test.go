@@ -67,10 +67,10 @@ func TestWorkedOutFollowsTheWords(t *testing.T) {
 
 	// Typed in: a secret comes letter by letter, and is one from the
 	// letter that makes it one.
-	c.Text = "家里的 wifi 在楼下\npassword: hunter2"
-	check("seven letters of a password", false, "hunter2", "")
-	c.Text += "h"
-	check("the eighth", true, "password: "+masked, "hunter2h")
+	c.Text = "家里的 wifi 在楼下\npassword: hunt2"
+	check("five letters of a password", false, "hunt2", "")
+	c.Text += "r"
+	check("the sixth", true, "password: "+masked, "hunt2r")
 	c.Text = "家里的 wifi 在楼下"
 	check("taken out again", false, "在楼下", masked)
 

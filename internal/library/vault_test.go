@@ -169,6 +169,14 @@ func TestSealedStaysSealed(t *testing.T) {
 		{"password: ", "pässword1234", ""},
 		{"密码是", "abc12345", ""},
 		{"OPENAI_API_KEY=", "sk-proj-9fK2mB7tLx0QaZr4Hn8Qx7b", "\n第二行"},
+		// And the forms found since.
+		{"密码 ", "abc12345", ""},
+		{"pwd=", "abc123", ""},
+		{"DB_PASS=", "s3cr3tpass", ""},
+		{"Authorization: Bearer ", "abcdefghij0123456789", ""},
+		{"postgres://admin:", "s3cret", "@db.example.com/app"},
+		{"redis://:", "hunter2", "@cache:6379"},
+		{"password: ", "correcthorse", ""},
 	} {
 		tok, ok := l.Vault.Seal(c.secret)
 		if !ok {
