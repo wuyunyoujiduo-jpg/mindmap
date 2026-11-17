@@ -92,35 +92,45 @@ func (s *Server) projectMap(dir string, create bool) (path string, f *model.File
 	}
 	name := filepath.Base(root)
 	remote := gitbase.Remote(root)
+	// Every map is looked at for whose it is, as kept from the call before
+	// when its file is as it was (peek): a call that names no map read
+	// and parsed them all, each time. The one found is read anew, for it
+	// is what the caller changes and writes.
 	var unbound, byRepo string
-	var unboundFile, byRepoFile *model.File
 	for _, p := range files {
-		g, err := model.Load(p)
+		g, err := s.peek(p)
 		if err != nil {
 			continue
 		}
 		if samePath(g.Project, root) {
+			if g, err = model.Load(p); err != nil || !samePath(g.Project, root) {
+				continue // changed since it was looked at
+			}
 			if g.Repo == "" {
 				g.Repo = remote // kept with what is written next
 			}
 			return p, g, nil
 		}
 		if remote != "" && g.Repo == remote && byRepo == "" {
-			byRepo, byRepoFile = p, g
+			byRepo = p
 		}
 		if g.Project == "" && unbound == "" && strings.TrimSuffix(filepath.Base(p), model.Ext) == name {
-			unbound, unboundFile = p, g
+			unbound = p
 		}
 	}
 	if byRepo != "" { // the project's, made on another computer: its folder there is left as it is
-		return byRepo, byRepoFile, nil
+		if g, err := model.Load(byRepo); err == nil && g.Repo == remote {
+			return byRepo, g, nil
+		}
 	}
 	if !create {
 		return "", nil, fmt.Errorf("项目 %s 还没有导图。用 capture、log_decision 或 log_session 记下第一条时会自动建一张", root)
 	}
 	if unbound != "" {
-		unboundFile.Project, unboundFile.Repo = root, remote
-		return unbound, unboundFile, nil
+		if g, err := model.Load(unbound); err == nil && g.Project == "" {
+			g.Project, g.Repo = root, remote
+			return unbound, g, nil
+		}
 	}
 	path = filepath.Join(s.Dir, model.FileName(name))
 	for i := 2; ; i++ {
