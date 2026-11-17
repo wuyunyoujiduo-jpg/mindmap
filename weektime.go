@@ -217,9 +217,12 @@ func (a *app) weekHead(c *ui.Context, days []time.Time, now time.Time) {
 		})
 		for i, d := range days {
 			isToday := sameDay(d, now)
-			rest := d.Weekday() == time.Saturday || d.Weekday() == time.Sunday
+			rest := restDay(d)
 			col := ui.Column(c.Key(fmt.Sprint("week-day:", i))).Grow(1).Basis(0).MinWidth(0).Padding(6, 10, 10).Gap(4).
 				BorderWidth(0, 0, 0, 1).BorderColor(t.Border.Alpha(0.55))
+			if rest {
+				col.Background(restFill(t))
+			}
 			if len(days) > 1 {
 				col.Cursor(ui.CursorPointer).Tooltip("只看这一天")
 				if col.DoubleClicked() {
@@ -227,22 +230,38 @@ func (a *app) weekHead(c *ui.Context, days []time.Time, now time.Time) {
 					a.later(func() { a.tasks.day, a.tasks.view = day, tasksDay })
 				}
 			}
+			// A day of rest is on its ground, its date in the muted ink; a
+			// weekend day worked is as any day. Today's is the accent's on
+			// either.
 			ink, word := t.Text, t.TextMuted
 			switch {
 			case isToday:
 				ink, word = t.Accent, t.Accent
 			case rest:
-				ink, word = faint(t), faint(t)
+				ink = t.TextMuted
 			}
 			col.Children(func() {
 				ui.Text(c, weekdays[d.Weekday()]).FontSize(textCaption).TextColor(word).NoWrap()
 				ui.Row(c).Gap(6).AlignItems(ui.Baseline).Children(func() {
 					ui.Text(c, fmt.Sprint(d.Day())).FontSize(textTitle).FontWeight(700).FontFeatures("tnum").TextColor(ink).NoWrap()
-					lunarText(c, d, rest && !isToday)
+					lunarText(c, d, false)
 				})
 			})
 		}
 	})
+}
+
+// dayGround is the ground of a day's column under its head: a day of
+// rest's (restFill), and today's breath of the accent over it.
+func dayGround(col ui.Element, t *ui.Theme, d, now time.Time) {
+	switch rest, isToday := restDay(d), sameDay(d, now); {
+	case rest && isToday:
+		col.Background(t.Accent.Alpha(0.045).Over(restFill(t)))
+	case isToday:
+		col.Background(todayFill(t))
+	case rest:
+		col.Background(restFill(t))
+	}
 }
 
 // lunarText is the day's word of the Chinese calendar, small: a feast or a
@@ -276,9 +295,7 @@ func (a *app) weekAllDay(c *ui.Context, days []time.Time, allDay [][]weekTask) {
 		for i, d := range days {
 			col := ui.Column(c.Key(fmt.Sprint("allday:", i))).Grow(1).Basis(0).MinWidth(0).MinHeight(34).Padding(4).Gap(3).
 				BorderWidth(0, 0, 0, 1).BorderColor(t.Border.Alpha(0.55)).Background(t.Text.Alpha(0)).Transition(easeLook)
-			if sameDay(d, a.now()) {
-				col.Background(t.Text.Alpha(0.025))
-			}
+			dayGround(col, t, d, a.now())
 			a.dropTaskAt(col, d, dropWholeDay)
 			list := allDay[i]
 			col.Children(func() {
@@ -366,9 +383,7 @@ func (a *app) weekDay(c *ui.Context, i int, d time.Time, timed []weekTask, now t
 	col := ui.Box(c.Key(fmt.Sprint("hours:", i))).Grow(1).Basis(0).MinWidth(0).FillHeight().
 		BorderWidth(0, 0, 0, 1).BorderColor(t.Border.Alpha(0.55))
 	isToday := sameDay(d, now)
-	if isToday {
-		col.Background(t.Text.Alpha(0.025))
-	}
+	dayGround(col, t, d, now)
 	_, py, _ := col.PointerPosition()
 	at := minuteAt(py)
 	dragOver := false

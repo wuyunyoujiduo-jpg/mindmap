@@ -243,6 +243,21 @@ func raise(el ui.Element, t *ui.Theme) ui.Element {
 // blockFill is the fill of a block on the leaf: a card, a field, a track.
 func blockFill(t *ui.Theme) ui.Color { return t.Text.Alpha(0.045) }
 
+// restFill is the ground of a day of rest in the calendars (restDay): a
+// week's column, a month's cell, a day of the small calendar. The block's
+// fill at two thirds, of the ink, a little more of it in the dark;
+// gray says rest there and nothing else.
+func restFill(t *ui.Theme) ui.Color {
+	if t.Dark {
+		return t.Text.Alpha(0.04)
+	}
+	return t.Text.Alpha(0.03)
+}
+
+// todayFill is the breath down today's column of the hours: of the
+// accent, as today's date is, the gray being the days of rest's.
+func todayFill(t *ui.Theme) ui.Color { return t.Accent.Alpha(0.045) }
+
 // paper gives an element the look of a card on a block (a task in a
 // column of the board, of the week): white, with a hairline at its edge.
 func paper(el ui.Element, t *ui.Theme) ui.Element {
@@ -514,8 +529,9 @@ func chipButton(c *ui.Context, text, label, tip string) ui.Element {
 }
 
 // dateProp is the row of a day that may not be set: the day to change
-// and to clear, or, with none, a few days near to choose from.
-func dateProp(c *ui.Context, name, label string, date *time.Time, now time.Time, set func(*time.Time)) {
+// and to clear (dateField, the app's small calendar), or, with none, a
+// few days near to choose from.
+func (a *app) dateProp(c *ui.Context, name, label string, date *time.Time, now time.Time, set func(*time.Time)) {
 	propRow(c, name, func() {
 		if date == nil {
 			day := today(now)
@@ -531,7 +547,7 @@ func dateProp(c *ui.Context, name, label string, date *time.Time, now time.Time,
 			return
 		}
 		d := *date
-		if ui.DateInput(c.Key("date:"+label), &d).Label(label).FontSize(textSmall).Background(blockFill(c.Theme())).BorderColor(ui.RGBA(0, 0, 0, 0)).Changed() {
+		if a.dateField(c, "date:"+label, label, &d) {
 			d = today(d)
 			set(&d)
 		}

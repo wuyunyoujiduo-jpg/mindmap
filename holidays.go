@@ -147,6 +147,14 @@ func workday(d time.Time) bool {
 
 func init() { model.Workday = workday }
 
+// restDay reports whether the day d is one of rest: a day the notice
+// gives off, or a Saturday or Sunday it does not name as worked. It is
+// the one thing the calendars ask to choose a day's ground (restFill): a
+// weekend day worked is as any day worked, and a year whose notice is not
+// out, or the holidays turned off in the settings, goes by Saturday and
+// Sunday alone.
+func restDay(d time.Time) bool { return !workday(d) }
+
 // holidaysFetch fetches the notices of the year before, this one and the
 // next, each once a day; a year not out yet is asked again the next day.
 func (a *app) holidaysFetch() {
@@ -228,7 +236,8 @@ func clearHolidays() {
 
 // holidayMark is the small mark of a day the notice names, by its date:
 // 休 for a day off, 班 for a weekend day worked; its name under the
-// pointer.
+// pointer. A mark is for what is not as the week has it: a weekend of no
+// notice has none, its ground saying it (restFill).
 func holidayMark(c *ui.Context, d time.Time) {
 	h, ok := holidayOn(d)
 	if !ok {

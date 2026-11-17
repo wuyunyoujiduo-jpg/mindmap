@@ -303,9 +303,9 @@ func (a *app) taskEditor(c *ui.Context, n *model.Node) {
 			a.mutate("", func() { task.Priority = model.Priorities[p] })
 		}
 	})
-	dateProp(c, "截止", "截止日期", task.Due, a.now(), func(d *time.Time) { a.mutate("", func() { task.Due = d }) })
+	a.dateProp(c, "截止", "截止日期", task.Due, a.now(), func(d *time.Time) { a.mutate("", func() { task.Due = d }) })
 	if task.Start != nil || a.panelShow[n.ID+":plan"] {
-		dateProp(c, "开始", "开始日期", task.Start, a.now(), func(d *time.Time) { a.mutate("", func() { task.Start = d }) })
+		a.dateProp(c, "开始", "开始日期", task.Start, a.now(), func(d *time.Time) { a.mutate("", func() { task.Start = d }) })
 	}
 	if task.Overdue(a.now()) {
 		propRow(c, "", func() { ui.Text(c, "已逾期").FontSize(textSmall).TextColor(t.Danger) })

@@ -880,7 +880,7 @@ func (a *app) taskDetail(c *ui.Context, it taskItem) {
 							a.later(func() { a.editTask(it, "改优先级", func(n *model.Node) { n.Task.Priority = pr }) })
 						}
 					})
-					dateProp(c, "日期", "截止日期", task.Due, a.now(), func(d *time.Time) { a.later(func() { a.setTaskDay(it, d) }) })
+					a.dateProp(c, "日期", "截止日期", task.Due, a.now(), func(d *time.Time) { a.later(func() { a.setTaskDay(it, d) }) })
 					a.timeProp(c, it)
 					a.repeatProp(c, it)
 					a.remindProp(c, it)
@@ -1041,6 +1041,7 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 		title  string
 		danger bool
 		drop   *time.Time // the day a task dropped on the group goes to
+		day    *time.Time // the day it is, where it is one day
 		items  []taskItem
 	}
 	var groups []*group
@@ -1113,6 +1114,7 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 				title = fmt.Sprintf("%s  %d月%d日", weekdayName(d), d.Month(), d.Day())
 			}
 			days[i] = add(title, false, at(d))
+			days[i].day = at(d)
 		}
 		for _, it := range items {
 			d := it.date()
@@ -1174,6 +1176,7 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 		// After tomorrow, the rest of the seven days from today on, by
 		// their name: it said 未来 7 天 and held six.
 		tomorrow, week := add("明天", false, at(day.AddDate(0, 0, 1))), add("7 天内", false, nil)
+		todayG.day, tomorrow.day = todayG.drop, tomorrow.drop
 		later, none := add("之后", false, nil), add("没定日期", false, nil)
 		for _, it := range items {
 			if it.done() || it.doneAt() != nil {
@@ -1234,6 +1237,11 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 				}
 				box.Children(func() {
 					ui.Row(c).Height(32).Padding(6, 8, 0).Gap(6).AlignItems(ui.Center).FillWidth().Children(func() {
+						// A day of rest's name is on the ground of rest, as its
+						// column of the week is (restDay).
+						if g.day != nil && restDay(*g.day) {
+							ui.Box(c.Key("rest")).Absolute().Top(6).Left(0).Right(0).Bottom(0).Radius(radiusSmall).Background(restFill(t)).PassThrough()
+						}
 						// A group's name is small and quiet: the tasks are what is read.
 						col := t.TextMuted
 						switch {
@@ -1245,6 +1253,9 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 						ui.Text(c, g.title).FontSize(textCaption).FontWeight(700).LetterSpacing(0.3).TextColor(col)
 						if len(g.items) > 0 {
 							ui.Text(c, fmt.Sprint(len(g.items))).FontSize(textCaption).TextColor(faint(t)).FontFeatures("tnum")
+						}
+						if g.day != nil {
+							holidayMark(c, *g.day)
 						}
 						if g.danger && len(g.items) > 0 {
 							// What is late is put on today in one go, as TickTick's 顺延.
@@ -1987,8 +1998,12 @@ func (a *app) monthView(c *ui.Context, items []taskItem) {
 	ui.Column(c.Key("month")).Grow(1).Padding(0, 12, 12).Children(func() {
 		ui.Row(c).Shrink(0).Children(func() {
 			for i := range 7 {
-				w := weekdays[start.AddDate(0, 0, i).Weekday()][len("周"):]
-				ui.Text(c, "周"+w).FontSize(textCaption).TextColor(t.TextMuted).Grow(1).Basis(0).Padding(8, 8, 4)
+				// Saturday and Sunday are named faintly: the week's days of rest.
+				wd, ink := start.AddDate(0, 0, i).Weekday(), t.TextMuted
+				if wd == time.Saturday || wd == time.Sunday {
+					ink = faint(t)
+				}
+				ui.Text(c, weekdays[wd]).FontSize(textCaption).TextColor(ink).Grow(1).Basis(0).Padding(8, 8, 4)
 			}
 		})
 		for week := range 6 {
@@ -2001,8 +2016,11 @@ func (a *app) monthView(c *ui.Context, items []taskItem) {
 					if i > 0 {
 						cell.BorderWidth(0, 0, 0, 1).BorderColor(hairline(t))
 					}
-					if !in {
-						cell.Background(t.Text.Alpha(0.02))
+					// The ground says a day of rest, and that alone: a day of
+					// another month is told by its faint figures.
+					rest := restDay(d)
+					if rest {
+						cell.Background(restFill(t))
 					}
 					a.dropTaskAt(cell, d, dropDayAlone)
 					if cell.DoubleClicked() {
@@ -2017,7 +2035,9 @@ func (a *app) monthView(c *ui.Context, items []taskItem) {
 							case sameDay(d, a.now()):
 								num.TextColor(t.Accent).FontWeight(700)
 							case !in:
-								num.TextColor(t.TextMuted.Alpha(0.6))
+								num.TextColor(faint(t))
+							case rest:
+								num.TextColor(t.TextMuted)
 							}
 							lunarText(c, d, !in)
 						})
@@ -2488,7 +2508,7 @@ func (a *app) repeatProp(c *ui.Context, it taskItem) {
 		switch {
 		case rep.Until != nil:
 			end := *rep.Until
-			if ui.DateInput(c.Key("repeat-until"), &end).Label("重复结束日期").FontSize(textSmall).Background(blockFill(t)).BorderColor(ui.RGBA(0, 0, 0, 0)).Changed() {
+			if a.dateField(c, "repeat-until", "重复结束日期", &end) {
 				end = today(end)
 				change(func(r *model.Repeat) { r.Until = &end })
 			}

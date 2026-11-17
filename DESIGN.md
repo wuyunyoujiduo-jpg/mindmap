@@ -295,9 +295,8 @@ Built to the draft https://claude.ai/artifact/5Nw4Mn4q4ozd9rpUNGh8AP.
   0.103, after TickTick's and Feishu's): the hours down the left, 48 to
   an hour, a faint line at each; a column a day cut by a faint line,
   headed by its weekday, its date at 16/700 and the Chinese calendar's
-  day by it, today's in the accent and on a breath of shade down its
-  column, the days of rest faint, 休 and 班 as small tags of the
-  success's and the danger's colors. Over the hours a band of the tasks
+  day by it, today's in the accent and on a breath of the accent down
+  its column (`todayFill`: the gray is the days of rest's). Over the hours a band of the tasks
   of the whole day, each a pale block (`taskChip`). A task with a time is
   a block on its hours, on its map's pastel laid whole on the white with
   a line of the map's color at its left, side by side with those it
@@ -306,8 +305,26 @@ Built to the draft https://claude.ai/artifact/5Nw4Mn4q4ozd9rpUNGh8AP.
   column. What is being chosen or dragged to is a tint of the accent
   with its hours said in it (`hourShade`).
 - **The month**: a cell a day cut by hairlines, the days of other months
-  on a faint shade; a few of a day's tasks as pale blocks and how many
-  more.
+  told by faint figures alone; a few of a day's tasks as pale blocks and
+  how many more.
+- **Days of rest** (`restDay`, `restFill`; the user's, after the draft's
+  fourth page): two rules, the same in every calendar. The ground says
+  whether a day is one of rest: a Saturday or Sunday not worked, or a day
+  the holidays' notice gives off, is on `restFill` (the ink at 3%, 4% in
+  the dark: the block's fill at two thirds) with its date and weekday in
+  the muted ink; a weekend day worked is as any day worked, white and in
+  the ink. And a mark is for what is not as the week has it: 休 (with the
+  holiday's name under the pointer) on a day off, 班 on a weekend worked,
+  small tags of the success's and the danger's colors; a weekend as any
+  has none. In the week and the day the whole column is on the ground,
+  head, band and hours; in the month the cell, a day of another month
+  too, and Saturday's and Sunday's names over it are faint; in a list of
+  days (最近 7 天, 今天 and 明天 of 全部) the day's heading is on it, with
+  its tag; in the small calendar of a day to choose (`dateField`,
+  `monthPick`, the app's own for this) the day's cell, the tag a small 休
+  or 班 at its corner. Today keeps its accent over the ground. A year
+  with no notice, and the holidays turned off, go by Saturday and Sunday.
+  Gray in a calendar says rest and nothing else.
 - **The AI's key by a heading** (`sparkKey`): the spark and its words in
   the accent, on no block until pointed at.
 
