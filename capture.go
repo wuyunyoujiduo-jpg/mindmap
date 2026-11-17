@@ -128,7 +128,7 @@ func (a *app) capture(text string, where int) error {
 	}
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		f := model.NewFile(inboxName)
-		f.Sheets[0].Root.Note = "随手记下的想法和待办，之后整理到对应的导图里（右键节点「移到其他导图…」）。"
+		f.Sheets[0].Root.Note = "随手记下的想法和待办，之后整理到对应的导图里（在主题的菜单里选「移到其他导图…」）。"
 		if err := f.Save(path); err != nil {
 			return err
 		}
@@ -222,15 +222,13 @@ func (a *app) captureView(c *ui.Context) {
 				ui.Text(c, a.captureErr).FontSize(textSmall).TextColor(t.Danger).Shrink(1).SingleLine()
 			} else if strings.TrimSpace(a.captureText) != "" && a.captureWhere != captureHere {
 				// Where it goes, said as it is written.
-				if a.captureWhere == captureInbox || a.captureWhere == captureAuto && taskLike(a.captureText, a.now()) {
+				if taskLike(a.captureText, a.now()) { // captureAuto: the window sets no other but captureHere
 					pill(c, "任务 → 收件箱", t.Text.Alpha(0.06), t.Accent)
 				} else {
 					pill(c, "灵感", t.Text.Alpha(0.06), t.TextMuted)
 				}
-			} else {
-				ui.Text(c, "⇧↩ 换行 · Esc 关闭").FontSize(textCaption).TextColor(t.TextMuted)
 			}
-			if accentButton(c, "记录 ↩", "保存").Clicked() {
+			if accentButton(c, "记下", "记下并收起这个窗口").Clicked() {
 				save()
 			}
 		})
@@ -448,7 +446,7 @@ func (a *app) settingsView(c *ui.Context) {
 			ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(10).Children(func() {
 				ui.Row(c).AlignItems(ui.Center).Children(func() {
 					ui.Text(c, tabs[a.settingsTab]).FontSize(textTitle).FontWeight(700).Grow(1)
-					if iconButton(c, iconClose, "关闭", "关闭（Esc）", 28, true).Clicked() {
+					if iconButton(c, iconClose, "关闭", "关闭", 28, true).Clicked() {
 						a.settingsOpen = false
 					}
 				})

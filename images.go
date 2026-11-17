@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
 
@@ -26,18 +27,9 @@ const (
 	thumbGap  = 6
 )
 
-// imageExts are the extensions of the pictures a node takes.
-var imageExts = []string{".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}
-
-func isImageFile(path string) bool {
-	ext := strings.ToLower(filepath.Ext(path))
-	for _, e := range imageExts {
-		if ext == e {
-			return true
-		}
-	}
-	return false
-}
+// isImageFile tells whether a file is a picture a node takes: those 收集
+// takes for pictures.
+func isImageFile(path string) bool { return library.IsImage(path) }
 
 // thumbSize is the size a picture shows at in its node, at zoom 1.
 func thumbSize(img *model.Image) (float32, float32) {
@@ -89,7 +81,7 @@ func (a *app) saveAsset(data []byte, ext string) (string, *ui.Bitmap, error) {
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return "", nil, err
 	}
-	a.bitmaps[path] = b
+	a.keepPicture(path, b)
 	return name, b, nil
 }
 
@@ -183,7 +175,7 @@ func (a *app) thumbnail(c *ui.Context, n *model.Node, w, h float32) ui.Element {
 		})
 	}
 	img := ui.Image(c.Key("image"), b).Size(w, h).Fit(ui.Contain).Radius(6).Cursor(ui.CursorPointer).
-		Label("图片：" + n.Title).Tooltip("双击查看大图 · 选中后按 Delete 删除")
+		Label("图片：" + n.Title).Tooltip("看大图")
 	// A click selects the picture, which Delete then takes off the node;
 	// a double click shows it large.
 	if img.Clicked() {
@@ -239,8 +231,24 @@ func (a *app) lightboxView(c *ui.Context) {
 		if overlay.Shortcut(ui.Cmd, ui.KeyC) {
 			a.copyImage(shown)
 		}
-		ui.Textf(c, "%s · %d×%d · 右键或 ⌘C 复制 · 点击或按 Esc 关闭", n.Title, shown.W, shown.H).FontSize(12).
-			TextColor(ui.RGBA(255, 255, 255, 0.8)).PassThrough()
+		// What it is, and the key that copies it: the picture's menu and
+		// ⌘C do too, which a phone has not, and which were said here in
+		// the words of a pointer and a keyboard.
+		ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
+			ui.Textf(c, "%s · %d×%d", n.Title, shown.W, shown.H).FontSize(12).
+				TextColor(ui.RGBA(255, 255, 255, 0.8)).PassThrough()
+			key := ui.Box(c.Key("copy-large")).Padding(4, 10).Radius(radiusSmall).Cursor(ui.CursorPointer).
+				Label("复制图片").Tooltip("把这张图片复制到剪贴板").Background(ui.RGBA(255, 255, 255, 0.14)).Transition(easeLook)
+			if key.Hovered() {
+				key.Background(ui.RGBA(255, 255, 255, 0.24))
+			}
+			key.Children(func() {
+				ui.Text(c, "复制").FontSize(12).TextColor(ui.RGBA(255, 255, 255, 0.92)).PassThrough()
+			})
+			if key.Clicked() {
+				a.copyImage(shown)
+			}
+		})
 	})
 }
 
@@ -277,7 +285,7 @@ func (a *app) imageSection(c *ui.Context, n *model.Node) {
 				}
 			})
 			if n.Image == nil {
-				ui.Text(c, "也可以选中节点后按 ⌘V 粘贴图片，或把图片文件拖到节点上。").FontSize(12).TextColor(t.TextMuted).Wrap()
+				ui.Text(c, "也可以选中节点后粘贴图片，或把图片文件拖到节点上。").FontSize(12).TextColor(t.TextMuted).Wrap()
 			}
 		})
 	})

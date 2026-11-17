@@ -142,12 +142,11 @@ func (a *app) noteLinkOffers(c *ui.Context, place string, d *noteDoc, n *model.N
 	if caret < 0 || caret > text.Len() {
 		return
 	}
-	part, at, ok := linkBegun(text.Slice(0, caret).PlainText())
+	part, _, ok := linkBegun(text.Slice(0, caret).PlainText())
 	if !ok {
 		return
 	}
 	start := caret - utf8.RuneCountInString(part) - 2
-	_ = at
 	ui.Row(c.Key(place+"-link-offers")).Gap(6).GapY(4).Padding(4, 0, 0).Wrap().AlignItems(ui.Center).FillWidth().Children(func() {
 		if o, got := a.offerChips(c, part); got && start >= 0 {
 			link := o.link

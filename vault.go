@@ -132,7 +132,7 @@ func (a *app) vaultSweep() int {
 		n, _, err = a.lib.UnsealAll()
 	}
 	if err != nil {
-		a.libErr = err.Error()
+		a.libFail(err.Error())
 	}
 	if n > 0 {
 		a.syncChange()
@@ -276,7 +276,14 @@ func (a *app) fieldTyped(clip *library.Clip, field, typed, stored string) {
 // showSecrets shows the secrets of a clip in its details, the password
 // asked first when they are sealed.
 func (a *app) showSecrets(clip *library.Clip) {
+	id := clip.ID
 	show := func() {
+		// Found again: the password asked, the library may have been read
+		// again meanwhile.
+		clip := a.lib.Find(id)
+		if clip == nil {
+			return
+		}
 		probe := *clip
 		if !a.lib.Unseal(&probe) {
 			a.tell("这条是用另一个二次密码加密的，用那个密码解锁")
@@ -340,32 +347,57 @@ func (a *app) copyOpened(text string, sealed bool) {
 }
 
 // sealedOut is a clip's words as they go elsewhere, to a map's topic or a
-// task: what is sealed in them in dots. The secret stays in the clip.
-// (Not all that the rules take for a secret: the words go there for
-// good, and the rules take some plain words for one, docs/审查清单.md.)
-func sealedOut(s string) string {
-	if vault.Has(s) || library.Marked(s) {
-		return library.Mask(s)
-	}
-	return s
-}
+// task: its secrets in dots, as its card has them, those sealed and those
+// the rules find in what is kept as written. The secret stays in the
+// clip. (With no second password set, a note with a password made a task
+// had the password in the task's name, and dots on its card.)
+func sealedOut(s string) string { return library.Mask(s) }
 
 // lockWhole seals the whole of a clip's text and note, or back.
 func (a *app) lockWhole(clip *library.Clip, on bool) {
+	// By its ID, found again when it is done: this is called once a
+	// password was set or asked, and setting one syncs, which may read
+	// the library again. The clip held since then is one the library has
+	// no more, and sealing it wrote an old clip over the new.
+	id := clip.ID
+	if clip = a.lib.Find(id); clip == nil {
+		return
+	}
 	if on {
 		clip.Locked = true
 		a.saveClip(clip)
 		a.hideSecrets()
-		a.tellUndo("已整条加密：内容和备注都加密了，标题留着好找", func() { a.lockWhole(clip, false) })
+		a.tellUndo("已整条加密：内容和备注都加密了，标题留着好找", func() {
+			if clip := a.lib.Find(id); clip != nil {
+				a.lockWhole(clip, false)
+			}
+		})
 		return
 	}
 	a.withVault(func() {
-		if !a.lib.Unseal(clip) {
+		clip := a.lib.Find(id)
+		if clip == nil {
+			return
+		}
+		// Opened as a copy, which is the clip only once all of it is open
+		// (as showSecrets does): of a clip sealed by two keys, one of them
+		// not open, what was opened stayed in memory unsealed, not kept,
+		// and was written so by the next thing that saved the clip.
+		open := *clip
+		if !a.lib.Unseal(&open) {
 			a.tell("这条是用另一个二次密码加密的，用那个密码解锁")
 			return
 		}
-		clip.Locked = false
-		a.saveClip(clip) // what looks like a secret in it is sealed again
+		open.Locked = false
+		sealed := *clip
+		*clip = open
+		// What looks like a secret in it is sealed again as it is kept.
+		if err := a.lib.Save(clip, a.now()); err != nil {
+			*clip = sealed
+			a.libFail(err.Error())
+			return
+		}
+		a.noteLibraryWrite()
 		a.tell("已取消整条加密，只加密其中的密钥")
 	})
 }

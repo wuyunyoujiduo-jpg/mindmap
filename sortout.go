@@ -67,7 +67,7 @@ func (a *app) suggestPlaces() {
 			a.tasks.places[tasks[i].node.ID] = p
 		}
 		if len(got) == 0 {
-			a.tasks.placeErr = "AI 觉得这些任务都不属于现有的主题，可以右键「移到导图…」自己放"
+			a.tasks.placeErr = "AI 觉得这些任务都不属于现有的主题，可以在任务的菜单里选「移到导图…」自己放"
 		}
 	})
 }

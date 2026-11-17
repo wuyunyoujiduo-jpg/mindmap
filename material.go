@@ -70,7 +70,7 @@ func (a *app) listedMaterial() []*library.Clip {
 // aiMaterialToMap has the AI arrange material into a new map, linking it.
 func (a *app) aiMaterialToMap(name string, clips []*library.Clip) {
 	if len(clips) == 0 {
-		a.libErr = "没有资料可以整理。"
+		a.libFail("没有资料可以整理。")
 		return
 	}
 	list, refs := a.materialLines(clips)
@@ -83,12 +83,12 @@ func (a *app) aiMaterialToMap(name string, clips []*library.Clip) {
 // belongs.
 func (a *app) aiMergeMaterial(clips []*library.Clip) {
 	if a.doc == nil {
-		a.libErr = "先打开要并入的导图。"
+		a.libFail("先打开要并入的导图。")
 		return
 	}
 	list, refs := a.materialLines(clips)
 	if len(refs) == 0 {
-		a.libErr = "没有资料可以并入。"
+		a.libFail("没有资料可以并入。")
 		return
 	}
 	a.libOpen = false

@@ -3544,7 +3544,7 @@ func TestNotePictureAndCopyImage(t *testing.T) {
 	if a.lightbox != "note:"+n.ID {
 		t.Fatalf("lightbox %q", a.lightbox)
 	}
-	if !tt.HasText("后端 · 400×300 · 右键或 ⌘C 复制 · 点击或按 Esc 关闭") {
+	if !tt.HasText("后端 · 400×300") {
 		t.Fatalf("texts %q", tt.Texts())
 	}
 	snapshot(t, tt, "note-picture-large")

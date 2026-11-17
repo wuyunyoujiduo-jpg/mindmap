@@ -106,7 +106,8 @@ func (a *app) embedLibrary() {
 			a.embedErr = err.Error()
 			return
 		}
-		a.noteLibraryWrite()
+		// Nothing of the library's that is synced was written: the vectors
+		// are this computer's, made again on another.
 		a.embedLibrary()
 	})
 }
@@ -300,7 +301,7 @@ func (a *app) clipPlacesSection(c *ui.Context, clip *library.Clip) {
 						p := p
 						a.later(func() {
 							if err := a.attachTo(p.path, p.id, ref, "资料"); err != nil {
-								a.libErr = err.Error()
+								a.libFail(err.Error())
 							}
 						})
 					}
@@ -336,7 +337,7 @@ func (a *app) recentClips(days int) []*library.Clip {
 func (a *app) aiReview(days int) {
 	clips := a.recentClips(days)
 	if len(clips) == 0 {
-		a.libErr = fmt.Sprintf("最近 %d 天没有收藏资料。", days)
+		a.libFail(fmt.Sprintf("最近 %d 天没有收藏资料。", days))
 		return
 	}
 	var b strings.Builder

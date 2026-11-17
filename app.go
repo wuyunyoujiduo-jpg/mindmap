@@ -395,6 +395,7 @@ type app struct {
 	// The AI assistant.
 	bitmaps      map[string]*ui.Bitmap // pictures of nodes, by file, decoded once
 	pictureBusy  map[string]bool       // the pictures being read (filePicture)
+	collect      collectState          // more of 收集's state (libview.go)
 	lightbox     string                // the node whose picture shows large
 	ai           aiState
 	aiOpen       bool // the panel shows the assistant

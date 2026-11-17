@@ -45,6 +45,8 @@ func (a *app) openLibrary() {
 		l = &library.Library{Dir: dir}
 	}
 	a.lib, a.libSel = l, ""
+	// What was deleted long enough ago to be taken back no more.
+	l.EmptyTrash(a.now().Add(-trashLife))
 	a.keepVault(l)
 	a.libMod = modTime(filepath.Join(dir, "clips"))
 }
@@ -71,6 +73,10 @@ func (a *app) checkLibrary() {
 		if !known[c.ID] && c.Organized == nil {
 			a.enqueueClip(c.ID, !a.cfg.LibraryManual)
 		}
+		delete(known, c.ID)
+	}
+	for id := range known { // deleted elsewhere
+		a.clipGone(id)
 	}
 }
 
@@ -124,48 +130,92 @@ func (a *app) addClipImage(data []byte, source string) (*library.Clip, error) {
 	return a.kept(a.lib.AddData(data, name, library.KindImage, source, a.now()))
 }
 
-// clipClipboard keeps what is on the clipboard: the files copied, else a
-// picture, else the text. It returns the clips kept.
-func (a *app) clipClipboard(source string) ([]*library.Clip, error) {
-	var out []*library.Clip
-	for _, f := range a.plat.ClipboardFiles() {
+// addClipFiles keeps files, each of them: one that cannot be kept does
+// not stop those after it (the first that failed ended it, and nothing
+// was said of the rest). It returns the clips kept, how many files could
+// not be, and what the first of those said.
+func (a *app) addClipFiles(files []string, source string) (kept []*library.Clip, failed int, first error) {
+	for _, f := range files {
 		if info, err := os.Stat(f); err != nil || info.IsDir() {
 			continue
 		}
 		c, err := a.addClipFile(f, source)
 		if err != nil {
-			return out, err
+			if failed++; first == nil {
+				first = fmt.Errorf("%s：%w", filepath.Base(f), err)
+			}
+			continue
 		}
-		out = append(out, c)
+		kept = append(kept, c)
 	}
-	if len(out) > 0 {
-		return out, nil
+	return kept, failed, first
+}
+
+// filesFailed says how many files could not be kept, of how many, and why
+// the first could not.
+func filesFailed(failed, kept int, first error) string {
+	switch {
+	case failed == 1 && kept == 0:
+		return "没有存下 " + first.Error()
+	case kept == 0:
+		return fmt.Sprintf("%d 个文件都没有存下，第一个是 %s", failed, first)
+	}
+	return fmt.Sprintf("存下了 %d 个，另有 %d 个没有存下，第一个是 %s", kept, failed, first)
+}
+
+// clipClipboard keeps what is on the clipboard: the files copied, else a
+// picture, else the text. It returns the clips kept, and says in a toast
+// how many of the files could not be.
+func (a *app) clipClipboard(source string) ([]*library.Clip, error) {
+	out, missed, err := a.clipClipboardAll(source)
+	if err == nil && missed != "" {
+		a.tell(missed)
+	}
+	return out, err
+}
+
+// clipClipboardAll is clipClipboard, with what it would say of the files
+// that could not be kept beside those that were (missed) left to say.
+func (a *app) clipClipboardAll(source string) (out []*library.Clip, missed string, err error) {
+	out, failed, first := a.addClipFiles(a.plat.ClipboardFiles(), source)
+	switch {
+	case len(out) > 0 && failed > 0:
+		return out, filesFailed(failed, len(out), first), nil
+	case len(out) > 0:
+		return out, "", nil
+	case failed > 0:
+		return nil, "", errors.New(filesFailed(failed, 0, first))
 	}
 	if data := a.plat.ClipboardImage(); len(data) > 0 {
 		c, err := a.addClipImage(data, source)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
-		return []*library.Clip{c}, nil
+		return []*library.Clip{c}, "", nil
 	}
 	text := a.plat.ClipboardText()
 	if strings.TrimSpace(text) == "" {
-		return nil, errors.New("剪贴板是空的")
+		return nil, "", errors.New("剪贴板是空的")
 	}
 	c, err := a.addClipText(text, source)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return []*library.Clip{c}, nil
+	return []*library.Clip{c}, "", nil
 }
 
 // clipFromShortcut keeps the clipboard when the global shortcut is
 // pressed, in any app, and says so in a notification.
 func (a *app) clipFromShortcut() {
 	a.dupe = false
-	clips, err := a.clipClipboard("剪贴板")
+	clips, missed, err := a.clipClipboardAll("剪贴板")
 	if err != nil {
 		a.plat.Notify("没有存到收集", err.Error())
+		return
+	}
+	if missed != "" { // some of the files and not others
+		a.plat.Notify("有文件没有存到收集", missed)
+		a.tell(missed)
 		return
 	}
 	if a.dupe && len(clips) == 1 {
@@ -367,7 +417,7 @@ func (a *app) finishClipJob(id string, r clipResult) {
 		}
 		if r.page != nil || r.org != nil {
 			if err := a.lib.Save(c, a.now()); err != nil {
-				a.libErr = err.Error()
+				a.libFail("没有存下：" + err.Error())
 			}
 			a.noteLibraryWrite()
 		}
@@ -450,12 +500,15 @@ const (
 
 // clipContentLen is how much there was to read of a clip: its text and
 // note, or what its pictures showed (the new answer's, when there is one).
+// As it reads (library.ReadLen), not as it is kept: a key sealed in it is
+// a token of some hundred and thirty letters, which made a short note
+// with a key in it a long one, with a description and a summary.
 func clipContentLen(c *library.Clip, o *clipOrganized) int {
 	text := c.Text
 	if (c.Kind == library.KindImage || isVideo(c)) && o != nil && strings.TrimSpace(o.Text) != "" {
 		text = o.Text // seen again: what was seen before is not added to it
 	}
-	return utf8.RuneCountInString(strings.TrimSpace(text)) + utf8.RuneCountInString(strings.TrimSpace(c.Note))
+	return library.ReadLen(text) + library.ReadLen(c.Note)
 }
 
 // fillerWords say, of a clause, that what the clip is cannot be told:
@@ -619,7 +672,7 @@ const briefLen = 200
 // briefClip tells whether a clip is a note short enough to need no
 // summary: what the AI wrote of it would be longer than the note.
 func briefClip(c *library.Clip) bool {
-	return c.Kind == library.KindText && len([]rune(strings.TrimSpace(c.Text))) <= briefLen
+	return c.Kind == library.KindText && library.ReadLen(c.Text) <= briefLen
 }
 
 // organizePromptFor puts a clip into a prompt.
@@ -794,7 +847,7 @@ func (a *app) clipToMap(c *library.Clip) error {
 			b, _ = ui.DecodeBitmap(data)
 		}
 		if b != nil {
-			a.bitmaps[filepath.Join(dir, file)] = b
+			a.keepPicture(filepath.Join(dir, file), b)
 			w, h := b.Size()
 			n.Image = &model.Image{File: file, W: w, H: h}
 		} else {
