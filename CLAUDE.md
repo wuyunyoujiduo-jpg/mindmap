@@ -150,8 +150,12 @@ by AI, and an AI assistant.
     task's state, priority and day are set with `segmented` and `dateProp`.
     A task may have a span of its day (`Task.Time`, `EndTime`,
     `timeProp`, `parseClock`: 明天 9点到10点半 开会), which the week shows
-    on its chip, a day's tasks of the whole day first and then by their
-    time (`byTime`), and which is when it reminds, set newly. How it
+    as hours (`weektime.go`, the user's, 0.103, after TickTick's and
+    Feishu's: the hours down the left, a band of the whole day's tasks
+    over them, timed tasks blocks on their hours side by side where they
+    meet, `lanes`, now a line across today; a task dropped on a half hour
+    goes to it, `dropTaskAt`), a day's tasks of the whole day first and
+    then by their time (`byTime`), and which is when it reminds, set newly. How it
     repeats is TickTick's, which the user named (0.102): by the year
     too, by dates of the month or its Nth weekday, ending on a day or
     after so many times, counted from the day done (`model.Repeat`).

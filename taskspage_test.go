@@ -565,3 +565,15 @@ func TestTaskTimeSpan(t *testing.T) {
 	}
 	snapshot(t, tt, "task-time")
 }
+
+// Timed tasks that meet share their day's column, side by side.
+func TestWeekLanes(t *testing.T) {
+	ws := lanes([]weekTask{{from: 540, to: 600}, {from: 570, to: 630}, {from: 600, to: 660}, {from: 720, to: 750}})
+	got := ""
+	for _, w := range ws {
+		got += fmt.Sprintf("%d/%d ", w.lane, w.lanes)
+	}
+	if got != "0/2 1/2 0/2 0/1 " {
+		t.Fatalf("lanes %q", got)
+	}
+}

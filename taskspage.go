@@ -61,6 +61,10 @@ type tasksState struct {
 	// spanOwn is the task whose time of day is being written, as remind's.
 	spanOwn, spanText string
 	spanBad           bool
+	// weekScroll is how far the week's hours are scrolled; weekAt the week
+	// it was set for, a week newly shown opening at its first hours.
+	weekScroll ui.ScrollState
+	weekAt     time.Time
 	// What the agents reported, as last gathered; how far back the list
 	// looks (agentRanges); and when it was looked at before this time,
 	// what came since being marked as new.
@@ -1935,62 +1939,6 @@ func (a *app) theme() *ui.Theme {
 		return a.lastTheme
 	}
 	return ui.LightTheme()
-}
-
-// weekView is the week of the day shown: a column a day, its tasks in it,
-// which tasks dragged to another day go to.
-func (a *app) weekView(c *ui.Context, items []taskItem) {
-	t := c.Theme()
-	start := weekStart(a.tasks.day)
-	// A column a day, cut from the next by a thin line, as a calendar's:
-	// today's on a breath of the accent, its day in a dot of it.
-	ui.Row(c.Key("week")).Grow(1).AlignItems(ui.Stretch).Margin(10, 28, 0).BorderWidth(1, 0, 0, 0).BorderColor(hairline(t)).Children(func() {
-		for i := range 7 {
-			d := start.AddDate(0, 0, i)
-			isToday := sameDay(d, a.now())
-			rest := d.Weekday() == time.Saturday || d.Weekday() == time.Sunday
-			col := ui.Column(c.Key(fmt.Sprint("week-day:", i))).Grow(1).Basis(0).MinWidth(0).Padding(8, 8, 10).Gap(4).Background(t.Text.Alpha(0))
-			if i < 6 {
-				col.BorderWidth(0, 1, 0, 0).BorderColor(t.Border.Alpha(0.55))
-			}
-			if isToday {
-				col.Background(t.Accent.Alpha(0.035))
-			}
-			a.dropTaskOn(col, d)
-			if col.DoubleClicked() {
-				a.tasks.day, a.tasks.view = d, tasksDay
-			}
-			col.Children(func() {
-				ui.Row(c).Height(34).Padding(0, 2).Gap(8).AlignItems(ui.Center).Children(func() {
-					dot := ui.Box(c).Size(26, 26).Radius(13).Center().Shrink(0)
-					ink, word, name := t.Text, t.TextMuted, weekdayName(d)
-					switch {
-					case isToday:
-						dot.Background(t.Accent)
-						ink, word, name = t.AccentText, t.Accent, "今天"
-					case rest:
-						ink, word = faint(t), faint(t)
-					}
-					dot.Children(func() {
-						ui.Text(c, fmt.Sprint(d.Day())).FontSize(textBody).FontWeight(700).FontFeatures("tnum").TextColor(ink)
-					})
-					ui.Text(c, name).FontSize(textCaption).TextColor(word).NoWrap()
-				})
-				ui.Scroll(c.Key("scroll")).Grow(1).Children(func() {
-					ui.Column(c).Gap(4).FillWidth().Children(func() {
-						for _, it := range byTime(items, d) {
-							a.taskChip(c, it, true)
-						}
-						for _, it := range items { // and those that come again on it
-							if a.comesAgain(it, d, d) {
-								a.taskGhost(c, it, d)
-							}
-						}
-					})
-				})
-			})
-		}
-	})
 }
 
 // monthView is the month of the day shown: a cell a day, a few of its
