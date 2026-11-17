@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
 	"time"
@@ -105,6 +106,9 @@ type config struct {
 	// repository, the same on every computer, and not where this
 	// computer keeps it, which another computer's choice overwrote.
 	Projects map[string]string `json:"projects,omitempty"`
+	// projectsSeen are the Projects as last read from the file or written
+	// to it (save).
+	projectsSeen map[string]string
 	// Icon is the app's icon chosen, "" for the default.
 	Icon string `json:"icon,omitempty"`
 	// LibraryManual leaves new clips for the AI to sort out when asked,
@@ -151,8 +155,8 @@ func configPath() string {
 func loadConfig() config {
 	var c config
 	if p := configPath(); p != "" {
-		if b, err := os.ReadFile(p); err == nil {
-			_ = json.Unmarshal(b, &c)
+		if b, err := os.ReadFile(p); err == nil && json.Unmarshal(b, &c) == nil {
+			c.projectsSeen = maps.Clone(c.Projects)
 		}
 	}
 	if c.Dir == "" {
@@ -161,7 +165,7 @@ func loadConfig() config {
 	return c
 }
 
-func (c config) save() {
+func (c *config) save() {
 	p := configPath()
 	if p == "" {
 		return
@@ -169,15 +173,76 @@ func (c config) save() {
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		return
 	}
+	c.Projects = c.projectsMerged(p)
 	b, _ := json.MarshalIndent(c, "", "  ")
 	// Only the user may read it: it holds the API key. Written whole or
-	// not at all, through a file renamed over it.
-	tmp := p + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+	// not at all, through a file renamed over it: a file of its own, for
+	// the MCP server writes the settings too, and two writing one
+	// temporary file could rename the other's half written.
+	f, err := os.CreateTemp(filepath.Dir(p), "config-*.tmp") // the user's alone
+	if err != nil {
 		return
 	}
-	_ = os.Chmod(tmp, 0o600)
-	_ = os.Rename(tmp, p)
+	tmp := f.Name()
+	_, err = f.Write(b)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Rename(tmp, p)
+	}
+	if err != nil {
+		_ = os.Remove(tmp)
+		return
+	}
+	c.projectsSeen = maps.Clone(c.Projects)
+}
+
+// The folders of the maps' code are written by two processes: the app,
+// which holds its settings and writes them whole, and the MCP server,
+// this same program run by an agent, which keeps the folder an agent
+// gives it (mcp.go). The app's next save wrote over the server's. So a
+// save takes the file's Projects as they are now, and keeps of its own
+// only what it changed since it last read or wrote them (projectsSeen):
+// a key it did not change is the file's, the server's among it. Each
+// change of the app's is saved as it is made (setProject), so a change
+// the server writes after it is the later and stays. A file that cannot
+// be read is not taken as one with no folders.
+//
+// projectsMerged is c's Projects with what the file at p has that c did
+// not change since it was last read or written.
+func (c *config) projectsMerged(p string) map[string]string {
+	b, err := os.ReadFile(p)
+	if err != nil {
+		return c.Projects
+	}
+	var disk config
+	if json.Unmarshal(b, &disk) != nil {
+		return c.Projects
+	}
+	seen := c.projectsSeen
+	out := map[string]string{}
+	keys := map[string]bool{}
+	for _, m := range []map[string]string{c.Projects, seen, disk.Projects} {
+		for k := range m {
+			keys[k] = true
+		}
+	}
+	for k := range keys {
+		mine, inMine := c.Projects[k]
+		was, inSeen := seen[k]
+		dir, in := disk.Projects[k]
+		if inMine != inSeen || mine != was { // changed here: this one's
+			dir, in = mine, inMine
+		}
+		if in {
+			out[k] = dir
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // The folder of a map's code is this computer's to know. A map's file,
