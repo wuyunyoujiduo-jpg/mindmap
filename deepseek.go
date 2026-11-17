@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"time"
 )
 
 // DeepSeek is called through its OpenAI-compatible Chat Completions API,
@@ -90,6 +89,24 @@ type deepseekSender func(ctx context.Context, cfg config, req dsRequest, onText 
 // text.
 func sendToDeepSeek(ctx context.Context, cfg config, req dsRequest, onText func(string)) (*dsResponse, error) {
 	req.Stream = onText != nil
+	if !req.Stream { // asked for whole: it has a time to come in
+		ctx, cancel := context.WithTimeout(ctx, aiDeadline)
+		defer cancel()
+		return deepseekCall(ctx, cfg, req, nil, nil)
+	}
+	// Streamed: as long as it takes, given up only when it stops coming.
+	ctx, watch := watchIdle(ctx)
+	defer watch.stop()
+	out, err := deepseekCall(ctx, cfg, req, onText, watch)
+	if err = watch.why(ctx, err); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// deepseekCall makes the request and reads its reply, whose body watch,
+// if any, is told of as it comes.
+func deepseekCall(ctx context.Context, cfg config, req dsRequest, onText func(string), watch *idleWatch) (*dsResponse, error) {
 	body, err := json.Marshal(req)
 	if err != nil {
 		return nil, err
@@ -98,8 +115,6 @@ func sendToDeepSeek(ctx context.Context, cfg config, req dsRequest, onText func(
 	if base == "" {
 		base = deepseekBaseURL
 	}
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
-	defer cancel()
 	hr, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(base, "/")+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
 		return nil, err
@@ -109,6 +124,9 @@ func sendToDeepSeek(ctx context.Context, cfg config, req dsRequest, onText func(
 	resp, err := http.DefaultClient.Do(hr)
 	if err != nil {
 		return nil, err
+	}
+	if watch != nil {
+		resp.Body = watch.body(resp.Body)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusOK && strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {

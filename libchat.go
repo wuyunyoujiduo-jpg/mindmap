@@ -103,9 +103,8 @@ func libraryToolsDeepSeek() []dsTool {
 	return out
 }
 
-// runLibraryTool answers a call of a library tool, and says what it did
-// for the conversation shown.
-// toolQuery is the query of a call of search_library, "" for others.
+// toolQuery is the query of a call that searches, 收集 or the maps: ""
+// for the others.
 func toolQuery(call aiCall) string {
 	var in struct {
 		Query string `json:"query"`
@@ -116,6 +115,8 @@ func toolQuery(call aiCall) string {
 	return strings.TrimSpace(in.Query)
 }
 
+// runLibraryTool answers a call of a library tool, and says what it did
+// for the conversation shown.
 func (a *app) runLibraryTool(call aiCall) (result, shown string) {
 	var in struct {
 		Query    string `json:"query"`

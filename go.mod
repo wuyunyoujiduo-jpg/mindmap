@@ -5,7 +5,7 @@ go 1.27.3
 tool github.com/egoist/mygo/cmd/mygo
 
 require (
-	github.com/anthropics/anthropic-sdk-go v1.80.0
+	github.com/anthropics/anthropic-sdk-go v1.84.0
 	github.com/ebitengine/purego v0.11.1
 	github.com/egoist/mygo v0.9.2
 	github.com/ledongthuc/pdf v0.0.0-20260907135840-6c8c28e0e8a0
@@ -20,6 +20,8 @@ require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.2 // indirect
 	github.com/cloudflare/circl v1.6.2 // indirect
+	github.com/go-logr/logr v1.4.2 // indirect
+	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-text/typesetting v0.3.5 // indirect
 	github.com/invopop/jsonschema v0.14.0 // indirect
 	github.com/klauspost/compress v1.18.6 // indirect
@@ -31,6 +33,10 @@ require (
 	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/ulikunitz/xz v0.5.15 // indirect
 	go.digitalxero.dev/rpm v0.3.4 // indirect
+	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
+	go.opentelemetry.io/otel v1.33.0 // indirect
+	go.opentelemetry.io/otel/metric v1.33.0 // indirect
+	go.opentelemetry.io/otel/trace v1.33.0 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
 	golang.org/x/net v0.59.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
