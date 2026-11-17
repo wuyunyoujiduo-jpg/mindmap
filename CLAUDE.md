@@ -22,7 +22,11 @@ by AI, and an AI assistant.
    third number for fixes and small changes, 0.25.0 → 0.25.1; the second
    only for a new feature of some size, 0.25.x → 0.26.0), add
    its section to `CHANGELOG.md` (in Chinese: the update window shows it),
-   and release by running the `build` workflow with `release: true`.
+   and release by running the `build` workflow with `release: true`. The
+   workflow refuses a release that is not from `main`, whose tag is there
+   already, or whose version is not above the one served
+   (`.github/preflight.sh`; `tools/check-release.sh` tries the release's
+   scripts here).
 
 ## Notes
 
@@ -48,7 +52,7 @@ by AI, and an AI assistant.
     `grounds` chosen in the settings, `config.Ground`). One row at its top,
     on every page, a map's too (`topBar` in `places.go`): the left column's
     key, the switch of the places, 今天, 项目, 收集 and 技能, the one bar,
-    the AI's spark, the search of everything, the settings. Under it one
+    the AI's spark, the screenshot's key, the search of everything, the settings. Under it one
     white leaf with round corners (`leaf`), everything else on it, cut
     into columns by thin lines: what of the place shows, the page, what is
     chosen.
@@ -67,7 +71,7 @@ by AI, and an AI assistant.
     own, 快捷访问, whether or not they have a task (the user asked for
     it at the head, apart, on 今天 too, where a click on one opens its
     map as in the directory, not its tasks; they stay in their folders
-    with a star as well); 收集's kinds, ways to look back and every tag (`libSide`): a kind,
+    with a star as well); 收集's kinds, ways to look back and the tags, the eighty most used (`libSide`): a kind,
     a tag and 星标, 未整理 or 含密钥 narrow together, each row chosen
     showing so, and the page says each as a chip with a ✕ of its own
     under its head, with how many are left (`libFilters`, `filterChip`;
@@ -169,7 +173,7 @@ by AI, and an AI assistant.
     (`hourPick`, `hourDraft`); the band's blank a task of the day; a
     block's foot drawn is when it ends (`hourStretch`); a task dragged
     shows where it would go and dropped goes to it (`moveTaskWhen`, with
-    its 撤回); ← and → turn the days, a day's tasks of the whole day first and
+    its 撤销); ← and → turn the days, a day's tasks of the whole day first and
     then by their time (`byTime`), and which is when it reminds, set newly. How it
     repeats is TickTick's, which the user named (0.102): by the year
     too, by dates of the month or its Nth weekday, ending on a day or
@@ -343,9 +347,9 @@ by AI, and an AI assistant.
   - Each main thing to do has its way in where it is looked for (the
     line to add a task on 今天's lists), though another way does it too.
   - What puts a thing away says so and gives the way back at once
-    (撤回), and a way back later. The same for what is ticked off,
+    (撤销), and a way back later. The same for what is ticked off,
     moved or tagged (`tellUndo`; `DESIGN.md`'s Hands, with the keys:
-    Escape, the arrows, ⌥⌘1–3, ⌘J, and what the left column takes when
+    Escape, the arrows, ⌥⌘1–4, ⌘J, and what the left column takes when
     dropped on).
   - Two kinds of thing that the user wants as one stay each in its own
     store and are joined by a link, made of each other without loss.
@@ -395,8 +399,11 @@ by AI, and an AI assistant.
 - Auto-updates: `mygo.json`'s `updates` and MyGo's updater plugin. Releases
   sign the update files and publish them (`.github/publish-updates.sh`) to
   `mindmap-models`' release `desktop-latest`, which apps read from
-  github.com with no API call (`updates.url`), and to `desktop-v<version>`
-  for apps before 0.30.1. The secrets `MYGO_UPDATER_PRIVATE_KEY` and
+  github.com with no API call (`updates.url`); no `desktop-v<version>` is
+  made any more (0.105.2: apps before 0.30.1 go by the last one, whose
+  files the pruning keeps). After the manifests, the archives and deltas no
+  manifest names are removed, fifty a release (`.github/prune-updates.sh`;
+  the workflow Prune updates lists them, and deletes when asked). The secrets `MYGO_UPDATER_PRIVATE_KEY` and
   `RELEASES_TOKEN` are the GitHub environment `mymind`'s.
 - macOS builds are per chip, `darwin/arm64` and `darwin/amd64`, a disk
   image each; each updates from its own manifest. A release builds
@@ -535,7 +542,10 @@ by AI, and an AI assistant.
   GitHub's history has of before. Its draft is
   https://claude.ai/artifact/8hvLab7D1yKyG8urBNzA71.
 - Sync with GitHub: `internal/ghsync` (a three-way merge over the REST API,
-  state in `<maps folder>/.sync/`), wired in `sync.go`. GitHub counts the
+  state beside the settings, `sync/<hash of the folder's path>.json`,
+  `syncStatePath`: in the folder it went where the folder went, a backup
+  put back or a cloud's copy, and the next sync pulled over the files),
+  wired in `sync.go`. GitHub counts the
   calls of a user, all tokens together, 5000 an hour, and a file sent is
   a call: a sync of many files that failed began again at the first, and
   could take every hour's calls without ever ending, so that the
@@ -584,4 +594,40 @@ by AI, and an AI assistant.
   收集 is masked where it is made (`library.Brief`, `Full`), not by each
   that asks; and a walk told to leave a branch must not leave the rest
   (`model.Diff`'s `tops`).
+- 0.105.2 mended the list of that reading, by part, each batch read again
+  by another before it went. What it left to keep to, beside the above:
+  - Sync: a folder that has none of the files remembered, by name or by
+    content, is another folder, and nothing is deleted for it
+    (`state.strange`); a folder made as it is opened forgets the memory at
+    its path (`openDir`). The open map is merged with what changed its
+    file, topic by topic (`mergeOutside`, `a.base`), never under a title
+    being typed; the bar that asks which to keep whole is for what cannot
+    be merged. A map's code folder is each computer's own
+    (`config.Projects`, `projectOf`); what keeps a path follows a rename
+    by `pathFollowers`.
+  - 今天: a line is read by `readTaskLine` alone (`taskline.go`), for the
+    preview and for what is kept. A word of repeating needs no space
+    after it, and is none where the next character makes another word of
+    it (工作日报, 每天都…, 每周一次): the user's lines have no spaces. What
+    is to do, late and done are one count everywhere (`countsAsTask`,
+    `late`, `doneOn`); a day changed anywhere says so with 撤销
+    (`moveTaskDay`); reminders are said once a day and kept
+    (`reminded.json`).
+  - 收集: a file deleted goes to `.library/.trash` and comes back by 撤销
+    (`Trash`, `PutBack`); pictures are turned upright and bounded
+    (`cardPicture`, `wholeRoom`); a panic of work off the window's thread
+    is an error said (`guarded`).
+  - Maps: a cut pasted in its own map keeps its IDs, in another is a copy
+    (`clipFrom`); a move to another map is undone on both sides, by its
+    step of the history (`movedOut`); a toast's 撤销 is of that one thing
+    (`undoTopic`, `stepBack`), never a bare `a.undo`; a summary left with
+    no child becomes a child (`settleSummaries`, on open too). The outline
+    is a `ui.List`; a topic's page costs what it shows (`refIndex` a map,
+    `relatedPause`); the steps kept are bounded (`histBytes`). The word of
+    the UI is 主题, never 节点 (which is for what a model reads), and 关联线.
+  - AI: each question brings the map, and the one before keeps a line in
+    its place (`dropSnapshot`); a stream ends by ninety seconds of silence,
+    not by a time (`watchIdle`).
+  - Every frame: nothing reads the disk nor walks every map
+    (`shellperf_test.go`, `mapsperf_test.go` count it).
 - The user writes in Chinese; the app's texts are Chinese.
