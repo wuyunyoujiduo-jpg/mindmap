@@ -16,17 +16,18 @@ import (
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/skills"
 )
 
-// AI 技能 is the skills of the AI coding agents on this computer, a list
-// of 今天's left column beside AI 动态 (internal/skills): which agents
-// there are, which skills each has, every session's, a project's or a
-// plugin's, and what is wrong with any. A skill taken in is kept once, in
-// the maps folder's .skills, and the agents' folders hold links to it;
-// a switch a tool links it or takes the link out, and the store goes
-// with the maps to the other computers, which offer to link what this
-// one linked. The agents are found by the table of internal/skills, a
-// newer one of which is fetched from mindmap-models' release once a day, and an
-// agent the table does not know by its folder of skills. Built to the
-// draft https://claude.ai/artifact/SUEZAk4SLoJ76BxsM9LXDE.
+// 技能 is the skills of the AI coding agents on this computer, the fourth
+// place of the top row, after 收集 (internal/skills): which agents there
+// are, which skills each has, every session's, a plugin's or a tool's
+// own, and what is wrong with any. A skill taken in is kept once, in
+// ~/.agents/skills, the agents' common place (skillsStore), which Codex
+// reads itself and the others by links; a switch a tool links it or
+// takes the link out, and the store goes with the maps to the other
+// computers (a mount of the sync, at .skills), which offer to link what
+// this one linked. The agents are found by the table of internal/skills,
+// a newer one of which is fetched from mindmap-models' release once a
+// day, and an agent the table does not know by its folder of skills.
+// Built to the draft https://claude.ai/artifact/SUEZAk4SLoJ76BxsM9LXDE.
 
 // skillsTableURL is where a newer table of the agents is: an agent come
 // out since the app was built is known by it, with no new version. The
@@ -43,6 +44,8 @@ type skillsState struct {
 	busy      bool              // a scan goes on
 	tidy      bool              // the next scan is the first as the app opens (skillsTidyOnOpen)
 	again     bool              // and another was asked for meanwhile
+	say       bool              // the scan was asked for by its key: said when it is in
+	stamp     string            // the folders of skills as the last scan left them (skills.Stamp)
 	scanned   time.Time
 	counted   time.Time // when the uses were last counted
 	tool      string    // the tool narrowed to; with one, side is ""
@@ -175,6 +178,7 @@ type skillsScan struct {
 	report  *skills.Report
 	repoMap map[string]string
 	hooks   map[string]bool
+	stamp   string
 }
 
 // skillsRescan scans the skills again, away from the window's work.
@@ -210,11 +214,13 @@ func (a *app) skillsRescan() {
 				hooks[t.ID] = in
 			}
 		}
-		return skillsScan{env, r, repoMap, hooks}, nil
+		// The folders as this scan leaves them, its own mending done.
+		return skillsScan{env, r, repoMap, hooks, skills.Stamp(env)}, nil
 	}, func(v any, err error) {
 		a.skills.busy = false
 		if s, ok := v.(skillsScan); ok {
 			a.skills.env, a.skills.report, a.skills.repoMap, a.skills.hooks, a.skills.scanned = s.env, s.report, s.repoMap, s.hooks, a.now()
+			a.skills.stamp = s.stamp
 			a.skillsNoticeTools()
 			if want := a.skills.want; want != "" { // a link opened before the scan was in (showSkill)
 				a.skills.want = ""
@@ -230,17 +236,37 @@ func (a *app) skillsRescan() {
 		if a.skills.again {
 			a.skills.again = false
 			a.skillsRescan()
+			return
+		}
+		if a.skills.say { // asked for by its key: said now that it is in, not as it began
+			a.skills.say = false
+			a.tell("扫过了各个工具的技能目录")
 		}
 	})
 }
 
-// skillsActive scans again when the app is come back to: a tool may have
-// been installed, a skill written, meanwhile.
+// skillsActive looks at the skills again when the app is come back to: a
+// tool may have been installed, a skill written, meanwhile. With 技能
+// shown it scans. With another page shown it asks only whether a folder
+// of skills changed (skills.Stamp, which reads no file) and scans if one
+// did: a scan sums every file of every skill and walks the plugins'
+// folders, which every return to the app paid for, the page open or not.
+// The page scans as it is opened (showSkills).
 func (a *app) skillsActive() {
 	a.holidaysFetch() // a day may have gone by: next year's notice may be out
-	if a.now().Sub(a.skills.scanned) > 10*time.Second {
-		a.skillsRescan()
+	if a.skills.busy || a.now().Sub(a.skills.scanned) <= 10*time.Second {
+		return
 	}
+	if a.skills.report == nil || a.place() == placeSkills {
+		a.skillsRescan()
+		return
+	}
+	env, was := a.skills.env, a.skills.stamp
+	a.async(func() (any, error) { return skills.Stamp(env), nil }, func(v any, _ error) {
+		if now, _ := v.(string); now != was && a.skills.stamp == was {
+			a.skillsRescan()
+		}
+	})
 }
 
 func isDirPath(p string) bool {
@@ -595,8 +621,8 @@ func (a *app) skillsPage(c *ui.Context) {
 					pageHead(c, "skills-head", "AI 技能", sub, fs, func() {
 						if busyClicked(busyKey(c, "重新扫描", "再看一遍各个工具的技能目录", a.skills.busy, true, false), a.skills.busy, true) {
 							a.later(func() {
+								a.skills.say = true // said when the scan is in (skillsRescan)
 								a.skillsRescan()
-								a.tell("扫过了各个工具的技能目录")
 							})
 						}
 					})
@@ -623,7 +649,7 @@ func (a *app) skillsView(c *ui.Context) {
 	ui.Row(c.Key("skills-store")).Gap(4).AlignItems(ui.Center).FillWidth().Children(func() {
 		ui.Text(c, "技能只存一份，在 "+tildePath(a.skills.env.Store, a.skills.env.Home)+"：Codex 直接读，其他工具用链接。").
 			FontSize(textCaption).TextColor(t.TextMuted).SingleLine().Shrink(1).MinWidth(0)
-		if textLink(c, "在访达中显示", "在访达中显示技能的目录").Clicked() {
+		if textLink(c, revealWord(), revealWord()+"技能的目录").Clicked() {
 			if isDirPath(a.skills.env.Store) {
 				a.plat.ShowInFolder(a.skills.env.Store)
 			} else {
@@ -1091,7 +1117,7 @@ func (a *app) skillRow(c *ui.Context, e *skills.Entry, marksW float32, wide bool
 					pill(c, "含密钥", t.Danger.Alpha(0.1), t.Danger)
 				}
 			})
-			desc := cmpOr(library.Mask(e.Description), "没有说明")
+			desc := cmpOr(e.About, "没有说明") // masked by the scan
 			ui.Text(c, desc).FontSize(textCaption).TextColor(t.TextMuted).SingleLine()
 		})
 		ui.Row(c).Width(marksW).Gap(4).Shrink(0).PassThrough().Children(func() {
@@ -1186,7 +1212,7 @@ func (a *app) skillMenu(m *ui.Menu, e *skills.Entry) {
 			dir := e.Dir
 			a.later(func() { a.plat.OpenPath(filepath.Join(dir, "SKILL.md")) })
 		}
-		if m.Item("在访达中显示").Chosen() {
+		if m.Item(revealWord()).Chosen() {
 			dir := e.Dir
 			a.later(func() { a.plat.ShowInFolder(dir) })
 		}
@@ -1483,7 +1509,7 @@ func (a *app) skillDetail(c *ui.Context, e *skills.Entry) {
 					a.skills.sel = ""
 				}
 			})
-			ui.Text(c, cmpOr(library.Mask(e.Description), "没有说明。")).FontSize(textSmall+0.5).TextColor(ink2(t)).LineHeight(1.5).Wrap().Margin(4, 0, 0)
+			ui.Text(c, cmpOr(e.About, "没有说明。")).FontSize(textSmall+0.5).TextColor(ink2(t)).LineHeight(1.5).Wrap().Margin(4, 0, 0)
 			where := "全局"
 			switch e.Scope {
 			case skills.Project:
@@ -1527,7 +1553,7 @@ func (a *app) skillDetail(c *ui.Context, e *skills.Entry) {
 					if textKey(c, "在编辑器中打开", "在编辑器中打开 SKILL.md", "").Clicked() {
 						a.plat.OpenPath(filepath.Join(e.Dir, "SKILL.md"))
 					}
-					if textKey(c, "在访达中显示", "在访达中显示这个技能", "").Clicked() {
+					if textKey(c, revealWord(), revealWord()+"这个技能", "").Clicked() {
 						a.plat.ShowInFolder(e.Dir)
 					}
 				}
@@ -1839,12 +1865,10 @@ func (a *app) skillFile(c *ui.Context, e *skills.Entry) {
 				a.tell("已复制")
 			}
 		})
-		text := library.Mask(raw)
-		if r := []rune(text); len(r) > 3000 {
-			text = string(r[:3000]) + "\n…"
-		}
 		ui.Box(c.Key("md")).Padding(10, 12).Radius(radiusCard).Background(blockFill(t)).FillWidth().Children(func() {
-			ui.Text(c, strings.TrimRight(text, "\n")).Font("monospace").FontSize(11.5).LineHeight(1.55).TextColor(ink2(t)).Wrap().Selectable()
+			// Its secrets were put in dots by the scan too (Entry.Shown): the
+			// patterns took some 20 ms of every frame on a long file.
+			ui.Text(c, e.Shown).Font("monospace").FontSize(11.5).LineHeight(1.55).TextColor(ink2(t)).Wrap().Selectable()
 		})
 		if len(e.Files) > 1 {
 			ui.Text(c, "文件").FontSize(textSmall).FontWeight(700).Margin(6, 0, 0)

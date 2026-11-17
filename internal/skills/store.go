@@ -500,18 +500,32 @@ func Rename(env Env, e *Entry, name string, tools []Tool) (Undo, error) {
 	}, nil
 }
 
-var nameLine = regexp.MustCompile(`(?m)^name:.*$`)
-
-// setName is a SKILL.md with its name changed.
+// setName is a SKILL.md with its name changed: the name of its head, and
+// no line of the text under it, which may well have one that begins the
+// same (another file's head, as an example).
 func setName(text, name string) string {
 	meta, _, ok := Frontmatter(text)
 	if !ok {
 		return text
 	}
-	if _, has := meta["name"]; has {
-		return nameLine.ReplaceAllLiteralString(text, "name: "+name)
+	if _, has := meta["name"]; !has {
+		return strings.Replace(text, "---", "---\nname: "+name, 1)
 	}
-	return strings.Replace(text, "---", "---\nname: "+name, 1)
+	lines := strings.SplitAfter(text, "\n")
+	for i := 1; i < len(lines); i++ {
+		line := strings.TrimRight(lines[i], "\r\n")
+		if strings.TrimSpace(line) == "---" {
+			break // the head's end
+		}
+		if line == "" || line[0] == ' ' || line[0] == '\t' {
+			continue // of a block under a key
+		}
+		if k, _, found := strings.Cut(line, ":"); found && strings.TrimSpace(k) == "name" {
+			lines[i] = "name: " + name + lines[i][len(line):]
+			break
+		}
+	}
+	return strings.Join(lines, "")
 }
 
 // MakeReal has a project's skill be files in its repository, for the

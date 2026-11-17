@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
@@ -30,8 +31,11 @@ type Server struct {
 	Versions versions.Store
 	Version  string // the app's, as the server's
 	Now      func() time.Time
-	// Embedder, when set up, finds clips by meaning too.
-	Embedder library.Embedder
+	// Embedder, when set up, finds clips by meaning too. LoadEmbedder, if
+	// not nil, sets it up at the first search of the library and not as
+	// the server starts (embedder, in cache.go).
+	Embedder     library.Embedder
+	LoadEmbedder func() library.Embedder
 	// Cwd is the folder the server runs in, the agent's project: the map
 	// of a call that names none is that project's (project.go).
 	Cwd string
@@ -40,6 +44,12 @@ type Server struct {
 	StateDir string
 	// Agent is the program that connected, as it named itself.
 	Agent string
+
+	// What was read, kept for the calls that only look (cache.go).
+	mu       sync.Mutex
+	maps     map[string]kept
+	lib      *library.Library
+	libStamp string
 }
 
 type request struct {
@@ -324,31 +334,35 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 		return msg, nil
 	case "create_map":
 		return s.createMap(get("name"), get("root_title"), get("outline"), get("folder"))
-	case "search_library", "read_clip", "add_clip":
-		l, err := library.Open(library.In(s.Dir))
+	case "search_library", "read_clip":
+		l, err := s.lookLibrary() // as kept from the call before, if its files are as they were
 		if err != nil {
 			return "", err
 		}
-		switch name {
-		case "search_library":
-			limit := 10
-			if v, ok := args["limit"].(float64); ok && v > 0 {
-				limit = min(int(v), 50)
-			}
-			var qv []float32
-			if s.Embedder.On() && strings.TrimSpace(get("query")) != "" {
-				if vs, err := s.Embedder.Embed(context.Background(), []string{get("query")}); err == nil {
-					qv = vs[0]
-				}
-			}
-			text, _ := library.SearchText(l, get("query"), get("category"), limit, qv, s.Embedder.Name())
-			return text, nil
-		case "read_clip":
+		if name == "read_clip" {
 			c := l.Find(get("id"))
 			if c == nil {
 				return "", fmt.Errorf("no clip %q", get("id"))
 			}
 			return library.Full(c, 50000), nil
+		}
+		limit := 10
+		if v, ok := args["limit"].(float64); ok && v > 0 {
+			limit = min(int(v), 50)
+		}
+		var qv []float32
+		embedder := s.embedder() // set up now, at the first search
+		if embedder.On() && strings.TrimSpace(get("query")) != "" {
+			if vs, err := embedder.Embed(context.Background(), []string{get("query")}); err == nil {
+				qv = vs[0]
+			}
+		}
+		text, _ := library.SearchText(l, get("query"), get("category"), limit, qv, embedder.Name())
+		return text, nil
+	case "add_clip":
+		l, err := library.Open(library.In(s.Dir)) // written in: read anew
+		if err != nil {
+			return "", err
 		}
 		text := strings.TrimSpace(get("text"))
 		if text == "" {
@@ -443,7 +457,7 @@ func (s *Server) listMaps() (string, error) {
 	var b strings.Builder
 	fmt.Fprintf(&b, "导图文件夹：%s\n\n", s.Dir)
 	for _, p := range files {
-		f, err := model.Load(p)
+		f, err := s.peek(p) // looked at, not changed
 		if err != nil {
 			continue
 		}
@@ -534,7 +548,7 @@ func (s *Server) search(query, only string) (string, error) {
 	var b strings.Builder
 	n := 0
 	for _, p := range paths {
-		f, err := model.Load(p)
+		f, err := s.peek(p)
 		if err != nil {
 			continue
 		}
@@ -584,7 +598,7 @@ func (s *Server) listTasks(only, status string) (string, error) {
 	var b strings.Builder
 	n := 0
 	for _, p := range paths {
-		f, err := model.Load(p)
+		f, err := s.peek(p)
 		if err != nil {
 			continue
 		}

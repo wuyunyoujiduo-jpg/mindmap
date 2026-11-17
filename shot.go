@@ -19,6 +19,21 @@ var defaultShotKey = func() string {
 	return "Control+Alt+A"
 }()
 
+// revealWord is what a key that shows a file where it is kept says: by
+// the name the system has for the place, 访达 being the Mac's alone and
+// the app shipping for Windows too.
+func revealWord() string { return revealOn(runtime.GOOS) }
+
+func revealOn(goos string) string {
+	switch goos {
+	case "darwin":
+		return "在访达中显示"
+	case "windows":
+		return "在资源管理器中显示"
+	}
+	return "在文件夹中显示"
+}
+
 func (a *app) shotKey() string {
 	if a.cfg.ShotKey != "" {
 		return a.cfg.ShotKey
@@ -73,7 +88,7 @@ func (a *app) keepShot(png []byte, act screenshot.Action, fromApp bool) {
 }
 
 // shotSettings says how screenshots are taken, and tries one. Their log
-// is a menu item away (帮助 → 在访达中显示截图记录), not shown.
+// is a menu item away (帮助 → revealWord 截图记录), not shown.
 func (a *app) shotSettings(c *ui.Context) {
 	t := c.Theme()
 	rowsField(c, "截图", "屏幕定格后直接框选，可拖动、拉边调整；框选后加框线、箭头、画笔、文字，可选颜色。✓ 或双击复制到剪贴板，书签按钮存到收集。", func() {

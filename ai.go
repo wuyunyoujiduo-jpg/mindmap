@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -20,11 +22,12 @@ import (
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/versions"
 )
 
-// The AI panel chats with Claude or DeepSeek about the map. Each message
-// carries the map as an outline with the nodes' IDs; the model answers,
-// and when asked to change the map it proposes edits through the
-// propose_edits tool, which the user reviews and applies, as one step that
-// undo takes back.
+// The AI's window (aiFloat in view.go, which shows aiPanel) chats with
+// Claude or DeepSeek about the map. Each question carries the map as an
+// outline with the nodes' IDs, and the questions before it keep a line in
+// the map's place (dropSnapshots); the model answers, and when asked to
+// change the map it proposes edits through the propose_edits tool, which
+// the user reviews and applies, as one step that undo takes back.
 
 // Providers of the assistant.
 const (
@@ -37,7 +40,16 @@ var aiModels = []struct{ id, name string }{
 	{"claude-opus-5-5", "Claude Opus 5.5（推荐）"},
 	{"claude-sonnet-5-5", "Claude Sonnet 5.5（更快）"},
 	{"claude-haiku-5-5", "Claude Haiku 5.5（最便宜）"},
-	{"claude-fable-5-1", "Claude Fable 5.1（最强）"},
+	{"claude-fable-5-2", "Claude Fable 5.2（最强）"},
+}
+
+// aiModelsBefore are the models offered once and no more. One of them
+// kept in the settings is the user's choice still: it goes on being sent
+// (aiModel), and the settings show it as chosen, by its name here; a
+// model the app never offered, written into the settings' file, by its
+// ID.
+var aiModelsBefore = []struct{ id, name string }{
+	{"claude-fable-5-1", "Claude Fable 5.1（上一版）"},
 }
 
 // Scopes of what the AI sees.
@@ -128,11 +140,22 @@ type sentMark struct {
 	answers    []toolAnswer
 }
 
-// aiState is the conversation of the AI panel.
+// snapMark is where the snapshot the last question brought is in the
+// conversation as sent: the message, for Claude the block of it, and the
+// snapshot itself, which the block's text, or DeepSeek's message, begins
+// with. gone is the line put in its place when the next question brings
+// a newer one (dropSnapshot).
+type snapMark struct {
+	msg, block int
+	text, gone string
+}
+
+// aiState is the conversation of the AI's window.
 type aiState struct {
 	provider  string                       // of the conversation, which stays with it
 	claude    []anthropic.BetaMessageParam // the conversation, as sent to Claude
 	ds        []dsMessage                  // or to DeepSeek
+	snap      *snapMark                    // the one snapshot of the map in it
 	msgs      []chatMsg
 	draft     string
 	attach    []aiAttach // attached to the draft
@@ -189,20 +212,94 @@ func providerModelName(cfg config) string {
 	return aiModelName(aiModel(cfg))
 }
 
+// A reply asked for whole has aiDeadline to come in. A reply streamed has
+// no such end: a long one (a map made of a repository) took more than
+// any, and was cut as an error of the network, short of the way that
+// asks a reply cut at its length to go on. It is given up only when it
+// brings nothing for aiIdle: no text, no part of a tool's call, no sign
+// of life of the server's (a ping while the model thinks).
+var (
+	aiDeadline = 5 * time.Minute
+	aiIdle     = 90 * time.Second
+)
+
+// errIdle is why a stream that stopped coming was given up.
+var errIdle = plainError("AI 的回复中断了：等了一分半也没有新内容。可以再问一次。")
+
+// An idleWatch gives up a request whose reply stops coming.
+type idleWatch struct {
+	timer  *time.Timer
+	cancel context.CancelCauseFunc
+}
+
+// watchIdle is ctx, canceled when the reply brings nothing for aiIdle,
+// and its watch, which is told of what comes (body) and stopped at the
+// end. The time until the reply's head counts too.
+func watchIdle(ctx context.Context) (context.Context, *idleWatch) {
+	ctx, cancel := context.WithCancelCause(ctx)
+	w := &idleWatch{cancel: cancel}
+	w.timer = time.AfterFunc(aiIdle, func() { cancel(errIdle) })
+	return ctx, w
+}
+
+func (w *idleWatch) stop() {
+	w.timer.Stop()
+	w.cancel(nil)
+}
+
+// body is a reply's body, each read of which that brings something
+// gives the reply aiIdle more.
+func (w *idleWatch) body(rc io.ReadCloser) io.ReadCloser { return &idleBody{rc, w} }
+
+type idleBody struct {
+	io.ReadCloser
+	w *idleWatch
+}
+
+func (b *idleBody) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	if n > 0 {
+		b.w.timer.Reset(aiIdle)
+	}
+	return n, err
+}
+
+// why is the error of a request as the user is to read it: that the
+// reply stopped coming, when that is why ctx was canceled, and not that
+// it was stopped, which is the user's doing.
+func (w *idleWatch) why(ctx context.Context, err error) error {
+	if err != nil && context.Cause(ctx) == errIdle {
+		return errIdle
+	}
+	return err
+}
+
 // sendToClaude calls the Messages API with the official SDK, streaming the
 // reply when onText takes its text.
 func sendToClaude(ctx context.Context, cfg config, params anthropic.BetaMessageNewParams, onText func(string)) (*anthropic.BetaMessage, error) {
-	opts := []option.RequestOption{option.WithRequestTimeout(5 * time.Minute)}
+	var opts []option.RequestOption
 	if key := aiKey(cfg); key != "" {
 		opts = append(opts, option.WithAPIKey(key))
 	}
 	if cfg.AIBaseURL != "" {
 		opts = append(opts, option.WithBaseURL(cfg.AIBaseURL))
 	}
-	client := anthropic.NewClient(opts...)
 	if onText == nil {
+		client := anthropic.NewClient(append(opts, option.WithRequestTimeout(aiDeadline))...)
 		return client.Beta.Messages.New(ctx, params)
 	}
+	ctx, watch := watchIdle(ctx)
+	defer watch.stop()
+	// The body is watched, not the events: the SDK keeps the pings to
+	// itself, and they are what comes while the model thinks.
+	opts = append(opts, option.WithMiddleware(func(req *http.Request, next option.MiddlewareNext) (*http.Response, error) {
+		resp, err := next(req)
+		if resp != nil && resp.Body != nil {
+			resp.Body = watch.body(resp.Body)
+		}
+		return resp, err
+	}))
+	client := anthropic.NewClient(opts...)
 	stream := client.Beta.Messages.NewStreaming(ctx, params)
 	defer stream.Close()
 	var msg anthropic.BetaMessage
@@ -216,7 +313,7 @@ func sendToClaude(ctx context.Context, cfg config, params anthropic.BetaMessageN
 		}
 	}
 	if err := stream.Err(); err != nil {
-		return nil, err
+		return nil, watch.why(ctx, err)
 	}
 	return &msg, nil
 }
@@ -407,32 +504,117 @@ func (a *app) aiSend() {
 			a.answerProposal(i, false)
 		}
 	}
-	var snapshot string
+	// What the question brings: the map as it is now, or what 收集 holds,
+	// which the next question's takes the place of; and with it what an
+	// action gives besides, which stays.
+	q := aiQuestion{text: text, files: files}
 	if a.libOpen || a.doc == nil {
-		snapshot = "资料库：\n" + a.librarySnapshot()
+		q.snapshot, q.gone = "资料库：\n"+a.librarySnapshot(), libraryGone
 	} else if ai.scope == scopeNone {
-		snapshot = "（这次没有附带导图内容。要新建导图时用 propose_new_map。）"
+		q.extra = "（这次没有附带导图内容。要新建导图时用 propose_new_map。）"
 	} else {
-		snapshot = "导图快照：\n" + a.snapshot(ai.scope)
+		q.snapshot, q.gone = "导图快照：\n"+a.snapshot(ai.scope), snapshotGone
 	}
-	if ai.extra != "" { // what an action gives besides the map
-		snapshot += "\n\n" + ai.extra
+	if ai.extra != "" {
+		q.extra = strings.TrimPrefix(q.extra+"\n\n"+ai.extra, "\n\n")
 		ai.extra = ""
 	}
 	ai.msgs = append(ai.msgs, chatMsg{role: "user", text: text, files: files,
 		sent: &sentMark{len(ai.claude), len(ai.ds), slices.Clone(ai.answers)}})
 	ai.draft, ai.attach = "", nil
-	a.aiTurn(snapshot, text, files)
+	a.aiTurn(q)
+}
+
+// aiQuestion is a message of the user's as sent: its words and files,
+// and before them the snapshot of the map (or of 收集) and what else goes
+// with it. Its words empty, only the answers to the last reply's tool
+// calls are sent.
+type aiQuestion struct {
+	snapshot, gone string // gone: the line a later question leaves in the snapshot's place
+	extra          string
+	text           string
+	files          []aiAttach
+}
+
+// What stands where a snapshot was, once a later question brought a
+// newer one.
+const (
+	snapshotGone = "（当时的导图快照已省略，以最新的为准）"
+	libraryGone  = "（当时的资料库概况已省略，以最新的为准）"
+)
+
+// dropSnapshot puts a line in the place of the snapshot the question
+// before brought, as a new question brings its own: each question sent
+// the whole map and none was ever taken out, so that the tenth question
+// of a conversation sent ten maps, nine of them of no use and some of
+// them wrong by then.
+//
+// For Claude the thinking blocks of the replies since that question go
+// with it. A thinking block is signed over all that was sent before it
+// and is refused (a 400) when any of that is changed after, on the
+// current models; without the blocks the turns are plain text and tool
+// calls, which may be sent after a change. The model loses what it
+// thought in the last turn and no more: the blocks of the turns before
+// went the same way a question earlier.
+func (ai *aiState) dropSnapshot() {
+	m := ai.snap
+	ai.snap = nil
+	if m == nil {
+		return
+	}
+	if ai.provider == providerDeepSeek {
+		if m.msg < len(ai.ds) && strings.HasPrefix(ai.ds[m.msg].Content, m.text) {
+			ai.ds[m.msg].Content = m.gone + ai.ds[m.msg].Content[len(m.text):]
+		}
+		return
+	}
+	if m.msg >= len(ai.claude) || m.block >= len(ai.claude[m.msg].Content) {
+		return // taken back since (a request that failed, a question asked again)
+	}
+	was := ai.claude[m.msg].Content[m.block].OfText
+	if was == nil || !strings.HasPrefix(was.Text, m.text) {
+		return
+	}
+	// New blocks, not the old ones changed: a request made before holds
+	// them still.
+	content := slices.Clone(ai.claude[m.msg].Content)
+	content[m.block] = anthropic.NewBetaTextBlock(m.gone + was.Text[len(m.text):])
+	ai.claude[m.msg].Content = content
+	for i := m.msg + 1; i < len(ai.claude); i++ {
+		ai.claude[i].Content = withoutThinking(ai.claude[i].Content)
+	}
+}
+
+// withoutThinking is a message's blocks less the model's thinking.
+func withoutThinking(blocks []anthropic.BetaContentBlockParamUnion) []anthropic.BetaContentBlockParamUnion {
+	thinks := func(b anthropic.BetaContentBlockParamUnion) bool {
+		return b.OfThinking != nil || b.OfRedactedThinking != nil
+	}
+	if !slices.ContainsFunc(blocks, thinks) {
+		return blocks
+	}
+	out := slices.DeleteFunc(slices.Clone(blocks), thinks)
+	if len(out) == 0 { // a message may not be empty
+		out = append(out, anthropic.NewBetaTextBlock("（没有文字）"))
+	}
+	return out
 }
 
 // aiTurn sends the answers to the last reply's tool calls, and the user's
 // message when there is one, with its files, and waits for the reply in the background.
-func (a *app) aiTurn(snapshot, text string, files []aiAttach) {
+func (a *app) aiTurn(q aiQuestion) {
 	ai := &a.ai
 	answers := ai.answers
 	ai.answers = nil
 	ai.busy = true
 	ai.scroll.Y = 1e9
+	text, files := q.text, q.files
+	// The snapshot and what goes with it, as one text before the words.
+	lead := strings.TrimPrefix(q.snapshot+"\n\n"+q.extra, "\n\n")
+	lead = strings.TrimSuffix(lead, "\n\n")
+	if text != "" && lead != "" {
+		ai.dropSnapshot() // a new question: the one before keeps a line of its map
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	ai.cancel = cancel
@@ -466,9 +648,12 @@ func (a *app) aiTurn(snapshot, text string, files []aiAttach) {
 			ai.ds = append(ai.ds, dsMessage{Role: "tool", ToolCallID: an.id, Content: an.text})
 		}
 		if text != "" {
-			content := snapshot + "\n\n" + text
+			content := lead + "\n\n" + text
 			if t := attachText(files); t != "" {
-				content = snapshot + "\n\n" + t + "\n\n" + text
+				content = lead + "\n\n" + t + "\n\n" + text
+			}
+			if q.snapshot != "" {
+				ai.snap = &snapMark{msg: len(ai.ds), text: q.snapshot, gone: q.gone}
 			}
 			ai.ds = append(ai.ds, dsMessage{Role: "user", Content: content})
 		}
@@ -488,8 +673,11 @@ func (a *app) aiTurn(snapshot, text string, files []aiAttach) {
 		blocks = append(blocks, anthropic.NewBetaToolResultBlock(an.id, an.text, an.isError))
 	}
 	if text != "" {
-		if snapshot != "" { // none when going on from a reply cut short
-			blocks = append(blocks, anthropic.NewBetaTextBlock(snapshot))
+		if lead != "" { // none when going on from a reply cut short
+			if q.snapshot != "" {
+				ai.snap = &snapMark{msg: len(ai.claude), block: len(blocks), text: q.snapshot, gone: q.gone}
+			}
+			blocks = append(blocks, anthropic.NewBetaTextBlock(lead))
 		}
 		if t := attachText(files); t != "" {
 			blocks = append(blocks, anthropic.NewBetaTextBlock(t))
@@ -521,9 +709,14 @@ func (a *app) aiParams() anthropic.BetaMessageNewParams {
 	p := anthropic.BetaMessageNewParams{
 		Model:     anthropic.Model(m),
 		MaxTokens: 32000,
-		System:    []anthropic.BetaTextBlockParam{{Text: aiSystem()}},
-		Messages:  slices.Clone(a.ai.claude),
-		Tools:     libraryToolsClaude(),
+		// The tools and the system prompt are the same at every request of
+		// a conversation, and are kept by the API to be read again at a
+		// tenth of their price (the mark on the system prompt covers the
+		// tools, which come before it). The messages have no mark: what
+		// is long in them is the map, which each question changes.
+		System:   []anthropic.BetaTextBlockParam{{Text: aiSystem(), CacheControl: anthropic.NewBetaCacheControlEphemeralParam()}},
+		Messages: slices.Clone(a.ai.claude),
+		Tools:    libraryToolsClaude(),
 		OutputConfig: anthropic.BetaOutputConfigParam{
 			Effort: anthropic.BetaOutputConfigEffortMedium,
 		},
@@ -642,7 +835,7 @@ func (a *app) aiReceive(r aiReply, err error) {
 		if ai.continued < 1 {
 			ai.continued++
 			ai.msgs = append(ai.msgs, chatMsg{role: "tool", text: "回复太长被截断了，正在让 AI 分批继续…"})
-			a.aiTurn("", aiContinuePrompt, nil)
+			a.aiTurn(aiQuestion{text: aiContinuePrompt})
 			return
 		}
 		ai.msgs = append(ai.msgs, chatMsg{role: "error", text: "回复太长，被截断了。可以让 AI 只处理一部分（比如一个分支），或者分几次提。"})
@@ -669,7 +862,7 @@ func (a *app) answerLibraryCalls(calls []aiCall) {
 	}
 	if ai.rounds < 8 {
 		ai.rounds++
-		a.aiTurn("", "", nil)
+		a.aiTurn(aiQuestion{})
 	} else {
 		ai.msgs = append(ai.msgs, chatMsg{role: "error", text: "检索次数太多，已停下。可以换个问法再试。"})
 	}
@@ -949,8 +1142,9 @@ func (a *app) describeEdit(op aiEdit, added map[string]string) string {
 	return op.Op
 }
 
-// aiPanel is the panel's AI tab: the conversation, a field to write in,
-// and the settings.
+// aiPanel is what the AI's window holds (aiFloat in view.go, floating at
+// the window's foot on the right, over whatever page shows): the
+// conversation, a field to write in, and the settings.
 func (a *app) aiPanel(c *ui.Context) {
 	a.switchChat()
 	t := c.Theme()
@@ -1111,8 +1305,10 @@ func (a *app) aiPanel(c *ui.Context) {
 	})
 }
 
+// aiModelName is a Claude model's name: of those offered, of those
+// offered before, else its ID.
 func aiModelName(id string) string {
-	for _, m := range aiModels {
+	for _, m := range slices.Concat(aiModels, aiModelsBefore) {
 		if m.id == id {
 			return m.name
 		}
@@ -1309,6 +1505,11 @@ func (a *app) aiSettings(c *ui.Context) {
 			names[i] = m.name
 		}
 		current := providerModelName(a.cfg)
+		if !slices.Contains(names, current) {
+			// Kept in the settings and offered no more: the one chosen
+			// still, and sent, until another is.
+			names = append(names, current)
+		}
 		ui.Field(c, "模型", func() {
 			if ui.Select(c.Key("model"+a.cfg.AIProvider), &current, names).Label("模型").Changed() {
 				for _, m := range models {

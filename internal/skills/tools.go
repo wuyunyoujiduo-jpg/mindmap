@@ -2,12 +2,19 @@
 // computer (Claude Code, Codex, Grok Build and the others: a folder with
 // a SKILL.md, the Agent Skills form), says what each is and where, and
 // keeps them in one place: the skills the user takes in are one folder
-// each in MyMind's store (.skills in the maps folder), and the agents'
-// folders hold links to them, so that whichever is changed, it is the
-// one copy. The store goes with the maps to the user's other computers
-// (ghsync), and each computer makes its own links, its paths being its
-// own; what each computer linked is written in the store
-// (_machines/<name>.json), so that the other one offers the same.
+// each in MyMind's store (Env.Store: ~/.agents/skills, the agents' common
+// place, since 0.100.7; before, .skills in the maps folder, which Migrate
+// moves), and the agents' folders hold links to them, so that whichever
+// is changed, it is the one copy; a tool that reads the store itself
+// (Codex) needs no link (Env.Reads). What MyMind keeps of its own, put
+// away or turned off, is beside it where no tool reads (Env.Keep). The
+// store goes with the maps to the user's other computers (a mount of
+// ghsync's, at .skills), and each computer makes its own links, its paths
+// being its own; what each computer linked is written in the store
+// (_machines/<name>.json), so that the other one offers the same. A
+// project's skills, in its repository, are known to the package
+// (ProjectStore, MakeReal, SetScope) and not looked at by the app, which
+// leaves Env.Repos empty: the user's choice.
 //
 // The agents are known by a table (tools.json), which the app may have
 // newer from the network (Table), and an agent the table does not know

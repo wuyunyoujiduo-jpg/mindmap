@@ -3,7 +3,6 @@
 package screenshot
 
 import (
-	"strings"
 	"sync"
 	"time"
 	"unsafe"
@@ -30,13 +29,10 @@ const (
 	kCGKeyboardEventKeycode        = 9
 	kCGEventTapDisabledByTimeout   = 0xFFFFFFFE
 	kCGEventTapDisabledByUserInput = 0xFFFFFFFF
-
-	flagShift   = 1 << 17
-	flagControl = 1 << 18
-	flagOption  = 1 << 19
-	flagCommand = 1 << 20
-	flagMods    = flagShift | flagControl | flagOption | flagCommand
 )
+
+// The keys' codes and the modifiers' flags are in keys.go, read on every
+// system so that their test runs wherever the tests do.
 
 var (
 	cgEventTapCreate         func(tap, place, options uint32, mask uint64, callback, refcon uintptr) uintptr
@@ -238,40 +234,4 @@ func watchKeysUnderMenu() {
 			time.Sleep(25 * time.Millisecond)
 		}
 	}()
-}
-
-// keyCodes are the virtual key codes of the keys a shortcut may end in.
-var keyCodes = map[string]int64{
-	"A": 0, "S": 1, "D": 2, "F": 3, "H": 4, "G": 5, "Z": 6, "X": 7, "C": 8, "V": 9, "B": 11, "Q": 12, "W": 13,
-	"E": 14, "R": 15, "Y": 16, "T": 17, "1": 18, "2": 19, "3": 20, "4": 21, "6": 22, "5": 23, "=": 24, "9": 25,
-	"7": 26, "-": 27, "8": 28, "0": 29, "]": 30, "O": 31, "U": 32, "[": 33, "I": 34, "P": 35, "L": 37, "J": 38,
-	"'": 39, "K": 40, ";": 41, "\\": 42, ",": 43, "/": 44, "N": 45, "M": 46, ".": 47, "`": 50,
-	"SPACE": 49, "TAB": 48, "RETURN": 36, "ENTER": 36,
-	"F1": 122, "F2": 120, "F3": 99, "F4": 118, "F5": 96, "F6": 97, "F7": 98, "F8": 100, "F9": 101, "F10": 109,
-	"F11": 103, "F12": 111,
-}
-
-// parseKey reads an accelerator as "Control+Command+A".
-func parseKey(key string) (int64, uint64, bool) {
-	var flags uint64
-	code := int64(-1)
-	for _, part := range strings.Split(key, "+") {
-		switch p := strings.ToUpper(strings.TrimSpace(part)); p {
-		case "CMD", "COMMAND", "CMDORCTRL", "COMMANDORCONTROL", "SUPER", "META":
-			flags |= flagCommand
-		case "CTRL", "CONTROL":
-			flags |= flagControl
-		case "ALT", "OPTION":
-			flags |= flagOption
-		case "SHIFT":
-			flags |= flagShift
-		default:
-			c, ok := keyCodes[p]
-			if !ok {
-				return 0, 0, false
-			}
-			code = c
-		}
-	}
-	return code, flags, code >= 0
 }

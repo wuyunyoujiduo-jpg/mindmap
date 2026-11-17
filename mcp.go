@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/embed"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/mcp"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/versions"
@@ -37,13 +38,22 @@ func serveMCP(args []string) error {
 	if _, err := os.Stat(abs); err != nil {
 		return fmt.Errorf("导图文件夹不存在：%s", abs)
 	}
-	cfg := loadConfig()
 	s := mcpServer(abs)
-	s.Embedder = library.Embedder{URL: cfg.EmbedURL, Key: cfg.EmbedKey, Model: cfg.EmbedModel, Local: loadLocalModel()}
-	if cfg.NoEmbed {
-		s.Embedder = library.Embedder{}
-	}
+	s.LoadEmbedder = mcpEmbedder(loadConfig(), loadLocalModel)
 	return s.Serve(os.Stdin, os.Stdout)
+}
+
+// mcpEmbedder sets up what finds clips by meaning, when the server first
+// searches the library and not as it starts: every session of an agent
+// starts a server, the local model is tens of megabytes to read, and few
+// sessions search.
+func mcpEmbedder(cfg config, local func() *embed.Model) func() library.Embedder {
+	return func() library.Embedder {
+		if cfg.NoEmbed {
+			return library.Embedder{}
+		}
+		return library.Embedder{URL: cfg.EmbedURL, Key: cfg.EmbedKey, Model: cfg.EmbedModel, Local: local()}
+	}
 }
 
 // mcpServer is the server of the maps in dir, for an agent working in the
