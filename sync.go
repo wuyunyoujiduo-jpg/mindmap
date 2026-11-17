@@ -314,8 +314,10 @@ func (a *app) syncNow() {
 		return
 	}
 	a.syncAdoptState()
-	if a.dirty && !a.conflict {
-		a.save() // what is being edited goes too
+	// What is being edited goes too; but not a save that would merge a
+	// file changed outside under a title being typed (tick's rule).
+	if a.dirty && !a.conflict && (a.editing == "" || modTime(a.path).Equal(a.modTime)) {
+		a.save()
 	}
 	a.syncBusy, a.syncTried, a.syncMsg = true, a.now(), "正在同步…"
 	dir, cfg, run, post := a.dir, a.syncConfig(), a.syncRun, a.post
