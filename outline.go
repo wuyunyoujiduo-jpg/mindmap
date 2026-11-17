@@ -92,7 +92,7 @@ func (a *app) outlineView(c *ui.Context) {
 	if _, y, ok := list.PointerPosition(); ok {
 		a.outlineDragY = list.Bounds().Y + y
 	}
-	a.outlinePressed = false
+	a.outlineDragSeen = false
 	list.Rows(func(r ui.ListRow) {
 		c := r.Context
 		// The lines are a column in the page's middle, as wide as reads
@@ -155,10 +155,19 @@ func (a *app) outlineHead(c *ui.Context, empty bool) {
 // outlineDrag follows a drag from a line: onto others it selects the
 // lines whole; back on the line, its text is selected again. It is seen to
 // once the lines are built, by where they are.
+//
+// The line it began on is kept by its topic (outlineDragFrom), not by its
+// row: scrolled out of view, by the wheel or as the pointer nears the
+// list's edge, the row is built no more, and the drag ended there, the
+// selection no longer growing. While it is not built, the press lasts
+// till the pointer is let go (outlineLetGo).
 func (a *app) outlineDrag(c *ui.Context, rows []outlineRow) {
 	from := a.outlineDragFrom
 	if from == "" {
 		return
+	}
+	if !a.outlineDragSeen {
+		a.outlinePressed = !a.outlineLetGo && a.outlineIndex(rows, from) >= 0
 	}
 	// Up to where it was let go: the pointer's place may come a frame
 	// after the press it moves with.
@@ -169,7 +178,7 @@ func (a *app) outlineDrag(c *ui.Context, rows []outlineRow) {
 		a.outlineBlock, a.multi, a.selected = false, nil, from
 	}
 	if !a.outlinePressed {
-		a.outlineDragFrom = ""
+		a.outlineDragFrom, a.outlineLetGo = "", false
 		if a.outlineBlock {
 			a.outlineFocus = outlineBlockFocus // the drag ended: the lines take the keys
 		}
@@ -264,9 +273,14 @@ func (a *app) outlineLine(c *ui.Context, rows []outlineRow, i int) {
 				a.later(func() { a.toggleTag(n, tg) })
 			}
 		}
-		// A drag from the line selects lines whole (outlineDrag).
-		if in.Pressed() {
-			a.outlineDragFrom, a.outlinePressed = n.ID, true
+		// A drag from the line selects lines whole (outlineDrag): pressed
+		// as it begins, held wherever the pointer goes after.
+		switch button, held := in.PressedButton(); {
+		case in.Pressed() && a.outlineDragFrom != n.ID:
+			a.outlineDragFrom, a.outlineLetGo = n.ID, false
+			a.outlineDragSeen, a.outlinePressed = true, true
+		case n.ID == a.outlineDragFrom:
+			a.outlineDragSeen, a.outlinePressed = true, held && button == 0
 		}
 		// Lines pasted, as copied from here or another outliner, come in
 		// as lines after this one, nested as they were.

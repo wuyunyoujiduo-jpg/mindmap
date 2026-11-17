@@ -390,6 +390,85 @@ func TestLongOutline(t *testing.T) {
 	snapshot(t, tt, "outline-long")
 }
 
+// A drag from a line of a long outline goes on when the line scrolls out
+// of view: the wheel turned while it is held, the selection grows from
+// the line it began on to the one the pointer is over, and ends where it
+// is let go.
+func TestOutlineDragScrolledAway(t *testing.T) {
+	for _, wheel := range []float32{-3000, 3000} {
+		a, tt := newTestApp(t)
+		longOutline(a, 5000)
+		tt.Frame()
+		tt.Frame()
+		rows := outlineRows(a.doc)
+		start := rows[2000].node
+		a.outlineFocus = start.ID
+		tt.Frame()
+		tt.Frame()
+		i := a.outlineIndex(rows, start.ID)
+		b1, b2 := a.outlineRowAt[start.ID], a.outlineRowAt[rows[i-2].node.ID]
+		if b1.H == 0 || b2.H == 0 {
+			t.Fatalf("the lines by the focus are not built: %v %v", b1, b2)
+		}
+		x := b1.X + b1.W - 40
+		tt.Press(x, b1.Y+b1.H/2)
+		tt.Move(x, b2.Y+b2.H/2)
+		tt.Frame()
+		if !a.outlineBlock || a.outlineDragFrom != start.ID {
+			t.Fatalf("the drag did not begin: block %v, from %q", a.outlineBlock, a.outlineDragFrom)
+		}
+		// The wheel, held: the line it began on goes far out of view.
+		tt.Scroll(x, b2.Y+b2.H/2, 0, wheel)
+		tt.Frame()
+		tt.Frame()
+		if box, _ := tt.Find("大纲 " + start.Title); box.H > 0 && box.Y+box.H > 0 && box.Y < 800 {
+			t.Fatalf("the line dragged from is in view still: %v", box)
+		}
+		if a.outlineDragFrom != start.ID {
+			t.Fatalf("%v: the drag ended as its line scrolled away", wheel)
+		}
+		// Onto a line in view now.
+		var over string
+		var ob ui.Rect
+		for id, b := range a.outlineRowAt {
+			if b.H > 0 && b.Y > 300 && b.Y < 500 {
+				over, ob = id, b
+				break
+			}
+		}
+		if over == "" {
+			t.Fatal("no line in view to drag onto")
+		}
+		tt.Move(x, ob.Y+ob.H/2)
+		tt.Frame()
+		j := a.outlineIndex(rows, over)
+		if j < 0 || j > i-10 && j < i+10 {
+			t.Fatalf("the line under the pointer, %d, is by the start, %d", j, i)
+		}
+		if a.outlineEnd != over {
+			t.Fatalf("%v: the selection did not grow to the line under the pointer", wheel)
+		}
+		tt.Release(x, ob.Y+ob.H/2)
+		tt.Frame()
+		tt.Frame()
+		lo, hi := min(i, j), max(i, j)
+		for _, r := range []int{lo, lo + 1, (lo + hi) / 2, hi} {
+			if !a.isSelected(rows[r].node.ID) {
+				t.Fatalf("%v: line %d of %d to %d not selected", wheel, r, lo, hi)
+			}
+		}
+		if a.isSelected(rows[lo-1].node.ID) || a.isSelected(rows[hi+1].node.ID) || a.outlineFocus != outlineBlockFocus || a.outlineDragFrom != "" {
+			t.Fatalf("%v: the drag selected past its ends, or did not end: focus %q, from %q", wheel, a.outlineFocus, a.outlineDragFrom)
+		}
+		// A move after it was let go selects nothing more.
+		tt.Move(x, 200)
+		tt.Frame()
+		if a.outlineEnd != over || a.outlineAnchor != start.ID {
+			t.Fatalf("%v: the selection moved after the drag ended", wheel)
+		}
+	}
+}
+
 // A frame of an outline of five thousand lines, with a change made.
 func BenchmarkOutline5000(b *testing.B) {
 	a, tt := newTestApp(b)
