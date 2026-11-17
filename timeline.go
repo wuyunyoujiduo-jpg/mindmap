@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"math"
+	"slices"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -182,16 +183,23 @@ func (a *app) timelineView(c *ui.Context) {
 	})
 }
 
+// sortTasksByStart puts the tasks by the day each begins on, those of a
+// day as they came: each one's span worked out once, and sorted as a list
+// is (it was an insertion sort that worked out two spans at each
+// comparison: a thousand tasks, a million spans a frame).
 func sortTasksByStart(tasks []model.TaskNode) {
-	for i := 1; i < len(tasks); i++ {
-		for j := i; j > 0; j-- {
-			a, _, _ := span(tasks[j].Node.Task)
-			b, _, _ := span(tasks[j-1].Node.Task)
-			if !a.Before(b) {
-				break
-			}
-			tasks[j], tasks[j-1] = tasks[j-1], tasks[j]
-		}
+	type begun struct {
+		tn model.TaskNode
+		at time.Time
+	}
+	by := make([]begun, len(tasks))
+	for i, tn := range tasks {
+		by[i].tn = tn
+		by[i].at, _, _ = span(tn.Node.Task)
+	}
+	slices.SortStableFunc(by, func(x, y begun) int { return x.at.Compare(y.at) })
+	for i := range by {
+		tasks[i] = by[i].tn
 	}
 }
 

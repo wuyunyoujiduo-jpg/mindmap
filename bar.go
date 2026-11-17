@@ -195,7 +195,7 @@ func (a *app) barHits(text string, n int) []paletteItem {
 	}
 	mode, query := a.paletteMode, a.paletteQuery
 	a.paletteMode, a.paletteQuery = paletteAll, text
-	items := a.paletteItems()
+	items := a.foundIn(&a.memo.found[1]) // kept while the words and what they are found in stand
 	a.paletteMode, a.paletteQuery = mode, query
 	var out []paletteItem
 	for _, it := range items {

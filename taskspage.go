@@ -52,8 +52,14 @@ type tasksState struct {
 	// repeatOwn is the task whose repeat is being made up in its details.
 	repeatOwn string
 	items     []taskItem
-	read      time.Time // when the items were gathered
-	edits     int       // the open map's edits then
+	// read is when the items were gathered, and gathered the same: what
+	// sets read to another time has them gathered again. of is what they
+	// were gathered of, looked when every map's file was last looked at,
+	// and serial counts the gatherings, for what is worked out of them.
+	read, gathered time.Time
+	of             tasksOf
+	looked         lookedAt
+	serial         int
 	// remindOwn is the task whose time to remind at is being written,
 	// remindText what is written, remindBad that it was not understood.
 	remindOwn, remindText string
@@ -77,7 +83,7 @@ type tasksState struct {
 	// what came since being marked as new.
 	agents        []agentItem
 	agentsRead    time.Time
-	agentsEdits   int
+	agentsOf      tasksOf
 	agentRange    int
 	agentsSeenWas time.Time
 	// allMaps has the left column show every project with tasks, not the
@@ -111,6 +117,10 @@ type tasksState struct {
 	// their keys (reminders.go); nil before the day's first look.
 	dueSeen map[string]bool
 }
+
+// tasksOf is what the tasks were gathered of: the maps as read, the folder
+// as scanned, the open map as edited.
+type tasksOf struct{ maps, scans, edits int }
 
 func (it taskItem) key() string { return it.path + "#" + it.node.ID }
 
@@ -211,14 +221,27 @@ func (a *app) openTasks() {
 	a.tasks.read = time.Time{}
 }
 
-// taskItems are the tasks of all the maps, the open one as it is edited,
-// gathered again each second or as the open map changes.
+// taskItems are the tasks of all the maps, the open one as it is edited.
+// They are gathered again when a map was read anew (every map's file is
+// looked at once a tick, indexed), when the folder was scanned, when the
+// open map changed (a.edits), and when what changed a task asks for it
+// (tasks.read set to another time); else they stand, frame after frame.
+// What is given is not to be changed in place.
 func (a *app) taskItems() []taskItem {
-	now := a.now()
-	if now.Sub(a.tasks.read) < time.Second && a.tasks.edits == a.edits && !a.tasks.read.IsZero() {
+	if at := a.looked(); at != a.tasks.looked || at.tick.IsZero() {
+		a.tasks.looked = at
+		for _, fi := range a.files {
+			if fi.Path != a.path {
+				a.indexed(fi.Path)
+			}
+		}
+	}
+	of := tasksOf{a.memo.maps, a.memo.scans, a.edits}
+	if of == a.tasks.of && a.tasks.read.Equal(a.tasks.gathered) && !a.tasks.read.IsZero() {
 		return a.tasks.items
 	}
-	a.tasks.read, a.tasks.edits = now, a.edits
+	a.tasks.of, a.tasks.read, a.tasks.gathered = of, a.now(), a.now()
+	a.tasks.serial++
 	var items []taskItem
 	for _, fi := range a.files {
 		f := a.file
@@ -1960,20 +1983,7 @@ func (a *app) monthView(c *ui.Context, items []taskItem) {
 	t := c.Theme()
 	first := time.Date(a.tasks.day.Year(), a.tasks.day.Month(), 1, 0, 0, 0, 0, a.tasks.day.Location())
 	start := a.weekOf(first)
-	byDay := map[string][]taskItem{}
-	again := map[string][]taskItem{} // those that come again on a day
-	for _, it := range items {
-		if d := it.date(); d != nil {
-			k := d.Format("2006-01-02")
-			byDay[k] = append(byDay[k], it)
-		}
-		if rp := it.node.Task.Repeat; rp != nil && it.node.Task.Due != nil && !it.done() {
-			for _, d := range rp.Coming(*it.node.Task.Due, it.node.Task.Times, a.now(), start, start.AddDate(0, 0, 41)) {
-				k := d.Format("2006-01-02")
-				again[k] = append(again[k], it)
-			}
-		}
-	}
+	laid := a.monthLaid(items, start)
 	ui.Column(c.Key("month")).Grow(1).Padding(0, 12, 12).Children(func() {
 		ui.Row(c).Shrink(0).Children(func() {
 			for i := range 7 {
@@ -1999,7 +2009,7 @@ func (a *app) monthView(c *ui.Context, items []taskItem) {
 						day := d
 						a.later(func() { a.tasks.day, a.tasks.view = day, tasksDay })
 					}
-					list := byTime(byDay[d.Format("2006-01-02")], d)
+					list := laid.list[week*7+i]
 					cell.Children(func() {
 						ui.Row(c).Padding(2, 4).Gap(6).AlignItems(ui.Baseline).Children(func() {
 							num := ui.Text(c, fmt.Sprint(d.Day())).FontSize(textSmall)
@@ -2024,7 +2034,7 @@ func (a *app) monthView(c *ui.Context, items []taskItem) {
 							a.taskChip(c, it, false)
 						}
 						if len(list) < 3 {
-							for j, it := range again[d.Format("2006-01-02")] {
+							for j, it := range laid.again[week*7+i] {
 								if len(list)+j < 3 {
 									a.taskGhost(c, it, d)
 								}
@@ -2037,11 +2047,45 @@ func (a *app) monthView(c *ui.Context, items []taskItem) {
 	})
 }
 
-// comesAgain tells whether a task that repeats comes again on a day from
-// from to to, after its day due and after today (Repeat.Coming).
-func (a *app) comesAgain(it taskItem, from, to time.Time) bool {
-	task := it.node.Task
-	return task.Repeat != nil && task.Due != nil && !it.done() && len(task.Repeat.Coming(*task.Due, task.Times, a.now(), from, to)) > 0
+// monthLaid is the tasks of the month's forty-two days put on them: each
+// day's own, as a calendar orders them (byTime), and those that come
+// again on it. As the hours' (hoursLaid), it is worked out once for the
+// tasks as gathered, the project they are narrowed to, the first day and
+// today, not at each frame.
+type monthLaid struct {
+	of          hoursOf
+	list, again [42][]taskItem
+}
+
+// monthLaid puts the tasks on the days from start (monthLaid the type).
+func (a *app) monthLaid(items []taskItem, start time.Time) *monthLaid {
+	of := hoursOf{a.tasks.serial, a.tasks.onMap, start, 42, today(a.now()), holidaysLoads()}
+	if l := &a.memo.month; l.of == of && a.tasks.serial > 0 {
+		return l
+	}
+	a.memo.laid++
+	byDay := map[string][]taskItem{}
+	again := map[string][]taskItem{} // those that come again on a day
+	for _, it := range items {
+		if d := it.date(); d != nil {
+			k := d.Format("2006-01-02")
+			byDay[k] = append(byDay[k], it)
+		}
+		if rp := it.node.Task.Repeat; rp != nil && it.node.Task.Due != nil && !it.done() {
+			for _, d := range rp.Coming(*it.node.Task.Due, it.node.Task.Times, a.now(), start, start.AddDate(0, 0, 41)) {
+				k := d.Format("2006-01-02")
+				again[k] = append(again[k], it)
+			}
+		}
+	}
+	l := monthLaid{of: of}
+	for i := range l.list {
+		d := start.AddDate(0, 0, i)
+		k := d.Format("2006-01-02")
+		l.list[i], l.again[i] = byTime(byDay[k], d), again[k]
+	}
+	a.memo.month = l
+	return &a.memo.month
 }
 
 // taskGhost is a task that repeats on a day it comes again, in the week

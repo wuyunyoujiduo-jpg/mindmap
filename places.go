@@ -208,20 +208,12 @@ func (a *app) projectsView(c *ui.Context) {
 		el.ContextMenu(func(m *ui.Menu) { a.mapMenu(m, path) })
 		n := counts[path]
 		// The map itself, small: its face, by which it is told from the others.
-		file := a.file
-		if path != a.path {
-			file = a.indexed(path)
-		}
-		var sheet *model.Document
-		topics := 0
-		if file != nil && len(file.Sheets) > 0 {
-			sheet = file.Sheets[0]
-			topics = countTopics(sheet.Root) - 1
-		}
+		face := a.mapFaceOf(path)
+		topics := face.topics
 		el.Children(func() {
 			ui.Box(c.Key("face")).Height(116).FillWidth().Radius(radiusCard - 4).Background(t.Text.Alpha(0.028)).PassThrough().
 				Draw(func(pt *ui.Painter, r ui.Rect) {
-					pt.Clip(r, radiusCard-4, func() { drawMapFace(pt, r, sheet, col) })
+					pt.Clip(r, radiusCard-4, func() { face.draw(pt, r, col) })
 				})
 			ui.Row(c).Padding(0, 4, 0, 8).Gap(6).AlignItems(ui.Center).FillWidth().Children(func() {
 				ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(2).Children(func() {
@@ -393,9 +385,6 @@ func (a *app) projectsView(c *ui.Context) {
 								a.later(func() { a.newMapIn(at.Path) })
 							}
 						})
-						if a.projFolder == "" {
-							a.removeMapMeta(a.tree.Path)
-						}
 						return
 					}
 					ui.Grid(c.Key("maps")).Columns(cols).Gap(16).FillWidth().Children(func() {
@@ -465,30 +454,65 @@ func countTopics(n *model.Node) int {
 	return k
 }
 
-// drawMapFace draws a map small, as the face of its card: its center and
-// its first two levels, laid out as the map itself is (a mind map, a logic
-// chart, an org chart, a timeline…) by the canvas's own layout, each
-// branch in a color, so that a map is told at a glance from another by
-// its shape.
-func drawMapFace(p *ui.Painter, r ui.Rect, doc *model.Document, col ui.Color) {
+// mapFace is a map's face on its card: its center and its first two
+// levels, laid out as the map itself is (a mind map, a logic chart, an org
+// chart, a timeline…) by the canvas's own layout, each branch in a color,
+// so that a map is told at a glance from another by its shape; and how
+// many topics it holds. It is worked out once for the map as read (file:
+// a map read anew is another; of the open map, as edited, edits), not
+// as each card is drawn: every card of 项目 counted its map's topics and
+// laid its face out at each frame.
+type mapFace struct {
+	file   *model.File
+	edits  int
+	topics int
+	// What is drawn: the layout of its first levels, how deep and of which
+	// branch each box is; none of a map with no canvas.
+	laid          bool
+	structure     model.Structure
+	lr            layout.Result
+	depth, branch map[string]int
+}
+
+// mapFaceOf is the face of the map at path (mapFace).
+func (a *app) mapFaceOf(path string) *mapFace {
+	file, edits := a.file, a.edits
+	if path != a.path {
+		file, edits = a.indexed(path), 0
+	}
+	if f := a.memo.faces[path]; f != nil && f.file == file && f.edits == edits {
+		return f
+	}
+	f := &mapFace{file: file, edits: edits}
+	if file != nil && len(file.Sheets) > 0 {
+		f.topics = countTopics(file.Sheets[0].Root) - 1
+		f.lay(file.Sheets[0])
+	}
+	if a.memo.faces == nil || len(a.memo.faces) > 2*len(a.files)+16 { // those of maps gone go with them
+		a.memo.faces = map[string]*mapFace{}
+	}
+	a.memo.faces[path] = f
+	a.memo.faced++
+	return f
+}
+
+// lay lays out the face of a canvas.
+func (f *mapFace) lay(doc *model.Document) {
 	if doc == nil || doc.Root == nil {
-		rw, rh := float32(52), float32(18)
-		p.Fill(ui.Rect{X: r.X + r.W/2 - rw/2, Y: r.Y + r.H/2 - rh/2, W: rw, H: rh}, col, rh/2)
 		return
 	}
 	// A copy of what shows: seven branches at most, four topics on each.
 	small := &model.Document{Structure: doc.Structure, Root: &model.Node{ID: "r"}}
-	depth := map[string]int{"r": 0}
-	branch := map[string]int{}
+	f.depth, f.branch = map[string]int{"r": 0}, map[string]int{}
 	for i, k := range doc.Root.Children {
 		if i == 7 {
 			break
 		}
 		kid := &model.Node{ID: fmt.Sprint("b", i), Title: k.Title}
-		depth[kid.ID], branch[kid.ID] = 1, i
+		f.depth[kid.ID], f.branch[kid.ID] = 1, i
 		for j := range min(len(k.Children), 4) {
 			g := &model.Node{ID: fmt.Sprint("b", i, "-", j)}
-			depth[g.ID], branch[g.ID] = 2, i
+			f.depth[g.ID], f.branch[g.ID] = 2, i
 			kid.Children = append(kid.Children, g)
 		}
 		small.Root.Children = append(small.Root.Children, kid)
@@ -504,7 +528,17 @@ func drawMapFace(p *ui.Painter, r ui.Rect, doc *model.Document, col ui.Color) {
 	}
 	o := layoutOptions(doc.Structure)
 	o.Margin, o.GapX, o.GapY = 0, 20, 7
-	lr := layout.Compute(small, measure, o)
+	f.laid, f.structure, f.lr = true, doc.Structure, layout.Compute(small, measure, o)
+}
+
+// draw draws the face in r, in the map's color.
+func (f *mapFace) draw(p *ui.Painter, r ui.Rect, col ui.Color) {
+	if !f.laid {
+		rw, rh := float32(52), float32(18)
+		p.Fill(ui.Rect{X: r.X + r.W/2 - rw/2, Y: r.Y + r.H/2 - rh/2, W: rw, H: rh}, col, rh/2)
+		return
+	}
+	lr := f.lr
 	if lr.Width <= 0 || lr.Height <= 0 {
 		return
 	}
@@ -512,11 +546,12 @@ func drawMapFace(p *ui.Painter, r ui.Rect, doc *model.Document, col ui.Color) {
 	z := min((r.W-28)/lr.Width, (r.H-24)/lr.Height, 1.7)
 	ox := r.X + (r.W-lr.Width*z)/2
 	oy := r.Y + (r.H-lr.Height*z)/2
-	tint := func(id string) ui.Color { return ui.Hex(mapPalette[(colorIndex(col)+branch[id]+1)%len(mapPalette)]) }
-	drawEdges(p, lr, doc.Structure, ox, oy, z, 1.4, ui.Rect{}, func(to string) ui.Color { return tint(to).Alpha(0.7) })
+	first := colorIndex(col)
+	tint := func(id string) ui.Color { return mapColors[(first+f.branch[id]+1)%len(mapColors)] }
+	drawEdges(p, lr, f.structure, ox, oy, z, 1.4, ui.Rect{}, func(to string) ui.Color { return tint(to).Alpha(0.7) })
 	for id, b := range lr.Boxes {
 		box := ui.Rect{X: ox + b.X*z, Y: oy + b.Y*z, W: b.W * z, H: b.H * z}
-		switch depth[id] {
+		switch f.depth[id] {
 		case 0:
 			p.Fill(box, col, box.H/2)
 		case 1:
@@ -529,12 +564,7 @@ func drawMapFace(p *ui.Painter, r ui.Rect, doc *model.Document, col ui.Color) {
 
 // colorIndex is a map's color's place among the maps' colors, or 0.
 func colorIndex(col ui.Color) int {
-	for i, hex := range mapPalette {
-		if ui.Hex(hex) == col {
-			return i
-		}
-	}
-	return 0
+	return max(slices.Index(mapColors, col), 0)
 }
 
 // A wide window's second column on 项目: projRailRoom is the room the

@@ -121,10 +121,12 @@ func TestHome(t *testing.T) {
 		t.Fatalf("an old clip asked to be placed left by itself: %d", n)
 	}
 	a.lib.Clips[0].ToPlace = false
+	a.lib.Version++ // as a write of the clip counts: what waits is worked out of the library as it stands
 	if n := len(a.waiting()); n != 5 {
 		t.Fatalf("a clip not to place waits: %d", n)
 	}
 	a.lib.Clips[0].ToPlace = true
+	a.lib.Version++
 	a.lib.Clips[0].Created = testNow
 	// What can be done with a card is under the key at its corner, on the
 	// list of what waits.

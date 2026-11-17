@@ -267,6 +267,7 @@ type app struct {
 	relatedClips   []library.Hit
 	relatedNodes   []place
 	index          map[string]indexEntry // maps read for the search, by path
+	memo           memo                  // what is worked out once for many frames (palette.go)
 	// The maps' AI analyses (mapanalysis.go), by key; the map analyzed.
 	mapMetas       map[string]*model.Analysis
 	mapMetaMod     time.Time
@@ -591,6 +592,7 @@ func (a *app) openDir(dir string) {
 }
 
 func (a *app) refreshFiles() {
+	a.memo.scans++ // the maps' files are looked at anew (indexed)
 	tree, err := model.ScanFolder(a.dir)
 	if err != nil {
 		a.tree, a.files = model.Folder{Path: a.dir, Name: filepath.Base(a.dir)}, nil
@@ -972,6 +974,7 @@ func (a *app) reload() {
 }
 
 func modTime(path string) time.Time {
+	fileLooks++
 	info, err := os.Stat(path)
 	if err != nil {
 		return time.Time{}

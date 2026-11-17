@@ -1,6 +1,10 @@
 package main
 
-import "time"
+import (
+	"sort"
+	"sync"
+	"time"
+)
 
 // The Chinese calendar's days, under the dates of the week and the month,
 // as TickTick's and Feishu's (the user's reference): 初七, the month's name
@@ -70,6 +74,15 @@ func lunarYearDays(y int) int {
 	return n + lunarLeapDays(y)
 }
 
+// lunarYearAt is the day each year of the table begins on, counted from
+// the table's first, and after the last the day the table ends.
+var lunarYearAt = func() (at [len(lunarInfo) + 1]int) {
+	for i := range lunarInfo {
+		at[i+1] = at[i] + lunarYearDays(1900+i)
+	}
+	return at
+}()
+
 // lunarOf is the day d of the Chinese calendar, and false out of the
 // table's years.
 func lunarOf(d time.Time) (lunarDate, bool) {
@@ -78,13 +91,15 @@ func lunarOf(d time.Time) (lunarDate, bool) {
 	if off < 0 {
 		return lunarDate{}, false
 	}
-	y := 1900
-	for ; y <= 2100 && off >= lunarYearDays(y); y++ {
-		off -= lunarYearDays(y)
-	}
-	if y > 2100 {
+	// The year it falls in, by where each begins (lunarYearAt): counted
+	// from 1900 a year at a time, a month's forty-two cells walked some
+	// five thousand years at every frame.
+	i := sort.Search(len(lunarInfo), func(i int) bool { return lunarYearAt[i+1] > off })
+	if i == len(lunarInfo) {
 		return lunarDate{}, false
 	}
+	y := 1900 + i
+	off -= lunarYearAt[i]
 	leap := lunarLeap(y)
 	for m := 1; m <= 12; m++ {
 		n := lunarMonthDays(y, m)
@@ -116,7 +131,43 @@ var (
 // lunarLabel names the day d by the Chinese calendar, in a word: a feast
 // or a holiday, the month's name on its first day, else its day; and
 // whether it is a feast or a holiday. Nothing out of the table's years.
+//
+// A day's word is of the day alone and never changes: it is worked out
+// once and kept (lunarWords), a calendar asking for each cell's at every
+// frame.
 func lunarLabel(d time.Time) (string, bool) {
+	y, m, day := d.Date()
+	key := [3]int{y, int(m), day}
+	lunarWords.Lock()
+	defer lunarWords.Unlock()
+	if w, ok := lunarWords.of[key]; ok {
+		return w.word, w.feast
+	}
+	if lunarWords.of == nil || len(lunarWords.of) > 4000 {
+		lunarWords.of = map[[3]int]lunarWord{}
+	}
+	var w lunarWord
+	w.word, w.feast = lunarWordOf(d)
+	lunarWords.of[key] = w
+	lunarWords.made++
+	return w.word, w.feast
+}
+
+type lunarWord struct {
+	word  string
+	feast bool
+}
+
+// lunarWords are the days' words as worked out, by the day; made counts
+// them, for the tests.
+var lunarWords struct {
+	sync.Mutex
+	of   map[[3]int]lunarWord
+	made int
+}
+
+// lunarWordOf works out lunarLabel's word.
+func lunarWordOf(d time.Time) (string, bool) {
 	if h, ok := solarHolidays[[2]int{int(d.Month()), d.Day()}]; ok {
 		return h, true
 	}

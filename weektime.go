@@ -70,6 +70,80 @@ type hourStretch struct {
 	to  float32
 }
 
+// hoursLaid is the tasks of some days put on them: those of the whole day,
+// those with a time in their lanes, and the earliest minute any begins at.
+// It is worked out once for the tasks as gathered, the project they are
+// narrowed to, the days and today (of): the pointer moving over the hours
+// is a frame each, and each put every task on its day anew and asked of
+// every one that repeats, for every day, when it comes again.
+type hoursLaid struct {
+	of            hoursOf
+	allDay, timed [][]weekTask
+	earliest      int
+}
+
+// hoursOf is what the tasks were put on the days of; holidays is the
+// reading of the notices, by which 法定工作日 comes again.
+type hoursOf struct {
+	tasks    int
+	onMap    string
+	first    time.Time
+	days     int
+	today    time.Time
+	holidays int
+}
+
+// hoursLaid puts the tasks on the days (hoursLaid the type).
+func (a *app) hoursLaid(items []taskItem, days []time.Time) *hoursLaid {
+	now := a.now()
+	of := hoursOf{a.tasks.serial, a.tasks.onMap, days[0], len(days), today(now), holidaysLoads()}
+	if l := &a.memo.hours; l.of == of && a.tasks.serial > 0 {
+		return l
+	}
+	a.memo.laid++
+	allDay := make([][]weekTask, len(days))
+	timed := make([][]weekTask, len(days))
+	earliest := 24 * 60
+	add := func(i int, it taskItem, ghost bool) {
+		task := it.node.Task
+		if task.Time == "" || task.Due == nil {
+			allDay[i] = append(allDay[i], weekTask{it: it, ghost: ghost})
+			return
+		}
+		from := clockMinutes(task.Time)
+		to := from + slotMinutes
+		if task.EndTime != "" && clockMinutes(task.EndTime) > from {
+			to = max(clockMinutes(task.EndTime), from+stretchStep)
+		}
+		timed[i] = append(timed[i], weekTask{it: it, ghost: ghost, from: from, to: min(to, 24*60)})
+		earliest = min(earliest, from)
+	}
+	for i, d := range days {
+		for _, it := range byTime(items, d) {
+			add(i, it, false)
+		}
+	}
+	// Those that come again, asked once for all the days and not a day at
+	// a time; on each day as the tasks come, after its own.
+	last := days[len(days)-1]
+	for _, it := range items {
+		task := it.node.Task
+		if task.Repeat == nil || task.Due == nil || it.done() {
+			continue
+		}
+		for _, d := range task.Repeat.Coming(*task.Due, task.Times, now, days[0], last) {
+			if i := slices.IndexFunc(days, func(day time.Time) bool { return sameDay(day, d) }); i >= 0 {
+				add(i, it, true)
+			}
+		}
+	}
+	for i := range timed {
+		timed[i] = lanes(timed[i])
+	}
+	a.memo.hours = hoursLaid{of, allDay, timed, earliest}
+	return &a.memo.hours
+}
+
 // weekView is the week of the day shown, as hours.
 func (a *app) weekView(c *ui.Context, items []taskItem) {
 	start := a.weekOf(a.tasks.day)
@@ -83,34 +157,8 @@ func (a *app) weekView(c *ui.Context, items []taskItem) {
 // hoursView is days as hours: the week's seven, or the day's one.
 func (a *app) hoursView(c *ui.Context, items []taskItem, days []time.Time) {
 	now := a.now()
-	allDay := make([][]weekTask, len(days))
-	timed := make([][]weekTask, len(days))
-	earliest := 24 * 60
-	for i, d := range days {
-		add := func(it taskItem, ghost bool) {
-			task := it.node.Task
-			if task.Time == "" || task.Due == nil {
-				allDay[i] = append(allDay[i], weekTask{it: it, ghost: ghost})
-				return
-			}
-			from := clockMinutes(task.Time)
-			to := from + slotMinutes
-			if task.EndTime != "" && clockMinutes(task.EndTime) > from {
-				to = max(clockMinutes(task.EndTime), from+stretchStep)
-			}
-			timed[i] = append(timed[i], weekTask{it: it, ghost: ghost, from: from, to: min(to, 24*60)})
-			earliest = min(earliest, from)
-		}
-		for _, it := range byTime(items, d) {
-			add(it, false)
-		}
-		for _, it := range items {
-			if a.comesAgain(it, d, d) {
-				add(it, true)
-			}
-		}
-		timed[i] = lanes(timed[i])
-	}
+	laid := a.hoursLaid(items, days)
+	allDay, timed, earliest := laid.allDay, laid.timed, laid.earliest
 	// Days newly shown open at their first hours: seven, or earlier for
 	// what is earlier, or with now in sight.
 	start, end := days[0], days[len(days)-1].AddDate(0, 0, 1)
@@ -336,10 +384,14 @@ func (a *app) weekDay(c *ui.Context, i int, d time.Time, timed []weekTask, now t
 		// The blank, under all: pressed, it chooses where to write a task.
 		blank = ui.Box(c.Key("blank")).Absolute().Top(0).Left(0).Right(0).Bottom(0).
 			Label(fmt.Sprintf("时间格 %d月%d日", d.Month(), d.Day())).Tooltip("点空白时间格新建任务，按住往下拖选时长")
-		for h := 1; h < 24; h++ {
-			ui.Box(c.Key(fmt.Sprint("line:", h))).Absolute().Top(float32(h * hourHeight)).Left(0).Right(0).Height(1).
-				Background(hairline(t).Alpha(0.6)).PassThrough()
-		}
+		// The hours' lines, drawn in one box: a box a line was 161 of them
+		// a week, each built and keyed at every frame.
+		line := hairline(t).Alpha(0.6)
+		ui.Box(c.Key("lines")).Absolute().Top(0).Left(0).Right(0).Bottom(0).PassThrough().Draw(func(p *ui.Painter, r ui.Rect) {
+			for h := 1; h < 24; h++ {
+				p.Fill(ui.Rect{X: r.X, Y: r.Y + float32(h*hourHeight), W: r.W, H: 1}, line, 0)
+			}
+		})
 		for _, w := range timed {
 			if a.weekBlock(c, w, d) {
 				onBlock = true

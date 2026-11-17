@@ -115,7 +115,10 @@ func (a *app) commands() []command {
 		{"从文本生成导图…", "", func() { a.fromTextOpen = true }, hasDoc},
 		{"从代码仓库生成架构…", "", a.askRepo, hasDoc},
 		{"快速记录", keyLabel(a.captureKey()), a.plat.ShowCapture, nil},
-		{"打开收件箱", "", func() { _ = a.open(a.inboxPath()) }, func() bool { _, err := os.Stat(a.inboxPath()); return err == nil }},
+		{"打开收件箱", "", func() { _ = a.open(a.inboxPath()) }, func() bool {
+			inbox := a.inboxPath() // among the maps as scanned: the file is not looked for
+			return slices.ContainsFunc(a.files, func(f model.FileInfo) bool { return f.Path == inbox })
+		}},
 		{"移到其他导图…", "", func() { a.openPalette(paletteMove) }, hasDoc},
 		// No key said: ⌘⇧L, which it said, is the canvas's 关联线, and the
 		// place 收集 has the places' key (⌥⌘3, 前往).
@@ -141,8 +144,79 @@ func (a *app) openPalette(mode int) {
 	a.floatAt = nil
 }
 
-// paletteItems are the lines the palette shows for what is typed.
-func (a *app) paletteItems() []paletteItem {
+// paletteItems are the lines the palette shows for what is typed. They
+// are found once for what is asked and what it is found in (foundKey),
+// not at each frame: the bar with words in it, and the palette open,
+// built the commands, walked the open map and searched 收集 as they were
+// drawn.
+func (a *app) paletteItems() []paletteItem { return a.foundIn(&a.memo.found[0]) }
+
+// found is what was found, and of what.
+type found struct {
+	of    foundKey
+	items []paletteItem
+}
+
+// foundIn finds the palette's lines, or gives those kept in f where they
+// were found of what stands now. The palette and the bar keep theirs
+// apart (memo.found): the bar's words stay in it while the palette is
+// open, and each would have taken the other's place at every frame.
+func (a *app) foundIn(f *found) []paletteItem {
+	key, ok := a.foundOf()
+	if ok && key == f.of {
+		return f.items
+	}
+	a.memo.finds++
+	items := a.paletteFind()
+	*f = found{}
+	if ok {
+		*f = found{key, items}
+	}
+	return items
+}
+
+// foundKey is what the palette's lines were found of: what is asked (the
+// words, the mode, what is being placed), and all they are found in and
+// say: the open map as edited and what of it is chosen, the maps as read
+// and the folder as scanned, the tasks as gathered, 收集 as it stands,
+// the maps' analyses and the diagrams, the day and the shortcuts said.
+type foundKey struct {
+	query                     string
+	mode                      int
+	edits, maps, scans, tasks int
+	lib                       *library.Library
+	version, metas, dias      int
+	doc                       *model.Document
+	selected, focus, attach   string
+	libOpen                   bool
+	day                       time.Time
+	keys                      [3]string
+}
+
+// foundOf is the key of what the palette would find now, and whether it
+// is one to keep by: a skill's and a clip's likeliest places are worked
+// out of more than the key says, and are found at each asking.
+func (a *app) foundOf() (foundKey, bool) {
+	if a.lib == nil || a.paletteMode == paletteSkill || a.paletteMode == paletteAttach && strings.TrimSpace(a.paletteQuery) == "" {
+		return foundKey{}, false
+	}
+	a.taskItems() // looks at the maps' files, once a tick
+	if at := a.looked(); at != a.memo.metasLooked {
+		a.memo.metasLooked = at
+		a.loadMapMetas() // the analyses' folder, once a tick too
+	}
+	k := foundKey{query: a.paletteQuery, mode: a.paletteMode, edits: a.edits, maps: a.memo.maps, scans: a.memo.scans,
+		tasks: a.tasks.serial, lib: a.lib, version: a.lib.Version, metas: a.mapMetaVersion, dias: a.diaVersion,
+		doc: a.doc, selected: a.selected, attach: a.attachRef, libOpen: a.libOpen, day: today(a.now()),
+		keys: [3]string{a.captureKey(), a.clipKey(), a.shotKey()}}
+	if a.doc != nil {
+		k.focus = a.focus[a.doc.ID]
+	}
+	return k, true
+}
+
+// paletteFind finds the palette's lines (paletteItems keeps them).
+func (a *app) paletteFind() []paletteItem {
 	q := strings.ToLower(strings.TrimSpace(a.paletteQuery))
 	match := func(s string) bool { return q == "" || strings.Contains(strings.ToLower(s), q) }
 	var items []paletteItem
@@ -233,7 +307,7 @@ func (a *app) paletteItems() []paletteItem {
 	if a.paletteMode == paletteSkill {
 		for _, e := range a.skillsNamed(q, 100) {
 			name := e.Name
-			items = append(items, paletteItem{"技能", name, library.Mask(e.Description), func() {
+			items = append(items, paletteItem{"技能", name, e.About, func() {
 				if n := a.file.Node(a.linkFrom); n != nil {
 					a.addLink(n, skillScheme+name)
 				}
@@ -444,17 +518,30 @@ func (a *app) openMap(path string) {
 	}
 }
 
-// recentFiles are the maps, those opened last first.
+// recentFiles are the maps, those opened last first: put in that order
+// once for the folder as scanned and the list of those opened, and given
+// as a copy, which a caller may sort or cut (a frame asked two or three
+// times, each a sort).
 func (a *app) recentFiles() []model.FileInfo {
-	files := slices.Clone(a.files)
-	rank := func(p string) int {
-		if i := slices.Index(a.cfg.Recent, p); i >= 0 {
-			return i
+	if a.memo.recentFor != a.memo.scans || !slices.Equal(a.memo.recentOrder, a.cfg.Recent) || a.memo.scans == 0 {
+		a.memo.recentFor, a.memo.recentOrder = a.memo.scans, slices.Clone(a.cfg.Recent)
+		a.memo.sorted++
+		rank := make(map[string]int, len(a.cfg.Recent))
+		for i, p := range a.cfg.Recent {
+			if _, ok := rank[p]; !ok {
+				rank[p] = i
+			}
 		}
-		return len(a.cfg.Recent)
+		at := func(p string) int {
+			if i, ok := rank[p]; ok {
+				return i
+			}
+			return len(a.cfg.Recent)
+		}
+		a.memo.recent = slices.Clone(a.files)
+		slices.SortStableFunc(a.memo.recent, func(x, y model.FileInfo) int { return at(x.Path) - at(y.Path) })
 	}
-	slices.SortStableFunc(files, func(x, y model.FileInfo) int { return rank(x.Path) - rank(y.Path) })
-	return files
+	return slices.Clone(a.memo.recent)
 }
 
 // remember puts a map first among those opened last.
@@ -475,26 +562,98 @@ func (a *app) relDir(path string) string {
 	return rel
 }
 
-// indexed is a map read for the search, kept until its file changes.
+// fileLooks counts the looks at a file's time (modTime), for the tests: a
+// frame of a page is to take none.
+var fileLooks int
+
+// memo is what is worked out once and shown for many frames; each part
+// says what has it made again.
+type memo struct {
+	// scans counts the looks at the maps' folder (refreshFiles); maps the
+	// maps read anew (indexed): what is worked out of the maps not open
+	// stands while neither moved, of the open one while a.edits did not.
+	scans, maps int
+	// What waits for a place (waiting), and today's tasks (dueToday,
+	// doneToday), of the tasks as gathered and the library as it stands;
+	// waited counts the times it was worked out, for the tests.
+	waitFor  waitKey
+	waitList []waitingItem
+	waited   int
+	dayFor   dayKey
+	due      []taskItem
+	done     []taskItem
+	// What the palette and the bar found (foundIn), each of what was asked
+	// of it; metasLooked is when the analyses' folder was last looked at
+	// for them.
+	found       [2]found
+	finds       int // counts the searches, for the tests
+	metasLooked lookedAt
+	// The maps opened last first (recentFiles), of the folder as scanned
+	// and the list of those opened; sorted counts the sorts, for the tests.
+	sorted      int
+	recentFor   int
+	recentOrder []string
+	recent      []model.FileInfo
+	// The maps' faces on 项目's cards (mapFaceOf), by path; faced counts
+	// those worked out, for the tests.
+	faces map[string]*mapFace
+	faced int
+	// The tasks put on the hours' days (hoursLaid) and on the month's
+	// (monthLaid); laid counts the times, for the tests.
+	hours hoursLaid
+	month monthLaid
+	laid  int
+	// holidaysAt is when it was last looked whether a year's notice of the
+	// holidays is due (holidaysFetch).
+	holidaysAt time.Time
+}
+
+// lookedAt is a moment the maps' files are looked at: the tick's (every
+// two seconds, a.checked) and the folder's last scan. A file is not
+// looked at twice in one: a frame draws a map's dot a hundred times.
+type lookedAt struct {
+	tick  time.Time
+	scans int
+}
+
+func (a *app) looked() lookedAt { return lookedAt{a.checked, a.memo.scans} }
+
+// indexed is a map read for the search, kept until its file changes: its
+// file's time is looked at once a tick (looked), and at once after the
+// app wrote a map or scanned the folder; what another program wrote shows
+// by the next tick. Before the first tick nothing is trusted.
 func (a *app) indexed(path string) *model.File {
-	mt := modTime(path)
-	if e, ok := a.index[path]; ok && e.mod.Equal(mt) {
+	at := a.looked()
+	e, ok := a.index[path]
+	if ok && e.at == at && !at.tick.IsZero() {
 		return e.file
 	}
-	f, err := model.Load(path)
-	if err != nil {
-		return nil
+	mt := modTime(path)
+	if !ok || !e.mod.Equal(mt) {
+		f, err := model.Load(path)
+		if err != nil {
+			f = nil
+		}
+		if e.file != nil || f != nil {
+			a.memo.maps++
+		}
+		e = indexEntry{mod: mt, file: f}
+		if err != nil && !mt.IsZero() {
+			e.mod = time.Time{} // not read: tried again at the next look, it may be half written
+		}
 	}
+	e.at = at
 	if a.index == nil {
 		a.index = map[string]indexEntry{}
 	}
-	a.index[path] = indexEntry{mod: mt, file: f}
-	return f
+	a.index[path] = e
+	return e.file
 }
 
 type indexEntry struct {
 	mod  time.Time
 	file *model.File
+	at   lookedAt // when its file's time was last looked at
 }
 
 // paletteView shows the palette over the window.

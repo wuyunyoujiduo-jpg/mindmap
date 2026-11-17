@@ -35,13 +35,17 @@ var agentRanges = []struct {
 	days int
 }{{"今天", 1}, {"7 天", 7}, {"30 天", 30}}
 
-// agentItems are the entries of every map's log, the newest first.
+// agentItems are the entries of every map's log, the newest first:
+// gathered again as the tasks are (taskItems), when a map was read anew,
+// the folder scanned or the open map changed, and when what took an entry
+// back asks for it (agentsRead set to no time), not every second.
 func (a *app) agentItems() []agentItem {
-	now := a.now()
-	if now.Sub(a.tasks.agentsRead) < time.Second && a.tasks.agentsEdits == a.edits && !a.tasks.agentsRead.IsZero() {
+	a.taskItems() // looks at every map's file, once a tick
+	of := tasksOf{a.memo.maps, a.memo.scans, a.edits}
+	if of == a.tasks.agentsOf && !a.tasks.agentsRead.IsZero() {
 		return a.tasks.agents
 	}
-	a.tasks.agentsRead, a.tasks.agentsEdits = now, a.edits
+	a.tasks.agentsRead, a.tasks.agentsOf = a.now(), of
 	var items []agentItem
 	for _, fi := range a.files {
 		f := a.file
