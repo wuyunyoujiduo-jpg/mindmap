@@ -154,7 +154,15 @@ by AI, and an AI assistant.
     Feishu's: the hours down the left, a band of the whole day's tasks
     over them, timed tasks blocks on their hours side by side where they
     meet, `lanes`, now a line across today, the Chinese calendar's day by
-    each date, `lunar.go`; and the day alone as hours, 日 among the tabs,
+    each date, `lunar.go`, and the solar terms, `solarterm.go`: the
+    almanacs' formula with its known misses of 2001 to 2100, the sun's
+    place elsewhere; China's holidays and the weekend days worked for
+    them marked 休 and 班, `holidays.go`: the app has no such data and
+    is not to guess it (the user, 0.105), so each year's notice is read
+    from holiday-cn once a day and kept, a year not out being Monday to
+    Friday and said so; 法定工作日 among the repeats,
+    `model.RepeatWorkday`, `model.Workday`; the week from Monday or
+    Sunday, `config.WeekFromSunday`, `weekOf`, the settings' 日历; and the day alone as hours, 日 among the tabs,
     `hoursView`). What is done there is done there, the user asked, all
     at once (0.104: a version a part was one too many): a press on a
     blank hour writes a task there, drawn down of the hours drawn over

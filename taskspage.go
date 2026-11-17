@@ -542,6 +542,15 @@ func weekdayName(d time.Time) string {
 }
 
 // weekStart is the Monday of the week of d.
+// weekOf is the first day of the calendars' week of the day d: Monday,
+// or Sunday as the settings say (config.WeekFromSunday).
+func (a *app) weekOf(d time.Time) time.Time {
+	if a.cfg.WeekFromSunday {
+		return today(d).AddDate(0, 0, -int(d.Weekday()))
+	}
+	return weekStart(d)
+}
+
 func weekStart(d time.Time) time.Time {
 	wd := int(d.Weekday())
 	if wd == 0 {
@@ -1036,7 +1045,7 @@ func (a *app) calendarNav(c *ui.Context) {
 	case tasksDay:
 		label = fmt.Sprintf("%d月%d日 %s", d.Month(), d.Day(), weekdayName(d))
 	case tasksWeek:
-		s := weekStart(d)
+		s := a.weekOf(d)
 		e := s.AddDate(0, 0, 6)
 		label = fmt.Sprintf("%d月%d日 – %d月%d日", s.Month(), s.Day(), e.Month(), e.Day())
 	default:
@@ -1977,7 +1986,7 @@ func (a *app) theme() *ui.Theme {
 func (a *app) monthView(c *ui.Context, items []taskItem) {
 	t := c.Theme()
 	first := time.Date(a.tasks.day.Year(), a.tasks.day.Month(), 1, 0, 0, 0, 0, a.tasks.day.Location())
-	start := weekStart(first)
+	start := a.weekOf(first)
 	byDay := map[string][]taskItem{}
 	again := map[string][]taskItem{} // those that come again on a day
 	for _, it := range items {
@@ -1994,7 +2003,8 @@ func (a *app) monthView(c *ui.Context, items []taskItem) {
 	}
 	ui.Column(c.Key("month")).Grow(1).Padding(0, 12, 12).Children(func() {
 		ui.Row(c).Shrink(0).Children(func() {
-			for _, w := range []string{"一", "二", "三", "四", "五", "六", "日"} {
+			for i := range 7 {
+				w := weekdays[start.AddDate(0, 0, i).Weekday()][len("周"):]
 				ui.Text(c, "周"+w).FontSize(textCaption).TextColor(t.TextMuted).Grow(1).Basis(0).Padding(8, 8, 4)
 			}
 		})
@@ -2225,6 +2235,11 @@ func parseRepeat(line string, now time.Time) (rest string, rep *model.Repeat, fi
 	switch {
 	case strings.HasPrefix(s, "每天"):
 		return strings.TrimSpace(strings.TrimPrefix(s, "每天")), &model.Repeat{Unit: model.RepeatDay}, &day
+	case strings.HasPrefix(s, "每个法定工作日"), strings.HasPrefix(s, "法定工作日"):
+		s = strings.TrimPrefix(strings.TrimPrefix(s, "每个"), "法定工作日")
+		r := &model.Repeat{Unit: model.RepeatWorkday}
+		first := r.Next(nil, day.AddDate(0, 0, -1)) // today, if worked
+		return strings.TrimSpace(s), r, &first
 	case strings.HasPrefix(s, "每个工作日"), strings.HasPrefix(s, "工作日"):
 		s = strings.TrimPrefix(strings.TrimPrefix(s, "每个"), "工作日")
 		if wd > 5 { // on a weekend: from Monday
@@ -2308,13 +2323,16 @@ func (a *app) repeatProp(c *ui.Context, it taskItem) {
 		kindMonth
 		kindYear
 		kindOwn
+		kindLegal
 	)
-	kinds := []string{"不重复", "每天", "每周", "工作日", "每月", "每年", "自定义"}
+	kinds := []string{"不重复", "每天", "每周", "工作日", "每月", "每年", "自定义", "法定工作日"}
 	kind := kindNone
 	switch {
 	case rep == nil:
 	case a.tasks.repeatOwn == it.key():
 		kind = kindOwn
+	case rep.Unit == model.RepeatWorkday:
+		kind = kindLegal
 	case rep.Workdays():
 		kind = kindWorkdays
 	case rep.Every > 1 || rep.Unit == model.RepeatWeek && len(rep.Days) > 1 ||
@@ -2366,13 +2384,15 @@ func (a *app) repeatProp(c *ui.Context, it taskItem) {
 			more = kinds[kind]
 		}
 		dropButton(c, "repeat", more, "重复方式", "工作日、每月、每年，或自己定").Menu(func(m *ui.Menu) {
-			for _, i := range []int{kindWorkdays, kindMonth, kindYear, kindOwn} {
+			for _, i := range []int{kindWorkdays, kindLegal, kindMonth, kindYear, kindOwn} {
 				name := kinds[i]
 				switch i {
 				case kindMonth:
 					name = fmt.Sprintf("每月（%d 日）", due.Day())
 				case kindYear:
 					name = fmt.Sprintf("每年（%d月%d日）", due.Month(), due.Day())
+				case kindLegal:
+					name = "法定工作日（跳过节假日，调休上班照常）"
 				}
 				if m.Item(name).Checked(i == kind).Chosen() {
 					chosen = i
@@ -2403,6 +2423,8 @@ func (a *app) repeatProp(c *ui.Context, it taskItem) {
 			set(keep(&model.Repeat{Unit: model.RepeatMonth}))
 		case kindYear:
 			set(keep(&model.Repeat{Unit: model.RepeatYear}))
+		case kindLegal:
+			set(keep(&model.Repeat{Unit: model.RepeatWorkday}))
 		case kindOwn:
 			a.tasks.repeatOwn = it.key()
 			if rep == nil {
@@ -2546,6 +2568,19 @@ func (a *app) repeatProp(c *ui.Context, it taskItem) {
 			change(func(r *model.Repeat) { r.FromDone = !r.FromDone })
 		}
 	})
+	// By the notices: where the next day's year has none yet, it is by the
+	// week, and said so.
+	if rep.Unit == model.RepeatWorkday && task.Due != nil {
+		if y := rep.Next(task.Due, a.now()).Year(); !holidayYearKnown(y) {
+			sub("repeat-legal", func() {
+				says := fmt.Sprintf("%d 年的放假安排还没拿到，先按周一到周五算", y)
+				if a.cfg.NoHolidays {
+					says = "设置里关了节假日，先按周一到周五算"
+				}
+				ui.Text(c, says).FontSize(textSmall).TextColor(t.Warning).Wrap()
+			})
+		}
+	}
 	sub("repeat-says", func() {
 		says := rep.Label()
 		if task.Due != nil {

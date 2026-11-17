@@ -237,6 +237,7 @@ func (a *app) skillsRescan() {
 // skillsActive scans again when the app is come back to: a tool may have
 // been installed, a skill written, meanwhile.
 func (a *app) skillsActive() {
+	a.holidaysFetch() // a day may have gone by: next year's notice may be out
 	if a.now().Sub(a.skills.scanned) > 10*time.Second {
 		a.skillsRescan()
 	}

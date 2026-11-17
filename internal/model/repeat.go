@@ -13,7 +13,21 @@ const (
 	RepeatWeek  = "week"
 	RepeatMonth = "month"
 	RepeatYear  = "year"
+	// RepeatWorkday comes on every day worked, by the State Council's
+	// notice of the holidays where the app knows it (Workday).
+	RepeatWorkday = "workday"
 )
+
+// Workday reports whether a day is one worked; the app sets it to read
+// the holidays' notices. Unset, Monday to Friday.
+var Workday func(d time.Time) bool
+
+func isWorkday(d time.Time) bool {
+	if Workday != nil {
+		return Workday(d)
+	}
+	return isoWeekday(d) <= 5
+}
 
 // Repeat says how a task comes again: every Every days, weeks, months or
 // years, and, by the week, on which Days of it (1 Monday to 7 Sunday; none
@@ -168,6 +182,15 @@ func (r *Repeat) Next(due *time.Time, now time.Time) time.Time {
 			}
 		}
 		return after.AddDate(0, 0, 1)
+	case RepeatWorkday:
+		d := after.AddDate(0, 0, 1)
+		for range 60 { // the longest holiday is some ten days
+			if isWorkday(d) {
+				break
+			}
+			d = d.AddDate(0, 0, 1)
+		}
+		return d
 	case RepeatYear:
 		for i := 0; ; i++ {
 			// The same day of its month, or the month's last (29 February).
@@ -271,6 +294,8 @@ func (r *Repeat) label() string {
 		return every("月")
 	case RepeatYear:
 		return every("年")
+	case RepeatWorkday:
+		return "法定工作日"
 	}
 	return every("天")
 }

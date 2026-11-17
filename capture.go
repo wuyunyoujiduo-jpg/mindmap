@@ -538,6 +538,30 @@ func (a *app) generalSettings(c *ui.Context) {
 			})
 		}
 	})
+	rowsField(c, "日历", "", func() {
+		setRow(c, "每周从哪天开始", "日程的周视图、月视图和本周回顾", func() {
+			chosen := 0
+			if a.cfg.WeekFromSunday {
+				chosen = 1
+			}
+			if n := tabGroup(c, "week-from", []string{"周一", "周日"}, chosen); n != chosen {
+				a.cfg.WeekFromSunday = n == 1
+				a.cfg.save()
+			}
+		})
+		setLine(c)
+		on := !a.cfg.NoHolidays
+		switchRow(c, &on, "节假日和调休", "日期旁标出放假（休）和调休上班（班）的日子，重复里可选「法定工作日」。按国务院办公厅每年的放假通知，由开源项目 holiday-cn 整理，每天取一次；已有 "+holidayYearsSaid(), func() {
+			a.cfg.NoHolidays = !on
+			a.cfg.save()
+			if on {
+				a.holidaysAsked = nil
+				a.holidaysFetch()
+			} else {
+				clearHolidays()
+			}
+		})
+	})
 	rowsField(c, "菜单栏和提醒", "", func() {
 		tray := !a.cfg.NoTray
 		switchRow(c, &tray, "菜单栏图标", "显示今天到期和已逾期的任务数，点开列出任务、快速记录、收藏剪贴板", func() {

@@ -103,3 +103,34 @@ func TestRepeatEnds(t *testing.T) {
 		t.Errorf("span %q", got)
 	}
 }
+
+func TestRepeatWorkday(t *testing.T) {
+	day := func(m time.Month, d int) time.Time { return time.Date(2026, m, d, 0, 0, 0, 0, time.UTC) }
+	r := &Repeat{Unit: RepeatWorkday}
+	// Unset: Monday to Friday. Friday the 13th of November: Monday.
+	due := day(11, 13)
+	if got := r.Next(&due, due); !got.Equal(day(11, 16)) {
+		t.Fatalf("by the week: %v", got)
+	}
+	// A notice: the 16th off, Saturday the 14th worked.
+	Workday = func(d time.Time) bool {
+		switch d.Format("01-02") {
+		case "11-16":
+			return false
+		case "11-14":
+			return true
+		}
+		return isoWeekday(d) <= 5
+	}
+	defer func() { Workday = nil }()
+	if got := r.Next(&due, due); !got.Equal(day(11, 14)) {
+		t.Fatalf("a Saturday worked: %v", got)
+	}
+	sat := day(11, 14)
+	if got := r.Next(&sat, sat); !got.Equal(day(11, 17)) {
+		t.Fatalf("over a day off: %v", got)
+	}
+	if r.Label() != "法定工作日" {
+		t.Fatal(r.Label())
+	}
+}

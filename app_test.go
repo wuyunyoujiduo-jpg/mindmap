@@ -2982,7 +2982,7 @@ func TestUpdateSettings(t *testing.T) {
 	fp := a.plat.(*fakePlatform)
 	a.openSettings()
 	tt.Frame()
-	tt.Scroll(720, 400, 0, 580) // the version is under the look, the shortcuts and the screenshots
+	tt.Scroll(720, 400, 0, 710) // the version is under the look, the shortcuts, the screenshots and the calendar
 	tt.Frame()
 	if !tt.HasText(appName + " " + version) {
 		t.Fatalf("no version: %q", tt.Texts())

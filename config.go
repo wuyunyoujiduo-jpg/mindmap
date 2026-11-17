@@ -69,6 +69,11 @@ type config struct {
 	GitHubAPI string `json:"githubAPI,omitempty"`
 	// NoReminders turns off the notifications of tasks due.
 	NoReminders bool `json:"noReminders,omitempty"`
+	// NoHolidays leaves out China's holidays and the weekend days worked
+	// for them (holidays.go); WeekFromSunday begins the calendars' weeks
+	// on Sunday, not Monday.
+	NoHolidays     bool `json:"noHolidays,omitempty"`
+	WeekFromSunday bool `json:"weekFromSunday,omitempty"`
 	// ClipKey keeps what is on the clipboard in the library, from any
 	// app; "" is the default.
 	ClipKey string `json:"clipKey,omitempty"`

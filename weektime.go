@@ -72,7 +72,7 @@ type hourStretch struct {
 
 // weekView is the week of the day shown, as hours.
 func (a *app) weekView(c *ui.Context, items []taskItem) {
-	start := weekStart(a.tasks.day)
+	start := a.weekOf(a.tasks.day)
 	var days []time.Time
 	for i := range 7 {
 		days = append(days, start.AddDate(0, 0, i))
@@ -205,6 +205,7 @@ func lunarText(c *ui.Context, d time.Time, faded bool) {
 		col = faint(t)
 	}
 	ui.Text(c, word).FontSize(textCaption).TextColor(col).NoWrap().Shrink(1).MinWidth(0).SingleLine()
+	holidayMark(c, d)
 }
 
 // weekAllDay is the band of the tasks of the whole day, over the hours:

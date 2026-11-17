@@ -406,14 +406,17 @@ type app struct {
 	async        asyncRunner
 	post         func(fn func()) // runs fn on the main thread, from any
 
-	tasks        tasksState  // the tasks of all the maps (taskspage.go)
-	skills       skillsState // the skills of the AI agents (skillsview.go)
-	skillsOpen   bool        // 技能 is the place shown
-	libReview    int         // the way 收集 looks back, or reviewOff (memos.go)
-	libWalk      int         // how many times 随机漫步 went on
-	clipTagsFor  int         // the library's version clipTagsList is of
-	clipTagsOf   *library.Library
-	clipTagsList []tagCount
+	tasks  tasksState  // the tasks of all the maps (taskspage.go)
+	skills skillsState // the skills of the AI agents (skillsview.go)
+	// holidaysAsked is when each year's notice of the holidays was last
+	// asked for (holidays.go).
+	holidaysAsked map[int]time.Time
+	skillsOpen    bool // 技能 is the place shown
+	libReview     int  // the way 收集 looks back, or reviewOff (memos.go)
+	libWalk       int  // how many times 随机漫步 went on
+	clipTagsFor   int  // the library's version clipTagsList is of
+	clipTagsOf    *library.Library
+	clipTagsList  []tagCount
 	// lastTheme is the theme the window was last drawn in, for what is
 	// worked out outside a frame's build.
 	lastTheme *ui.Theme
@@ -1368,7 +1371,7 @@ func (a *app) highlighted(n *model.Node) bool {
 		}
 	case taskFilterWeek: // not done, and due before next week: this week's and the late
 		if n.Task == nil || n.Task.Status == model.StatusDone || n.Task.Due == nil ||
-			!n.Task.Due.Before(weekStart(today(a.now())).AddDate(0, 0, 7)) {
+			!n.Task.Due.Before(a.weekOf(today(a.now())).AddDate(0, 0, 7)) {
 			return false
 		}
 	}

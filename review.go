@@ -19,7 +19,7 @@ func (a *app) weekReview(c *ui.Context, all []taskItem) {
 	now := a.now()
 	day := today(now)
 	back := a.tasks.reviewBack
-	from := weekStart(day).AddDate(0, 0, -7*back)
+	from := a.weekOf(day).AddDate(0, 0, -7*back)
 	to := from.AddDate(0, 0, 7)
 	var done, late []taskItem
 	for _, it := range all {

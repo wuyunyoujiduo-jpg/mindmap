@@ -4,8 +4,9 @@ import "time"
 
 // The Chinese calendar's days, under the dates of the week and the month,
 // as TickTick's and Feishu's (the user's reference): 初七, the month's name
-// on its first day (十月, 闰六月), and the feasts (春节, 中秋) and the few
-// holidays of the sun's calendar (元旦, 国庆节) instead. From the table that
+// on its first day (十月, 闰六月), and the feasts (春节, 中秋), the solar
+// terms (立冬, 冬至) and the few holidays of the sun's calendar (元旦,
+// 国庆节) instead. From the table that
 // calendars commonly carry, of 1900 to 2100: a year's months of thirty
 // days (bits 15 to 4, the first month highest), its leap month (bits 3 to
 // 0, none at 0), and whether that one has thirty (bit 16). Its first day
@@ -130,6 +131,9 @@ func lunarLabel(d time.Time) (string, bool) {
 		if f, ok := lunarFeasts[[2]int{l.month, l.day}]; ok {
 			return f, true
 		}
+	}
+	if term, ok := solarTerm(d); ok { // solarterm.go
+		return term, true
 	}
 	if l.day == 1 {
 		name := lunarMonthNames[l.month]
