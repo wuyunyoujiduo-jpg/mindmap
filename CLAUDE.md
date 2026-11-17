@@ -564,11 +564,24 @@ by AI, and an AI assistant.
   so that it shows over full-screen apps without activating the app, a region
   framed there with handles and marked up in colors, the toolbar by it.
   macOS may keep those windows below the menu bar: the shot is drawn offset
-  by where the window really is (`screenShot.off`). No system tool is used.
+  by where the window really is (`screenShot.off`). The pixels of a display
+  are macOS's `screencapture`'s (`capture_darwin.go`); the rest is the app's.
   Global shortcuts reach the app with a menu open (`menus_darwin.go`; and,
   as macOS hands them over only once the menu closes, the keyboard's state
   is watched while a menu of the app is open, `watchKeysUnderMenu`, which
   needs no permission; the listener of `keytap_darwin.go` needs 输入监控),
   and the shot closes that menu once taken.
-  Each step goes to `screenshot.log`, shown in the settings.
+  Each step goes to `screenshot.log`, shown in its folder from the menu.
+- A reading of the whole (0.105.1, the user's: what is broken, at odds,
+  slow or no longer needed) mended what was sure and left the rest in
+  `docs/审查清单.md`, by part, each with where it is and how it was shown:
+  to be read before a part is worked on, and its entries taken out as
+  they are mended. What it taught, to keep to: what cannot be read is not
+  gone (the sync, the backup: a file locked or a folder that is a link
+  was read as deleted, and deleted elsewhere); what a field shows of a
+  thing kept is saved only where it was typed in, for the thing may have
+  changed meanwhile (`tasks.titleWas`); what an AI or an agent reads of
+  收集 is masked where it is made (`library.Brief`, `Full`), not by each
+  that asks; and a walk told to leave a branch must not leave the rest
+  (`model.Diff`'s `tops`).
 - The user writes in Chinese; the app's texts are Chinese.

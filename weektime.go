@@ -609,6 +609,11 @@ func (a *app) moveTaskWhen(d taskDrag, day time.Time, at int) {
 			w := *task.Due
 			was = &w
 		}
+		var wasStart *time.Time // the move takes it off when it is after the new day
+		if task.Start != nil {
+			w := *task.Start
+			wasStart = &w
+		}
 		wasAt, wasEnd, wasRemind := task.Time, task.EndTime, task.Remind
 		a.later(func() {
 			a.editTask(it, "改任务时间", func(n *model.Node) {
@@ -645,7 +650,7 @@ func (a *app) moveTaskWhen(d taskDrag, day time.Time, at int) {
 			}
 			a.tellUndo("已移到 "+when+"：「"+it.node.Title+"」", func() {
 				a.editTask(it, "撤回移动", func(n *model.Node) {
-					n.Task.Due, n.Task.Time, n.Task.EndTime, n.Task.Remind = was, wasAt, wasEnd, wasRemind
+					n.Task.Due, n.Task.Start, n.Task.Time, n.Task.EndTime, n.Task.Remind = was, wasStart, wasAt, wasEnd, wasRemind
 				})
 			})
 		})

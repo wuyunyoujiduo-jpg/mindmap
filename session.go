@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
@@ -84,14 +85,21 @@ func (a *app) rememberView() {
 	}
 	a.views[a.path] = v
 	a.hists[a.path] = a.hist
+	if a.histAt == nil {
+		a.histAt = map[string]time.Time{}
+	}
+	a.histAt[a.path] = a.modTime
 }
 
 // restoreView shows the map just opened as it was left: its canvas, view,
 // cameras and history. A map never opened starts on its first canvas.
 func (a *app) restoreView(f *model.File) {
 	a.cams = map[string]*camera{}
+	// Its steps are of the file as it was left. Changed since by an agent
+	// or the sync, they are of another content: undone, the map was put
+	// back to before that change and saved so, with nothing said.
 	a.hist = a.hists[a.path]
-	if a.hist == nil {
+	if a.hist == nil || !a.histAt[a.path].Equal(a.modTime) {
 		a.hist = model.NewHistory(200)
 	}
 	sheet := f.Sheets[0].ID

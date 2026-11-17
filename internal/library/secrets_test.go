@@ -111,3 +111,17 @@ func TestAIReadsNoSecret(t *testing.T) {
 		}
 	}
 }
+
+// A # in a password is no tag's; what is sealed in a clip's analysis is
+// a secret of the clip; a page of letters whose small form is of another
+// length is cut where it should be.
+func TestSecretsOddPlaces(t *testing.T) {
+	c := &Clip{ID: "c1", Kind: KindLink, Analysis: "接口用 sk-abcdefghijklmnopqrstuvwx 调"}
+	if !c.Secret() {
+		t.Error("a secret in the analysis is not the clip's")
+	}
+	p := ParseHTML("<html><head><title>T</title></head>" + strings.Repeat("Ⱥ", 200) + "<BODY><article>正文在这里</article></BODY></html>")
+	if !strings.Contains(p.Text, "正文在这里") {
+		t.Errorf("page text %q", p.Text)
+	}
+}

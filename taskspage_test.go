@@ -689,3 +689,66 @@ func TestHoursMakeTasks(t *testing.T) {
 	}
 	snapshot(t, tt, "hours-day")
 }
+
+// A task whose details are open and that an agent or the sync changes
+// keeps the change: the draft follows it, and is not written back over it.
+func TestTaskDetailsFollowOutsideChange(t *testing.T) {
+	a, tt := newTestApp(t)
+	a.openTasks()
+	a.addTask("写方案", nil)
+	tt.Frame()
+	var it *taskItem
+	for _, x := range a.taskItems() {
+		if x.node.Title == "写方案" {
+			it = &x
+		}
+	}
+	if it == nil {
+		t.Fatal("no task")
+	}
+	a.tasks.view = tasksAll
+	a.showTask(*it)
+	tt.Frame()
+	tt.Frame()
+
+	f, err := model.Load(it.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := f.Node(it.node.ID)
+	n.Title, n.Note = "写方案（第二版）", "对方补的备注"
+	if err := f.Save(it.path); err != nil {
+		t.Fatal(err)
+	}
+	future := testNow.Add(time.Minute)
+	os.Chtimes(it.path, future, future)
+	a.now = func() time.Time { return testNow.Add(10 * time.Second) }
+	for range 6 {
+		tt.Frame()
+	}
+	f, _ = model.Load(it.path)
+	if n := f.Node(it.node.ID); n == nil || n.Title != "写方案（第二版）" || n.Note != "对方补的备注" {
+		t.Fatalf("the change from outside was written over: %+v", n)
+	}
+	if a.tasks.title != "写方案（第二版）" || a.tasks.note != "对方补的备注" {
+		t.Fatalf("the draft did not follow: %q, %q", a.tasks.title, a.tasks.note)
+	}
+
+	// A name left with a space at its end, or emptied, asks for no frame
+	// without end, and what is typed is still kept.
+	a.tasks.title = "写方案（第三版） "
+	for range 4 {
+		tt.Frame()
+	}
+	f, _ = model.Load(it.path)
+	if n := f.Node(it.node.ID); n == nil || n.Title != "写方案（第三版）" || n.Note != "对方补的备注" {
+		t.Fatalf("what was typed was not kept: %+v", n)
+	}
+	a.tasks.title = ""
+	for range 4 {
+		tt.Frame()
+	}
+	if a.tasks.title != "写方案（第三版）" {
+		t.Fatalf("a name emptied: %q", a.tasks.title)
+	}
+}

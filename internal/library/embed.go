@@ -150,15 +150,17 @@ func Cosine(a, b []float32) float64 {
 	return s
 }
 
-// EmbedText is what of a clip its vector is made of.
+// EmbedText is what of a clip its vector is made of: without what is
+// sealed, and with what looks like a secret and is not sealed in dots,
+// for the model may be one asked over the network.
 func EmbedText(c *Clip) string {
 	var b strings.Builder
 	for _, s := range []string{c.Title, c.Desc, c.Summary, c.Category, strings.Join(c.Tags, " "), strings.Join(c.Keywords, " "), strings.Join(c.Synonyms, " "), c.Analysis, c.Note} {
-		if s = strings.TrimSpace(noSealed(s)); s != "" {
+		if s = strings.TrimSpace(Mask(noSealed(s))); s != "" {
 			b.WriteString(s + "\n")
 		}
 	}
-	text := []rune(strings.TrimSpace(noSealed(c.Text)))
+	text := []rune(strings.TrimSpace(Mask(noSealed(c.Text))))
 	if len(text) > 1500 {
 		text = text[:1500]
 	}

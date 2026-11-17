@@ -245,14 +245,39 @@ func (a *app) moveToMap(path, sheet, id string) {
 		return
 	}
 	if path == a.path {
+		// Under a topic of the canvas shown, or of another canvas of the
+		// map: there the branch is taken off this one and put under it.
+		// (Moved as on one canvas, nothing moved, and it said 已移动.)
+		to := a.file.SheetOf(id)
+		if to == nil {
+			a.tell("没有移动：那个主题已经不在了")
+			return
+		}
+		moved := 0
 		a.mutate("", func() {
 			for _, n := range nodes {
 				if n.Contains(id) {
 					continue // not under itself
 				}
-				_ = a.doc.Move(n.ID, id, -1)
+				if to == a.doc {
+					if a.doc.Move(n.ID, id, -1) == nil {
+						moved++
+					}
+					continue
+				}
+				target, _ := to.Find(id)
+				if _, err := a.doc.Delete(n.ID); err != nil || target == nil {
+					continue
+				}
+				target.Children = append(target.Children, n)
+				target.Collapsed = false
+				moved++
 			}
 		})
+		if moved == 0 {
+			a.tell("没有移动")
+			return
+		}
 		if d := a.file.SheetOf(nodes[0].ID); d != nil && d.ID != a.doc.ID {
 			a.showSheet(d.ID)
 		}

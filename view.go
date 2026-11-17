@@ -541,6 +541,11 @@ func (a *app) panelShown(c *ui.Context) bool {
 // the map's sets and draws one of the topic chosen.
 func (a *app) showView(mode int) {
 	if mode != viewDiagram {
+		// What is being written is kept first: left open, a title typed
+		// on the canvas was an empty line of the outline.
+		if mode != a.mode {
+			a.commitEditIfAny()
+		}
 		a.mode = mode
 		return
 	}

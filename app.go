@@ -129,6 +129,7 @@ type app struct {
 	savedAt   time.Time // when this run last saved the map
 	hist      *model.History
 	hists     map[string]*model.History // of the maps opened, while the app runs
+	histAt    map[string]time.Time      // each as its file was when it was left (restoreView)
 	views     map[string]*fileView      // how each map was left
 	versions  versions.Store            // past versions of the maps
 	lastSnap  map[string]time.Time      // when each map was last kept as a version
@@ -1272,6 +1273,12 @@ func (a *app) showSheet(id string) {
 	}
 	if a.editing != "" && a.doc != nil && a.doc.ID != id {
 		a.commitEdit()
+	}
+	if a.doc != nil && a.doc.ID != id {
+		// What was chosen of the canvas left, and a relation begun on it,
+		// are not of this one: the panel said one topic chosen of several,
+		// and a relation ended here joined a topic that is not here.
+		a.multi, a.relFrom, a.selRel = nil, "", ""
 	}
 	a.doc = d
 	a.selected = a.cam().selected

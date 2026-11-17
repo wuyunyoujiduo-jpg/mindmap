@@ -357,11 +357,9 @@ func (a *app) searchClips() []library.Hit {
 			return false
 		case a.libCat == "★" && !c.Starred:
 			return false
-		case a.libCat == secretCat:
-			if c.Kind == kindMap || !c.Secret() {
-				return false
-			}
-		case a.libCat != "" && a.libCat != "-" && a.libCat != "★" && c.Category != a.libCat:
+		case a.libCat == secretCat && (c.Kind == kindMap || !c.Secret()):
+			return false
+		case a.libCat != "" && a.libCat != secretCat && a.libCat != "-" && a.libCat != "★" && c.Category != a.libCat:
 			return false
 		case a.libTag != "" && !slices.Contains(c.Tags, a.libTag):
 			return false
@@ -841,7 +839,8 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 			// details a page of the AI's words over a line of the user's.
 			if analysisShown(clip) {
 				if a.foldKey(c, "analysis:"+clip.ID, "分析要点", "") {
-					markdownView(c.Key("clip-analysis"), clip.Analysis, textBody)
+					analysis, _ := a.fieldText(clip, "analysis", clip.Analysis) // a secret in it in dots, till shown
+					markdownView(c.Key("clip-analysis"), analysis, textBody)
 				}
 			}
 			if a.libSynFor != clip.ID || !a.libSynEditing {

@@ -96,7 +96,11 @@ type tasksState struct {
 	// The details edited: the title and the note, kept as they are typed
 	// and saved as they are left; the subtask being written.
 	title, note, draftOf string
-	subtask              string
+	// titleWas and noteWas are the task's name and note as the draft was
+	// taken of them: what is typed is what differs from them, and a task
+	// changed meanwhile by an agent or the sync differs from them too.
+	titleWas, noteWas string
+	subtask           string
 	// places are where the AI would put the tasks of the inbox, by their
 	// nodes' IDs (sortout.go); placing while it is asked.
 	places   map[string]taskPlace
@@ -509,7 +513,9 @@ func parseTaskLine(line string, now time.Time) (string, *time.Time, model.Priori
 // dayLabel names a day near now: 今天, 明天, 周三, 11月20日.
 func dayLabel(d, now time.Time) string {
 	day := today(now)
-	switch n := int(d.Sub(day).Hours() / 24); {
+	// In days, not in hours by 24: a day of 23 hours, where the clocks
+	// change, made tomorrow today.
+	switch n := daysBetween(day, d); {
 	case n == 0:
 		return "今天"
 	case n == 1:
@@ -840,6 +846,7 @@ func (a *app) showTask(it taskItem) {
 	a.saveTaskDrafts()
 	a.tasks.sel = it.key()
 	a.tasks.title, a.tasks.note, a.tasks.draftOf, a.tasks.subtask = it.node.Title, it.node.Note, it.key(), ""
+	a.tasks.titleWas, a.tasks.noteWas = it.node.Title, it.node.Note
 }
 
 // saveTaskDrafts saves the title and the note typed in the details.
@@ -851,14 +858,35 @@ func (a *app) saveTaskDrafts() {
 		if it.key() != a.tasks.draftOf {
 			continue
 		}
+		// Only what was typed is kept: a draft as it was taken says
+		// nothing, and written back it undid what an agent or the sync
+		// had changed of the task meanwhile (and, a name that was only
+		// trimmed never being the task's, asked for a frame without end).
 		title, note := strings.TrimSpace(a.tasks.title), a.tasks.note
-		if title != "" && title != it.node.Title || note != it.node.Note {
+		setTitle := title != "" && title != a.tasks.titleWas && title != it.node.Title
+		setNote := note != a.tasks.noteWas && note != it.node.Note
+		nowTitle, nowNote := it.node.Title, it.node.Note
+		if setTitle || setNote {
 			a.editTask(it, "改任务", func(n *model.Node) {
-				if title != "" {
+				if setTitle {
 					n.Title = title
 				}
-				n.Note = note
+				if setNote {
+					n.Note = note
+				}
 			})
+		}
+		// The draft is of the task as it now is: what was not typed
+		// follows it, a name emptied is the task's again.
+		if setTitle {
+			a.tasks.titleWas = title
+		} else {
+			a.tasks.title, a.tasks.titleWas = nowTitle, nowTitle
+		}
+		if setNote {
+			a.tasks.noteWas = note
+		} else {
+			a.tasks.note, a.tasks.noteWas = nowNote, nowNote
 		}
 	}
 }
@@ -870,6 +898,7 @@ func (a *app) taskDetail(c *ui.Context, it taskItem) {
 	task := it.node.Task
 	if a.tasks.draftOf != it.key() {
 		a.tasks.title, a.tasks.note, a.tasks.draftOf = it.node.Title, it.node.Note, it.key()
+		a.tasks.titleWas, a.tasks.noteWas = it.node.Title, it.node.Note
 	}
 	// Escape puts the details away, as everything that opens; while
 	// something is written in it, it first leaves the field (escRest).
@@ -888,7 +917,7 @@ func (a *app) taskDetail(c *ui.Context, it taskItem) {
 		ui.Row(c.Key("task-detail-head")).Height(pageHeadHeight).Padding(16, 12, 0, 20).Gap(10).AlignItems(ui.Center).Shrink(0).Children(func() {
 			a.taskCircle(c, it, 20)
 			in := inlineInput(c, &a.tasks.title, textTitle, true, "任务名", "任务名").Grow(1).Shrink(1).MinWidth(0)
-			if in.Submitted() || !in.Focused() && a.tasks.title != it.node.Title {
+			if in.Submitted() || !in.Focused() && (strings.TrimSpace(a.tasks.title) != a.tasks.titleWas || it.node.Title != a.tasks.titleWas) {
 				a.later(a.saveTaskDrafts)
 			}
 			if iconButton(c, iconClose, "关闭详情", "关闭", 26, true).Clicked() {
@@ -921,7 +950,7 @@ func (a *app) taskDetail(c *ui.Context, it taskItem) {
 				section(c, iconPencil, "备注", nil, func() {
 					in := area(c.Key("task-note"), &a.tasks.note).Lines(3, 14).FontSize(textBody).FillWidth().
 						Placeholder("写点细节、链接、想法…").Label("任务备注")
-					if !in.Focused() && a.tasks.note != it.node.Note {
+					if !in.Focused() && (a.tasks.note != a.tasks.noteWas || it.node.Note != a.tasks.noteWas) {
 						a.later(a.saveTaskDrafts)
 					}
 				})

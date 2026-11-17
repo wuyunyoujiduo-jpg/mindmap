@@ -126,6 +126,7 @@ func (a *app) newFromTemplate(tp template) {
 			return
 		}
 		f = g.Clone()
+		notOfAProject(f)
 		for _, d := range f.Sheets { // new IDs, as for a copy
 			d.ID = model.NewID()
 			d.Root = d.Root.Copy()
@@ -164,14 +165,28 @@ func (a *app) saveAsTemplate() {
 		return
 	}
 	path := freeMapPath(dir, mapName(a.path))
-	if err := a.file.Save(path); err != nil {
+	tpl := a.file.Clone()
+	notOfAProject(tpl)
+	if err := tpl.Save(path); err != nil {
 		a.saveErr = err.Error()
 		return
 	}
 	for _, d := range a.file.Sheets {
 		copyAssets(d.Root, model.AssetsDir(a.path), model.AssetsDir(path))
+		for _, n := range d.Floating {
+			copyAssets(n, model.AssetsDir(a.path), model.AssetsDir(path))
+		}
 	}
 	a.tell("已存为模板「" + mapName(path) + "」")
+}
+
+// notOfAProject takes from a map what makes it a project's own: the
+// code's folder and repository, the commit it was brought up to date
+// with, and what the agents wrote of their sessions. A template is of no
+// project: with these, a map made from one claimed the repository of the
+// map it was saved from, and showed its agents' record.
+func notOfAProject(f *model.File) {
+	f.Project, f.Repo, f.GitHub, f.Baseline, f.Log = "", "", "", nil, nil
 }
 
 func (a *app) deleteTemplate(tp template) {

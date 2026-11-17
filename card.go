@@ -58,7 +58,7 @@ func cardText(c *library.Clip) string {
 	}
 	var parts []string
 	for _, s := range []string{c.Title, c.Desc} {
-		if s = strings.TrimSpace(s); s != "" {
+		if s = strings.TrimSpace(library.Mask(s)); s != "" {
 			parts = append(parts, s)
 		}
 	}

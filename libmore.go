@@ -161,7 +161,7 @@ func (a *app) clipLink(c *ui.Context, clip *library.Clip) {
 		glyph(c, kindIcon(clip.Kind), 13, t.Accent)
 		ui.Text(c, clip.Label()).FontSize(12).TextColor(t.Accent).SingleLine().Shrink(1).MinWidth(0)
 		if clip.Desc != "" {
-			ui.Text(c, clip.Desc).FontSize(11).TextColor(t.TextMuted).SingleLine().Shrink(2).MinWidth(0)
+			ui.Text(c, library.Mask(clip.Desc)).FontSize(11).TextColor(t.TextMuted).SingleLine().Shrink(2).MinWidth(0)
 		}
 	})
 }

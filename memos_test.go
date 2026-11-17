@@ -165,3 +165,20 @@ func TestMemoPlaces(t *testing.T) {
 		t.Fatal("asked again of a note already on a map")
 	}
 }
+
+// A # in a password is not a tag; and 含密钥 narrows with a tag as the
+// other ways to look back do.
+func TestSecretIsNoTagAndNarrowsWithOne(t *testing.T) {
+	a, _ := newTestApp(t)
+	m, err := a.addMemo("服务器 root 密码: Abc#12345678x", "测试")
+	if err != nil || len(m.Tags) != 0 {
+		t.Fatalf("tags of a password: %v (%v)", m.Tags, err)
+	}
+	if _, err := a.addMemo("接口 sk-abcdefghijklmnopqrstuvwx #工作", "测试"); err != nil {
+		t.Fatal(err)
+	}
+	a.libCat, a.libTag = secretCat, "工作"
+	if hits := a.searchClips(); len(hits) != 1 || !slices.Contains(hits[0].Clip.Tags, "工作") {
+		t.Fatalf("含密钥 and #工作: %d found", len(hits))
+	}
+}

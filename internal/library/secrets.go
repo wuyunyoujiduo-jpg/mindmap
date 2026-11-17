@@ -332,8 +332,11 @@ func (c *Clip) Secret() bool {
 	if c.Locked {
 		return true
 	}
-	for _, s := range []string{c.Text, c.Note, c.Title, c.Summary, c.Desc} {
-		if HasSecret(s) {
+	// Every part that is sealed (secretFields), the analysis too: sealed
+	// there and not counted here, a secret could be neither shown nor
+	// found under 含密钥.
+	for _, f := range c.secretFields() {
+		if HasSecret(*f) {
 			return true
 		}
 	}

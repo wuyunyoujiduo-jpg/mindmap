@@ -115,9 +115,6 @@ func (a *app) dueToday(now time.Time) []taskItem {
 	return due
 }
 
-// homeTaskCount is how many tasks of today the desk shows.
-const homeTaskCount = 5
-
 // doneToday are the tasks ticked off today.
 func (a *app) doneToday(now time.Time) []taskItem {
 	var done []taskItem
@@ -183,13 +180,10 @@ const homeWaitingCount = 6
 // has its place, 收集, and may be put on a map as well.
 func (a *app) homeWaiting(c *ui.Context) {
 	t := c.Theme()
-	listed := map[string]bool{} // the tasks of 今天要做 are not listed twice
-	for i, it := range a.dueToday(a.now()) {
-		if i < homeTaskCount {
-			listed[it.key()] = true
-		}
-	}
-	items := slices.DeleteFunc(a.waiting(), func(w waitingItem) bool { return w.task != nil && listed[w.task.key()] })
+	// All that waits, as the left column counts it. (The desk that was
+	// left out the tasks of today it showed above: the row then said two
+	// where the page said nothing waits.)
+	items := a.waiting()
 	suggested := len(a.tasks.places) + len(a.clipPlaces)
 	tray(c, "home-waiting").Children(func() {
 		trayHead(c, "head:刚记下的", "刚记下的", "收件箱的任务，和标了待归位的资料", func() {

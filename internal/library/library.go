@@ -141,6 +141,8 @@ func Open(dir string) (*Library, error) {
 	if err != nil && !os.IsNotExist(err) {
 		return nil, err
 	}
+	at := map[string]int{}       // where the clip of an ID is in l.Clips
+	named := map[string]string{} // and the file it was first read from
 	for _, e := range entries {
 		if e.IsDir() || filepath.Ext(e.Name()) != ".json" {
 			continue
@@ -154,6 +156,22 @@ func Open(dir string) (*Library, error) {
 			l.Broken = append(l.Broken, e.Name())
 			continue
 		}
+		// A second file of one clip, as a cloud's copy "abc 2.json" is:
+		// the one updated later is the clip, the other is said with the
+		// files that could not be read. Both loaded were two cards of one
+		// key, and Find's index was made again at every call.
+		if i, ok := at[c.ID]; ok {
+			stray := e.Name()
+			if stray == c.ID+".json" { // the clip's own file: the other is the stray
+				stray = named[c.ID]
+			}
+			l.Broken = append(l.Broken, stray)
+			if c.Updated.After(l.Clips[i].Updated) {
+				l.Clips[i] = &c
+			}
+			continue
+		}
+		at[c.ID], named[c.ID] = len(l.Clips), e.Name()
 		l.Clips = append(l.Clips, &c)
 	}
 	l.sort()

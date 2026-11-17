@@ -364,7 +364,9 @@ func (a *app) canvasArea(c *ui.Context) {
 	z := cam.Zoom
 	lk := lookOf(a.doc.Style)
 	shown := a.shownDoc()
-	if shown.Path(a.selected) == nil && a.editing == "" { // left outside the branch focused on
+	// Not while a picture is made of it, with nothing chosen: its central
+	// topic was drawn chosen in every picture saved.
+	if a.exportCam == nil && shown.Path(a.selected) == nil && a.editing == "" { // left outside the branch focused on
 		a.selected, a.multi = shown.Root.ID, nil
 	}
 	a.progress = progressOf(shown.Root)
@@ -1095,14 +1097,7 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 				})
 				continue
 			}
-			if false { // main topics are pastel now: the usual chip reads on them
-				size := markSize * z
-				ui.Box(c.Key("tag:"+tag)).Padding(size*0.15, size*0.6).Radius(999).Background(ui.Hex("#FFFFFF").Alpha(0.5)).PassThrough().Children(func() {
-					ui.Text(c, tag).FontSize(size).TextColor(onFill).NoWrap().PassThrough()
-				})
-			} else {
-				tagChip(c.Key("tag:"+tag), tag, tag, false, markSize*z).PassThrough()
-			}
+			tagChip(c.Key("tag:"+tag), tag, tag, false, markSize*z).PassThrough()
 		}
 		if p.more > 0 {
 			ui.Text(c, "+"+strconv.Itoa(p.more)).FontSize(markSize * z).TextColor(muted).NoWrap()

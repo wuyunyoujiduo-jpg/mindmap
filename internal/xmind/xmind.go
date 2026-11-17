@@ -425,6 +425,9 @@ func (im *importer) fromJSON(b []byte) (*model.File, error) {
 		d := &model.Document{ID: model.NewID(), Title: s.Title, Root: im.topic(s.RootTopic)}
 		if s.RootTopic.Children != nil { // floating topics where they were
 			for _, t := range s.RootTopic.Children.Detached {
+				if t == nil {
+					continue
+				}
 				f := im.topic(t)
 				f.Pos = &model.Point{X: 220, Y: -120}
 				if t.Position != nil {
@@ -470,13 +473,15 @@ func (im *importer) topic(t *topic) *model.Node {
 	}
 	if t.Children != nil {
 		for _, c := range t.Children.Attached {
-			n.Children = append(n.Children, im.topic(c))
+			if c != nil { // a file not of XMind's making may hold a null
+				n.Children = append(n.Children, im.topic(c))
+			}
 		}
 		// A summary's topic, of XMind's or of an export from here; one a
 		// node, over all its children: the first, if there are several.
 		for _, s := range t.Summaries {
 			for _, c := range t.Children.Summary {
-				if c.ID == s.TopicID && n.Summary == nil {
+				if c != nil && c.ID == s.TopicID && n.Summary == nil {
 					n.Summary = &model.Mark{Topic: im.topic(c)}
 				}
 			}

@@ -39,6 +39,7 @@ func (a *app) materialLines(clips []*library.Clip) (string, []string) {
 		if desc == "" {
 			desc = c.Summary
 		}
+		desc = library.Mask(desc) // it goes to the AI
 		if r := []rune(desc); len(r) > 80 {
 			desc = string(r[:80]) + "…"
 		}

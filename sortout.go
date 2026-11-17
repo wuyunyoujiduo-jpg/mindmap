@@ -186,6 +186,11 @@ func (a *app) moveTaskUndoably(it taskItem, toPath, toID, label string) {
 		a.tell("没有移过去：" + err.Error())
 		return
 	}
+	// Chosen, it is no longer where it was chosen: the page was laid out
+	// for details that showed no more, and Escape could not put them away.
+	if a.tasks.sel == it.key() {
+		a.tasks.sel, a.tasks.draftOf = "", ""
+	}
 	said := "已放到「" + label + "」下"
 	if was == "" {
 		a.tell(said)

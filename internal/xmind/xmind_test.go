@@ -200,3 +200,14 @@ func TestNotXMind(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// A file not of XMind's making, with a null where a topic should be, is
+// read without it.
+func TestImportNullTopics(t *testing.T) {
+	content := `[{"id":"s","title":"画布","rootTopic":{"id":"r","title":"中心主题",
+	 "children":{"attached":[null,{"id":"a","title":"分支","children":{"attached":[null]}}],"detached":[null]}}}]`
+	f := importBytes(t, archive(t, map[string][]byte{"content.json": []byte(content)}), filepath.Join(t.TempDir(), "x.assets"))
+	if root := f.Sheets[0].Root; len(root.Children) != 1 || root.Children[0].Title != "分支" || len(f.Sheets[0].Floating) != 0 {
+		t.Fatalf("read %+v", root)
+	}
+}

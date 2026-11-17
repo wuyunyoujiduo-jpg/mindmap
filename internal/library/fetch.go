@@ -120,7 +120,7 @@ func ParseHTML(src string) Page {
 		}
 	}
 	body := src
-	if i := strings.Index(strings.ToLower(body), "<body"); i >= 0 {
+	if i := strings.Index(lowerASCII(body), "<body"); i >= 0 {
 		body = body[i:]
 	}
 	body = reDrop.ReplaceAllString(body, " ")
@@ -135,9 +135,23 @@ func ParseHTML(src string) Page {
 	return p
 }
 
+// lowerASCII is s with its Latin capitals small, every byte in its place:
+// what is found in it is cut out of s, and strings.ToLower moves the
+// places where a letter's small form is longer or shorter (Ⱥ, İ), so
+// that a page of them was cut wrong, or past its end.
+func lowerASCII(s string) string {
+	b := []byte(s)
+	for i, c := range b {
+		if c >= 'A' && c <= 'Z' {
+			b[i] = c + 'a' - 'A'
+		}
+	}
+	return string(b)
+}
+
 // mainPart is the page's <article> or <main>, where its content is.
 func mainPart(body string) string {
-	lower := strings.ToLower(body)
+	lower := lowerASCII(body)
 	for _, tag := range []string{"article", "main"} {
 		i := strings.Index(lower, "<"+tag)
 		j := strings.LastIndex(lower, "</"+tag+">")

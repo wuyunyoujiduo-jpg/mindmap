@@ -38,17 +38,19 @@ func (a *app) addMemo(text, source string) (*library.Clip, error) {
 	if text == "" {
 		return nil, fmt.Errorf("没有内容")
 	}
-	c := &library.Clip{Kind: library.KindText, Text: text, Source: source, Tags: memoTags(text)}
+	c := &library.Clip{Kind: library.KindText, Text: text, Source: source, Tags: memoTags(library.Mask(text))}
 	return a.kept(c, a.lib.Add(c, a.now()))
 }
 
 // setMemoText changes a note's text: the tags written in it follow, the
 // others (the AI's, the user's) stay.
 func (a *app) setMemoText(m *library.Clip, text string) {
-	old := memoTags(m.Text)
+	// The tags of the text with its secrets in dots: a # in a password
+	// made the rest of it a tag, kept and shown in the open.
+	old := memoTags(library.Mask(m.Text))
 	m.Text = text
 	tags := slices.DeleteFunc(slices.Clone(m.Tags), func(s string) bool { return slices.Contains(old, s) })
-	for _, tag := range memoTags(text) {
+	for _, tag := range memoTags(library.Mask(text)) {
 		if !slices.Contains(tags, tag) {
 			tags = append(tags, tag)
 		}

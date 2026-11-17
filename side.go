@@ -183,7 +183,7 @@ func (a *app) todaySide(c *ui.Context) {
 		}
 		if n := len(a.waiting()); n > 0 || a.tasks.view == tasksWaiting {
 			if sideRow(c, "list:waiting", "等着归位", fmt.Sprint(n), noMap && a.tasks.view == tasksWaiting, sideIcon(c, "import")).Clicked() {
-				a.tasks.view = tasksWaiting
+				a.tasks.view, a.tasks.onMap = tasksWaiting, "" // of no one project, as the lists
 			}
 		}
 		// A project's count is the lists' count (countsAsTask), and how far

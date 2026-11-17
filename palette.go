@@ -49,7 +49,7 @@ type command struct {
 
 func (a *app) commands() []command {
 	hasDoc := func() bool { return a.doc != nil }
-	view := func(m int) func() { return func() { a.mode = m } }
+	view := func(m int) func() { return func() { a.showView(m) } }
 	cmds := []command{
 		{"新建导图", "⌘N", a.newMap, nil},
 		{"从模板新建…", "⌘⇧N", func() { a.templatesOpen = true }, nil},
@@ -219,7 +219,7 @@ func (a *app) paletteItems() []paletteItem {
 				break
 			}
 			id := h.Clip.ID
-			items = append(items, paletteItem{"资料", h.Clip.Label(), cmpOr(h.Clip.Desc, h.Clip.Category), func() {
+			items = append(items, paletteItem{"资料", h.Clip.Label(), library.Mask(cmpOr(h.Clip.Desc, h.Clip.Category)), func() {
 				if at := a.floatAt; at != nil { // onto the canvas, where its menu was opened
 					a.addFloatingClip(id, *at)
 				} else if n := a.file.Node(a.linkFrom); n != nil {
@@ -261,7 +261,7 @@ func (a *app) paletteItems() []paletteItem {
 				break
 			}
 			id := h.Clip.ID
-			items = append(items, paletteItem{"资料", h.Clip.Label(), cmpOr(h.Clip.Desc, h.Clip.Category), func() {
+			items = append(items, paletteItem{"资料", h.Clip.Label(), library.Mask(cmpOr(h.Clip.Desc, h.Clip.Category)), func() {
 				a.libOpen, a.libSel = true, id
 			}, nil})
 		}

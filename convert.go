@@ -168,7 +168,7 @@ func (a *app) taskThoughts(c *ui.Context, it taskItem) {
 				})
 			}
 			card.Children(func() {
-				body := cl.Text
+				body := library.Mask(cl.Text) // as on the wall
 				if !isMemo(cl) || strings.TrimSpace(body) == "" {
 					body = cl.Label()
 				}

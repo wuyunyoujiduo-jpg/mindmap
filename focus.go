@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -162,7 +163,9 @@ func (a *app) topSelection() []*model.Node {
 		}
 		inside := false
 		for _, m := range sel {
-			if m != n && m.Contains(n.ID) {
+			// The root holds every topic and is not of what moves or
+			// goes: chosen with others, it is not what they are inside.
+			if m != n && m != a.doc.Root && m.Contains(n.ID) {
 				inside = true
 				break
 			}
@@ -177,7 +180,9 @@ func (a *app) topSelection() []*model.Node {
 // deleteSelection deletes the nodes selected.
 func (a *app) deleteSelection() {
 	nodes := a.topSelection()
-	if len(nodes) <= 1 {
+	// One topic chosen: as ever. Several of which one holds the others
+	// are that one too, and not the one chosen last, a child of it.
+	if len(nodes) == 0 || len(nodes) == 1 && nodes[0].ID == a.selected {
 		a.deleteSelected()
 		return
 	}
@@ -382,12 +387,25 @@ func copyAssets(n *model.Node, from, to string) {
 				}
 			}
 		}
+		// The pictures in its note too: left behind, the note of a branch
+		// moved to another map showed a picture missing.
+		if from != to {
+			for _, m := range notePictureFile.FindAllStringSubmatch(n.Note, -1) {
+				copyAsset(from, to, m[1])
+			}
+		}
 		for _, c := range n.Children {
 			walk(c)
+		}
+		if t := n.SummaryTopic(); t != nil {
+			walk(t)
 		}
 	}
 	walk(n)
 }
+
+// notePictureFile finds the file of each picture in a note's Markdown.
+var notePictureFile = regexp.MustCompile(`!\[[^\]]*\]\(` + assetScheme + `([^)\s]+)[^)]*\)`)
 
 // expandTo opens the canvas down to the depth (0: all) below the middle.
 func (a *app) expandTo(depth int) {
