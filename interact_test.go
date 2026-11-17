@@ -712,7 +712,16 @@ func TestTodaySideProjects(t *testing.T) {
 		n := model.NewNode("一件事")
 		n.SetStatus(model.StatusTodo, a.now())
 		f.Sheets[0].Root.Children = append(f.Sheets[0].Root.Children, n)
-		if err := f.Save(filepath.Join(a.dir, model.FileName(fmt.Sprint("项目", i)))); err != nil {
+		path := filepath.Join(a.dir, model.FileName(fmt.Sprint("项目", i)))
+		if err := f.Save(path); err != nil {
+			t.Fatal(err)
+		}
+		// Each written a minute before the one before it: the folder gives
+		// its maps by when they were written, and eight written in one
+		// tick of the disk's clock came in an order of their own, 项目0 now
+		// and then at the column's foot, out of the window.
+		at := a.now().Add(-time.Duration(i) * time.Minute)
+		if err := os.Chtimes(path, at, at); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -842,7 +851,7 @@ func TestThoughtLinksToATopic(t *testing.T) {
 	a, tt := newTestApp(t)
 	login := find(t, a, "登录")
 	a.showLibrary()
-	a.libHome = true
+	a.tasks.open = true
 	a.barOpen = true
 	a.homeDraft = "上线前要再看一遍 [[登录"
 	tt.Frame()

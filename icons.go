@@ -19,8 +19,6 @@ const (
 	iconTarget   // back to the center
 	iconDownload // export
 	iconPlay
-	iconUndo
-	iconRedo
 	iconCheck
 	iconPencil
 	iconClose
@@ -31,27 +29,23 @@ const (
 	iconShare
 	iconFolder
 	iconLibrary
-	iconInbox
 	iconMap
 	iconSearch
-	iconSend     // a paper plane
-	iconText     // a clip of text: lines on a page
-	iconLink     // two links of a chain
-	iconImage    // a picture: a frame, a hill and the sun
-	iconFile     // a page with its corner folded
-	iconShot     // a screenshot: the corners of a frame
-	iconCloud    // the sync with GitHub
-	iconClip     // a paperclip: attach files
-	iconCategory // a category: four squares
-	iconTag      // a tag: a label with a hole
-	iconLevels   // levels shown: an outline, each row further in
-	iconSidebar  // the list beside: a frame, its left part marked off
-	iconPanel    // the panel beside: a frame, its right part marked off
-	iconBack     // back: a chevron to the left
-	iconForward  // on: a chevron to the right
-	iconGear     // settings: a wheel with teeth
-	iconFilter   // what shows is narrowed: three lines, each shorter
-	iconDiagram  // a topic's 图解: a step and the next, joined
+	iconSend    // a paper plane
+	iconText    // a clip of text: lines on a page
+	iconLink    // two links of a chain
+	iconImage   // a picture: a frame, a hill and the sun
+	iconFile    // a page with its corner folded
+	iconCloud   // the sync with GitHub
+	iconClip    // a paperclip: attach files
+	iconTag     // a tag: a label with a hole
+	iconLevels  // levels shown: an outline, each row further in
+	iconSidebar // the list beside: a frame, its left part marked off
+	iconPanel   // the panel beside: a frame, its right part marked off
+	iconBack    // back: a chevron to the left
+	iconForward // on: a chevron to the right
+	iconFilter  // what shows is narrowed: three lines, each shorter
+	iconDiagram // a topic's 图解: a step and the next, joined
 )
 
 // glyph is an icon drawn in a box of the given side, as a piece of text.
@@ -83,14 +77,6 @@ func drawIcon(p *ui.Painter, r ui.Rect, s float32, ic icon, col ui.Color) {
 		p.StrokePath(arrow, w, col)
 		tray := new(ui.Path).MoveTo(cx-h*0.8, cy+h*0.35).LineTo(cx-h*0.8, cy+h*0.78).LineTo(cx+h*0.8, cy+h*0.78).LineTo(cx+h*0.8, cy+h*0.35)
 		p.StrokePath(tray, w, col)
-	case iconGear:
-		p.StrokePath(new(ui.Path).Circle(cx, cy, h*0.48), w, col)
-		p.StrokePath(new(ui.Path).Circle(cx, cy, h*0.17), w, col)
-		for i := range 6 { // the teeth, short and apart
-			a := float64(i)*math.Pi/3 + math.Pi/6
-			dx, dy := float32(math.Cos(a)), float32(math.Sin(a))
-			p.Line(cx+dx*h*0.48, cy+dy*h*0.48, cx+dx*h*0.78, cy+dy*h*0.78, w*1.2, col)
-		}
 	case iconBack, iconForward:
 		k := float32(1)
 		if ic == iconForward {
@@ -107,17 +93,6 @@ func drawIcon(p *ui.Painter, r ui.Rect, s float32, ic icon, col ui.Color) {
 	case iconPlay:
 		tri := new(ui.Path).MoveTo(cx-h*0.45, cy-h*0.7).LineTo(cx+h*0.7, cy).LineTo(cx-h*0.45, cy+h*0.7).Close()
 		p.FillPath(tri, col)
-	case iconUndo, iconRedo:
-		k := float32(1)
-		if ic == iconRedo {
-			k = -1
-		}
-		// A hook: back along the top, then round and down.
-		arc := new(ui.Path).MoveTo(cx-k*h*0.6, cy-h*0.25).LineTo(cx+k*h*0.2, cy-h*0.25).
-			CubeTo(cx+k*h*0.95, cy-h*0.25, cx+k*h*0.95, cy+h*0.7, cx+k*h*0.2, cy+h*0.7).LineTo(cx-k*h*0.2, cy+h*0.7)
-		p.StrokePath(arc, w, col)
-		head := new(ui.Path).MoveTo(cx-k*h*0.25, cy-h*0.62).LineTo(cx-k*h*0.65, cy-h*0.25).LineTo(cx-k*h*0.25, cy+h*0.12)
-		p.StrokePath(head, w, col)
 	case iconCheck:
 		check := new(ui.Path).MoveTo(cx-h*0.55, cy+h*0.02).LineTo(cx-h*0.15, cy+h*0.42).LineTo(cx+h*0.6, cy-h*0.4)
 		p.StrokePath(check, w*1.15, col)
@@ -176,10 +151,6 @@ func drawIcon(p *ui.Painter, r ui.Rect, s float32, ic icon, col ui.Color) {
 		p.StrokePath(roundedRect(cx-h*0.8, cy-h*0.7, h*0.42, h*1.4, h*0.08), w, col)
 		p.StrokePath(roundedRect(cx-h*0.25, cy-h*0.7, h*0.42, h*1.4, h*0.08), w, col)
 		p.StrokePath(new(ui.Path).MoveTo(cx+h*0.35, cy-h*0.55).LineTo(cx+h*0.68, cy-h*0.68).LineTo(cx+h*0.95, cy+h*0.62).LineTo(cx+h*0.62, cy+h*0.75).Close(), w, col)
-	case iconInbox:
-		p.StrokePath(roundedRect(cx-h*0.85, cy-h*0.65, h*1.7, h*1.3, h*0.2), w, col)
-		p.StrokePath(new(ui.Path).MoveTo(cx-h*0.85, cy+h*0.1).LineTo(cx-h*0.35, cy+h*0.1).LineTo(cx-h*0.2, cy+h*0.35).
-			LineTo(cx+h*0.2, cy+h*0.35).LineTo(cx+h*0.35, cy+h*0.1).LineTo(cx+h*0.85, cy+h*0.1), w, col)
 	case iconDiagram: // two boxes, the second lower and further on, a line from one to the other
 		p.StrokePath(roundedRect(cx-h*0.85, cy-h*0.75, h*0.9, h*0.62, h*0.14), w, col)
 		p.StrokePath(roundedRect(cx-h*0.05, cy+h*0.13, h*0.9, h*0.62, h*0.14), w, col)
@@ -231,12 +202,6 @@ func drawIcon(p *ui.Painter, r ui.Rect, s float32, ic icon, col ui.Color) {
 		p.StrokePath(new(ui.Path).MoveTo(cx-h*0.75, cy-h*0.75).LineTo(cx+h*0.05, cy-h*0.75).LineTo(cx+h*0.8, cy).
 			LineTo(cx+h*0.05, cy+h*0.75).LineTo(cx-h*0.75, cy+h*0.75).Close(), w, col)
 		p.FillPath(new(ui.Path).Circle(cx-h*0.35, cy-h*0.35, h*0.14), col)
-	case iconCategory:
-		k := h * 0.62
-		for _, d := range [][2]float32{{-1, -1}, {1, -1}, {-1, 1}, {1, 1}} {
-			x, y := cx+d[0]*h*0.42, cy+d[1]*h*0.42
-			p.StrokePath(roundedRect(x-k/2, y-k/2, k, k, k*0.25), w*0.9, col)
-		}
 	case iconClip:
 		// Drawn upright and turned 40° to the right.
 		sin, cos := float32(math.Sin(40*math.Pi/180)), float32(math.Cos(40*math.Pi/180))
@@ -261,13 +226,6 @@ func drawIcon(p *ui.Painter, r ui.Rect, s float32, ic icon, col ui.Color) {
 			CubeTo(cx-h*1.0, by, cx-h*1.0, cy-h*0.2, cx-h*0.5, cy-h*0.12).
 			CubeTo(cx-h*0.42, cy-h*0.8, cx+h*0.38, cy-h*0.8, cx+h*0.42, cy-h*0.18).
 			CubeTo(cx+h*1.0, cy-h*0.18, cx+h*1.0, by, cx+h*0.45, by).Close(), w, col)
-	case iconShot:
-		k := h * 0.4
-		for _, c := range [][4]float32{{-1, -1, 1, 1}, {1, -1, -1, 1}, {-1, 1, 1, -1}, {1, 1, -1, -1}} {
-			x, y := cx+c[0]*h*0.8, cy+c[1]*h*0.8
-			p.StrokePath(new(ui.Path).MoveTo(x+c[2]*k, y).LineTo(x, y).LineTo(x, y+c[3]*k), w, col)
-		}
-		p.FillPath(new(ui.Path).Circle(cx, cy, h*0.18), col)
 	case iconSend:
 		p.FillPath(new(ui.Path).MoveTo(cx-h*0.8, cy-h*0.7).LineTo(cx+h*0.85, cy).LineTo(cx-h*0.8, cy+h*0.7).
 			LineTo(cx-h*0.5, cy+h*0.08).LineTo(cx+h*0.15, cy).LineTo(cx-h*0.5, cy-h*0.08).Close(), col)
@@ -314,10 +272,10 @@ func (a *app) taskCheck(c *ui.Context, n *model.Node, size float32) ui.Element {
 	t := c.Theme()
 	task := n.Task
 	done := task.Status == model.StatusDone
-	tip := a.taskSummary(task) + "\n点击标为完成"
+	tip := a.taskSummary(task) + "\n标为完成"
 	label := "完成任务 " + n.Title
 	if done {
-		tip, label = a.taskSummary(task)+"\n点击标为未完成", "取消完成 "+n.Title
+		tip, label = a.taskSummary(task)+"\n标为未完成", "取消完成 "+n.Title
 	}
 	b := ui.Box(c.Key("task-check")).Size(size, size).Shrink(0).Cursor(ui.CursorPointer).Label(label)
 	if a.mode != viewMap || a.libOpen {
@@ -402,7 +360,7 @@ func (a *app) noteMark(c *ui.Context, n *model.Node, size float32, col ui.Color)
 		ui.PopoverBase(c.Key("note-peek"), mark, &peek, func(panel ui.Element) {
 			lifted(panel.Padding(14, 16).Radius(14).Background(cardColor(t)), t).
 				Width(320).PassThrough().Children(func() {
-				ui.Text(c, "备注 · 点击编辑").FontSize(11).TextColor(t.TextMuted)
+				ui.Text(c, "备注").FontSize(11).TextColor(t.TextMuted)
 				note := notePictureMark.ReplaceAllString(n.Note, "🖼")
 				if r := []rune(note); len(r) > 600 {
 					note = string(r[:600]) + "…"
@@ -431,7 +389,7 @@ func (a *app) notePopover(c *ui.Context, anchor ui.Element, n *model.Node) {
 				open = false
 			}
 			ui.Row(c).Children(func() {
-				ui.Text(c, "⌘↩ 或 Esc 完成").FontSize(11).TextColor(t.TextMuted).Grow(1)
+				ui.Spacer(c)
 				if inkButton(c, "完成", true).Clicked() {
 					open = false
 				}
@@ -443,66 +401,22 @@ func (a *app) notePopover(c *ui.Context, anchor ui.Element, n *model.Node) {
 	}
 }
 
-// The rail's icons: one set drawn alike, in lines of one weight with
-// round ends on a 24 grid, each with one part filled, so that they read
-// as a family and stand at a small size.
-const (
-	railDesk = iota
-	railMap
-	railTasks
-	railCollect
-	railSearch
-	railGear
-)
-
-// drawRailIcon draws an icon of the rail in the square of side s centered
-// in r, in col; its filled part in col too, lightly.
-func drawRailIcon(p *ui.Painter, r ui.Rect, s float32, kind int, col ui.Color) {
+// drawRailMap draws a map's icon in the square of side s centered in r,
+// in col, its topic filled in col too, lightly: a topic, and two branches
+// ending in topics, in lines of one weight with round ends on a 24 grid.
+// It is what is left of the rail's set, the places' icons being Kubai's
+// since (kubai.go).
+func drawRailMap(p *ui.Painter, r ui.Rect, s float32, col ui.Color) {
 	k := s / 24
 	ox, oy := r.X+(r.W-s)/2, r.Y+(r.H-s)/2
 	x := func(v float32) float32 { return ox + v*k }
 	y := func(v float32) float32 { return oy + v*k }
 	w := 1.9 * k
-	soft := col.Alpha(0.22)
 	line := func(path *ui.Path) { p.StrokePath(path, w, col) }
-	box := func(bx, by, bw, bh, rad float32, fill bool) {
-		path := roundedRect(x(bx), y(by), bw*k, bh*k, rad*k)
-		if fill {
-			p.FillPath(path, soft)
-		}
-		line(path)
-	}
-	switch kind {
-	case railDesk: // the desk: four tiles, two tall, the first filled
-		box(3.5, 3.5, 7.5, 9.5, 2.2, true)
-		box(13, 3.5, 7.5, 5.5, 2.2, false)
-		box(13, 11, 7.5, 9.5, 2.2, false)
-		box(3.5, 15, 7.5, 5.5, 2.2, false)
-	case railMap: // a map: a topic, and two branches ending in topics
-		p.FillPath(new(ui.Path).Circle(x(6.6), y(12), 3.6*k), soft)
-		line(new(ui.Path).Circle(x(6.6), y(12), 3.6*k))
-		line(new(ui.Path).MoveTo(x(10.2), y(12)).CubeTo(x(13.5), y(12), x(12.5), y(6), x(16.2), y(6)))
-		line(new(ui.Path).MoveTo(x(10.2), y(12)).CubeTo(x(13.5), y(12), x(12.5), y(18), x(16.2), y(18)))
-		line(new(ui.Path).Circle(x(18.6), y(6), 2.4*k))
-		line(new(ui.Path).Circle(x(18.6), y(18), 2.4*k))
-	case railTasks: // a task done: a disc, ticked
-		p.FillPath(new(ui.Path).Circle(x(12), y(12), 8.5*k), soft)
-		line(new(ui.Path).Circle(x(12), y(12), 8.5*k))
-		line(new(ui.Path).MoveTo(x(8.2), y(12.3)).LineTo(x(10.9), y(15)).LineTo(x(15.9), y(9.4)))
-	case railCollect: // what is kept: a box with its lid, a line on it
-		box(3.5, 4, 17, 5, 1.8, true)
-		line(new(ui.Path).MoveTo(x(5), y(9)).LineTo(x(5), y(18)).QuadTo(x(5), y(20), x(7), y(20)).
-			LineTo(x(17), y(20)).QuadTo(x(19), y(20), x(19), y(18)).LineTo(x(19), y(9)))
-		line(new(ui.Path).MoveTo(x(9.5), y(13.5)).LineTo(x(14.5), y(13.5)))
-	case railSearch:
-		line(new(ui.Path).Circle(x(11), y(11), 6.5*k))
-		line(new(ui.Path).MoveTo(x(16), y(16)).LineTo(x(20.5), y(20.5)))
-	case railGear: // the settings: three sliders
-		for i, knob := range []float32{15, 9, 13.5} {
-			cy := 6 + float32(i)*6
-			line(new(ui.Path).MoveTo(x(4), y(cy)).LineTo(x(knob-2.4), y(cy)))
-			line(new(ui.Path).MoveTo(x(knob+2.4), y(cy)).LineTo(x(20), y(cy)))
-			line(new(ui.Path).Circle(x(knob), y(cy), 2.4*k))
-		}
-	}
+	p.FillPath(new(ui.Path).Circle(x(6.6), y(12), 3.6*k), col.Alpha(0.22))
+	line(new(ui.Path).Circle(x(6.6), y(12), 3.6*k))
+	line(new(ui.Path).MoveTo(x(10.2), y(12)).CubeTo(x(13.5), y(12), x(12.5), y(6), x(16.2), y(6)))
+	line(new(ui.Path).MoveTo(x(10.2), y(12)).CubeTo(x(13.5), y(12), x(12.5), y(18), x(16.2), y(18)))
+	line(new(ui.Path).Circle(x(18.6), y(6), 2.4*k))
+	line(new(ui.Path).Circle(x(18.6), y(18), 2.4*k))
 }

@@ -141,7 +141,7 @@ func (a *app) relatedSection(c *ui.Context, clip *library.Clip) {
 	if len(hits) == 0 {
 		return
 	}
-	sectionCard(c, iconLibrary, tileTeal, "相关资料", nil, func() {
+	section(c, iconLibrary, "相关资料", nil, func() {
 		ui.Column(c).Gap(4).Children(func() {
 			for _, h := range hits {
 				a.clipLink(c.Key("rel"+h.Clip.ID), h.Clip)
@@ -259,7 +259,7 @@ func (a *app) clipPlacesSection(c *ui.Context, clip *library.Clip) {
 		a.attachRef = ref
 		a.openPalette(paletteAttach)
 	}
-	sectionCard(c, iconMap, tileBlue, title, func() {
+	section(c, iconMap, title, func() {
 		// Later, for one not placed yet: it waits on 今天 till it is.
 		switch {
 		case len(back) > 0:
@@ -605,7 +605,7 @@ func (a *app) clipMentions(c *ui.Context, clip *library.Clip) {
 			})
 		}
 	}
-	sectionCard(c, iconLink, tileGreen, fmt.Sprintf("和 %d 条相连", len(by)+len(of)), nil, func() {
+	section(c, iconLink, fmt.Sprintf("和 %d 条相连", len(by)+len(of)), nil, func() {
 		ui.Column(c).Gap(5).Children(func() {
 			rows("by:", "提到它的", by)
 			rows("of:", "它提到的", of)

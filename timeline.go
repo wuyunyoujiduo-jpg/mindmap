@@ -162,7 +162,7 @@ func (a *app) timelineView(c *ui.Context) {
 							}
 							n := tn.Node
 							chip := ui.Row(c.Key(n.ID)).Padding(3, 8).Gap(6).Radius(6).Background(t.Surface).Border(1, t.Border).
-								AlignItems(ui.Center).Cursor(ui.CursorPointer).Tooltip("点击排到今天开始，持续 3 天").Label("安排 " + n.Title)
+								AlignItems(ui.Center).Cursor(ui.CursorPointer).Tooltip("排到今天开始，持续 3 天").Label("安排 " + n.Title)
 							if chip.Clicked() {
 								a.later(func() {
 									a.mutate("", func() {

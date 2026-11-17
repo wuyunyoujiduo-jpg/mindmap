@@ -11,11 +11,11 @@ import (
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
 
-// The app has four places, and no sidebar: 今天 (what is to do and what
-// was written down), 项目 (the maps, by folder; one opened takes the
-// page), 收集 (what was collected) and 技能 (the AI agents' skills,
-// skillsview.go: the user had it after 收集, not on 今天, 0.99.2). A
-// switch at the top of the window goes between them (placesBar).
+// The app has four places: 今天 (what is to do and what was written
+// down), 项目 (the maps, by folder; one opened takes the page), 收集 (what
+// was collected) and 技能 (the AI agents' skills, skillsview.go: the user
+// had it after 收集, not on 今天, 0.99.2). A switch in the top row goes
+// between them (topBar), and each has its own left column (side.go).
 const (
 	placeToday = iota
 	placeMaps
@@ -30,7 +30,7 @@ func (a *app) place() int {
 		return placeMaps
 	case a.skillsOpen:
 		return placeSkills
-	case a.libHome || a.tasks.open:
+	case a.tasks.open:
 		return placeToday
 	}
 	return placeCollect
@@ -52,8 +52,8 @@ func (a *app) sideWidth() float32 {
 
 // topBar is the top of the window, on every page: the left column's
 // key, the switch of the places, the one bar, which takes the room,
-// then the AI's key, the search of everything and the settings. It is the
-// window's title bar, and drags it.
+// then the AI's key, the screenshot's, the search of everything and the
+// settings. It is the window's title bar, and drags it.
 func (a *app) topBar(c *ui.Context) {
 	t := c.Theme()
 	bar := c.TitleBar()
@@ -93,12 +93,9 @@ func (a *app) topBar(c *ui.Context) {
 					}
 				})
 			}
-			part(placeToday, "今天", "今天要做的，和刚记下的（"+keyLabel("CmdOrCtrl+Alt+1")+"）", func() {
-				a.showLibrary()
-				a.libHome = true
-			})
+			part(placeToday, "今天", "今天要做的，和刚记下的（"+keyLabel("CmdOrCtrl+Alt+1")+"）", a.goToday)
 			part(placeMaps, "项目", "导图：一张就是一个项目（"+keyLabel("CmdOrCtrl+Alt+2")+"）", a.showProjects)
-			part(placeCollect, "收集", "灵感、链接、文档和图片（"+keyLabel("CmdOrCtrl+Alt+3")+"）", func() { a.openList(kindAll, "") })
+			part(placeCollect, "收集", "灵感、链接、文档和图片（"+keyLabel("CmdOrCtrl+Alt+3")+"）", a.goCollect)
 			part(placeSkills, "技能", "各个 AI 编程工具的技能：在哪、收进来、链接、同步（"+keyLabel("CmdOrCtrl+Alt+4")+"）", a.showSkills)
 		})
 		// The places and the bar by the keyboard, from every page (the
@@ -107,11 +104,11 @@ func (a *app) topBar(c *ui.Context) {
 		// beside them.
 		switch {
 		case c.Shortcut(ui.Cmd|ui.Alt, ui.Key1):
-			a.later(func() { a.showLibrary(); a.libHome = true })
+			a.later(a.goToday)
 		case c.Shortcut(ui.Cmd|ui.Alt, ui.Key2):
 			a.later(a.showProjects)
 		case c.Shortcut(ui.Cmd|ui.Alt, ui.Key3):
-			a.later(func() { a.openList(kindAll, "") })
+			a.later(a.goCollect)
 		case c.Shortcut(ui.Cmd|ui.Alt, ui.Key4):
 			a.later(a.showSkills)
 		case c.Shortcut(ui.Cmd, ui.KeyJ):
@@ -261,7 +258,7 @@ func (a *app) projectsView(c *ui.Context) {
 		case path != "" && draggedOver(b):
 			b.Background(t.Accent.Alpha(0.18))
 		case on:
-			soft(b.Background(pillColor(t)), t)
+			b.Background(pillColor(t))
 		case b.Hovered():
 			b.Background(t.Text.Alpha(0.09))
 		}
@@ -408,7 +405,7 @@ func (a *app) projectsView(c *ui.Context) {
 					if m.Item("打开其他文件夹…").Shortcut(ui.Cmd, ui.KeyO).Chosen() {
 						a.pickWorkspace()
 					}
-					if m.Item("在 Finder 中显示").Chosen() {
+					if m.Item(revealWord()).Chosen() {
 						a.plat.ShowInFolder(a.dir)
 					}
 				})
@@ -425,15 +422,16 @@ func (a *app) projectsView(c *ui.Context) {
 
 // deleteConfirm asks before a map or a folder goes to the trash.
 func (a *app) deleteConfirm(c *ui.Context) {
-	title, says := "把「"+mapName(a.deletePath)+"」移到废纸篓？", "可以在废纸篓中找回。"
+	trash := trashWord()
+	title, says := "把「"+mapName(a.deletePath)+"」移到"+trash+"？", "可以在"+trash+"中找回。"
 	folder := a.deletePath != "" && !strings.HasSuffix(a.deletePath, model.Ext)
 	if folder {
-		title = "把文件夹「" + filepath.Base(a.deletePath) + "」移到废纸篓？"
+		title = "把文件夹「" + filepath.Base(a.deletePath) + "」移到" + trash + "？"
 		if n := len(a.mapsIn(a.deletePath)); n > 0 {
-			says = fmt.Sprintf("里面的 %d 张导图会一起移走，可以在废纸篓中找回。", n)
+			says = fmt.Sprintf("里面的 %d 张导图会一起移走，可以在%s中找回。", n, trash)
 		}
 	}
-	if ui.AlertDialog(c, &a.confirmDelete, title, says, "取消", "移到废纸篓") == 1 {
+	if ui.AlertDialog(c, &a.confirmDelete, title, says, "取消", "移到"+trash) == 1 {
 		if folder {
 			a.deleteFolder(a.deletePath)
 		} else {
@@ -720,10 +718,13 @@ func (a *app) projectsRail(c *ui.Context) {
 // openBar opens the one bar to write in, from wherever.
 func (a *app) openBar() { a.barOpen, a.writeRefocus = true, "home-line" }
 
-// goToday, goCollect go to those places (showProjects is 项目's).
+// goToday, goCollect go to those places (showProjects is 项目's): the
+// one way to each, for the switch of the places, its keys and the menu
+// 前往. 今天 is the tasks' page (tasksState.open: it had a second flag
+// beside, and the two were one page).
 func (a *app) goToday() {
 	a.showLibrary()
-	a.libHome = true
+	a.tasks.open = true
 }
 
 func (a *app) goCollect() { a.openList(kindAll, "") }

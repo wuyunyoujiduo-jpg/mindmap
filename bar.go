@@ -73,7 +73,7 @@ func (a *app) barCard(c *ui.Context, text string) {
 				},
 				reads: func() { // what it is kept as: a click makes a task of a thought, or a thought of a task
 					now := a.now()
-					label, tip := "记为 灵感", "现在会记成灵感（收集里的一条笔记）。点一下改成任务"
+					label, tip := "记为 灵感", "现在会记成灵感（收集里的一条笔记）。可以改成任务"
 					switch {
 					case asking:
 						if ask != "" {
@@ -81,7 +81,7 @@ func (a *app) barCard(c *ui.Context, text string) {
 						}
 						return
 					case a.barTask(text):
-						label, tip = "记为 任务", "现在会记成任务（要做的事，能打勾、定日子、重复）。点一下改成灵感"
+						label, tip = "记为 任务", "现在会记成任务（要做的事，能打勾、定日子、重复）。可以改成灵感"
 						if lines := checklist(text); len(lines) > 1 { // a checklist: a task a line
 							label = fmt.Sprintf("记为 %d 件任务", len(lines))
 							break

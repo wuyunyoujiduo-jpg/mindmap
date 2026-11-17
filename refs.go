@@ -330,7 +330,7 @@ func (a *app) mapMaterialSection(c *ui.Context) {
 	if len(clips)+len(maps)+len(from)+len(gone)+len(thoughts) == 0 {
 		return
 	}
-	sectionCard(c, iconLibrary, tileOrange, "本图资料", nil, func() {
+	section(c, iconLibrary, "本图资料", nil, func() {
 		ui.Column(c).Gap(6).Children(func() {
 			line := func(text string) { ui.Text(c, text).FontSize(12).Wrap() }
 			if len(clips) > 0 {

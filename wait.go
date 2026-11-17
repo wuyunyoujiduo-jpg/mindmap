@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -10,7 +11,7 @@ import (
 // How the app waits (DESIGN.md's waiting): what is of this computer is
 // done as it is clicked and shows nothing; a short wait for one action
 // shows on its key, whose words and width stay; long work that can be
-// counted is a card at the window's top right, which stays on every page
+// counted is a card at the window's foot on the right, which stays on every page
 // and turns into its result; work that cannot be counted says the stage
 // it is in. Nothing that shows comes before 300ms or goes before 500ms
 // more, so that nothing flickers.
@@ -121,7 +122,7 @@ func busyClicked(b ui.Element, busy, enabled bool) bool {
 	return enabled && !busy && b.Clicked()
 }
 
-// A jobCard is long work shown at the window's top right: what it is, how
+// A jobCard is long work shown at the window's foot on the right: what it is, how
 // far, and when done what came of it.
 type jobCard struct {
 	key, icon   string
@@ -153,7 +154,8 @@ func timeLeft(now, since time.Time, frac float32) string {
 }
 
 // jobsView shows the long work going on, and what was just done, as cards
-// at the top right, over whatever page shows and taking no room from it.
+// at the window's foot on the right, over whatever page shows and taking
+// no room from it (under the top row they lay over a page's keys).
 func (a *app) jobsView(c *ui.Context) {
 	t := c.Theme()
 	var cards []jobCard
@@ -302,6 +304,9 @@ func (a *app) jobs() []jobCard {
 		out = append(out, jobCard{key: "organize", title: a.orgResult, line: "标题、摘要、分类和标签都写好了", done: true,
 			close: func() { a.orgResult = "" }, open: func() { a.orgResult = ""; a.openList(kindAll, "") }})
 	}
+	for i, j := range a.copies {
+		out = append(out, jobCard{key: fmt.Sprint("copy:", i, ":", j.name), icon: "import", title: "正在加上附件", line: j.name, frac: -1, since: j.since})
+	}
 	switch {
 	case a.pluginBusy:
 		line, frac := "正在连接…", float32(-1)
@@ -314,6 +319,25 @@ func (a *app) jobs() []jobCard {
 		out = append(out, jobCard{key: "plugin", title: a.pluginResult, line: "收集现在可以按意思搜索", done: true, close: func() { a.pluginResult = "" }})
 	}
 	return out
+}
+
+// A copyJob is a file being copied into a map's assets, as an attachment
+// or a picture: of a large one the copy lasts, away from the window's
+// work, and nothing said that it was going on.
+type copyJob struct {
+	name  string
+	since time.Time
+}
+
+// copying says a file is being copied into the map, until done is called:
+// a card among the long work's once it lasts (jobsView, which shows none
+// before waitDelay: most copies are over by then, and show nothing).
+func (a *app) copying(name string) (done func()) {
+	j := &copyJob{name: name, since: a.now()}
+	a.copies = append(a.copies, j)
+	return func() {
+		a.copies = slices.DeleteFunc(a.copies, func(c *copyJob) bool { return c == j })
+	}
 }
 
 // toastLook is how a toast looks: a small card at the window's foot, in

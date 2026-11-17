@@ -351,7 +351,7 @@ func TestWallOfUnevenCards(t *testing.T) {
 		}
 	}
 	a.showLibrary()
-	a.libHome = false
+	a.tasks.open = false
 	tt.Frame()
 	tt.Frame()
 	short, ok1 := tt.Find("资料 钱来？")

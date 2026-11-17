@@ -169,7 +169,7 @@ func (a *app) nodePanel(c *ui.Context) {
 
 			// The note shows as it is written: Markdown typed formats as it
 			// goes.
-			sectionCard(c, iconPencil, tileYellow, "备注", func() { a.notePictureButton(c, "panel", n) }, func() {
+			section(c, iconPencil, "备注", func() { a.notePictureButton(c, "panel", n) }, func() {
 				a.noteEditor(c, "panel", n, textBody, "实现要点、决策、注意事项…（# 标题、- 列表、**粗体** 输入即显示）").
 					FillWidth().MinHeight(72).MaxHeight(420)
 			})
@@ -177,7 +177,7 @@ func (a *app) nodePanel(c *ui.Context) {
 			clips, nodes := a.relatedOfCached(n)
 			rels := slices.ContainsFunc(a.doc.Relations, func(r model.Relation) bool { return r.From == n.ID || r.To == n.ID })
 			if links || image || files || len(clips)+len(nodes) > 0 || n.Summary != nil || n.Boundary != nil || rels {
-				sectionCard(c, iconLink, tileBlue, "链接、附件与资料", nil, func() {
+				section(c, iconLink, "链接、附件与资料", nil, func() {
 					if links {
 						a.linksSection(c, n)
 					}

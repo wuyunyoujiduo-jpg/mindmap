@@ -9,9 +9,10 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// The app's icon, chosen in the settings: a large white note, a task on
-// it ticked and the AI's spark by it, on a bright color, coral (the
-// default and the one in the app bundle), blue or teal; the library's
+// The app's icon, chosen in the settings: the desk (the default and the
+// one in the app bundle: a white note on the app's violet-blue, three
+// lines each led by a dot of a map's color, the last ticked, the AI's
+// spark); the vivid note on a bright color, coral, blue or teal; 收集's
 // cards with the AI's spark; or knowledge in orbit around the spark. The
 // choice shows in the Dock (macOS) or the taskbar (Windows) while the app
 // runs.
@@ -121,8 +122,8 @@ func (a *app) iconSettings(c *ui.Context) {
 	})
 }
 
-// groundSettings lets the color of the window's ground be chosen: the
-// rail's, and with it the shade of the trays.
+// groundSettings lets the color of the window's ground be chosen, and
+// with it the shade of the trays.
 func (a *app) groundSettings(c *ui.Context) {
 	t := c.Theme()
 	rowsField(c, "外观", "", func() {

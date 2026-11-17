@@ -110,7 +110,7 @@ func (a *app) pageView(c *ui.Context) {
 					a.projectsView(c)
 				} else if a.skillsOpen {
 					a.skillsPage(c) // 技能: the AI agents' skills
-				} else if a.tasks.open || a.libHome {
+				} else if a.tasks.open {
 					a.tasksView(c) // 今天: what is to do, and what was written down
 				} else {
 					a.libraryView(c)
@@ -320,7 +320,7 @@ func (a *app) toolbar(c *ui.Context) {
 						// (app.open), but put away it says nothing.
 						if dir := filepath.Dir(a.path); room >= 700 && dir != a.dir && inside(a.path, a.dir) {
 							where := ui.Row(c.Key("map-folder")).Gap(4).AlignItems(ui.Center).Cursor(ui.CursorPointer).Shrink(1).MinWidth(0).
-								Label("所在文件夹 " + a.relDir(a.path)).Tooltip("这张导图在文件夹「" + a.relDir(a.path) + "」里：点一下看这个文件夹的导图")
+								Label("所在文件夹 " + a.relDir(a.path)).Tooltip("这张导图在文件夹「" + a.relDir(a.path) + "」里：去看这个文件夹的导图")
 							ink := t.TextMuted
 							if where.Hovered() {
 								ink = t.Text
@@ -340,7 +340,7 @@ func (a *app) toolbar(c *ui.Context) {
 						}
 						// A click on how saving goes shows the versions kept.
 						st := ui.Box(c.Key("save-status")).Cursor(ui.CursorPointer).Label("历史版本").
-							Tooltip("自动保存，无需手动保存 · 点击查看历史版本 ⌘⇧H")
+							Tooltip("自动保存，无需手动保存 · 查看历史版本")
 						if st.Hovered() && col == t.TextMuted {
 							col = t.Text
 						}
@@ -374,13 +374,13 @@ func (a *app) toolbar(c *ui.Context) {
 			} else if room >= 560 {
 				a.structureRoom(c, room)
 			}
-			if room >= 450 && iconButton(c, iconPlay, "开始演说", "开始演说 ⌘↩", 30, true).Clicked() {
+			if room >= 450 && iconButton(c, iconPlay, "开始演说", "开始演说", 30, true).Clicked() {
 				a.later(func() { a.startPresenting("") })
 			}
 			// The panel of the topic chosen, put away or shown.
-			tip := "显示主题面板：备注、任务、标签、链接 ⌘⌥I"
+			tip := "显示主题面板：备注、任务、标签、链接"
 			if !a.panelOff {
-				tip = "收起主题面板 ⌘⌥I"
+				tip = "收起主题面板"
 			}
 			if iconButton(c, iconPanel, "主题面板", tip, 30, true).Clicked() {
 				a.togglePanel()
@@ -494,7 +494,7 @@ func (a *app) viewTabs(c *ui.Context, room float32) {
 // searchField is the toolbar's search: a field with a magnifier, which
 // Return steps through what it finds and Escape clears.
 func (a *app) searchField(c *ui.Context, width float32) {
-	search := searchBox(c, "search", &a.search, "搜索", "搜索导图", "搜索标题、备注、标签，回车跳到下一个", width)
+	search := searchBox(c, "search", &a.search, "搜索", "搜索导图", "搜索标题、备注、标签", width)
 	if a.searchOpen && a.search == "" {
 		search.AutoFocus()
 	}

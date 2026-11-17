@@ -12,11 +12,11 @@ import (
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
 )
 
-// The desk is the page the app opens on, laid out as the work goes: write
-// it down, do what is for today, and put what was written where it
-// belongs. On top the line to write in; on the left what is to do today
-// and the maps; on the right what waits for a place, with where the AI
-// would put it.
+// What 今天 has beside its tasks (taskspage.go): the keeping of what is
+// written in the one bar (saveHomeLine), today's figures, and what waits
+// for a place: a band under today's tasks or a column beside them, and
+// the list 等着归位 where each is a card with what can be done with it.
+// (It began as the desk, a page of its own the app opened on.)
 
 var weekdays = []string{"周日", "周一", "周二", "周三", "周四", "周五", "周六"}
 
@@ -49,7 +49,7 @@ func titleAndSite(title string) (string, string) {
 
 var linkInTitle = regexp.MustCompile(`https?://\S+`)
 
-// saveHomeLine keeps what was typed in the desk's line.
+// saveHomeLine keeps what was typed in the one bar.
 func (a *app) saveHomeLine() {
 	text := strings.TrimSpace(a.homeDraft)
 	if text == "" {
@@ -209,7 +209,7 @@ func shortPlace(p taskPlace) string {
 	return parts[0] + " › " + parts[len(parts)-1]
 }
 
-// homeWaitingCount is how many waiting things the desk shows.
+// homeWaitingCount is how many waiting things the list 等着归位 shows.
 const homeWaitingCount = 6
 
 // homeWaiting is 刚记下的: what was written down lately, each a card with

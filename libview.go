@@ -342,7 +342,7 @@ type collectState struct {
 
 // collectShown tells whether 收集's page shows.
 func (a *app) collectShown() bool {
-	return a.libOpen && !a.projOpen && !a.skillsOpen && !a.tasks.open && !a.libHome
+	return a.libOpen && !a.projOpen && !a.skillsOpen && !a.tasks.open
 }
 
 // libFail says what went wrong with a thing collected where it is looked
@@ -822,7 +822,7 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 	// line or two that the content needs not wait for.
 	aiPart := func() {
 		// What the AI made of it.
-		sectionCard(c, iconSparkle, tilePurple, "AI 整理", func() {
+		section(c, iconSparkle, "AI 整理", func() {
 			label := "整理"
 			if clip.Organized != nil {
 				label = "重新整理"
@@ -955,11 +955,11 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 	}
 	switch {
 	case clip.Kind == library.KindText:
-		sectionCard(c, iconText, tileOrange, "内容", nil, func() {
+		section(c, iconText, "内容", nil, func() {
 			content("clip-text", "", "资料内容", textBody+1, 30, func(text string) { a.setMemoText(clip, text) })
 		})
 	case clip.Kind == library.KindLink:
-		sectionCard(c, iconLink, tileGreen, "网页正文", nil, func() {
+		section(c, iconLink, "网页正文", nil, func() {
 			in := content("clip-page", "没读到网页正文时（需要登录的页面、公众号文章等），可以把正文复制粘贴到这里", "网页正文", textBody, 16, func(text string) {
 				clip.Text = text
 				a.saveClip(clip)
@@ -973,7 +973,7 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 		if clip.Kind == library.KindImage {
 			label = "图中内容（AI 识别）"
 		}
-		sectionCard(c, kindTile(clip.Kind), kindColor(clip.Kind), label, nil, func() {
+		section(c, kindTile(clip.Kind), label, nil, func() {
 			text, _ := a.fieldText(clip, "text", clip.Text)
 			text, _ = library.Marks(text)
 			ui.Text(c, library.Excerpt(text, "", 3000)).FontSize(textSmall).LineHeight(1.5).TextColor(t.TextMuted).Wrap().Selectable()
@@ -985,7 +985,7 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 	}
 
 	// The user's note.
-	sectionCard(c, iconPencil, tileYellow, "我的备注", nil, func() {
+	section(c, iconPencil, "我的备注", nil, func() {
 		note, write := a.fieldText(clip, "note", clip.Note)
 		if !write {
 			ui.Text(c.Key("clip-note-dots"), note).FontSize(textBody).LineHeight(1.55).Wrap()
@@ -1017,7 +1017,7 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 	a.clipMentions(c, clip)
 
 	// Properties.
-	sectionCard(c, iconTag, tileBlue, "信息", nil, func() {
+	section(c, iconTag, "信息", nil, func() {
 		propRow(c, "分类", func() {
 			// The field holds what is typed, a space at its end too, and
 			// the clip the same without the spaces at its ends, which the
@@ -1124,7 +1124,7 @@ func clipTagChip(c *ui.Context, tag string) (chip ui.Element, off bool) {
 func (a *app) showLibrary() {
 	a.commitEditIfAny()
 	a.lightbox, a.presenting = "", false
-	a.libOpen, a.libHome, a.tasks.open, a.projOpen, a.skillsOpen = true, false, false, false, false
+	a.libOpen, a.tasks.open, a.projOpen, a.skillsOpen = true, false, false, false
 	a.libReview = reviewOff
 }
 

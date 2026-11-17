@@ -88,7 +88,7 @@ func TestSkillLinks(t *testing.T) {
 
 	// A thought names one by [[ as well.
 	a.showLibrary()
-	a.libHome, a.barOpen = true, true
+	a.tasks.open, a.barOpen = true, true
 	a.homeDraft = "这套步骤写在 [[rele"
 	tt.Frame()
 	tt.Frame()

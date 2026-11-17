@@ -8,7 +8,7 @@ import (
 )
 
 // Each map has a color of its own, which marks what is its: its card on
-// the desk, its tasks in the lists, what was put on it. It is the map's
+// 项目, its tasks in the lists, what was put on it. It is the map's
 // own (File.Color) or, until one is chosen, one of the palette by its
 // name, the same each time.
 
@@ -67,7 +67,7 @@ func mapDot(c *ui.Context, col ui.Color, size float32) ui.Element {
 }
 
 // mapSwitchMenu is the menu of the map's name: the maps opened last, to
-// go to; the maps' list beside the rail; a new map; the search of all.
+// go to; 项目, where all of them are; the search of all; a new map.
 func (a *app) mapSwitchMenu(m *ui.Menu) {
 	files := a.recentFiles() // those starred first, then the last opened
 	slices.SortStableFunc(files, func(x, y model.FileInfo) int { return b2i(a.starred(y.Path)) - b2i(a.starred(x.Path)) })

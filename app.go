@@ -327,7 +327,6 @@ type app struct {
 	libSel        string // the clip shown
 	libQuery      string
 	libKind       int               // kindAll, kindMaps, kindDocs or kindLinks
-	libHome       bool              // 今天 is shown, not the list
 	barOpen       bool              // the one bar is open, a card to write in (bar.go)
 	barKind       int               // what the bar keeps its words as, chosen by hand: barAuto, barATask, barThought
 	keptLast      string            // the clip last left in 收集 from what waits: said there, with the way back
@@ -489,6 +488,7 @@ type app struct {
 	orgResult             string
 	pluginSince           time.Time
 	pluginResult          string
+	copies                []*copyJob               // the files being copied into a map (copying)
 	syncChecking          bool                     // the sync's repository is being checked
 	syncByHand            bool                     // the sync going on was asked for: its result is said
 	pluginChecking        bool                     // a newer plugin is being looked for

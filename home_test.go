@@ -27,7 +27,7 @@ func TestHome(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if !a.libOpen || !a.libHome {
+	if !a.libOpen || !a.tasks.open {
 		t.Fatal("今天 not shown")
 	}
 	// Today's page: what waits is a band of lines under the tasks; its
@@ -160,10 +160,10 @@ func TestHomeDaysKeysAndDark(t *testing.T) {
 		clip.Created = testNow.Add(-time.Duration(i) * 24 * time.Hour)
 	}
 	tt.SetDark(true)
-	a.libOpen, a.libHome = true, true
+	a.libOpen, a.tasks.open = true, true
 	tt.Frame()
 	snapshot(t, tt, "home-dark")
-	a.libHome = false
+	a.tasks.open = false
 	tt.Frame()
 	snapshot(t, tt, "library-dark")
 }
@@ -237,7 +237,7 @@ func TestHomeTicksAndReads(t *testing.T) {
 	a, tt := newTestApp(t)
 	a.addTask("今天 写周报", nil)
 	a.showLibrary()
-	a.libHome = true
+	a.tasks.open = true
 	tt.Frame()
 	if len(a.doneToday(testNow)) != 0 {
 		t.Fatal("nothing is done yet")
@@ -318,7 +318,7 @@ func TestHomeTicksAndReads(t *testing.T) {
 func TestGroundChosen(t *testing.T) {
 	a, tt := newTestApp(t)
 	a.showLibrary()
-	a.libHome = true
+	a.tasks.open = true
 	tt.Frame()
 	if groundNow().key != "" || ground(a.theme()) != ui.Hex("#F5F5F7") {
 		t.Fatalf("the ground is %q", groundNow().name)
@@ -399,7 +399,7 @@ func TestWaitingSaysItsPlace(t *testing.T) {
 	}
 	toPlaceAll(a)
 	a.showLibrary()
-	a.libHome = true
+	a.tasks.open = true
 	tt.Frame()
 	tt.Frame()
 	p, ok := a.nearPlace("c:"+clip.ID, clip)
@@ -610,4 +610,5 @@ func toPlaceAll(a *app) {
 	for _, cl := range a.lib.Clips {
 		cl.ToPlace = true
 	}
+	a.lib.Version++ // as the writes of the clips count: what waits is worked out of the library as it stands
 }

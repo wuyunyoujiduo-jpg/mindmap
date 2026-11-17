@@ -16,7 +16,6 @@ func TestIconPreview(t *testing.T) {
 					glyph(c, iconFolder, size, th.TextMuted)
 					glyph(c, iconMap, size, th.TextMuted)
 					glyph(c, iconText, size, th.TextMuted)
-					glyph(c, iconInbox, size, th.TextMuted)
 					glyph(c, iconMap, size, ui.Hex("#E8833A"))
 					ui.Text(c, "使用指南").FontSize(13)
 				})

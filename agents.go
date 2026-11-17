@@ -41,7 +41,7 @@ var agentRanges = []struct {
 // back asks for it (agentsRead set to no time), not every second.
 func (a *app) agentItems() []agentItem {
 	a.taskItems() // looks at every map's file, once a tick
-	of := tasksOf{a.memo.maps, a.memo.scans, a.edits}
+	of := tasksOf{a.memo.maps, a.memo.scans, a.edits, a.path}
 	if of == a.tasks.agentsOf && !a.tasks.agentsRead.IsZero() {
 		return a.tasks.agents
 	}
@@ -249,7 +249,7 @@ func (a *app) agentRow(c *ui.Context, it agentItem, now time.Time) {
 		}
 		ui.Text(c, e.At.Local().Format("15:04")).FontSize(textCaption).TextColor(t.TextMuted).FontFeatures("tnum").NoWrap().Shrink(0).Margin(5, 0, 0).PassThrough()
 		// One key for all that can be done, as the pointer's other key.
-		more := ui.Box(c.Key("more")).Size(26, 26).Radius(radiusPill).Label("操作 " + e.Text).Tooltip("打开、撤回…").Shrink(0).
+		more := ui.Box(c.Key("more")).Size(26, 26).Radius(radiusPill).Label("操作 " + e.Text).Tooltip("打开、删去…").Shrink(0).
 			Cursor(ui.CursorPointer).Background(t.Text.Alpha(0)).Transition(easeLook)
 		dots := t.TextMuted.Alpha(0.7)
 		if more.Hovered() {
@@ -350,7 +350,7 @@ func (a *app) agentMenu(m *ui.Menu, it agentItem) {
 	word := "从记录里删去"
 	switch e.Kind {
 	case model.LogTask:
-		word = "撤回这条待办"
+		word = "删去这条待办"
 	case model.LogDecision:
 		word = "删除这条决策"
 	case model.LogIdea:
@@ -375,7 +375,7 @@ func (a *app) takeBack(it agentItem) {
 	var nodes []removed
 	var unlinked []string
 	link := "clip:" + e.Clip
-	err := a.editMapAt(it.path, "撤回 AI 记下的："+e.Text, func(f *model.File) error {
+	err := a.editMapAt(it.path, "撤销 AI 记下的："+e.Text, func(f *model.File) error {
 		f.DropLog(e.ID)
 		switch e.Kind {
 		case model.LogTask:
@@ -406,7 +406,7 @@ func (a *app) takeBack(it agentItem) {
 		return nil
 	})
 	if err != nil {
-		a.tell("没有撤回：" + err.Error())
+		a.tell("没有删去：" + err.Error())
 		return
 	}
 	var restoreClip func() error
@@ -422,7 +422,7 @@ func (a *app) takeBack(it agentItem) {
 	said := "已从记录里删去"
 	switch e.Kind {
 	case model.LogTask:
-		said = "已撤回这条待办"
+		said = "已删去这条待办"
 	case model.LogDecision, model.LogIdea:
 		said = "已删除"
 	}

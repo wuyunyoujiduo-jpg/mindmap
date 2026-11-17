@@ -33,7 +33,7 @@ const (
 	tasksAgents  // what the AI agents reported, by day and project (agents.go)
 )
 
-// The lists of the tasks' page, as its tabs show them.
+// The lists of the tasks' page, as its left column shows them (todaySide).
 var taskLists = []struct {
 	view       int
 	name, icon string
@@ -119,8 +119,11 @@ type tasksState struct {
 }
 
 // tasksOf is what the tasks were gathered of: the maps as read, the folder
-// as scanned, the open map as edited.
-type tasksOf struct{ maps, scans, edits int }
+// as scanned, the open map as edited, and which map is open.
+type tasksOf struct {
+	maps, scans, edits int
+	open               string
+}
 
 func (it taskItem) key() string { return it.path + "#" + it.node.ID }
 
@@ -211,10 +214,9 @@ func (w taskWhen) put(t *model.Task) {
 // taskDrag is a task dragged to a day.
 type taskDrag struct{ path, id string }
 
-// openTasks shows the tasks in the main area.
+// openTasks shows the tasks in the main area: 今天, gathered anew.
 func (a *app) openTasks() {
-	a.showLibrary()
-	a.tasks.open = true
+	a.goToday()
 	if a.tasks.day.IsZero() {
 		a.tasks.day = today(a.now())
 	}
@@ -236,7 +238,7 @@ func (a *app) taskItems() []taskItem {
 			}
 		}
 	}
-	of := tasksOf{a.memo.maps, a.memo.scans, a.edits}
+	of := tasksOf{a.memo.maps, a.memo.scans, a.edits, a.path}
 	if of == a.tasks.of && a.tasks.read.Equal(a.tasks.gathered) && !a.tasks.read.IsZero() {
 		return a.tasks.items
 	}
@@ -714,7 +716,6 @@ func (a *app) tasksAdd(c *ui.Context, now time.Time) {
 			if tl.prio != model.PriorityNone {
 				pill(c, tl.prio.Label(), t.Background, taskPriorityColor(t, tl.prio))
 			}
-			ui.Text(c, "↩").FontSize(textCaption).TextColor(t.TextMuted)
 		}
 		if in.Submitted() && strings.TrimSpace(a.tasks.add) != "" {
 			line := a.tasks.add
@@ -1229,7 +1230,7 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 				// dropped on it, to its day.
 				box := tray(c, "group:"+g.title)
 				if g.drop != nil {
-					a.dropTaskOn(box, *g.drop)
+					a.dropTaskAt(box, *g.drop, dropDayAlone)
 				}
 				box.Children(func() {
 					ui.Row(c).Height(32).Padding(6, 8, 0).Gap(6).AlignItems(ui.Center).FillWidth().Children(func() {
@@ -1357,24 +1358,7 @@ func (a *app) remindProp(c *ui.Context, it taskItem) {
 			ui.Text(c, "先定个日期，再选几点提醒").FontSize(textSmall).TextColor(faint(t))
 			return
 		}
-		chip := func(key, text, label string, on bool) bool {
-			b := ui.Box(c.Key(key)).Height(28).Padding(0, 12).Radius(radiusPill).Center().Cursor(ui.CursorPointer).Label(label).Shrink(0).
-				Background(t.Text.Alpha(0.05)).Transition(easeLook)
-			switch {
-			case on:
-				b.Background(t.Accent.Alpha(0.14))
-			case b.Hovered():
-				b.Background(t.Text.Alpha(0.09))
-			}
-			press(b, 0.96)
-			b.Children(func() {
-				txt := ui.Text(c, text).FontSize(textSmall).NoWrap().PassThrough().FontFeatures("tnum")
-				if on {
-					txt.FontWeight(700).TextColor(t.Accent.MixOklab(t.Text, 0.3))
-				}
-			})
-			return b.Clicked()
-		}
+		chip := func(key, text, label string, on bool) bool { return propChip(c, key, text, label, on).Clicked() }
 		if chip("remind:none", "不提醒", "提醒 不提醒", task.Remind == "") {
 			set("")
 		}
@@ -1952,21 +1936,37 @@ func (a *app) moveTaskTo(it taskItem) {
 	a.openPalette(paletteMove)
 }
 
-// dropTaskOn makes el take tasks dropped on it, which go to the day, and
-// say so with the way back (moveTaskDay).
-func (a *app) dropTaskOn(el ui.Element, day time.Time) {
-	t := a.theme()
-	if _, over := ui.DragOver[taskDrag](el); over {
-		el.Background(t.Accent.Alpha(0.12))
+// propChip is a choice among a task's details' few (when it reminds, how
+// it repeats, a date of the month): a small key, on the accent's tint
+// when chosen. The caller acts on its click.
+func propChip(c *ui.Context, key, text, label string, on bool) ui.Element {
+	t := c.Theme()
+	b := ui.Box(c.Key(key)).Height(28).Padding(0, 12).Radius(radiusPill).Center().Cursor(ui.CursorPointer).Label(label).Shrink(0).
+		Background(t.Text.Alpha(0.05)).Transition(easeLook)
+	switch {
+	case on:
+		b.Background(t.Accent.Alpha(0.14))
+	case b.Hovered():
+		b.Background(t.Text.Alpha(0.09))
 	}
-	if d, ok := ui.Drop[taskDrag](el); ok {
-		for _, it := range a.tasks.items {
-			if it.path == d.path && it.node.ID == d.id {
-				a.later(func() { a.moveTaskDay(it, &day) })
-				return
-			}
+	press(b, 0.96)
+	b.Children(func() {
+		txt := ui.Text(c, text).FontSize(textSmall).NoWrap().PassThrough().FontFeatures("tnum")
+		if on {
+			txt.FontWeight(700).TextColor(t.Accent.MixOklab(t.Text, 0.3))
+		}
+	})
+	return b
+}
+
+// dragged is the task a drag carries, as the tasks were last gathered.
+func (a *app) dragged(d taskDrag) (taskItem, bool) {
+	for _, it := range a.tasks.items {
+		if it.path == d.path && it.node.ID == d.id {
+			return it, true
 		}
 	}
+	return taskItem{}, false
 }
 
 // theme is the theme the window was last drawn in.
@@ -2004,7 +2004,7 @@ func (a *app) monthView(c *ui.Context, items []taskItem) {
 					if !in {
 						cell.Background(t.Text.Alpha(0.02))
 					}
-					a.dropTaskOn(cell, d)
+					a.dropTaskAt(cell, d, dropDayAlone)
 					if cell.DoubleClicked() {
 						day := d
 						a.later(func() { a.tasks.day, a.tasks.view = day, tasksDay })
@@ -2187,7 +2187,7 @@ func (a *app) ensureInbox() error {
 	path := a.inboxPath()
 	if modTime(path).IsZero() {
 		f := model.NewFile(inboxName)
-		f.Sheets[0].Root.Note = "随手记下的想法和待办，之后整理到对应的导图里（右键节点「移到其他导图…」）。"
+		f.Sheets[0].Root.Note = "随手记下的想法和待办，之后整理到对应的导图里（在主题的菜单里选「移到其他导图…」）。"
 		if err := f.Save(path); err != nil {
 			return err
 		}
@@ -2299,24 +2299,7 @@ func (a *app) repeatProp(c *ui.Context, it taskItem) {
 	case rep.Unit == model.RepeatYear:
 		kind = kindYear
 	}
-	chip := func(key, text, label string, on bool) ui.Element {
-		b := ui.Box(c.Key(key)).Height(28).Padding(0, 12).Radius(radiusPill).Center().Cursor(ui.CursorPointer).Label(label).Shrink(0).
-			Background(t.Text.Alpha(0.05)).Transition(easeLook)
-		switch {
-		case on:
-			b.Background(t.Accent.Alpha(0.14))
-		case b.Hovered():
-			b.Background(t.Text.Alpha(0.09))
-		}
-		press(b, 0.96)
-		b.Children(func() {
-			txt := ui.Text(c, text).FontSize(textSmall).NoWrap().PassThrough().FontFeatures("tnum")
-			if on {
-				txt.FontWeight(700).TextColor(t.Accent.MixOklab(t.Text, 0.3))
-			}
-		})
-		return b
-	}
+	chip := func(key, text, label string, on bool) ui.Element { return propChip(c, key, text, label, on) }
 	// day is a date's small square key, of a grid of the month's dates.
 	day := func(key, text, label string, on bool) ui.Element {
 		return chip(key, text, label, on).Padding(0).Width(30)

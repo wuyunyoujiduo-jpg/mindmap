@@ -38,6 +38,17 @@ func (a *app) sidePane(c *ui.Context, key string, body, foot func()) {
 // sideRow is a row of the left column: what lead builds, a name, a count
 // at its end; the one shown is on a shade. The caller acts on its click.
 func sideRow(c *ui.Context, key, name, count string, on bool, lead func(hot bool)) ui.Element {
+	return sideRowTrail(c, key, name, count, on, lead, nil)
+}
+
+// sideMaps is how many projects 今天's left column shows before the rest
+// are under 全部项目.
+const sideMaps = 6
+
+// sideRowTrail is sideRow with what trail builds at its end in the count's
+// place, told whether the row is pointed at: a key that shows only then;
+// with no trail, the count. It is the one body of the two.
+func sideRowTrail(c *ui.Context, key, name, count string, on bool, lead, trail func(hot bool)) ui.Element {
 	t := c.Theme()
 	row := ui.Row(c.Key(key)).Height(36).Padding(0, 10).Gap(10).Radius(radiusRow).AlignItems(ui.Center).FillWidth().
 		Cursor(ui.CursorPointer).Label(name).Background(t.Text.Alpha(0)).Transition(easeLook)
@@ -57,40 +68,12 @@ func sideRow(c *ui.Context, key, name, count string, on bool, lead func(hot bool
 		} else if !row.Hovered() {
 			txt.TextColor(ink2(t)) // read second, until it is chosen or pointed at
 		}
-		if count != "" && count != "0" {
+		switch {
+		case trail != nil:
+			ui.Row(c).Gap(6).AlignItems(ui.Center).Shrink(0).Children(func() { trail(row.Hovered()) })
+		case count != "" && count != "0":
 			sideCount(c, count, on, false)
 		}
-	})
-	return row
-}
-
-// sideMaps is how many projects 今天's left column shows before the rest
-// are under 全部项目.
-const sideMaps = 6
-
-// sideRowTrail is sideRow with what trail builds at its end in the count's
-// place, told whether the row is pointed at: a key that shows only then.
-func sideRowTrail(c *ui.Context, key, name, count string, on bool, lead, trail func(hot bool)) ui.Element {
-	t := c.Theme()
-	row := ui.Row(c.Key(key)).Height(36).Padding(0, 10).Gap(10).Radius(radiusRow).AlignItems(ui.Center).FillWidth().
-		Cursor(ui.CursorPointer).Label(name).Background(t.Text.Alpha(0)).Transition(easeLook)
-	switch {
-	case on:
-		row.Background(t.Text.Alpha(0.07))
-	case row.Hovered():
-		row.Background(t.Text.Alpha(0.04))
-	}
-	row.Children(func() {
-		if lead != nil {
-			lead(on || row.Hovered())
-		}
-		txt := ui.Text(c, name).FontSize(textBody + 0.5).SingleLine().Grow(1).Shrink(1).MinWidth(0).PassThrough()
-		if on {
-			txt.FontWeight(700)
-		} else if !row.Hovered() {
-			txt.TextColor(ink2(t))
-		}
-		ui.Row(c).Gap(6).AlignItems(ui.Center).Shrink(0).Children(func() { trail(row.Hovered()) })
 	})
 	return row
 }
@@ -434,11 +417,8 @@ func (a *app) dropTaskOnMap(d taskDrag, path string) {
 		a.tell("没有移过去：打不开「" + mapName(path) + "」")
 		return
 	}
-	for _, it := range a.tasks.items {
-		if it.path == d.path && it.node.ID == d.id {
-			a.moveTaskUndoably(it, path, f.Sheets[0].Root.ID, mapName(path))
-			return
-		}
+	if it, ok := a.dragged(d); ok {
+		a.moveTaskUndoably(it, path, f.Sheets[0].Root.ID, mapName(path))
 	}
 }
 
