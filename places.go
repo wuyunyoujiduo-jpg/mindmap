@@ -38,17 +38,13 @@ func (a *app) place() int {
 
 // showProjects shows 项目, the maps by folder.
 // projectFiles are the maps of a folder and its folders as 项目's cards
-// stand: those starred first, then the one changed last first, in
-// whichever folder it is (gathered folder by folder, a map of a subfolder
-// edited today stood after every map of the folder above it).
+// stand: the one changed last first, in whichever folder it is, starred
+// or not (the user's: a star keeps a map at the head of 快捷访问, not
+// here). Gathered folder by folder, a map of a subfolder edited today
+// stood after every map of the folder above it.
 func (a *app) projectFiles(at model.Folder) []model.FileInfo {
 	files := at.AllFiles()
-	slices.SortStableFunc(files, func(x, y model.FileInfo) int {
-		if s := b2i(a.starred(y.Path)) - b2i(a.starred(x.Path)); s != 0 {
-			return s
-		}
-		return y.Modified.Compare(x.Modified)
-	})
+	slices.SortStableFunc(files, func(x, y model.FileInfo) int { return y.Modified.Compare(x.Modified) })
 	return files
 }
 

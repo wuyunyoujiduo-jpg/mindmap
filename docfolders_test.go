@@ -349,8 +349,8 @@ func TestInboxStaysTheInbox(t *testing.T) {
 	}
 }
 
-// 项目's cards are the starred first, then the map changed last first,
-// whichever folder it is in.
+// 项目's cards are the map changed last first, starred or not, whichever
+// folder it is in.
 func TestProjectsByLastChange(t *testing.T) {
 	a, _ := newTestApp(t)
 	sub := filepath.Join(a.dir, "子文件夹")
@@ -364,6 +364,7 @@ func TestProjectsByLastChange(t *testing.T) {
 		at := time.Now().Add(time.Duration(i+1) * time.Hour) // after the guide map, written now
 		os.Chtimes(p, at, at)
 	}
+	a.cfg.Favorites = append(a.cfg.Favorites, old) // starred, and older: after
 	a.refreshFiles()
 	var names []string
 	for _, f := range a.projectFiles(a.tree) {
