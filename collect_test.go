@@ -322,8 +322,9 @@ func TestClipFoundAgainAfterReload(t *testing.T) {
 func TestWorkPanicIsAnError(t *testing.T) {
 	a, _ := newTestApp(t)
 	v, err := guarded(func() (any, error) {
-		var m map[string]int
-		m["x"] = 1
+		if a != nil {
+			panic("写坏了")
+		}
 		return "done", nil
 	})
 	var p *workPanic

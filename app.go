@@ -204,7 +204,6 @@ type app struct {
 	// Canvas tabs.
 	renamingSheet string
 	sheetTitle    string
-	confirmSheet  bool
 	structureOpen bool
 	panelTab      int
 	// The command palette and the cheat sheet of shortcuts.
