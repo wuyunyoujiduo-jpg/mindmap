@@ -19,13 +19,15 @@ import (
 
 // Sync with GitHub: the maps folder, maps and library alike, kept in step
 // with a private repository of the user's, so that other computers have
-// them too (internal/ghsync). Once set up it runs by itself: soon after a
-// change here, and every few minutes for the changes of other computers.
+// them too (internal/ghsync). Once set up it runs by itself, every few
+// minutes: what changed here since goes up together, and what changed on
+// other computers comes down. Before 0.101.3 a change went up fifteen
+// seconds after it: GitHub counts the calls of an account, and the user
+// asked for one round every five minutes with all of it.
 
 const (
-	syncAfterChange = 15 * time.Second // after the last change here
-	syncEvery       = 5 * time.Minute  // for other computers' changes
-	syncRetry       = 2 * time.Minute  // after a failure
+	syncEvery = 5 * time.Minute // a round: the changes here, and other computers'
+	syncRetry = 2 * time.Minute // after a failure
 )
 
 func (a *app) syncConfig() ghsync.Config {
@@ -199,10 +201,7 @@ func (a *app) syncDue() {
 	if a.syncErr != "" {
 		wait = syncRetry
 	}
-	switch {
-	case a.syncTried.IsZero(), // just started
-		a.syncChanged.After(a.syncTried) && now.Sub(a.syncChanged) >= syncAfterChange,
-		now.Sub(a.syncTried) >= wait:
+	if a.syncTried.IsZero() || now.Sub(a.syncTried) >= wait { // just started, or a round is due
 		a.syncNow()
 	}
 }
@@ -417,7 +416,7 @@ func (a *app) syncSettings(c *ui.Context) {
 				ui.Text(c, a.syncCheck).FontSize(12).TextColor(col).Wrap()
 			}
 			auto := !a.cfg.SyncOff
-			switchRow(c, &auto, "自动同步", "修改后十几秒内自动上传，每 5 分钟检查一次其他电脑的修改", func() {
+			switchRow(c, &auto, "自动同步", "每 5 分钟一次：这段时间里的修改一起上传，其他电脑的修改一起下载。想马上同步就点「立即同步」", func() {
 				a.cfg.SyncOff = !auto
 				a.cfg.save()
 			})

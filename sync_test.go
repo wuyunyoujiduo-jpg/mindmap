@@ -67,15 +67,16 @@ func TestSyncWithGitHub(t *testing.T) {
 		t.Fatalf("no status: %q", tt.Texts())
 	}
 
-	// A change here goes up a little later, by itself.
+	// A change here goes up with the next round, by itself: not at once,
+	// each sync being calls of the account's hour.
 	clock = clock.Add(time.Second)
 	a.syncChange()
-	clock = clock.Add(5 * time.Second)
+	clock = clock.Add(time.Minute)
 	a.syncDue()
 	if len(runs) != 1 {
-		t.Fatal("synced too soon after a change")
+		t.Fatal("synced at once after a change")
 	}
-	clock = clock.Add(syncAfterChange)
+	clock = clock.Add(syncEvery)
 	a.syncDue()
 	if len(runs) != 2 {
 		t.Fatalf("runs %d", len(runs))

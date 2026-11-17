@@ -34,6 +34,7 @@ import (
 	"sync"
 	"time"
 	"unicode"
+	"unicode/utf8"
 )
 
 // MaxFile is the size of the largest file synced: GitHub refuses files
@@ -294,7 +295,8 @@ type state struct {
 	Repo   string            `json:"repo"`
 	Branch string            `json:"branch"`
 	Commit string            `json:"commit"`
-	Base   map[string]string `json:"base"` // path → blob SHA both sides had
+	Tree   string            `json:"tree,omitempty"` // the commit's tree, not asked for again
+	Base   map[string]string `json:"base"`           // path → blob SHA both sides had
 	// Hashes are the local files' SHAs, by their size and time, so that
 	// unchanged files are not read again.
 	Hashes map[string]cached `json:"hashes"`
@@ -622,6 +624,14 @@ func syncOnce(ctx context.Context, dir string, cfg Config, progress func(string)
 				return err
 			}
 			sha := blobSHA(data)
+			if inline(data) { // with the tree, no call of its own
+				text := string(data)
+				mu.Lock()
+				entries = append(entries, treeEntry{Path: p, Content: &text})
+				merged[p] = sha
+				mu.Unlock()
+				return nil
+			}
 			mu.Lock()
 			sent := s.Sent[sha]
 			mu.Unlock()
@@ -635,7 +645,7 @@ func syncOnce(ctx context.Context, dir string, cfg Config, progress func(string)
 			}
 			mu.Lock()
 			s.Sent[sha] = true
-			entries = append(entries, treeEntry{Path: p, Mode: "100644", Type: "blob", SHA: &sha})
+			entries = append(entries, treeEntry{Path: p, SHA: &sha})
 			merged[p] = sha
 			mu.Unlock()
 			return nil
@@ -643,14 +653,17 @@ func syncOnce(ctx context.Context, dir string, cfg Config, progress func(string)
 			return fail(err)
 		}
 		for _, p := range drop {
-			entries = append(entries, treeEntry{Path: p, Mode: "100644", Type: "blob"})
+			entries = append(entries, treeEntry{Path: p})
+		}
+		if tree == "" {
+			tree = s.Tree
 		}
 		if tree == "" {
 			if tree, err = cfg.treeOf(ctx, head); err != nil {
 				return res, err
 			}
 		}
-		commit, err := cfg.commit(ctx, head, tree, entries, message(len(push), len(drop)))
+		commit, made, err := cfg.commit(ctx, head, tree, entries, message(len(push), len(drop)))
 		if err != nil {
 			if c := status(err); c == 404 || c == 422 {
 				s.Sent = nil // a blob kept from before is gone: all are sent again
@@ -660,11 +673,14 @@ func syncOnce(ctx context.Context, dir string, cfg Config, progress func(string)
 		if err := cfg.move(ctx, commit); err != nil {
 			return fail(err)
 		}
-		head = commit
+		head, tree = commit, made
 		res.Pushed, res.Deleted = len(push), res.Deleted+len(drop)
 	}
 	res.Commit = head
 
+	if tree != "" || head != s.Commit {
+		s.Tree = tree
+	}
 	s.Commit, s.Base, s.At, s.Sent = head, merged, now(), nil
 	// The files written are hashed again next time.
 	for _, p := range res.Written {
@@ -1040,25 +1056,64 @@ func (cfg Config) putBlob(ctx context.Context, data []byte) (string, error) {
 	return out.SHA, err
 }
 
+// A treeEntry is a file of a commit: the blob uploaded for it, or its
+// text itself, which GitHub makes the blob of, or neither for a file
+// deleted.
 type treeEntry struct {
-	Path string  `json:"path"`
-	Mode string  `json:"mode"`
-	Type string  `json:"type"`
-	SHA  *string `json:"sha"` // nil deletes
+	Path    string
+	SHA     *string
+	Content *string
+}
+
+func (e treeEntry) MarshalJSON() ([]byte, error) {
+	m := map[string]any{"path": e.Path, "mode": "100644", "type": "blob"}
+	if e.Content != nil {
+		m["content"] = *e.Content
+	} else {
+		m["sha"] = e.SHA // nil deletes
+	}
+	return json.Marshal(m)
+}
+
+// A file's text goes up in the call that makes the commit's tree, with
+// the others': a call a file, as a blob is, was what used up the hour's
+// calls of the account (the user asked for one call for the lot). Not a
+// file that is no text, nor a long one; and a tree's call holds so much
+// of them, the rest in a tree made of it.
+const (
+	inlineMax   = 512 << 10
+	inlineBatch = 4 << 20
+)
+
+// inline tells whether a file's content goes up as text in the tree.
+func inline(data []byte) bool {
+	return len(data) <= inlineMax && utf8.Valid(data) && bytes.IndexByte(data, 0) < 0
 }
 
 // commit makes a commit of the tree base with the entries changed, on
 // parent.
-func (cfg Config) commit(ctx context.Context, parent, base string, entries []treeEntry, msg string) (string, error) {
+func (cfg Config) commit(ctx context.Context, parent, base string, entries []treeEntry, msg string) (commit, tree string, err error) {
 	var t struct{ SHA string }
-	if err := cfg.call(ctx, "POST", "/git/trees", map[string]any{"base_tree": base, "tree": entries}, &t); err != nil {
-		return "", err
+	t.SHA = base
+	// One tree for all, or one upon another when the texts are many.
+	for len(entries) > 0 {
+		n, size := 0, 0
+		for n < len(entries) && (n == 0 || size < inlineBatch) {
+			if c := entries[n].Content; c != nil {
+				size += len(*c)
+			}
+			n++
+		}
+		if err := cfg.call(ctx, "POST", "/git/trees", map[string]any{"base_tree": t.SHA, "tree": entries[:n]}, &t); err != nil {
+			return "", "", err
+		}
+		entries = entries[n:]
 	}
 	var c struct{ SHA string }
-	err := cfg.call(ctx, "POST", "/git/commits", map[string]any{
+	err = cfg.call(ctx, "POST", "/git/commits", map[string]any{
 		"message": msg, "tree": t.SHA, "parents": []string{parent},
 	}, &c)
-	return c.SHA, err
+	return c.SHA, t.SHA, err
 }
 
 // move points the branch at commit, unless another device moved it since.

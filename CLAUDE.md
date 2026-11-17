@@ -511,7 +511,12 @@ by AI, and an AI assistant.
   what the code showed, not seen on the user's computer). It goes on from
   where it stopped (`state.Sent`), leaves the account `Reserve` calls,
   and waits for the hour to be counted anew (`LimitError`, `RetryAfter`,
-  `app.syncHold`). A map changed on
+  `app.syncHold`). And, the user's (0.101.3): a round every five minutes
+  with all that changed, not a sync fifteen seconds after each change
+  (`syncEvery`, `syncDue`); and the texts of a round go up in the call
+  that makes the commit's tree, however many (`treeEntry.Content`,
+  `inline`), a blob's call being left to what is no text. A round of
+  edits is four calls. A file that comes down is still a call. A map changed on
   both computers is merged topic by topic against the version both came
   from (`model.Merge`, by `Config.Merge`), and where both changed one
   field each its own way a window asks which to keep, as git does

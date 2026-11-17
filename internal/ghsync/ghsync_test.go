@@ -169,7 +169,19 @@ func (f *fakeGitHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		for _, e := range in["tree"].([]any) {
 			e := e.(map[string]any)
-			if sha, ok := e["sha"].(string); ok {
+			if text, ok := e["content"].(string); ok { // the text itself: its blob is made here
+				if _, both := e["sha"]; both {
+					reply(422, map[string]string{"message": "tree.sha and tree.content given"})
+					return
+				}
+				sha := blobSHA([]byte(text))
+				f.blobs[sha] = []byte(text)
+				files[e["path"].(string)] = sha
+			} else if sha, ok := e["sha"].(string); ok {
+				if f.blobs[sha] == nil {
+					reply(422, map[string]string{"message": "tree.sha " + sha + " is not a valid blob"})
+					return
+				}
 				files[e["path"].(string)] = sha
 			} else {
 				delete(files, e["path"].(string))
@@ -552,7 +564,7 @@ func TestLimitStopsAndGoesOn(t *testing.T) {
 	dir := t.TempDir()
 	const files = 40
 	for i := range files {
-		put(t, dir, fmt.Sprintf("m%02d.mindmap.json", i), fmt.Sprint("map ", i))
+		put(t, dir, fmt.Sprintf("m%02d.mindmap.json", i), fmt.Sprint("\xff picture ", i))
 	}
 	// The calls run out on the way, taken by something else of the account.
 	f.limited, f.left, f.drain = true, 5000, 12
@@ -589,7 +601,7 @@ func TestLimitSpared(t *testing.T) {
 	f, cfg := setup(t)
 	dir := t.TempDir()
 	for i := range 30 {
-		put(t, dir, fmt.Sprintf("m%02d.mindmap.json", i), fmt.Sprint("map ", i))
+		put(t, dir, fmt.Sprintf("m%02d.mindmap.json", i), fmt.Sprint("\xff picture ", i))
 	}
 	f.limited, f.left = true, Reserve+12
 	_, err := Sync(context.Background(), dir, cfg, nil)
@@ -613,5 +625,77 @@ func TestLimitSpared(t *testing.T) {
 	sync1(t, dir, cfg)
 	if used := before - f.left; used != 1 {
 		t.Fatalf("an idle sync took %d calls", used)
+	}
+}
+
+// The texts of a sync go up in one call, however many; a file that is no
+// text is a call. What the other computer gets is what was written, to
+// the byte.
+func TestTextsGoUpTogether(t *testing.T) {
+	f, cfg := setup(t)
+	a, b := t.TempDir(), t.TempDir()
+	sync1(t, a, cfg) // the repository begun
+	texts := map[string]string{
+		"计划.mindmap.json":           "{\n  \"title\": \"计划 <a> & b\"\n}\n",
+		".library/clips/1.json":     "line one\r\nline two\r\n",
+		".library/clips/2.json":     "\ufeff密码：⟦mm1.4c7a1e.pX0v-8Jw_⟧ \t tab",
+		".skills/review/SKILL.md":   "# Review\n\n- a\n- b",
+		".skills/review/run.py":     "",
+		".library/clips/quotes.txt": `"quoted" \back\slash \u00e9`,
+	}
+	for i := range 60 {
+		texts[fmt.Sprintf(".library/clips/n%02d.json", i)] = fmt.Sprint("clip ", i)
+	}
+	for p, c := range texts {
+		put(t, a, p, c)
+	}
+	put(t, a, ".library/files/pic.png", "\x89PNG\x00\x01\xff")
+	f.limited, f.left = true, 5000
+	res := sync1(t, a, cfg)
+	if res.Pushed != len(texts)+1 {
+		t.Fatalf("pushed %d of %d", res.Pushed, len(texts)+1)
+	}
+	if f.uploads != 1 {
+		t.Fatalf("%d blobs uploaded: the picture alone is one", f.uploads)
+	}
+	if used := 5000 - f.left; used != 5 { // the head, the picture, the tree, the commit, the branch
+		t.Fatalf("%d calls for %d files", used, res.Pushed)
+	}
+	f.limited = false
+	sync1(t, b, cfg)
+	for p, c := range texts {
+		if got := read(b, p); got != c {
+			t.Errorf("%s: %q, written %q", p, got, c)
+		}
+	}
+	if read(b, ".library/files/pic.png") != "\x89PNG\x00\x01\xff" {
+		t.Error("the picture")
+	}
+	// Neither has anything more to send: what GitHub has is what each has.
+	f.uploads = 0
+	if r := sync1(t, a, cfg); r.Synced() {
+		t.Fatalf("a synced again: %+v", r)
+	}
+	if r := sync1(t, b, cfg); r.Synced() || f.uploads != 0 {
+		t.Fatalf("b synced again: %+v", r)
+	}
+}
+
+// Texts beyond what a call holds go up in a tree upon a tree.
+func TestManyTexts(t *testing.T) {
+	f, cfg := setup(t)
+	a := t.TempDir()
+	sync1(t, a, cfg)
+	long := strings.Repeat("字", inlineMax/3-10) // near the most a text may be
+	for i := range 12 {
+		put(t, a, fmt.Sprintf("m%02d.mindmap.json", i), fmt.Sprint(i, long))
+	}
+	put(t, a, "long.mindmap.json", long+long) // too long a text: a blob
+	f.limited, f.left = true, 5000
+	if res := sync1(t, a, cfg); res.Pushed != 13 || len(f.files()) < 13 {
+		t.Fatalf("pushed %d, %d in the repository", res.Pushed, len(f.files()))
+	}
+	if used := 5000 - f.left; f.uploads != 1 || used > 7 {
+		t.Fatalf("%d uploads, %d calls", f.uploads, used)
 	}
 }
