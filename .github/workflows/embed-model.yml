@@ -1,9 +1,13 @@
 name: Embedding model
 
-# Builds the built-in embedding model of the library's semantic search
-# from a Model2Vec model (tools/embedmodel) and publishes it as the assets
-# of the embed-model release, which the app's builds download into
-# resources/. Run by hand when the model or its trimming changes.
+# Builds the embedding model of 收集's semantic search from a Model2Vec
+# model (tools/embedmodel/build.py) and publishes it, with what the full
+# model gives of some sample texts, as the assets of this repository's
+# release embed-model, which the Build workflow's tests download and
+# compare against. No app has it built in: the apps download it as a
+# plugin from the public repository mindmap-models (plugin.go), where it
+# is put by hand, cut into parts by tools/embedmodel/split.py. Run by hand
+# when the model or its trimming changes.
 on:
   workflow_dispatch:
     inputs:
@@ -17,8 +21,8 @@ on:
         description: "保留的英文词元数"
         default: "30000"
       dims:
-        description: "向量维度（PCA）"
-        default: "128"
+        description: "向量维度（比模型自己的少就用 PCA 降维；现在发布的是 256）"
+        default: "256"
 
 permissions:
   contents: write
@@ -32,8 +36,15 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install model2vec numpy
+      # What is typed into the run's form reaches the shell as variables,
+      # not as text of the script.
       - name: Build the model
-        run: python tools/embedmodel/build.py "${{ inputs.model }}" mindmap-embed.bin reference.json "${{ inputs.cjk }}" "${{ inputs.ascii }}" "${{ inputs.dims }}"
+        env:
+          MODEL: ${{ inputs.model }}
+          CJK: ${{ inputs.cjk }}
+          ASCII: ${{ inputs.ascii }}
+          DIMS: ${{ inputs.dims }}
+        run: python tools/embedmodel/build.py "$MODEL" mindmap-embed.bin reference.json "$CJK" "$ASCII" "$DIMS"
       - run: ls -la mindmap-embed.bin reference.json && gzip -k -9 mindmap-embed.bin && ls -la mindmap-embed.bin.gz
       - name: Publish
         env:
@@ -41,6 +52,6 @@ jobs:
         run: |
           gh release view embed-model --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 ||
             gh release create embed-model --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-              --title "内置向量模型" --notes "资料库语义检索的内置模型，由 tools/embedmodel 生成，供打包时下载。" \
+              --title "向量模型" --notes "收集的语义检索用的向量模型，由 tools/embedmodel 生成，测试时下载。" \
               --prerelease --latest=false
           gh release upload embed-model mindmap-embed.bin reference.json --repo "$GITHUB_REPOSITORY" --clobber

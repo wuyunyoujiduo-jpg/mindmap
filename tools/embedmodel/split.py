@@ -11,11 +11,17 @@ whole's, which the app checks.
 import hashlib
 import json
 import os
+import struct
 import sys
 
 src, out, version = sys.argv[1], sys.argv[2], int(sys.argv[3])
 PART = 15 * 1024 * 1024
 data = open(src, "rb").read()
+# The model's name and dimensions are read from its header (build.py's):
+# written here a second time, they were not what the build's default made.
+if data[:6] != b"MMEMB1":
+    sys.exit(src + " is not a model of build.py's")
+header = json.loads(data[10 : 10 + struct.unpack("<I", data[6:10])[0]])
 os.makedirs(out, exist_ok=True)
 for f in os.listdir(out):
     if f.startswith("mindmap-embed.bin."):
@@ -27,7 +33,7 @@ for i in range(0, len(data), PART):
     open(os.path.join(out, name), "wb").write(chunk)
     parts.append({"file": name, "size": len(chunk), "sha256": hashlib.sha256(chunk).hexdigest()})
 manifest = {
-    "name": "potion-multilingual-128M（中日英，256 维）",
+    "name": f"{header['name'].split('/')[-1]}（中日英，{header['dim']} 维）",
     "version": version,
     "size": len(data),
     "sha256": hashlib.sha256(data).hexdigest(),

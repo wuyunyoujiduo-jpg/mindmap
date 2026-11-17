@@ -1,15 +1,17 @@
-"""Other concepts of MindMap's icon, on project knowledge and AI:
+"""Other concepts of MyMind's icon, on project knowledge and AI, and what
+the other icons are drawn with (base, layers, sparkle):
 
     spark   the AI's spark at the center of a map of knowledge
-    cards   the library's cards, a map on the front one, and the spark
+    cards   the cards of what is collected, a map on the front one, and the spark
     orbit   knowledge in orbit around the spark, a constellation
 
     python3 tools/icon/concepts.py <concept> out.png
 
-The app's icon, resources/icon.png, is now vivid.py's, a large white note
-on coral; bold.py's take on cards is appicons/cards.png. appicons/ holds
-the vivid note in three colors, the cards and orbit at 512 pixels, the
-icons to choose from in the settings.
+The app's icon, resources/icon.png, is desk.py's: a white note on the
+app's violet-blue. appicons/ holds the icons to choose in the settings,
+at 512 pixels: the desk, vivid.py's note in three colors, bold.py's take
+on the cards (cards.png) and the orbit of here; tray.py draws their menu
+bar icons.
 """
 import math
 import sys

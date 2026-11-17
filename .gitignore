@@ -2,6 +2,9 @@
 /.mygo/
 mygo_windows_*.syso
 /mindmap
+# The embedding model, when a build from source has it among the app's
+# resources (libmore.go's localModelPaths looks there too): nothing puts
+# it there by itself, and 23 MB are not to be committed by the way.
 resources/mindmap-embed.bin
 
 /mindmap.test

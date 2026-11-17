@@ -1,4 +1,5 @@
-"""Builds MindMap's built-in embedding model from a Model2Vec model.
+"""Builds the embedding model of MyMind's semantic search, which the app
+downloads as a plugin (plugin.go), from a Model2Vec model.
 
 Model2Vec distills a sentence transformer (here potion-multilingual-128M,
 distilled from BAAI/bge-m3) into a table of token vectors: a text's vector
@@ -19,7 +20,11 @@ It also writes reference.json: sample texts with their normalized form,
 the tokens and vector of the trimmed model (which internal/embed must
 reproduce), and how alike the trimmed and the full model's vectors are.
 
-    python build.py MODEL OUT.bin reference.json [TOKENS]
+    python build.py MODEL OUT.bin reference.json [CJK] [ASCII] [DIMS]
+
+CJK and ASCII are how many tokens of each are kept; DIMS is the vectors'
+dimensions: the model's own 256, as the plugin published has, or fewer,
+which takes their principal components.
 """
 
 import json
@@ -37,7 +42,7 @@ OUT = sys.argv[2] if len(sys.argv) > 2 else "mindmap-embed.bin"
 REF = sys.argv[3] if len(sys.argv) > 3 else "reference.json"
 CJK_BUDGET = int(sys.argv[4]) if len(sys.argv) > 4 else 70000
 ASCII_BUDGET = int(sys.argv[5]) if len(sys.argv) > 5 else 30000
-DIMS = int(sys.argv[6]) if len(sys.argv) > 6 else 128
+DIMS = int(sys.argv[6]) if len(sys.argv) > 6 else 256
 
 m = StaticModel.from_pretrained(NAME)
 tok = m.tokenizer
