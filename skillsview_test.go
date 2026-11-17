@@ -355,7 +355,7 @@ func TestSkillsBundled(t *testing.T) {
 	a.skillMarkOwn(a.skills.report.Entry("g/release"), true)
 	tt.Frame()
 	tt.Frame()
-	if e := a.skills.report.Entry("g/release"); e == nil || e.Scope != 3 || a.skillsNeedCount() != 0 {
+	if e := a.skills.report.Entry("g/release"); e == nil || e.Scope != skills.Bundled || a.skillsNeedCount() != 0 {
 		t.Fatalf("not marked: %+v", e)
 	}
 	a.noticeUndo()

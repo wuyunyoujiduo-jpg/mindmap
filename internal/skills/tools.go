@@ -12,9 +12,8 @@
 // ghsync's, at .skills), and each computer makes its own links, its paths
 // being its own; what each computer linked is written in the store
 // (_machines/<name>.json), so that the other one offers the same. A
-// project's skills, in its repository, are known to the package
-// (ProjectStore, MakeReal, SetScope) and not looked at by the app, which
-// leaves Env.Repos empty: the user's choice.
+// project's skills, in its repository, are not looked at nor touched:
+// the user's choice, the repository's to keep.
 //
 // The agents are known by a table (tools.json), which the app may have
 // newer from the network (Table), and an agent the table does not know
@@ -31,8 +30,9 @@ import (
 	"strings"
 )
 
-// A Tool is an AI coding agent: where it keeps its things and its skills,
-// in the home and in a project's repository.
+// A Tool is an AI coding agent: where it keeps its things and its skills.
+// The table's "project", a tool's folders of skills in a repository, is
+// not read: a project's skills are not looked at.
 type Tool struct {
 	ID    string `json:"id"`
 	Name  string `json:"name"`
@@ -40,10 +40,9 @@ type Tool struct {
 	// Home is its folder from the user's home (".claude"): there, it is
 	// installed.
 	Home string `json:"home"`
-	// Global and Project are the folders of its skills, from the home and
-	// from a repository's root; a skill is linked into the first.
-	Global  []string `json:"global"`
-	Project []string `json:"project"`
+	// Global is the folders of its skills, from the home; a skill is
+	// linked into the first.
+	Global []string `json:"global"`
 	// Plugins is the folder under which its plugins keep their skills,
 	// from the home, if it has plugins.
 	Plugins string `json:"plugins,omitempty"`
@@ -153,8 +152,7 @@ func Detect(home string, table []Tool) []Tool {
 				continue
 			}
 			id := strings.TrimPrefix(name, ".")
-			out = append(out, Tool{ID: id, Name: id, Home: rel, Global: []string{skills},
-				Project: []string{filepath.Join("."+id, "skills")}, Found: true})
+			out = append(out, Tool{ID: id, Name: id, Home: rel, Global: []string{skills}, Found: true})
 		}
 	}
 	return out

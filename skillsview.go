@@ -39,23 +39,20 @@ const skillsTableURL = "https://github.com/wuyunyoujiduo-jpg/mindmap-models/rele
 type skillsState struct {
 	report    *skills.Report
 	env       skills.Env
-	repoMap   map[string]string // a repository's map, by its root
-	hooks     map[string]bool   // whether the app's hooks are in a tool it connects, by its ID
-	busy      bool              // a scan goes on
-	tidy      bool              // the next scan is the first as the app opens (skillsTidyOnOpen)
-	again     bool              // and another was asked for meanwhile
-	say       bool              // the scan was asked for by its key: said when it is in
-	stamp     string            // the folders of skills as the last scan left them (skills.Stamp)
+	hooks     map[string]bool // whether the app's hooks are in a tool it connects, by its ID
+	busy      bool            // a scan goes on
+	tidy      bool            // the next scan is the first as the app opens (skillsTidyOnOpen)
+	again     bool            // and another was asked for meanwhile
+	say       bool            // the scan was asked for by its key: said when it is in
+	stamp     string          // the folders of skills as the last scan left them (skills.Stamp)
 	scanned   time.Time
 	counted   time.Time // when the uses were last counted
 	tool      string    // the tool narrowed to; with one, side is ""
-	side      string    // the part of the left column: "", needs, unused, global, plugin, bundled, others, repo:<root>
+	side      string    // the part of the left column: "", needs, unused, global, plugin, bundled, others
 	moreTools bool      // the tools with no skill shown in the left column
-	effTool   string    // the tool whose sessions are looked at
 	find      string
 	sel       string // the key of the skill chosen
 	want      string // the name of one to choose once the scan is in (showSkill)
-	effRepo   string // the project whose sessions are looked at
 	diff      *skillDiff
 	diffOn    bool
 }
@@ -174,11 +171,10 @@ func (a *app) skillsFetchTable() {
 
 // skillsScan is what a scan gives back.
 type skillsScan struct {
-	env     skills.Env
-	report  *skills.Report
-	repoMap map[string]string
-	hooks   map[string]bool
-	stamp   string
+	env    skills.Env
+	report *skills.Report
+	hooks  map[string]bool
+	stamp  string
 }
 
 // skillsRescan scans the skills again, away from the window's work.
@@ -189,8 +185,7 @@ func (a *app) skillsRescan() {
 	}
 	home, _ := os.UserHomeDir()
 	// The skills of a project, in its repository, are not looked at: the
-	// user leaves them to the repository (0.100.7). env.Repos stays empty.
-	repoMap := map[string]string{}
+	// user leaves them to the repository (0.100.7).
 	env := skills.Env{Home: home, Store: skillsStore(home), Keep: skillsKeep(home), Machine: machineName(), Since: a.now().AddDate(0, 0, -30),
 		Marked: maps.Clone(a.cfg.SkillsMarked)}
 	// The uses are counted once an hour: a scan comes whenever the app is
@@ -215,11 +210,11 @@ func (a *app) skillsRescan() {
 			}
 		}
 		// The folders as this scan leaves them, its own mending done.
-		return skillsScan{env, r, repoMap, hooks, skills.Stamp(env)}, nil
+		return skillsScan{env, r, hooks, skills.Stamp(env)}, nil
 	}, func(v any, err error) {
 		a.skills.busy = false
 		if s, ok := v.(skillsScan); ok {
-			a.skills.env, a.skills.report, a.skills.repoMap, a.skills.hooks, a.skills.scanned = s.env, s.report, s.repoMap, s.hooks, a.now()
+			a.skills.env, a.skills.report, a.skills.hooks, a.skills.scanned = s.env, s.report, s.hooks, a.now()
 			a.skills.stamp = s.stamp
 			a.skillsNoticeTools()
 			if want := a.skills.want; want != "" { // a link opened before the scan was in (showSkill)
@@ -313,11 +308,9 @@ func (a *app) skillSeen(id string) {
 // skillState is what a skill's row says of it, and in what color: a
 // fault in the danger's, what waits for the user in the accent's.
 func skillState(t *ui.Theme, e *skills.Entry) (string, ui.Color) {
-	linkedCommitted, differs, alike, gone := false, false, false, false
+	differs, alike, gone := false, false, false
 	for _, c := range e.Copies {
 		switch {
-		case c.State == skills.Linked && c.Tracked:
-			linkedCommitted = true
 		case c.State == skills.Diverged:
 			differs = true
 		case c.State == skills.Same:
@@ -336,10 +329,6 @@ func skillState(t *ui.Theme, e *skills.Entry) (string, ui.Color) {
 		return "在别的电脑上", t.Accent
 	case len(e.Issues) > 0:
 		return "有问题", t.Danger
-	case e.Shadowed:
-		return "被全局的盖住", t.Danger
-	case linkedCommitted:
-		return "链接被提交了", t.Danger
 	case gone:
 		return "链接指向的没了", t.Danger
 	case differs: // a tool's own copy beside MyMind's, not alike: which, the user says
@@ -422,8 +411,6 @@ func skillInPart(e *skills.Entry, part string) bool {
 		return e.Scope == skills.Bundled
 	case part == "others":
 		return skillElsewhere(e)
-	case strings.HasPrefix(part, "repo:"):
-		return e.Scope == skills.Project && e.Repo != nil && e.Repo.Root == strings.TrimPrefix(part, "repo:") && !skillElsewhere(e)
 	}
 	return true
 }
@@ -503,26 +490,6 @@ func (a *app) skillsSide(c *ui.Context) {
 		part("unused", "30 天没用过", "history", count("unused"), false)
 		sideHead(c, "范围")
 		part("global", "全局", "layers", count("global"), false)
-		for _, rp := range a.skills.env.Repos {
-			id := "repo:" + rp.Root
-			n := count(id)
-			if n == 0 {
-				continue
-			}
-			on := a.skills.side == id && a.skills.tool == ""
-			col := faint(c.Theme())
-			if p, ok := a.skills.repoMap[rp.Root]; ok {
-				col = a.mapColor(p)
-			}
-			row := sideRow(c, "part:"+id, rp.Name, fmt.Sprint(n), on, func(bool) {
-				ui.Box(c).Size(sideIconSize, 18).Shrink(0).PassThrough().Draw(func(p *ui.Painter, rc ui.Rect) {
-					p.FillPath(new(ui.Path).Circle(rc.X+rc.W/2, rc.Y+rc.H/2, 4), col)
-				})
-			}).Tooltip("只在这个项目里加载：" + tildePath(rp.Root, a.skills.env.Home))
-			if row.Clicked() {
-				a.skills.side, a.skills.tool, a.skills.sel = id, "", ""
-			}
-		}
 		if n := count("plugin"); n > 0 {
 			part("plugin", "插件带的", "plug", n, false)
 		}
@@ -601,19 +568,12 @@ func (a *app) skillsPage(c *ui.Context) {
 					if r := a.skills.report; r != nil {
 						sub = fmt.Sprintf("%d 个编程工具", len(r.Tools))
 						n := 0
-						repos := map[string]bool{}
 						for _, e := range r.Entries {
 							if len(e.Copies) > 0 || e.Stored {
 								n++
 							}
-							if e.Scope == skills.Project && e.Repo != nil {
-								repos[e.Repo.Root] = true
-							}
 						}
 						fs = []figure{{n, "个技能"}, {a.skillsNeedCount(), "个要处理"}}
-						if len(repos) > 0 {
-							fs = append(fs, figure{len(repos), "个项目有自己的"})
-						}
 						if tl, ok := r.Tool(a.skills.tool); ok {
 							fs = append(fs, figure{r.Load(tl.ID), "字 · " + tl.Name + " 每次会话先读"})
 						}
@@ -662,11 +622,6 @@ func (a *app) skillsView(c *ui.Context) {
 	ui.Row(c.Key("skills-filters")).Gap(6).GapY(6).Wrap().AlignItems(ui.Center).FillWidth().Margin(10, 0, 2).Children(func() {
 		if a.skills.side != "" {
 			name := map[string]string{"needs": "要处理", "unused": "30 天没用过", "global": "全局", "plugin": "插件带的", "bundled": "工具自带的", "others": "别的电脑上的"}[a.skills.side]
-			for _, rp := range a.skills.env.Repos {
-				if a.skills.side == "repo:"+rp.Root {
-					name = "项目 " + rp.Name
-				}
-			}
 			if filterChip(c, name) {
 				a.skills.side = ""
 			}
@@ -785,7 +740,7 @@ func (a *app) skillsPlanned() skillsPlan {
 	// What another computer linked and this one has not.
 	var here []func() (skills.Undo, error)
 	for _, e := range r.Entries {
-		if skillElsewhere(e) && (e.Scope != skills.Project || e.Repo != nil) {
+		if skillElsewhere(e) {
 			here = append(here, func() (skills.Undo, error) { return skills.InstallHere(env, e, r.Tools) })
 		}
 	}
@@ -852,9 +807,9 @@ func (a *app) skillsSuggest(c *ui.Context) {
 		}
 		judged := false
 		for _, cp := range e.Copies {
-			judged = judged || cp.State == skills.Diverged || cp.Tracked && cp.State == skills.Linked
+			judged = judged || cp.State == skills.Diverged
 		}
-		if judged || len(e.Issues) > 0 || e.Shadowed || e.Secret {
+		if judged || len(e.Issues) > 0 || e.Secret {
 			look++
 		}
 	}
@@ -996,11 +951,9 @@ func toolMark(c *ui.Context, tl skills.Tool, size float32) {
 	})
 }
 
-// skillsGroup is a part of the list: a scope, a project, the other
-// computers'.
+// skillsGroup is a part of the list: a scope, the other computers'.
 type skillsGroup struct {
 	name, word string
-	color      *ui.Color
 	items      []*skills.Entry
 }
 
@@ -1009,7 +962,7 @@ func (a *app) skillsTable(c *ui.Context, shown []*skills.Entry) {
 	t := c.Theme()
 	r := a.skills.report
 	var groups []skillsGroup
-	add := func(name, word string, col *ui.Color, keep func(e *skills.Entry) bool) {
+	add := func(name, word string, keep func(e *skills.Entry) bool) {
 		var items []*skills.Entry
 		for _, e := range shown {
 			if keep(e) {
@@ -1017,25 +970,14 @@ func (a *app) skillsTable(c *ui.Context, shown []*skills.Entry) {
 			}
 		}
 		if len(items) > 0 {
-			groups = append(groups, skillsGroup{name, word, col, items})
+			groups = append(groups, skillsGroup{name, word, items})
 		}
 	}
 	elsewhere := func(e *skills.Entry) bool { return len(e.Copies) == 0 && len(e.Others) > 0 }
-	add("全局", "每个会话都会加载", nil, func(e *skills.Entry) bool { return e.Scope == skills.Global && !elsewhere(e) })
-	for _, rp := range a.skills.env.Repos {
-		rp := rp
-		var col *ui.Color
-		if p, ok := a.skills.repoMap[rp.Root]; ok {
-			cc := a.mapColor(p)
-			col = &cc
-		}
-		add("项目 · "+rp.Name, tildePath(rp.Root, a.skills.env.Home), col, func(e *skills.Entry) bool {
-			return e.Scope == skills.Project && e.Repo != nil && e.Repo.Root == rp.Root && !elsewhere(e)
-		})
-	}
-	add("插件带的", "由插件管理，这里只能看", nil, func(e *skills.Entry) bool { return e.Scope == skills.Plugin })
-	add("工具自带的", "装工具时带的，由工具自己更新，这里只能看", nil, func(e *skills.Entry) bool { return e.Scope == skills.Bundled })
-	add("别的电脑上的", "随导图同步过来，这台还没链接", nil, elsewhere)
+	add("全局", "每个会话都会加载", func(e *skills.Entry) bool { return e.Scope == skills.Global && !elsewhere(e) })
+	add("插件带的", "由插件管理，这里只能看", func(e *skills.Entry) bool { return e.Scope == skills.Plugin })
+	add("工具自带的", "装工具时带的，由工具自己更新，这里只能看", func(e *skills.Entry) bool { return e.Scope == skills.Bundled })
+	add("别的电脑上的", "随导图同步过来，这台还没链接", elsewhere)
 	marksW := float32(len(r.Tools))*28 + 4
 	// In a narrow room the count of uses goes, before the names do.
 	w, _ := c.Size()
@@ -1072,9 +1014,6 @@ func (a *app) skillsTable(c *ui.Context, shown []*skills.Entry) {
 		})
 		for _, g := range groups {
 			ui.Row(c.Key("group:"+g.name)).Height(38).Padding(10, 6, 0).Gap(8).AlignItems(ui.Center).FillWidth().Children(func() {
-				if g.color != nil {
-					ui.Box(c).Size(7, 7).Radius(4).Background(*g.color).Shrink(0)
-				}
 				ui.Text(c, g.name).FontSize(textCaption).FontWeight(700).LetterSpacing(0.3).TextColor(t.TextMuted).NoWrap()
 				ui.Text(c, fmt.Sprintf("%d · %s", len(g.items), g.word)).FontSize(textCaption).TextColor(t.TextMuted).SingleLine().Shrink(1).MinWidth(0)
 			})
@@ -1322,11 +1261,11 @@ func (a *app) skillGiveBack(e *skills.Entry, bundled bool) {
 
 // skillMarkOffer is the words of the item that says a skill came with its
 // tool, or that it did not, and whether it is offered: not for a skill
-// MyMind keeps, a project's or a plugin's, nor one in the tool's own
+// MyMind keeps nor a plugin's, nor one in the tool's own
 // folder of them, which the table says.
 func skillMarkOffer(e *skills.Entry) (string, bool) {
 	switch {
-	case e.Stored || e.Scope == skills.Plugin || e.Scope == skills.Project || len(e.Copies) == 0:
+	case e.Stored || e.Scope == skills.Plugin || len(e.Copies) == 0:
 		return "", false
 	case e.Scope == skills.Bundled && strings.HasPrefix(e.Key, "b/"):
 		return "", false
@@ -1382,8 +1321,7 @@ func (a *app) skillDelete(e *skills.Entry) {
 	}
 }
 
-// skillsSheet is the column at the page's right: the skill chosen, or,
-// with none and room for it, what a project's sessions load.
+// skillsSheet is the column at the page's right: the skill chosen.
 func (a *app) skillsSheet(c *ui.Context) {
 	r := a.skills.report
 	if r == nil {
@@ -1391,98 +1329,7 @@ func (a *app) skillsSheet(c *ui.Context) {
 	}
 	if e := r.Entry(a.skills.sel); e != nil {
 		sheet(c, "skill-sheet", 380, func() { a.skillDetail(c, e) })
-		return
 	}
-	if w, _ := c.Size(); w >= 1180 && len(a.skills.env.Repos) > 0 && len(r.Tools) > 0 {
-		sheet(c, "skill-next", 340, func() {
-			ui.Scroll(c.Key("skills-next")).Grow(1).Basis(0).MinHeight(0).FillWidth().Children(func() {
-				ui.Column(c).Padding(22, 22, 30).Gap(6).FillWidth().Children(func() { a.skillsEffective(c) })
-			})
-		})
-	}
-}
-
-// skillsEffective says which skills a session of a tool in a project
-// uses: every session's, its plugins', the project's, and those shadowed
-// faint.
-func (a *app) skillsEffective(c *ui.Context) {
-	t := c.Theme()
-	r := a.skills.report
-	repos := a.skills.env.Repos
-	repo := repos[0]
-	for _, rp := range repos {
-		if rp.Root == a.skills.effRepo {
-			repo = rp
-		}
-	}
-	tl := r.Tools[0]
-	if x, ok := r.Tool(a.skills.tool); ok {
-		tl = x
-	} else if x, ok := r.Tool(a.skills.effTool); ok {
-		tl = x
-	}
-	on, off := r.Effective(tl.ID, repo.Root)
-	ui.Text(c, "开一个会话，实际加载哪些").FontSize(textPage - 4).FontWeight(700).LetterSpacing(-0.3).Wrap()
-	ui.Text(c, "全局的、插件带的，加上这个项目自己的；同名被盖住的不算。").FontSize(textCaption).TextColor(t.TextMuted).LineHeight(1.45).Wrap().Margin(0, 0, 8)
-	raise(ui.Column(c.Key("eff")).Padding(10, 12).Gap(8).Radius(radiusCard).FillWidth(), t).Children(func() {
-		ui.Row(c).Gap(6).GapY(6).Wrap().AlignItems(ui.Center).Children(func() {
-			dropButton(c, "eff-tool", tl.Name, "看哪个工具", "看哪个工具的会话").Menu(func(m *ui.Menu) {
-				for _, x := range r.Tools {
-					if a.skillsToolCount(x.ID) == 0 {
-						continue
-					}
-					if m.Item(x.Name).Checked(x.ID == tl.ID).Chosen() {
-						a.skills.effTool, a.skills.tool = x.ID, ""
-					}
-				}
-			})
-			ui.Text(c, "在").FontSize(textSmall).TextColor(t.TextMuted).NoWrap()
-			dropButton(c, "eff-repo", repo.Name, "看哪个项目", "看在哪个项目里开会话").Menu(func(m *ui.Menu) {
-				for _, rp := range repos {
-					if m.Item(rp.Name).Checked(rp.Root == repo.Root).Chosen() {
-						a.skills.effRepo = rp.Root
-					}
-				}
-			})
-		})
-		chars := 0
-		for _, e := range on {
-			chars += utf8.RuneCountInString(e.Name) + utf8.RuneCountInString(e.Description)
-		}
-		ui.Text(c, fmt.Sprintf("%d 个 · 先读约 %d 字的说明", len(on), chars)).FontSize(textCaption).TextColor(t.TextMuted)
-		ui.Row(c.Key("names")).Gap(4).GapY(4).Wrap().FillWidth().Children(func() {
-			chip := func(e *skills.Entry, shadowed bool) {
-				tip := "全局"
-				switch {
-				case shadowed:
-					tip = "被全局的同名技能盖住，不会被用上"
-				case e.Scope == skills.Project:
-					tip = "这个项目自己的"
-				case e.Scope == skills.Plugin:
-					tip = "插件 " + e.Plugin + " 的"
-				case e.Scope == skills.Bundled:
-					tip = "工具自带的"
-				}
-				b := ui.Box(c.Key("eff:"+e.Key)).Padding(2, 7).Radius(6).Background(cardColor(t)).InsetShadow(0, 0, 0, 1, hairline(t)).Tooltip(tip).Cursor(ui.CursorPointer)
-				if b.Clicked() {
-					a.skills.sel = e.Key
-				}
-				b.Children(func() {
-					ink := ink2(t)
-					if shadowed {
-						ink = faint(t)
-					}
-					ui.Text(c, e.Name).Font("monospace").FontSize(11.5).TextColor(ink).NoWrap().PassThrough()
-				})
-			}
-			for _, e := range on {
-				chip(e, false)
-			}
-			for _, e := range off {
-				chip(e, true)
-			}
-		})
-	})
 }
 
 // skillDetail is a skill chosen: what it is, the tools it is in, where it
@@ -1512,8 +1359,6 @@ func (a *app) skillDetail(c *ui.Context, e *skills.Entry) {
 			ui.Text(c, cmpOr(e.About, "没有说明。")).FontSize(textSmall+0.5).TextColor(ink2(t)).LineHeight(1.5).Wrap().Margin(4, 0, 0)
 			where := "全局"
 			switch e.Scope {
-			case skills.Project:
-				where = "项目 " + repoName(e)
 			case skills.Plugin:
 				where = "插件 " + e.Plugin
 			case skills.Bundled:
@@ -1596,13 +1441,6 @@ func (a *app) skillDetail(c *ui.Context, e *skills.Entry) {
 	}
 }
 
-func repoName(e *skills.Entry) string {
-	if e.Repo != nil {
-		return e.Repo.Name
-	}
-	return "（这台没有它的仓库）"
-}
-
 func firstTool(e *skills.Entry) string {
 	for id := range e.Copies {
 		return id
@@ -1638,35 +1476,10 @@ func (a *app) skillWarnings(c *ui.Context, e *skills.Entry) {
 	if len(e.Issues) > 0 {
 		warnBlock(c, "issues", e.Issues, nil)
 	}
-	if e.Shadowed {
-		other := e.Name
-		if e.Repo != nil {
-			other = e.Repo.Key + "-" + e.Name
-		}
-		warnBlock(c, "shadow", []string{"全局也有一个 " + e.Name + "。同名时全局的优先，" + repoName(e) + " 里的这份不会被用上。改个名字，两份就都能用。"}, func() {
-			if e.Stored && accentButton(c, "改名为 "+other, "改名为 "+other).Clicked() {
-				a.later(func() {
-					if a.skillDo("已改名为 "+other+"，两份都能用了", func() (skills.Undo, error) { return skills.Rename(env, e, other, r.Tools) }) {
-						a.skills.sel = strings.TrimSuffix(e.Key, e.Name) + other
-					}
-				})
-			}
-			if textKey(c, "看全局的那份", "看全局的那份", "").Clicked() {
-				a.skills.sel = "g/" + e.Name
-			}
-		})
-	}
 	for _, tl := range r.Tools {
 		cp := e.Copies[tl.ID]
 		if cp == nil {
 			continue
-		}
-		if cp.State == skills.Linked && cp.Tracked {
-			warnBlock(c, "tracked:"+tl.ID, []string{repoName(e) + " 仓库里 " + tl.Name + " 的这个链接已经提交了。它指向这台电脑上的路径，队友和 CI 那边打不开。"}, func() {
-				if accentButton(c, "换成真文件", "换成仓库里的真文件").Clicked() {
-					a.later(func() { a.skillMakeReal(e) })
-				}
-			})
 		}
 		if cp.State == skills.Dangling {
 			warnBlock(c, "gone:"+tl.ID, []string{tl.Name + " 里的链接指向 " + tildePath(cp.Target, env.Home) + "，那里没有了。"}, func() {
@@ -1735,9 +1548,6 @@ func (a *app) skillNotes(c *ui.Context, e *skills.Entry) {
 		}
 		slices.Sort(where)
 		note("others", "在别的电脑上收进了 MyMind，随导图同步过来了："+strings.Join(where, "；")+"。", func() {
-			if e.Scope == skills.Project && e.Repo == nil {
-				return
-			}
 			if accentButton(c, "在这台链接上", "在这台电脑的工具里链接上").Clicked() {
 				a.later(func() {
 					a.skillDo("已在这台链接上 "+e.Name, func() (skills.Undo, error) { return skills.InstallHere(env, e, r.Tools) })
@@ -1796,9 +1606,6 @@ func (a *app) skillCopies(c *ui.Context, e *skills.Entry) {
 						say, col, mono := "没有", t.TextMuted, false
 						switch {
 						case cp == nil:
-							if e.Stored && e.Scope == skills.Project && len(tl.Project) == 0 {
-								say = "没有项目里的技能目录"
-							}
 						case cp.State == skills.Diverged:
 							say, col = "有一份它自己的，和 MyMind 的不一样", t.Accent
 						case cp.State == skills.Same:
@@ -1825,9 +1632,6 @@ func (a *app) skillCopies(c *ui.Context, e *skills.Entry) {
 					if !e.Stored || e.ReadOnly() || (cp != nil && cp.State != skills.Linked) {
 						return
 					}
-					if e.Scope == skills.Project && (e.Repo == nil || len(tl.Project) == 0) {
-						return
-					}
 					on := cp != nil
 					was := on
 					ui.Switch(c.Key("sw:"+tl.ID), &on).Shrink(0).Label("链接到 " + tl.Name)
@@ -1843,13 +1647,6 @@ func (a *app) skillCopies(c *ui.Context, e *skills.Entry) {
 				})
 			}
 		})
-	})
-}
-
-func (a *app) skillMakeReal(e *skills.Entry) {
-	env := a.skills.env
-	a.skillDo("已换成 "+repoName(e)+" 仓库里的真文件，提交后队友也能用", func() (skills.Undo, error) {
-		return skills.MakeReal(env, e, a.skills.report.Tools)
 	})
 }
 

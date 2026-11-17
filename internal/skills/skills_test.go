@@ -2,7 +2,6 @@ package skills
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -33,22 +32,20 @@ func skill(t *testing.T, dir, name, desc string, extra ...string) string {
 type world struct {
 	env  Env
 	home string
-	repo string
 }
 
 func newWorld(t *testing.T) world {
 	t.Helper()
 	root := t.TempDir()
 	home := filepath.Join(root, "home")
-	repo := filepath.Join(root, "code", "ergora")
-	for _, d := range []string{filepath.Join(home, ".claude"), filepath.Join(home, ".codex"), filepath.Join(home, ".grok"), repo} {
+	for _, d := range []string{filepath.Join(home, ".claude"), filepath.Join(home, ".codex"), filepath.Join(home, ".grok")} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
 	env := Env{Home: home, Store: filepath.Join(home, ".agents", "skills"), Keep: filepath.Join(home, ".agents", ".mymind"), Machine: "here",
-		Repos: []Repo{{Root: repo, Name: "ergora", Key: "ergora"}}, Table: Builtin(), Since: time.Now().AddDate(0, 0, -30)}
-	return world{env, home, repo}
+		Table: Builtin(), Since: time.Now().AddDate(0, 0, -30)}
+	return world{env, home}
 }
 
 func (w world) tool(t *testing.T, id string) Tool {
@@ -114,11 +111,9 @@ func TestScan(t *testing.T) {
 	skill(t, g, "deploy", "ships it", "scripts/deploy.sh")
 	skill(t, filepath.Join(w.home, ".codex", "skills"), "deploy", "ships it", "scripts/deploy.sh")
 	skill(t, g, "Bad Name", "")
-	skill(t, filepath.Join(w.repo, ".claude", "skills"), "deploy", "ergora's way")
-	skill(t, filepath.Join(w.repo, ".claude", "skills"), "rules", "the rules")
 	skill(t, filepath.Join(w.home, ".claude", "plugins", "cache", "mkt", "docs", "1.2.0", "skills"), "pdf", "reads pdfs")
 	r := Scan(w.env)
-	if len(r.Entries) != 5 {
+	if len(r.Entries) != 3 {
 		for _, e := range r.Entries {
 			t.Log(e.Key)
 		}
@@ -131,18 +126,11 @@ func TestScan(t *testing.T) {
 	if bad := r.Entry("g/Bad Name"); bad == nil || len(bad.Issues) < 2 {
 		t.Fatalf("bad %+v", bad)
 	}
-	if p := r.Entry("p/ergora/deploy"); p == nil || !p.Shadowed || p.Repo == nil {
-		t.Fatalf("project deploy %+v", p)
-	}
 	if p := r.Entry("x/claude/docs/pdf"); p == nil || p.Plugin != "docs" || p.Scope != Plugin {
 		t.Fatalf("plugin %+v", p)
 	}
 	if n := r.Load("claude"); n != len("deploy")+len("ships it")+len("Bad Name")+len("pdf")+len("reads pdfs") {
 		t.Fatalf("load %d", n)
-	}
-	on, off := r.Effective("claude", w.repo)
-	if len(on) != 4 || len(off) != 1 {
-		t.Fatalf("effective %d %d", len(on), len(off))
 	}
 }
 
@@ -291,44 +279,13 @@ func TestDivergedAndResolve(t *testing.T) {
 	}
 }
 
-func TestDeleteScopeRename(t *testing.T) {
+func TestDelete(t *testing.T) {
 	w := newWorld(t)
 	skill(t, filepath.Join(w.home, ".claude", "skills"), "deploy", "ships")
 	r := Scan(w.env)
 	if _, err := Adopt(w.env, r.Entry("g/deploy"), "claude"); err != nil {
 		t.Fatal(err)
 	}
-	tools := Detect(w.home, w.env.Table)
-	r = Scan(w.env)
-	repo := &w.env.Repos[0]
-	undo, err := SetScope(w.env, r.Entry("g/deploy"), Project, repo, tools)
-	if err != nil {
-		t.Fatal(err)
-	}
-	r = Scan(w.env)
-	p := r.Entry("p/ergora/deploy")
-	// In the repository's .agents/skills, Claude Code's link from inside it.
-	link := filepath.Join(w.repo, ".claude", "skills", "deploy")
-	if raw, _ := os.Readlink(link); p == nil || p.StorePath != filepath.Join(w.repo, ".agents", "skills", "deploy") ||
-		p.Copies["claude"] == nil || p.Copies["claude"].State != Linked || filepath.IsAbs(raw) || p.Copies["codex"].State != Native || r.Entry("g/deploy") != nil {
-		t.Fatalf("to project %+v %q", p, raw)
-	}
-	if err := undo(); err != nil {
-		t.Fatal(err)
-	}
-	r = Scan(w.env)
-	if g := r.Entry("g/deploy"); g == nil || g.Copies["claude"].State != Linked {
-		t.Fatal("not back to every session's")
-	}
-	un, err := Rename(w.env, r.Entry("g/deploy"), "ergora-deploy", tools)
-	if err != nil {
-		t.Fatal(err)
-	}
-	r = Scan(w.env)
-	if e := r.Entry("g/ergora-deploy"); e == nil || e.Title != "ergora-deploy" || e.Copies["claude"].State != Linked {
-		t.Fatalf("renamed %+v", e)
-	}
-	_ = un()
 	r = Scan(w.env)
 	del, err := Delete(w.env, r.Entry("g/deploy"))
 	if err != nil {
@@ -345,34 +302,6 @@ func TestDeleteScopeRename(t *testing.T) {
 	}
 	if r = Scan(w.env); r.Entry("g/deploy") == nil || r.Entry("g/deploy").Copies["claude"].State != Linked {
 		t.Fatal("not back")
-	}
-}
-
-// A project's skill is files in its repository, and the links to it are
-// from inside it: committed, they work in every clone, and are no fault.
-func TestProjectLinksCommitted(t *testing.T) {
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("no git")
-	}
-	w := newWorld(t)
-	if out, err := exec.Command("git", "init", "-q", w.repo).CombinedOutput(); err != nil {
-		t.Fatal(string(out))
-	}
-	skill(t, filepath.Join(w.repo, ".claude", "skills"), "rules", "the rules")
-	r := Scan(w.env)
-	if _, err := Adopt(w.env, r.Entry("p/ergora/rules"), "claude"); err != nil {
-		t.Fatal(err)
-	}
-	if out, err := exec.Command("git", "-C", w.repo, "add", ".").CombinedOutput(); err != nil {
-		t.Fatal(string(out))
-	}
-	r = Scan(w.env)
-	e := r.Entry("p/ergora/rules")
-	if !fileExists(filepath.Join(w.repo, ".agents", "skills", "rules", "SKILL.md")) || e.Copies["claude"].State != Linked || e.Copies["claude"].Tracked {
-		t.Fatalf("project %+v", e.Copies["claude"])
-	}
-	if _, err := MakeReal(w.env, e, Detect(w.home, w.env.Table)); err == nil {
-		t.Fatal("made real what is real")
 	}
 }
 
@@ -406,13 +335,13 @@ func TestOtherComputers(t *testing.T) {
 }
 
 // The store of before 0.100.7, the maps folder's .skills, moves into
-// ~/.agents/skills and the repositories' .agents/skills; the links are
-// mended, and Codex's, which reads the store itself now, taken out.
+// ~/.agents/skills; the links are mended, and Codex's, which reads the
+// store itself now, taken out. A project's skills there are left be.
 func TestMigrate(t *testing.T) {
 	w := newWorld(t)
 	old := filepath.Join(filepath.Dir(w.home), "maps", ".skills")
 	skill(t, old, "x", "does x")
-	skill(t, filepath.Join(old, projectsDir, "ergora"), "rules", "the rules")
+	skill(t, filepath.Join(old, "_projects", "ergora"), "rules", "the rules")
 	skill(t, w.env.Store, "y", "already here")
 	skill(t, old, "y", "an older y")
 	past := time.Now().Add(-time.Hour)
@@ -422,18 +351,15 @@ func TestMigrate(t *testing.T) {
 	_ = os.MkdirAll(cx, 0o755)
 	_ = os.Symlink(filepath.Join(old, "x"), filepath.Join(cc, "x"))
 	_ = os.Symlink(filepath.Join(old, "x"), filepath.Join(cx, "x"))
-	rp := filepath.Join(w.repo, ".claude", "skills")
-	_ = os.MkdirAll(rp, 0o755)
-	_ = os.Symlink(filepath.Join(old, projectsDir, "ergora", "rules"), filepath.Join(rp, "rules"))
 	n, err := Migrate(w.env, old)
-	if err != nil || n != 2 {
+	if err != nil || n != 1 {
 		t.Fatalf("moved %d %v", n, err)
 	}
-	if exists(old) {
-		t.Fatal("the old store left")
+	if exists(filepath.Join(old, "x")) || !fileExists(filepath.Join(old, "_projects", "ergora", "rules", "SKILL.md")) {
+		t.Fatal("the old store not moved, or a project's skill lost")
 	}
 	r := Scan(w.env)
-	if got := Repair(w.env, r); got != 3 {
+	if got := Repair(w.env, r); got != 2 {
 		t.Fatalf("repaired %d", got)
 	}
 	r = Scan(w.env)
@@ -442,10 +368,6 @@ func TestMigrate(t *testing.T) {
 	}
 	if e := r.Entry("g/y"); e.Description != "already here" {
 		t.Fatalf("y %q", e.Description)
-	}
-	p := r.Entry("p/ergora/rules")
-	if raw, _ := os.Readlink(filepath.Join(rp, "rules")); p == nil || p.Copies["claude"].State != Linked || filepath.IsAbs(raw) {
-		t.Fatalf("rules %+v %q", p, raw)
 	}
 }
 

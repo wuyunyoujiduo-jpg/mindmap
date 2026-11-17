@@ -24,40 +24,17 @@ type Undo func() error
 // when there is none, hidden there), not synced: a way back.
 const trashDir = ".trash"
 
-// linkIn puts at a link to target, a skill of the scope: from inside the
-// repository for a project's, so that the repository's other clones
-// follow it too; else whole, a folder of the home's being linked to.
-func linkIn(scope Scope, target, at string) error {
-	if scope == Project {
-		return makeRelLink(target, at)
-	}
-	return makeLink(target, at)
-}
-
-// Where is where a skill of the store goes in a tool's folders: e's
-// scope's first folder.
+// Where is where a skill of the store goes in a tool's folders: its
+// first folder of every session's skills.
 func Where(env Env, t Tool, e *Entry) string {
-	return where(env, t, e.Scope, e.Repo, e.Name)
-}
-
-func where(env Env, t Tool, scope Scope, repo *Repo, name string) string {
-	switch scope {
-	case Global:
-		return filepath.Join(env.Home, t.Global[0], name)
-	case Project:
-		if repo == nil || len(t.Project) == 0 {
-			return ""
-		}
-		return filepath.Join(repo.Root, t.Project[0], name)
+	if e.Scope != Global {
+		return ""
 	}
-	return ""
+	return filepath.Join(env.Home, t.Global[0], e.Name)
 }
 
 // storePath is where MyMind keeps a skill.
-func storePath(env Env, scope Scope, repo *Repo, name string) string {
-	if scope == Project && repo != nil {
-		return filepath.Join(ProjectStore(repo.Root), name)
-	}
+func storePath(env Env, name string) string {
 	return filepath.Join(env.Store, name)
 }
 
@@ -66,9 +43,6 @@ func disabledPath(env Env, e *Entry) string {
 	keep := env.Keep
 	if keep == "" {
 		keep = filepath.Join(env.Store, trashDir)
-	}
-	if e.Scope == Project && e.Repo != nil {
-		return filepath.Join(keep, disabledDir, projectsDir, e.Repo.Key, e.Name)
 	}
 	return filepath.Join(keep, disabledDir, e.Name)
 }
@@ -81,7 +55,7 @@ func Adopt(env Env, e *Entry, tool string) (Undo, error) {
 	if e.Stored || c == nil || c.State != Own || e.Scope == Plugin {
 		return nil, errors.New("这个技能不能收进来")
 	}
-	dst := storePath(env, e.Scope, e.Repo, e.Name)
+	dst := storePath(env, e.Name)
 	if exists(dst) {
 		return nil, fmt.Errorf("MyMind 里已经有一个 %s", e.Name)
 	}
@@ -93,7 +67,7 @@ func Adopt(env Env, e *Entry, tool string) (Undo, error) {
 	// read the skill twice.
 	native := env.ReadsID(tool, e.Scope)
 	if !native {
-		if err := linkIn(e.Scope, dst, c.Path); err != nil {
+		if err := makeLink(dst, c.Path); err != nil {
 			_ = moveDir(dst, c.Path)
 			return nil, err
 		}
@@ -105,7 +79,7 @@ func Adopt(env Env, e *Entry, tool string) (Undo, error) {
 			continue
 		}
 		if to, err := putAway(env, o.Path); err == nil {
-			if env.ReadsID(id, e.Scope) || linkIn(e.Scope, dst, o.Path) == nil {
+			if env.ReadsID(id, e.Scope) || makeLink(dst, o.Path) == nil {
 				alike = append(alike, moved{o.Path, to})
 			} else {
 				_ = moveDir(to, o.Path)
@@ -148,13 +122,8 @@ func GiveBack(env Env, e *Entry) (Undo, error) {
 		if c := e.Copies[t.ID]; c == nil || c.State != Native {
 			continue
 		}
-		dirs := t.Global
-		root := env.Home
-		if e.Scope == Project && e.Repo != nil {
-			dirs, root = t.Project, e.Repo.Root
-		}
-		for _, d := range dirs {
-			if p := filepath.Join(root, d, e.Name); filepath.Clean(filepath.Join(root, d)) != filepath.Clean(filepath.Dir(e.StorePath)) && !exists(p) {
+		for _, d := range t.Global {
+			if p := filepath.Join(env.Home, d, e.Name); filepath.Clean(filepath.Join(env.Home, d)) != filepath.Clean(filepath.Dir(e.StorePath)) && !exists(p) {
 				own = append(own, p)
 				break
 			}
@@ -179,7 +148,7 @@ func GiveBack(env Env, e *Entry) (Undo, error) {
 		}
 		if err := copyDir(e.StorePath, c.Path); err != nil {
 			_ = os.RemoveAll(c.Path)
-			_ = linkIn(e.Scope, e.StorePath, c.Path)
+			_ = makeLink(e.StorePath, c.Path)
 			_ = all(undos)()
 			return nil, err
 		}
@@ -187,7 +156,7 @@ func GiveBack(env Env, e *Entry) (Undo, error) {
 			if err := os.RemoveAll(c.Path); err != nil {
 				return err
 			}
-			return linkIn(e.Scope, e.StorePath, c.Path)
+			return makeLink(e.StorePath, c.Path)
 		})
 	}
 	to, err := putAway(env, e.StorePath)
@@ -253,7 +222,7 @@ func Link(env Env, e *Entry, t Tool) (Undo, error) {
 	}
 	at := Where(env, t, e)
 	if at == "" {
-		return nil, errors.New("这个工具没有项目里的技能目录")
+		return nil, errors.New("这个技能不能链接")
 	}
 	if _, err := os.Lstat(at); err == nil {
 		if tg, ok := linkTarget(at); ok && !exists(tg) {
@@ -262,7 +231,7 @@ func Link(env Env, e *Entry, t Tool) (Undo, error) {
 			return nil, fmt.Errorf("%s 里已经有一个 %s", t.Name, e.Name)
 		}
 	}
-	if err := linkIn(e.Scope, e.StorePath, at); err != nil {
+	if err := makeLink(e.StorePath, at); err != nil {
 		if on != nil {
 			_ = on()
 		}
@@ -284,7 +253,7 @@ func Enable(env Env, e *Entry) (Undo, error) {
 	if !e.Disabled {
 		return func() error { return nil }, nil
 	}
-	dst := storePath(env, e.Scope, e.Repo, e.Name)
+	dst := storePath(env, e.Name)
 	if exists(dst) {
 		return nil, fmt.Errorf("已经有一个 %s 在用", e.Name)
 	}
@@ -310,7 +279,7 @@ func Unlink(env Env, e *Entry, tool string) (Undo, error) {
 	if err := os.Remove(c.Path); err != nil {
 		return nil, err
 	}
-	return func() error { return linkIn(e.Scope, target, c.Path) }, nil
+	return func() error { return makeLink(target, c.Path) }, nil
 }
 
 // Disable turns a skill off: every link of this computer out, and
@@ -400,193 +369,6 @@ func Delete(env Env, e *Entry) (Undo, error) {
 	return all(undos), nil
 }
 
-// SetScope moves a skill of MyMind between every session's and a
-// project's: its folder in the store, and its links with it.
-func SetScope(env Env, e *Entry, scope Scope, repo *Repo, tools []Tool) (Undo, error) {
-	if !e.Stored || scope == Plugin || (scope == Project && repo == nil) {
-		return nil, errors.New("这个技能不能挪")
-	}
-	if scope == e.Scope && (scope == Global || e.Repo != nil && e.Repo.Key == repo.Key) {
-		return func() error { return nil }, nil
-	}
-	dst := storePath(env, scope, repo, e.Name)
-	if exists(dst) {
-		return nil, fmt.Errorf("那里已经有一个 %s", e.Name)
-	}
-	var linked []Tool
-	for _, t := range tools {
-		if c := e.Copies[t.ID]; c != nil && c.State == Linked {
-			linked = append(linked, t)
-		}
-	}
-	undo, err := unlinkAll(env, e)
-	if err != nil {
-		return nil, err
-	}
-	if err := moveDir(e.StorePath, dst); err != nil {
-		_ = undo()
-		return nil, err
-	}
-	var made []string
-	for _, t := range linked {
-		at := where(env, t, scope, repo, e.Name)
-		if at == "" || exists(at) || env.Reads(t, scope) {
-			continue
-		}
-		if linkIn(scope, dst, at) == nil {
-			made = append(made, at)
-		}
-	}
-	from := e.StorePath
-	return func() error {
-		for _, at := range made {
-			_ = os.Remove(at)
-		}
-		if err := moveDir(dst, from); err != nil {
-			return err
-		}
-		return undo()
-	}, nil
-}
-
-// Rename gives a skill of MyMind another name: its folder, its SKILL.md's
-// name and its links.
-func Rename(env Env, e *Entry, name string, tools []Tool) (Undo, error) {
-	if !e.Stored || !skillName.MatchString(name) {
-		return nil, errors.New("名字只能用小写字母、数字和连字符")
-	}
-	dst := filepath.Join(filepath.Dir(e.StorePath), name)
-	if exists(dst) {
-		return nil, fmt.Errorf("已经有一个 %s", name)
-	}
-	var linked []Tool
-	for _, t := range tools {
-		if c := e.Copies[t.ID]; c != nil && c.State == Linked {
-			linked = append(linked, t)
-		}
-	}
-	undo, err := unlinkAll(env, e)
-	if err != nil {
-		return nil, err
-	}
-	if err := moveDir(e.StorePath, dst); err != nil {
-		_ = undo()
-		return nil, err
-	}
-	md := filepath.Join(dst, "SKILL.md")
-	old, _ := os.ReadFile(md)
-	if len(old) > 0 {
-		_ = os.WriteFile(md, []byte(setName(string(old), name)), 0o644)
-	}
-	var made []string
-	for _, t := range linked {
-		at := where(env, t, e.Scope, e.Repo, name)
-		if at != "" && !exists(at) && !env.Reads(t, e.Scope) && linkIn(e.Scope, dst, at) == nil {
-			made = append(made, at)
-		}
-	}
-	from := e.StorePath
-	return func() error {
-		for _, at := range made {
-			_ = os.Remove(at)
-		}
-		if len(old) > 0 {
-			_ = os.WriteFile(md, old, 0o644)
-		}
-		if err := moveDir(dst, from); err != nil {
-			return err
-		}
-		return undo()
-	}, nil
-}
-
-// setName is a SKILL.md with its name changed: the name of its head, and
-// no line of the text under it, which may well have one that begins the
-// same (another file's head, as an example).
-func setName(text, name string) string {
-	meta, _, ok := Frontmatter(text)
-	if !ok {
-		return text
-	}
-	if _, has := meta["name"]; !has {
-		return strings.Replace(text, "---", "---\nname: "+name, 1)
-	}
-	lines := strings.SplitAfter(text, "\n")
-	for i := 1; i < len(lines); i++ {
-		line := strings.TrimRight(lines[i], "\r\n")
-		if strings.TrimSpace(line) == "---" {
-			break // the head's end
-		}
-		if line == "" || line[0] == ' ' || line[0] == '\t' {
-			continue // of a block under a key
-		}
-		if k, _, found := strings.Cut(line, ":"); found && strings.TrimSpace(k) == "name" {
-			lines[i] = "name: " + name + lines[i][len(line):]
-			break
-		}
-	}
-	return strings.Join(lines, "")
-}
-
-// MakeReal has a project's skill be files in its repository, for the
-// repository's other clones: MyMind's copy goes into the first tool's
-// folder there, in the link's place, and the other tools' links there
-// point to it, from inside the repository. MyMind keeps it no more.
-func MakeReal(env Env, e *Entry, tools []Tool) (Undo, error) {
-	if !e.Stored || e.Scope != Project || e.Repo == nil {
-		return nil, errors.New("只有项目里的技能可以换成真文件")
-	}
-	if strings.HasPrefix(e.StorePath, e.Repo.Root+string(filepath.Separator)) {
-		return nil, errors.New("它已经是仓库里的真文件")
-	}
-	var first *Copy
-	var rest []*Copy
-	for _, t := range tools {
-		if c := e.Copies[t.ID]; c != nil && c.State == Linked {
-			if first == nil {
-				first = c
-			} else {
-				rest = append(rest, c)
-			}
-		}
-	}
-	if first == nil {
-		return nil, errors.New("仓库里还没有它的链接")
-	}
-	if err := os.Remove(first.Path); err != nil {
-		return nil, err
-	}
-	if err := copyDir(e.StorePath, first.Path); err != nil {
-		_ = os.RemoveAll(first.Path)
-		_ = makeLink(e.StorePath, first.Path)
-		return nil, err
-	}
-	for _, c := range rest {
-		rel, err := filepath.Rel(filepath.Dir(c.Path), first.Path)
-		if err != nil {
-			continue
-		}
-		if os.Remove(c.Path) == nil {
-			_ = os.Symlink(rel, c.Path)
-		}
-	}
-	to, err := putAway(env, e.StorePath)
-	if err != nil {
-		return nil, err
-	}
-	store := e.StorePath
-	return func() error {
-		if err := moveDir(to, store); err != nil {
-			return err
-		}
-		for _, c := range append([]*Copy{first}, rest...) {
-			_ = os.RemoveAll(c.Path)
-			_ = makeLink(store, c.Path)
-		}
-		return nil
-	}, nil
-}
-
 // Resolve settles a tool's folder of its own for a skill MyMind has:
 // theirs takes it as MyMind's copy (the one before put away); otherwise
 // it is put away. Either way a link takes its place.
@@ -604,7 +386,7 @@ func Resolve(env Env, e *Entry, tool string, theirs bool) (Undo, error) {
 			_ = moveDir(was, e.StorePath)
 			return nil, err
 		}
-		if err := linkIn(e.Scope, e.StorePath, c.Path); err != nil {
+		if err := makeLink(e.StorePath, c.Path); err != nil {
 			_ = moveDir(e.StorePath, c.Path)
 			_ = moveDir(was, e.StorePath)
 			return nil, err
@@ -621,7 +403,7 @@ func Resolve(env Env, e *Entry, tool string, theirs bool) (Undo, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := linkIn(e.Scope, e.StorePath, c.Path); err != nil {
+	if err := makeLink(e.StorePath, c.Path); err != nil {
 		_ = moveDir(to, c.Path)
 		return nil, err
 	}
@@ -650,8 +432,8 @@ func CopyOwn(env Env, e *Entry, t Tool) (Undo, error) {
 	if e.Scope != Plugin || c == nil {
 		return nil, errors.New("只有插件的技能能复制")
 	}
-	dst := storePath(env, Global, nil, e.Name)
-	at := where(env, t, Global, nil, e.Name)
+	dst := storePath(env, e.Name)
+	at := filepath.Join(env.Home, t.Global[0], e.Name)
 	if exists(dst) || exists(at) {
 		return nil, fmt.Errorf("已经有一个 %s", e.Name)
 	}
@@ -694,7 +476,7 @@ func Repair(env Env, r *Report) int {
 			if env.ReadsID(id, e.Scope) {
 				continue
 			}
-			if linkIn(e.Scope, e.StorePath, c.Path) == nil {
+			if makeLink(e.StorePath, c.Path) == nil {
 				c.State, c.Target = Linked, e.StorePath
 			}
 		}
@@ -702,15 +484,8 @@ func Repair(env Env, r *Report) int {
 			if !env.Reads(t, e.Scope) {
 				continue
 			}
-			dirs, root := t.Global, env.Home
-			if e.Scope == Project {
-				if e.Repo == nil {
-					continue
-				}
-				dirs, root = t.Project, e.Repo.Root
-			}
-			for _, d := range dirs {
-				p := filepath.Join(root, d, e.Name)
+			for _, d := range t.Global {
+				p := filepath.Join(env.Home, d, e.Name)
 				if filepath.Clean(p) == filepath.Clean(e.StorePath) {
 					continue
 				}
@@ -724,9 +499,10 @@ func Repair(env Env, r *Report) int {
 }
 
 // Migrate moves the store of before, old (the maps folder's .skills),
-// into env's: every session's skills into ~/.agents/skills, a project's
-// into its repository's .agents/skills, what computers said and what was
-// put away beside them. Where a skill of the name is there already, the
+// into env's: every session's skills into ~/.agents/skills, what
+// computers said and what was put away beside them. A project's, in the
+// old store's _projects, are left where they are: a project's skills are
+// not looked at. Where a skill of the name is there already, the
 // newer stays and the other is put away. The links are mended by the
 // next scan (Repair). It gives how many skills it moved.
 func Migrate(env Env, old string) (int, error) {
@@ -763,11 +539,6 @@ func Migrate(env Env, old string) (int, error) {
 			continue
 		}
 		place(d, filepath.Join(env.Store, filepath.Base(d)))
-	}
-	for _, rp := range env.Repos {
-		for _, d := range skillDirs(filepath.Join(old, projectsDir, rp.Key)) {
-			place(d, filepath.Join(ProjectStore(rp.Root), filepath.Base(d)))
-		}
 	}
 	files, _ := filepath.Glob(filepath.Join(old, machinesDir, "*.json"))
 	for _, f := range files {
@@ -892,17 +663,6 @@ func safeName(s string) string {
 		return "computer"
 	}
 	return s
-}
-
-// RepoKey is a repository's folder in the store, by its name, apart from
-// those taken.
-func RepoKey(name string, taken map[string]bool) string {
-	base := strings.ToLower(safeName(name))
-	key := base
-	for i := 2; taken[key]; i++ {
-		key = fmt.Sprintf("%s-%d", base, i)
-	}
-	return key
 }
 
 // putAway moves p into the store's trash, and gives where.

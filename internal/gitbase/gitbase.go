@@ -235,10 +235,3 @@ func NormalRemote(url string) string {
 	path = strings.TrimSuffix(strings.Trim(path, "/"), ".git")
 	return strings.ToLower(host + "/" + path)
 }
-
-// Tracked tells whether the file at rel, from the repository's root dir,
-// is in git's index: kept in the repository, or about to be.
-func Tracked(dir, rel string) bool {
-	_, err := git(dir, "ls-files", "--error-unmatch", "--", rel)
-	return err == nil
-}
