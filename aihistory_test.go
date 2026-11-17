@@ -205,6 +205,7 @@ func TestAIModelKept(t *testing.T) {
 	if !tt.HasText("Claude Fable 5.1（上一版）") {
 		t.Fatalf("not shown as chosen: %q", tt.Texts())
 	}
+	snapshot(t, tt, "ai-model-kept")
 	// One the app never offered, written into the settings: by its ID.
 	a.cfg.AIModel = "claude-of-a-proxy"
 	tt.Frame()

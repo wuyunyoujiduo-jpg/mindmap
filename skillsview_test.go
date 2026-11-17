@@ -35,7 +35,7 @@ func isLink(p string) bool {
 	return err == nil && fi.Mode()&os.ModeSymlink != 0
 }
 
-// The agents' skills on 今天's left column: found, told where and how
+// The agents' skills on 技能, the fourth place: found, told where and how
 // each stands; taken into MyMind with a link in its place, linked and
 // unlinked by a switch, with their ways back; a tool newly installed
 // offered them; a copy that took a link's place settled.
