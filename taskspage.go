@@ -107,6 +107,9 @@ type tasksState struct {
 	placing  bool
 	placeErr string
 	table    bool // the list has room to be a table, with a column for the project and the day
+	// dueSeen are the tasks due or late as the reminders last looked, by
+	// their keys (reminders.go); nil before the day's first look.
+	dueSeen map[string]bool
 }
 
 func (it taskItem) key() string { return it.path + "#" + it.node.ID }
@@ -260,6 +263,8 @@ func (a *app) editTask(it taskItem, note string, fn func(n *model.Node)) bool {
 	})
 	if err != nil {
 		a.tell("没有改成：" + err.Error())
+	} else {
+		a.remindOwn(it.key()) // changed here today: the day is not said for it alone
 	}
 	a.tasks.read = time.Time{}
 	return err == nil

@@ -17,7 +17,12 @@ import (
 // Each is said once. The day's notification is one of the day, told by a
 // mark of the day and not of each task: a task written or put on today
 // later is no cause to say the day again (today's line to add one dates
-// each of its tasks today, and each was notified as it was written). A
+// each of its tasks today, and each was notified as it was written). The
+// mark is made when the day was said, not when it was looked at: with
+// nothing due at the day's first look it was made all the same, and what
+// the sync brought for today later was never said. What is no cause to
+// say it is a task made or changed here today (remindOwn): the user has
+// just seen it. A
 // time to remind at that was past already when it was first seen, 9:20
 // written at half past nine, is not a time that came, and says nothing.
 // And what was said is kept beside the settings (remindedPath), so that
@@ -30,6 +35,33 @@ var remindTimes = []string{"09:00", "14:00", "18:00", "08:00", "10:00", "12:00",
 // remindedDigest marks, in what was reminded of a day, the day's own
 // notification.
 const remindedDigest = "day"
+
+// remindedOwn marks, before a task's key, one made or changed here on the
+// day: the day is not said for it alone.
+const remindedOwn = "own:"
+
+// remindedOf brings what was reminded of today to hand: as kept, on the
+// day's first asking.
+func (a *app) remindedOf(day time.Time) {
+	if a.reminded == nil || !a.remindedDay.Equal(day) {
+		a.reminded, a.remindedDay = remindedLoad(day), day
+		a.tasks.dueSeen = nil
+	}
+}
+
+// remindOwn marks a task as made or changed here today (remindedOwn), by
+// its key.
+func (a *app) remindOwn(key string) {
+	if a.cfg.NoReminders {
+		return
+	}
+	day := today(a.now())
+	a.remindedOf(day)
+	if k := remindedOwn + key; !a.reminded[k] {
+		a.reminded[k] = true
+		remindedSave(day, a.reminded)
+	}
+}
 
 // remindedPath is the file that keeps what was reminded of today.
 func remindedPath() string {
@@ -98,14 +130,18 @@ func (a *app) reminderCheck() {
 	if !a.remindedAt.IsZero() && sameDay(a.remindedAt, now) && !a.remindedAt.After(now) {
 		last = a.remindedAt.Format("15:04")
 	}
+	// The open map changed here since the last look: a task of it that is
+	// due now and was not then was dated here, on the canvas or in its
+	// panel, and is the user's own as one written on 今天 is.
+	edited := last != "" && !a.changed.Before(a.remindedAt)
 	a.remindedAt = now
 	day := today(now)
-	if a.reminded == nil || !a.remindedDay.Equal(day) {
-		a.reminded, a.remindedDay = remindedLoad(day), day
-	}
+	a.remindedOf(day)
 	said := len(a.reminded)
 	clock := now.Format("15:04")
 	var due, overdue []string
+	seen, was := map[string]bool{}, a.tasks.dueSeen
+	news := false // something is due that was not made or changed here today
 	for _, it := range a.taskItems() {
 		if !countsAsTask(it) {
 			continue
@@ -126,9 +162,19 @@ func (a *app) reminderCheck() {
 			overdue = append(overdue, it.node.Title)
 		case sameDay(*d, day):
 			due = append(due, it.node.Title)
+		default:
+			continue
+		}
+		seen[it.key()] = true
+		if edited && was != nil && !was[it.key()] && it.path == a.path {
+			a.reminded[remindedOwn+it.key()] = true
+		}
+		if !a.reminded[remindedOwn+it.key()] {
+			news = true
 		}
 	}
-	if !a.reminded[remindedDigest] {
+	a.tasks.dueSeen = seen
+	if !a.reminded[remindedDigest] && news {
 		a.reminded[remindedDigest] = true
 		var body []string
 		if len(overdue) > 0 {
@@ -137,9 +183,7 @@ func (a *app) reminderCheck() {
 		if len(due) > 0 {
 			body = append(body, "今天到期："+strings.Join(due, "、"))
 		}
-		if len(body) > 0 {
-			a.plat.Notify("MyMind · 今天的任务", strings.Join(body, "\n"))
-		}
+		a.plat.Notify("MyMind · 今天的任务", strings.Join(body, "\n"))
 	}
 	if len(a.reminded) != said {
 		remindedSave(day, a.reminded)
