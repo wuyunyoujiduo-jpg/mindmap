@@ -58,14 +58,14 @@ func librarySchemas() []struct {
 				"required":             []string{"id"},
 				"additionalProperties": false,
 			}},
-		{toolSearchMaps, "在用户的所有导图中按关键词检索，返回最相关的导图：路径、名称、AI 分析的说明和分类，以及匹配的节点。",
+		{toolSearchMaps, "在用户的所有导图中按关键词检索，返回最相关的导图：路径、名称、AI 分析的说明和分类，以及匹配的主题。",
 			map[string]any{
 				"type":                 "object",
 				"properties":           map[string]any{"query": str("检索词：几个关键词，空格分隔；中英文都可以")},
 				"required":             []string{"query"},
 				"additionalProperties": false,
 			}},
-		{toolReadMap, "读取一张导图的内容：各画布的节点大纲、任务状态和备注。",
+		{toolReadMap, "读取一张导图的内容：各画布的主题大纲、任务状态和备注。",
 			map[string]any{
 				"type":                 "object",
 				"properties":           map[string]any{"path": str("导图的路径，来自 search_maps 的结果")},

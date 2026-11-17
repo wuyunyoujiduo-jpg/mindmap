@@ -74,7 +74,7 @@ func (a *app) aiMaterialToMap(name string, clips []*library.Clip) {
 		return
 	}
 	list, refs := a.materialLines(clips)
-	prompt := fmt.Sprintf("把下面这 %d 条资料整理成一张结构化的导图：按主题和脉络分组（不超过 4 层），相关的放在一起，分组节点用简短的标题概括主题；每条资料作为叶子节点挂在最合适的位置，标题用资料的标题或更精炼的说法，行尾空一格原样写上它的链接（如 <clip:…>）。不要把摘要和标签抄进节点。用 propose_new_map 提出，导图名字建议用「%s」。", len(refs), name)
+	prompt := fmt.Sprintf("把下面这 %d 条资料整理成一张结构化的导图：按主题和脉络分组（不超过 4 层），相关的放在一起，分组的主题用简短的标题概括；每条资料作为末级主题挂在最合适的位置，标题用资料的标题或更精炼的说法，行尾空一格原样写上它的链接（如 <clip:…>）。不要把摘要和标签抄进主题。用 propose_new_map 提出，导图名字建议用「%s」。", len(refs), name)
 	a.ai.nextMaterial = refs
 	a.aiAction(prompt, scopeNone, "资料：\n"+list)
 }
@@ -92,7 +92,7 @@ func (a *app) aiMergeMaterial(clips []*library.Clip) {
 		return
 	}
 	a.libOpen = false
-	prompt := fmt.Sprintf("把下面这 %d 条资料并入这张导图：每条挂到最相关的已有节点上（update 的 links 加上它的链接），或者在合适的位置新增节点（add，links 写它的链接）；和导图无关的就不要硬塞，最后用一句话说明没并入的有哪些。用 propose_edits 一次提出。", len(refs))
+	prompt := fmt.Sprintf("把下面这 %d 条资料并入这张导图：每条挂到最相关的已有主题上（update 的 links 加上它的链接），或者在合适的位置新增主题（add，links 写它的链接）；和导图无关的就不要硬塞，最后用一句话说明没并入的有哪些。用 propose_edits 一次提出。", len(refs))
 	a.aiAction(prompt, scopeFile, "资料：\n"+list)
 }
 

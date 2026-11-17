@@ -335,18 +335,18 @@ func aiModel(cfg config) string {
 
 const aiSystemPrompt = `你是「MyMind」思维导图项目管理工具里的助手。用户用思维导图管理项目：模块、功能、实现细节、待优化点和任务。
 
-每条用户消息都附带导图的当前快照：一份缩进大纲，每个节点前面的 [id] 是它的 ID，后面可能有标签（#标签）、任务（状态、截止日期）和备注。快照总是最新的，以它为准。
+每条用户消息都附带导图的当前快照：一份缩进大纲，每个主题前面的 [id] 是它的 ID，后面可能有标签（#标签）、任务（状态、截止日期）和备注。快照总是最新的，以它为准。
 
-回答用户的问题时，简洁地用中文回答，可以引用节点标题。
+回答用户的问题时，简洁地用中文回答，可以引用主题标题。导图上的每一项在界面上叫「主题」（中心主题、子主题），回答时也这样称呼，不要说「节点」。
 
 当用户要求修改导图（添加、整理、拆分任务、补充备注、改状态、移动、删除等）时，调用 propose_edits 工具，把这一次的所有修改放在一次调用里。用户会先看到修改清单，确认后才会应用，所以不要在文字里重复列出修改内容，只用一两句话说明思路。
-- 引用已有节点时，必须使用快照里的 ID，不要编造 ID。
-- 新增的节点给一个 ref（如 "r1"），后面的修改可以用这个 ref 作为父节点。
+- 引用已有主题时，必须使用快照里的 ID，不要编造 ID。
+- 新增的主题给一个 ref（如 "r1"），后面的修改可以用这个 ref 作为父主题。
 - 标题保持简短，细节写进备注。
 - 不需要修改的字段留空字符串（tags 留空数组）。
 - 不要删除用户没有要求删除的内容。
 
-当用户要新建一张导图（而不是改当前这张）时，调用 propose_new_map：给导图起个简短的名字，节点写成 Markdown 列表（两个空格缩进一层，"- [ ] 文字" 是待做任务）。用户确认后才会创建并打开它。`
+当用户要新建一张导图（而不是改当前这张）时，调用 propose_new_map：给导图起个简短的名字，主题写成 Markdown 列表（两个空格缩进一层，"- [ ] 文字" 是待做任务）。用户确认后才会创建并打开它。`
 
 const proposeEditsDescription = "向用户提出对导图的一组修改。用户确认后才会应用。一次请求的所有修改放在一次调用里。"
 
@@ -356,16 +356,16 @@ func editsSchema() map[string]any {
 	op := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"op":     map[string]any{"type": "string", "enum": []string{"add", "update", "delete", "move"}, "description": "add 新增节点；update 修改节点；delete 删除节点及其下级；move 把节点移到新的父节点下"},
-			"id":     str("update / delete / move 的目标节点 ID；add 时留空"),
-			"parent": str("add / move 时的父节点：已有节点的 ID，或本次新增节点的 ref；其他操作留空"),
-			"ref":    str("add 时给新节点起的引用名，如 r1；其他操作留空"),
+			"op":     map[string]any{"type": "string", "enum": []string{"add", "update", "delete", "move"}, "description": "add 新增主题；update 修改主题；delete 删除主题及其下级；move 把主题移到新的父主题下"},
+			"id":     str("update / delete / move 的目标主题 ID；add 时留空"),
+			"parent": str("add / move 时的父主题：已有主题的 ID，或本次新增主题的 ref；其他操作留空"),
+			"ref":    str("add 时给新主题起的引用名，如 r1；其他操作留空"),
 			"title":  str("add 时的标题；update 时的新标题，不改留空"),
 			"note":   str("备注；不改留空"),
 			"tags":   map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "update 时替换为这些标签，add 时设置的标签；不改留空数组"},
 			"status": map[string]any{"type": "string", "enum": []string{"", "none", "idea", "todo", "doing", "done"}, "description": "任务状态：idea 想法，todo 待做，doing 进行中，done 完成，none 取消任务；不改留空"},
 			"due":    str("截止日期 YYYY-MM-DD，none 表示清除；不改留空"),
-			"links":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "要添加的链接：网址；代码文件的相对路径（可带 :行号）；资料库的资料 clip:<资料ID>；导图或其节点 mindmap:<导图路径>#<节点ID>。没有留空数组"},
+			"links":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "要添加的链接：网址；代码文件的相对路径（可带 :行号）；资料库的资料 clip:<资料ID>；导图或其主题 mindmap:<导图路径>#<主题ID>。没有留空数组"},
 		},
 		"required":             []string{"op", "id", "parent", "ref", "title", "note", "tags", "status", "due", "links"},
 		"additionalProperties": false,
@@ -459,7 +459,7 @@ func (a *app) snapshot(scope int) string {
 		if n == nil {
 			n = a.doc.Root
 		}
-		fmt.Fprintf(&b, "画布「%s」中选中的节点及其下级：\n", a.doc.Title)
+		fmt.Fprintf(&b, "画布「%s」中选中的主题及其下级：\n", a.doc.Title)
 		write(n, 0)
 	default:
 		sheet(a.doc)
@@ -1559,7 +1559,7 @@ func newMapSchema() map[string]any {
 		"type": "object",
 		"properties": map[string]any{
 			"name":    map[string]any{"type": "string", "description": "导图的名字，简短，也是文件名"},
-			"outline": map[string]any{"type": "string", "description": "中心主题下的节点，Markdown 列表：两个空格缩进一层，\"- [ ] 文字\" 是待做任务；行尾空一格写 <clip:资料ID> 或 <mindmap:导图路径#节点ID> 把资料或导图挂到这个节点上"},
+			"outline": map[string]any{"type": "string", "description": "中心主题下的各级主题，Markdown 列表：两个空格缩进一层，\"- [ ] 文字\" 是待做任务；行尾空一格写 <clip:资料ID> 或 <mindmap:导图路径#主题ID> 把资料或导图挂到这个主题上"},
 		},
 		"required":             []string{"name", "outline"},
 		"additionalProperties": false,

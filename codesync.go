@@ -154,7 +154,7 @@ func (a *app) syncWithCode() {
 	}
 	var prompt, extra string
 	if bl := a.file.Baseline; bl == nil {
-		prompt = "对照下面代码仓库的目录结构和说明，检查这张导图（整个文件）和代码是否一致：补上缺的模块、改正过时的描述、删掉已经不存在的部分，给模块节点补上对应代码的 links（相对仓库根目录的路径）。没变化的部分不要动。用 propose_edits 一次提出所有修改；如果导图已经和代码一致，也调用 propose_edits，operations 为空数组，summary 写「导图已与代码一致」。"
+		prompt = "对照下面代码仓库的目录结构和说明，检查这张导图（整个文件）和代码是否一致：补上缺的模块、改正过时的描述、删掉已经不存在的部分，给模块主题补上对应代码的 links（相对仓库根目录的路径）。没变化的部分不要动。用 propose_edits 一次提出所有修改；如果导图已经和代码一致，也调用 propose_edits，operations 为空数组，summary 写「导图已与代码一致」。"
 		extra = scanRepo(dir, 3)
 	} else {
 		patch, err := gitbase.Patch(dir, bl.Commit, maxPatch)
@@ -162,7 +162,7 @@ func (a *app) syncWithCode() {
 			a.tell("读不出代码改动：" + err.Error())
 			return
 		}
-		prompt = "根据下面「代码基线」之后的代码改动更新这张导图（整个文件），让它和当前代码一致：只改受影响的节点——改备注、补 links、为新模块加节点、删掉已删除模块的节点、按需要更新任务状态；没变化的部分不要动，不要重写整张图。用 propose_edits 一次提出所有修改；如果导图不需要改，也调用 propose_edits，operations 为空数组，summary 写「导图已与代码一致」。"
+		prompt = "根据下面「代码基线」之后的代码改动更新这张导图（整个文件），让它和当前代码一致：只改受影响的主题——改备注、补 links、为新模块加主题、删掉已删除模块的主题、按需要更新任务状态；没变化的部分不要动，不要重写整张图。用 propose_edits 一次提出所有修改；如果导图不需要改，也调用 propose_edits，operations 为空数组，summary 写「导图已与代码一致」。"
 		extra = mcp.BaselineText(a.path, a.file) + "\n## 代码改动（git diff " + gitbase.Short(bl.Commit) + "）\n\n```diff\n" + patch + "\n```\n"
 	}
 	a.ai.nextSync = head // applied, the map matches this code

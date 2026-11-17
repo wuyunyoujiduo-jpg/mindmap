@@ -81,7 +81,7 @@ func (a *app) aiReport(days int) {
 	if days <= 1 {
 		kind = "日报"
 	}
-	prompt := fmt.Sprintf("根据导图和下面「最近 %d 天的变化」，写一份%s（Markdown）：本期完成、进行中、风险与阻塞、下期计划。简洁，用条目，引用节点标题。不要修改导图。", days, kind)
+	prompt := fmt.Sprintf("根据导图和下面「最近 %d 天的变化」，写一份%s（Markdown）：本期完成、进行中、风险与阻塞、下期计划。简洁，用条目，引用主题标题。不要修改导图。", days, kind)
 	a.aiAction(prompt, scopeFile, a.changesSince(since))
 }
 
@@ -91,7 +91,7 @@ func (a *app) aiBreakDown() {
 	if n == nil {
 		return
 	}
-	prompt := fmt.Sprintf("把选中的「%s」拆解成 3–8 个可执行的子任务（必要时再分一层），用 propose_edits 添加为它的子节点并设为待做任务，每个给一句备注说明要做什么、怎样算完成。", n.Title)
+	prompt := fmt.Sprintf("把选中的「%s」拆解成 3–8 个可执行的子任务（必要时再分一层），用 propose_edits 添加为它的子主题并设为待做任务，每个给一句备注说明要做什么、怎样算完成。", n.Title)
 	a.aiAction(prompt, scopeSubtree, "")
 }
 
@@ -128,7 +128,7 @@ func (a *app) riskFacts() string {
 	list("已逾期", overdue)
 	list("没有截止日期的待做/进行中任务", noDue)
 	list("停留在「想法」的任务", ideas)
-	list("有 3 个以上下级却没有备注的节点", bare)
+	list("有 3 个以上下级却没有备注的主题", bare)
 	if b.Len() == 0 {
 		return "（没有发现明显的问题。）"
 	}
@@ -143,7 +143,7 @@ func (a *app) aiRiskScan() {
 
 // aiFromText asks for nodes made of the text pasted in the window.
 func (a *app) aiFromText(text string) {
-	prompt := "根据下面「待整理的文本」生成结构化的导图节点，挂在当前画布的中心主题下：用 propose_edits 一次添加，层级不超过 4 层，标题简短、细节写进备注，可执行的事项设为待做任务。"
+	prompt := "根据下面「待整理的文本」生成结构化的导图主题，挂在当前画布的中心主题下：用 propose_edits 一次添加，层级不超过 4 层，标题简短、细节写进备注，可执行的事项设为待做任务。"
 	a.aiAction(prompt, scopeCanvas, "待整理的文本：\n"+text)
 }
 
@@ -214,7 +214,7 @@ func (a *app) aiFromRepo(dir string) {
 	if a.projectOf(a.path, a.file) == "" { // this computer's to know (setProject), not the file's alone
 		a.setProject(dir)
 	}
-	prompt := "根据下面这个代码仓库的目录结构和说明，生成项目架构导图，挂在当前画布的中心主题下：按模块 / 层次组织（不超过 4 层），每个模块写一句职责备注，关键文件作为节点的 links（相对仓库根目录的路径）。用 propose_edits 一次添加。"
+	prompt := "根据下面这个代码仓库的目录结构和说明，生成项目架构导图，挂在当前画布的中心主题下：按模块 / 层次组织（不超过 4 层），每个模块写一句职责备注，关键文件作为主题的 links（相对仓库根目录的路径）。用 propose_edits 一次添加。"
 	a.ai.nextSync = headBaseline(dir, a.now()) // applied, the map matches this code
 	a.aiAction(prompt, scopeCanvas, scanRepo(dir, 3))
 }

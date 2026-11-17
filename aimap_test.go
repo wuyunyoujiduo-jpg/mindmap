@@ -6,6 +6,19 @@ import (
 	"testing"
 )
 
+// The AI is told the word of the UI, 主题, and its prompts and tools say
+// it: an answer that said 节点 named what the user sees nowhere.
+func TestAISaysTopic(t *testing.T) {
+	sys := aiSystem()
+	if !strings.Contains(sys, "不要说「节点」") || strings.Count(sys, "节点") != 1 {
+		t.Fatalf("the system prompt does not tell the AI to say 主题, or says 节点 itself:\n%s", sys)
+	}
+	tools, _ := json.Marshal([]any{editsSchema(), newMapSchema(), librarySchemas()})
+	if strings.Contains(string(tools), "节点") {
+		t.Fatalf("a tool says 节点: %s", tools)
+	}
+}
+
 // Without the map, the AI proposes a new map, which applying creates and
 // opens.
 func TestAINewMap(t *testing.T) {
