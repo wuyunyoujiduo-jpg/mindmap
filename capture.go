@@ -618,10 +618,16 @@ func (a *app) joinOther(m *movedOut) bool {
 // own, into this map, followed as the move out is: undone, the branch is
 // in the other map again.
 func (a *app) moveHome(m *movedOut) {
-	if a.mapFile(m.from) == nil {
+	home := a.mapFile(m.from)
+	if home == nil {
 		return
 	}
 	a.leaveOther(m, false) // gone from there since, it is put back as it was moved
+	// Back already, by ⌘Z before the toast was gone: nothing to put back,
+	// and no step to make of it, whose undo would be a move of nothing.
+	if !slices.ContainsFunc(m.nodes, func(n *model.Node) bool { return home.Node(n.ID) == nil }) {
+		return
+	}
 	open := m.from == a.path
 	err := a.editMapAt(m.from, "从「"+mapName(m.to)+"」移回", func(f *model.File) error {
 		for i, n := range m.nodes {

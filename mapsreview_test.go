@@ -144,6 +144,13 @@ func TestMoveFollowedAcrossARename(t *testing.T) {
 	if a.file.Node(id) == nil || inMap(t, renamed, id) {
 		t.Fatal("the other map renamed, an undo left the branch in both maps")
 	}
+	// The toast's 撤销 with the branch back already: nothing is done, and
+	// no step made whose undo would put it into the other map as well.
+	steps := a.hist.Steps()
+	back()
+	if a.hist.Steps() != steps || a.file.Node(id) == nil || inMap(t, renamed, id) {
+		t.Fatal("撤销 of a move undone already did something")
+	}
 	a.redo()
 	if a.file.Node(id) != nil || !inMap(t, renamed, id) {
 		t.Fatal("made again, the branch is not in the map renamed")
