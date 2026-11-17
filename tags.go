@@ -464,7 +464,10 @@ func (a *app) putTitleTag(n *model.Node, tag, before string, title *string) {
 	// of 0.98.3).
 	a.tellUndo("已加标签 #"+tag, func() {
 		// On whichever canvas of the map it is now; nothing to do, no step.
-		n := a.nodeInFile(id)
+		if a.file == nil {
+			return
+		}
+		n := a.file.Node(id)
 		if n == nil {
 			return
 		}
@@ -540,17 +543,4 @@ func (a *app) outlineTagTab(n *model.Node) bool {
 		a.takeFieldTag(n, part, tag)
 	}
 	return ok
-}
-
-// nodeInFile is the topic id on any canvas of the open map.
-func (a *app) nodeInFile(id string) *model.Node {
-	if a.file == nil {
-		return nil
-	}
-	for _, d := range a.file.Sheets {
-		if n, _ := d.Find(id); n != nil {
-			return n
-		}
-	}
-	return nil
 }

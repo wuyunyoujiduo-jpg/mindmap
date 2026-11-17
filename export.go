@@ -27,7 +27,7 @@ const exportScale = 2
 // window still for six seconds. A larger map is drawn at a smaller scale,
 // and the toast says so.
 const (
-	exportMaxSide   = 8192
+	exportMaxSide   = 16384
 	exportMaxPixels = 32 << 20
 )
 

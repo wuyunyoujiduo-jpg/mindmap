@@ -157,7 +157,7 @@ func (a *app) slideView(c *ui.Context, d *model.Document, s slide, index, count 
 				ui.Text(c, s.node.Title).FontSize(54 * k).Bold()
 				ui.Box(c).Size(64*k, 6*k).Radius(3*k).Background(col.accent).Margin(4*k, 0, 18*k)
 				if s.kind == slideTopic {
-					ui.Text(c, s.node.Note).FontSize(28 * k).TextColor(col.text).Wrap()
+					a.slideNote(c, s.node.Note, 28*k, col, w-160*k, h*0.42)
 					return
 				}
 				shown := len(s.items)
@@ -216,12 +216,39 @@ func (a *app) slideCards(c *ui.Context, s slide, col slideColors, k float32, sho
 				ui.Text(c, it.Title).FontSize(30 * k).Bold().Wrap()
 				switch {
 				case it.Note != "":
-					ui.Text(c, it.Note).FontSize(18 * k).TextColor(col.muted).MaxLines(3).Ellipsis("…")
+					// Its words, not its Markdown: the marks showed as written.
+					ui.Text(c, markdownPlain(notePictureMark.ReplaceAllString(it.Note, ""))).FontSize(18 * k).TextColor(col.muted).MaxLines(3).Ellipsis("…")
 				case len(it.Children) > 0:
 					ui.Textf(c, "%d 个子主题", len(it.Children)).FontSize(18 * k).TextColor(col.muted)
 				}
 			})
 		}
+	})
+}
+
+// slideNote shows a topic's note on its slide as the topic's own column
+// shows it: its Markdown formatted, headings, lists, bold and links, in
+// the slide's colors, and its pictures as pictures, no larger than maxW
+// by maxH. It was shown as it is written, marks and all.
+func (a *app) slideNote(c *ui.Context, note string, size float32, col slideColors, maxW, maxH float32) {
+	md := mdColors{text: col.text, muted: col.muted, accent: col.accent, code: col.text.Alpha(0.1), line: col.text.Alpha(0.3)}
+	ui.Column(c.Key("note")).Gap(size * 0.5).FillWidth().Children(func() {
+		text := func(key any, s string) {
+			if s = strings.TrimSpace(s); s != "" {
+				markdownIn(c.Key(key), s, size, md)
+			}
+		}
+		last := 0
+		for i, m := range notePictureFile.FindAllStringSubmatchIndex(note, -1) {
+			text(fmt.Sprint("text", i), note[last:m[0]])
+			if b, _ := a.filePicture(a.imagePath(&model.Image{File: note[m[2]:m[3]]}), false); b != nil {
+				pw, ph := b.Size()
+				k := min(1, maxW/float32(pw), maxH/float32(ph))
+				ui.Image(c.Key(fmt.Sprint("picture", i)), b).Size(float32(pw)*k, float32(ph)*k).Fit(ui.Contain).Radius(8).Label("备注里的图片")
+			}
+			last = m[1]
+		}
+		text("rest", note[last:])
 	})
 }
 
@@ -338,8 +365,11 @@ func (a *app) presentPanel(c *ui.Context) {
 	t := c.Theme()
 	d := a.doc
 	p := d.Present
-	slides := slidesOf(d)
+	// The slides the talk has, a topic's 图解 among them (slidesFor): by
+	// slidesOf alone the count here was not the talk's.
+	slides := a.slidesFor(d)
 	set := func(key string, fn func(p *model.Present)) {
+
 		a.mutate("present:"+key+":"+d.ID, func() { fn(&d.Present) })
 	}
 	ui.Column(c.Key("present")).Padding(16).Gap(12).Children(func() {

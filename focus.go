@@ -71,6 +71,52 @@ func (a *app) focusOn(id string) {
 	a.reveal = true
 }
 
+// The menus' items that change the open map, or how it shows, were done
+// behind whatever page showed: on 今天, 收集 or 技能, ⌘T gave the map a
+// canvas, ⌘1–5 turned its view, ⌥0–3 folded it and ⌥↩ showed a branch of
+// it alone, none of it seen. They are done to the map seen.
+
+// toMap shows the open map where another place's page is over it, and
+// tells whether it was showing already.
+func (a *app) toMap() bool {
+	if a.doc == nil {
+		return false
+	}
+	if a.libOpen {
+		a.libOpen = false
+		return false
+	}
+	return true
+}
+
+// menuOnMap is an item that rearranges the map: folds it, opens it to a
+// level, shows a branch alone. With another page over the map it shows
+// the map, as it is, and does no more: what it would rearrange was not
+// being looked at. Chosen again, on the map, it acts.
+func (a *app) menuOnMap(fn func()) {
+	if a.toMap() {
+		fn()
+	}
+}
+
+// menuView is a view of the map chosen in the menu: a way to the map, so
+// the map is shown, in that view.
+func (a *app) menuView(mode int) {
+	a.toMap()
+	a.showView(mode)
+}
+
+// menuNewSheet adds a canvas to the open map, which is shown for it: what
+// is made is seen being made.
+func (a *app) menuNewSheet() {
+	if a.file == nil || a.doc == nil {
+		return
+	}
+	a.toMap()
+	a.mode = viewMap
+	a.addSheet()
+}
+
 // focusBar shows where the branch focused on is in the map, each step a
 // link back to it, over the canvas.
 func (a *app) focusBar(c *ui.Context) {

@@ -104,6 +104,11 @@ func TestNoSummaryOfTheMiddleWhereNoneIsDrawn(t *testing.T) {
 	if err := menu(); err != nil || a.doc.Root.Summary == nil {
 		t.Fatalf("a logic chart took none: %v", err)
 	}
+	a.commitEditIfAny()
+	a.cam().placed = false
+	tt.Frame()
+	tt.Frame()
+	snapshot(t, tt, "summary-of-the-middle")
 }
 
 // The 撤销 of the three toasts of a floating topic takes back that change
@@ -574,6 +579,7 @@ func TestExportImageOfALargeMapIsBounded(t *testing.T) {
 	a.async = func(work func() (any, error), done func(any, error)) {
 		waiting = append(waiting, func() { done(work()) })
 	}
+	snapshot(t, tt, "export-before")
 	out := filepath.Join(t.TempDir(), "大图.png")
 	a.plat.(*fakePlatform).savePath = out
 	a.askExportImage()
@@ -584,6 +590,7 @@ func TestExportImageOfALargeMapIsBounded(t *testing.T) {
 	if _, ok := tt.Find("正在导出图片"); !ok {
 		t.Fatal("no sign of the wait on the export key")
 	}
+	snapshot(t, tt, "export-waiting")
 	a.askExportImage() // again meanwhile: not begun twice
 	if len(waiting) != 1 {
 		t.Fatal("a second picture begun while the first is written")
@@ -592,6 +599,11 @@ func TestExportImageOfALargeMapIsBounded(t *testing.T) {
 	tt.Frame()
 	if _, ok := tt.Find("导出"); !ok || a.imageBusy {
 		t.Fatal("the export key did not come back")
+	}
+	if dir := os.Getenv("MINDMAP_SNAPSHOTS"); dir != "" {
+		if data, err := os.ReadFile(out); err == nil {
+			_ = os.WriteFile(filepath.Join(dir, "export-large.png"), data, 0o644)
+		}
 	}
 	file, err := os.Open(out)
 	if err != nil {
@@ -617,6 +629,256 @@ func TestExportImageOfALargeMapIsBounded(t *testing.T) {
 	}
 	if s := exportFit(6000, 6000); s*6000*s*6000 > exportMaxPixels*1.001 {
 		t.Fatalf("a square map at %v", s)
+	}
+}
+
+// The ⋯ of the bar over the canvas is the menu under the pointer's other
+// key, for a floating topic too: there it was the middle's, with 剪切 and
+// 删除 gray and no 移到其他导图 nor 聚焦.
+func TestNodeBarMenuOfAFloatingTopic(t *testing.T) {
+	a, tt := newTestApp(t)
+	var f *model.Node
+	a.mutate("", func() {
+		f = a.doc.AddFloating("漂着的", model.Point{X: -260, Y: 240})
+		_, _ = a.doc.AddChild(f.ID, "它下面的")
+	})
+	a.selected, a.multi = f.ID, nil
+	tt.Frame()
+	tt.Frame()
+	bar := func() []string {
+		t.Helper()
+		if err := tt.Click("更多操作"); err != nil {
+			t.Fatal(err)
+		}
+		return tt.Menu()
+	}
+	fromBar := bar()
+	tt.CloseMenu()
+	tt.Frame()
+	b, cam := a.boxes.Boxes[f.ID], a.cam()
+	tt.RightClickAt(a.vp.X+cam.X+(b.X+b.W/2)*cam.Zoom, a.vp.Y+cam.Y+(b.Y+b.H/2)*cam.Zoom)
+	other := tt.Menu()
+	tt.CloseMenu()
+	tt.Frame()
+	if !slices.Equal(fromBar, other) || !slices.Contains(fromBar, "移到其他导图…") || !slices.Contains(fromBar, "聚焦此分支") {
+		t.Fatalf("the bar's menu %q, the pointer's %q", fromBar, other)
+	}
+	bar()
+	if err := tt.ChooseMenuItem("剪切"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.doc.IsFloating(f.ID) || len(a.clip) != 1 {
+		t.Fatal("not cut from the bar's menu")
+	}
+}
+
+// A color scheme chosen in the bar's popover does what one chosen in the
+// canvas's column does: each branch a color of it, though the canvas was
+// of one color. (There it changed the middle and nothing else.)
+func TestSchemeChosenInTheBarColorsTheBranches(t *testing.T) {
+	a, tt := newTestApp(t)
+	a.mutate("", func() { a.doc.Style.SingleColor, a.doc.Style.Color = true, "#7C5CE0" })
+	tt.Frame()
+	if err := tt.Click("结构"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if err := tt.Click("配色 海洋"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	st := a.doc.Style
+	if st.Scheme != "ocean" || st.SingleColor {
+		t.Fatalf("style %+v", st)
+	}
+	if l := lookOf(st); l.branch(0) == l.branch(1) || l.branch(1) != ui.Hex("#2563EB") {
+		t.Fatal("the branches are of one color still")
+	}
+}
+
+// The menus' items that change the map are done to the map seen: with
+// another place's page over it, a view chosen shows the map in it, a new
+// canvas is made on the map shown, and what would rearrange the map shows
+// it and does no more.
+func TestMenuItemsActOnTheMapSeen(t *testing.T) {
+	a, tt := newTestApp(t)
+	tt.Frame()
+	sheets, mode := len(a.file.Sheets), a.mode
+	fold := func() string {
+		var s strings.Builder
+		a.doc.Walk(func(n, _ *model.Node, _ int) bool {
+			if n.Collapsed {
+				s.WriteString(n.ID + " ")
+			}
+			return true
+		})
+		return s.String()
+	}
+	folded := fold()
+	for _, place := range []func(){a.goToday, a.goCollect, a.showSkills} {
+		place()
+		tt.Frame()
+		a.menuOnMap(func() { a.expandTo(1) }) // ⌥1
+		if a.libOpen || fold() != folded {
+			t.Fatal("folded behind another page, or the map not shown for it")
+		}
+		place()
+		a.menuOnMap(func() { a.focusOn(find(t, a, "架构").ID) }) // ⌥↩
+		if a.libOpen || a.focusNode() != nil {
+			t.Fatal("a branch shown alone behind another page")
+		}
+		tt.Frame()
+	}
+	a.menuOnMap(func() { a.expandTo(1) }) // on the map, it acts
+	if fold() == folded {
+		t.Fatal("not folded on the map itself")
+	}
+	a.undo()
+
+	a.goToday()
+	tt.Frame()
+	a.menuView(viewOutline) // ⌘2
+	tt.Frame()
+	if a.libOpen || a.mode != viewOutline {
+		t.Fatalf("the view was turned behind 今天: libOpen %v mode %d (was %d)", a.libOpen, a.mode, mode)
+	}
+	a.goCollect()
+	tt.Frame()
+	a.menuNewSheet() // ⌘T
+	tt.Frame()
+	if a.libOpen || len(a.file.Sheets) != sheets+1 || a.mode != viewMap {
+		t.Fatal("a canvas was made behind 收集")
+	}
+}
+
+// 演说's column counts the slides the talk has, a topic's 图解 among them;
+// and a note shows on its slide formatted, not as its Markdown is written.
+func TestSlidesCountAndNotes(t *testing.T) {
+	a, tt := newTestApp(t)
+	var n *model.Node
+	a.mutate("", func() {
+		n, _ = a.doc.AddChild(a.doc.Root.ID, "要讲的一条")
+		n.Note = "## 小标题\n\n- **重点**一\n- 看[文档](https://example.com)\n"
+		p, _ := a.doc.AddChild(a.doc.Root.ID, "卡片的上级")
+		c1, _ := a.doc.AddChild(p.ID, "卡片一")
+		c1.Note = "**加粗**的一句"
+		_, _ = a.doc.AddChild(p.ID, "卡片二")
+	})
+	arch := find(t, a, "架构")
+	set := &diaFile{Path: a.mapKey(a.path), Set: diagram.Set{Node: arch.ID, Present: true,
+		Table: &diagram.Table{Conds: []string{"金额"}, Results: []string{"谁来审"}, Rows: []diagram.Row{{When: []string{"500 以内"}, Then: []string{"业务员"}}, {When: []string{"超过 500"}, Then: []string{"主管"}}}}}}
+	if err := a.writeDia(set); err != nil {
+		t.Fatal(err)
+	}
+	talk := a.slidesFor(a.doc)
+	if len(talk) == len(slidesOf(a.doc)) {
+		t.Fatal("the test expects a 图解 among the slides")
+	}
+	a.panelTab, a.panelOff = tabPresent, false
+	a.selected = a.doc.Root.ID
+	tt.Frame()
+	if want := fmt.Sprintf("共 %d 页", len(talk)); !tt.HasText(want) {
+		t.Fatalf("the column does not say %q: %q", want, tt.Texts())
+	}
+	// The topic's slide.
+	a.startPresenting(n.ID)
+	tt.Frame()
+	if a.slides[a.slideIndex].kind != slideTopic {
+		t.Fatalf("slide %+v", a.slides[a.slideIndex])
+	}
+	texts := strings.Join(tt.Texts(), "\n")
+	for _, raw := range []string{"##", "**", "](https"} {
+		if strings.Contains(texts, raw) {
+			t.Fatalf("the note shows as it is written (%q) in %q", raw, texts)
+		}
+	}
+	if !strings.Contains(texts, "小标题") || !strings.Contains(texts, "重点") {
+		t.Fatalf("the note's words are not on the slide: %q", texts)
+	}
+	snapshot(t, tt, "slide-note")
+	a.stopPresenting()
+	// A card of a list's slide: its words.
+	a.mutate("", func() { a.doc.Present.Layout = "cards" })
+	a.startPresenting(find(t, a, "卡片的上级").ID)
+	tt.Frame()
+	if texts = strings.Join(tt.Texts(), "\n"); strings.Contains(texts, "**") || !strings.Contains(texts, "加粗的一句") {
+		t.Fatalf("a card's note: %q", texts)
+	}
+	a.stopPresenting()
+}
+
+// A canvas is deleted at once, said so, and comes back by 撤销, where it
+// was among the others; it was asked about first.
+func TestCanvasDeletedAtOnceWithUndo(t *testing.T) {
+	a, tt := newTestApp(t)
+	tt.Frame()
+	first, had := a.doc.ID, len(a.file.Sheets)
+	a.addSheet()
+	a.commitEditIfAny()
+	second := a.doc
+	a.mutate("", func() { second.Title = "第二张"; _, _ = second.AddChild(second.Root.ID, "上面的主题") })
+	a.addSheet()
+	a.commitEditIfAny()
+	tt.Frame()
+	if err := tt.RightClick("第二张"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.ChooseMenuItem("删除画布"); err != nil {
+		t.Fatalf("%v: %q", err, tt.Menu())
+	}
+	tt.Frame()
+	if d, _ := a.file.Sheet(second.ID); d != nil {
+		t.Fatal("not deleted at once: asked first?")
+	}
+	if !strings.Contains(a.notice, "第二张") || a.noticeUndo == nil {
+		t.Fatalf("not said, or no 撤销: %q", a.notice)
+	}
+	back := a.noticeUndo
+	a.showSheet(first)
+	extra, _ := a.doc.AddChild(a.doc.Root.ID, "其间加的")
+	a.mutate("", func() { extra.Title = "其间加的主题" })
+	back()
+	tt.Frame()
+	d, at := a.file.Sheet(second.ID)
+	if d == nil || at != 1 || a.doc != d || len(d.Root.Children) != 1 {
+		t.Fatalf("not back where it was: at %d", at)
+	}
+	if n := a.file.Node(extra.ID); n == nil {
+		t.Fatal("撤销 took back the edit made meanwhile")
+	}
+	back() // again: nothing
+	if len(a.file.Sheets) != had+2 {
+		t.Fatalf("%d canvases", len(a.file.Sheets))
+	}
+}
+
+// Another map being analyzed shows by waitShown, as every wait.
+func TestOtherMapsAnalysisWaitsAsEveryWait(t *testing.T) {
+	a, tt := newTestApp(t)
+	other, _, _ := newMapFile(t, a, "别的导图", "主题")
+	a.panelTab, a.panelOff = tabCanvas, false
+	a.mapWorking = other
+	tt.Frame()
+	if _, ok := waits["map-analysis-other"]; !ok && !motionOff {
+		t.Fatal("the sign of another map's analysis does not go through waitShown")
+	}
+	if !tt.HasText("正在分析「别的导图」") {
+		t.Fatalf("not said: %q", tt.Texts())
+	}
+	// With motion, as the app runs: nothing spins before the wait has
+	// lasted, and the word is there at once.
+	a.noMotion = false
+	defer func() { a.noMotion = true; delete(waits, "map-analysis-other") }()
+	tt.Frame()
+	s := waits["map-analysis-other"]
+	if s == nil || !s.shown.IsZero() {
+		t.Fatalf("the spinner is there from the first frame: %+v", s)
+	}
+	a.mapWorking = ""
+	tt.Frame()
+	if _, ok := waits["map-analysis-other"]; ok {
+		t.Fatal("the wait is not over with the analysis")
 	}
 }
 

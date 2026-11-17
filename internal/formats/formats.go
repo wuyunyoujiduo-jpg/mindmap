@@ -501,10 +501,10 @@ func PDF(w io.Writer, pages []image.Image, pageWidth float64) error {
 		if err := jpeg.Encode(&jp, img, &jpeg.Options{Quality: 92}); err != nil {
 			return err
 		}
-		page, content, im := 3+i*3, 4+i*3, 5+i*3
+		content, im := 4+i*3, 5+i*3
 		obj(fmt.Sprintf("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 %.2f %.2f] /Resources << /XObject << /Im%d %d 0 R >> >> /Contents %d 0 R >>",
 			pw, ph, i, im, content))
-		_ = page
+
 		draw := fmt.Sprintf("q %.2f 0 0 %.2f 0 0 cm /Im%d Do Q", pw, ph, i)
 		obj(fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(draw), draw))
 		offsets = append(offsets, buf.Len())
