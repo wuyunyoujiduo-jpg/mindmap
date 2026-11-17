@@ -28,7 +28,7 @@ func (a *app) panel(c *ui.Context) {
 	t := c.Theme()
 	// The topic's page. The AI is not here: it floats over the window
 	// (aiFloat), and takes no room from any page.
-	ui.Column(c).Width(a.panelWidth).FillHeight().Background(t.Background).Children(func() {
+	ui.Column(c).Width(a.panelWidth).FillHeight().Background(t.Background).ObserveInput(a.stepEnds).Children(func() {
 		if a.mode == viewDiagram && a.doc != nil && a.diaOf(a.dia.node) != nil {
 			// A diagram's column: where what is chosen in it comes from.
 			ui.Row(c.Key("panel-head")).Height(20).Shrink(0).DragWindow()
@@ -314,7 +314,9 @@ func today(now time.Time) time.Time {
 	return time.Date(y, m, d, 0, 0, 0, 0, now.Location())
 }
 
-// nodeFigures tells what is below a node in figures, as a page's head.
+// nodeFigures tells what is below a node in figures, as a page's head, and
+// in words for what reads the page aloud: counted once (it was walked
+// twice a frame, once for each).
 func (a *app) nodeFigures(c *ui.Context, n *model.Node) {
 	var nodes, tasks, done int
 	var walk func(*model.Node)
@@ -332,32 +334,10 @@ func (a *app) nodeFigures(c *ui.Context, n *model.Node) {
 	}
 	walk(n)
 	fs := []figure{{nodes, "个下级节点"}}
+	words := fmt.Sprintf("下级节点 %d 个", nodes)
 	if tasks > 0 {
 		fs = append(fs, figure{tasks - done, "件要做"}, figure{done, "件做完"})
+		words += fmt.Sprintf(" · 任务 %d/%d 完成", done, tasks)
 	}
-	figures(c, fs...).Label(a.nodeStats(n))
-}
-
-// nodeStats counts what is below a node.
-func (a *app) nodeStats(n *model.Node) string {
-	var nodes, tasks, done int
-	var walk func(n *model.Node)
-	walk = func(n *model.Node) {
-		for _, c := range n.Children {
-			nodes++
-			if c.Task != nil {
-				tasks++
-				if c.Task.Status == model.StatusDone {
-					done++
-				}
-			}
-			walk(c)
-		}
-	}
-	walk(n)
-	s := fmt.Sprintf("下级节点 %d 个", nodes)
-	if tasks > 0 {
-		s += fmt.Sprintf(" · 任务 %d/%d 完成", done, tasks)
-	}
-	return s
+	figures(c, fs...).Label(words)
 }

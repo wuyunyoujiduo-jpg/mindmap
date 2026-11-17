@@ -234,12 +234,20 @@ func (a *app) analyzeMap(path string) {
 func (a *app) mapAnalysisSection(c *ui.Context) {
 	t := c.Theme()
 	an := a.adoptMapMeta(a.path, a.file)
+	// Another map being analyzed is a wait as any: its sign comes by
+	// waitShown, not before it has lasted, nor gone at once (it was a
+	// bare spinner, there from the first frame).
+	other := a.mapWorking != "" && a.mapWorking != a.path
+	spin := waitShown(c, "map-analysis-other", other)
 	sectionCard(c.Key("map-analysis"), iconSparkle, tilePurple, "AI 分析", func() {
 		switch {
 		case a.mapWorking == a.path: // said in the card, by its steps
-		case a.mapWorking != "":
-			ui.Spinner(c)
+		case other:
+			if spin {
+				ui.Spinner(c).Size(13, 13)
+			}
 			ui.Text(c, "正在分析「"+mapName(a.mapWorking)+"」").FontSize(12).TextColor(t.TextMuted).SingleLine().MaxWidth(150)
+
 		case providerKey(a.cfg) != "":
 			label := "分析导图"
 			if an != nil {

@@ -58,7 +58,7 @@ func (a *app) outlineView(c *ui.Context) {
 	if a.outlineRowAt == nil {
 		a.outlineRowAt = map[string]ui.Rect{}
 	}
-	ui.Scroll(c.Key("outline:" + a.doc.ID)).Grow(1).Children(func() {
+	ui.Scroll(c.Key("outline:" + a.doc.ID)).Grow(1).ObserveInput(a.stepEnds).Children(func() {
 		col := ui.Column(c.Key("outline-lines")).Padding(32, 40).Gap(4).MaxWidth(860).Margin(0, ui.Auto).FillWidth().
 			FocusBind(&a.outlineFocus, outlineBlockFocus).Label("大纲")
 		a.outlineBlockKeys(col, rows)
@@ -407,11 +407,12 @@ func (a *app) outlinePaste(id string) {
 	text := a.plat.ClipboardText()
 	var nodes []*model.Node
 	if a.clip != nil && text == a.clipText {
-		for _, c := range a.clip {
-			cp := c.Copy()
-			copyAssets(cp, a.clipAssets, model.AssetsDir(a.path))
-			nodes = append(nodes, cp)
-		}
+		// As the canvas pastes them: topics cut by their own IDs, once,
+		// and what was drawn of them with them. (Here every paste made
+		// copies, and a branch cut and pasted lost its 图解.)
+		var carry func()
+		nodes, carry = a.clipNodes()
+		defer carry()
 	} else {
 		nodes = model.ParseOutline(text)
 	}

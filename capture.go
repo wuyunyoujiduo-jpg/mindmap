@@ -279,6 +279,17 @@ func (a *app) moveToMap(path, sheet, id string) {
 	}
 	// The nodes keep their IDs, as links to them and tasks waiting on
 	// them follow them to the other map.
+	m := &movedOut{from: a.path, to: path, under: id}
+	for _, n := range nodes {
+		h := movedHome{sheet: a.doc.ID}
+		if _, p := a.doc.Find(n.ID); p != nil { // else a floating topic
+			h.parent, h.index = p.ID, slices.Index(p.Children, n)
+			if t := p.SummaryTopic(); t != nil && t != n {
+				h.sum = t.ID
+			}
+		}
+		m.nodes, m.homes = append(m.nodes, n.Clone()), append(m.homes, h)
+	}
 	var title string
 	from := model.AssetsDir(a.path)
 	err := a.editMapAt(path, "从「"+mapName(a.path)+"」移来", func(f *model.File) error {
@@ -288,8 +299,9 @@ func (a *app) moveToMap(path, sheet, id string) {
 		}
 		target, _ := d.Find(id)
 		title = target.Title
-		for _, n := range nodes {
+		for _, n := range m.nodes {
 			c := n.Clone()
+			c.Pos = nil // of a floating topic, which is one of the tree there
 			copyAssets(c, from, model.AssetsDir(path))
 			target.Children = append(target.Children, c)
 		}
@@ -300,9 +312,160 @@ func (a *app) moveToMap(path, sheet, id string) {
 		a.saveErr = err.Error()
 		return
 	}
-	a.moveDiasTo(nodes, path) // what was drawn of them goes with them
+	m.there = true
+	a.moveDiasTo(m.nodes, path) // what was drawn of them goes with them
 	a.deleteSelection()
-	a.tell(fmt.Sprintf("已移到「%s」的「%s」下", mapName(path), title))
+	if a.movedOut = append(a.movedOut, m); len(a.movedOut) > movedKept {
+		a.movedOut = a.movedOut[len(a.movedOut)-movedKept:]
+	}
+	a.tellUndo(fmt.Sprintf("已移到「%s」的「%s」下", mapName(path), title), func() { a.moveHome(m) })
+}
+
+// movedOut is a branch, or several, moved from a map to a topic of
+// another while the app runs. The two maps are two files, and the history
+// takes back the steps of one: an undo that brought the branch back here
+// left it there too, the same topics by the same IDs in both maps. So a
+// move is followed (movesFollow): the branch back here by an undo, it is
+// taken out there; gone from here again by a redo, it is put there again.
+// (Forgetting the map's steps at a move, as the other map's are, would
+// have cost every undo of what was done before it.)
+type movedOut struct {
+	from, to string        // the maps
+	under    string        // the topic of the other map it went under
+	nodes    []*model.Node // the topics as they were moved, with their IDs
+	homes    []movedHome   // where each was here
+	there    bool          // they are in the other map
+}
+
+// movedHome is where a topic moved away was: on which canvas, under which
+// topic (none: it floated), at which place among its children (-1: it was
+// the topic of its summary), and that topic's summary when it had one.
+type movedHome struct {
+	sheet, parent, sum string
+	index              int
+}
+
+// movedKept is how many moves are followed.
+const movedKept = 32
+
+// movesFollow has the branches moved from the open map to others follow
+// an undo or a redo of it.
+func (a *app) movesFollow() {
+	if a.file == nil {
+		return
+	}
+	for _, m := range slices.Clone(a.movedOut) {
+		if m.from != a.path {
+			continue
+		}
+		here := slices.ContainsFunc(m.nodes, func(n *model.Node) bool { return a.file.Node(n.ID) != nil })
+		switch {
+		case here && m.there:
+			if a.leaveOther(m) {
+				a.tell(fmt.Sprintf("这一支也从「%s」里拿回来了", mapName(m.to)))
+			}
+		case !here && !m.there:
+			if a.joinOther(m) {
+				a.tell(fmt.Sprintf("这一支又移到了「%s」", mapName(m.to)))
+			}
+		}
+	}
+}
+
+// leaveOther takes a branch moved to another map out of it. One that is
+// no longer there, deleted or taken elsewhere since, is this move's no
+// more, and is followed no longer.
+func (a *app) leaveOther(m *movedOut) bool {
+	f := a.mapFile(m.to)
+	if f == nil {
+		return false // not read: not known to be gone
+	}
+	if !slices.ContainsFunc(m.nodes, func(n *model.Node) bool { return f.Node(n.ID) != nil }) {
+		a.movedOut = slices.DeleteFunc(a.movedOut, func(o *movedOut) bool { return o == m })
+		return false
+	}
+	err := a.editMapAt(m.to, "移回「"+mapName(m.from)+"」", func(f *model.File) error {
+		for _, n := range m.nodes {
+			if d := f.SheetOf(n.ID); d != nil {
+				_, _ = d.Delete(n.ID)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return false
+	}
+	m.there = false
+	a.moveDiasTo(m.nodes, m.from)
+	return true
+}
+
+// joinOther puts a branch moved to another map, and taken out of it by an
+// undo, there again: under the topic it went under, or the map's middle
+// when that is gone.
+func (a *app) joinOther(m *movedOut) bool {
+	err := a.editMapAt(m.to, "从「"+mapName(m.from)+"」移来", func(f *model.File) error {
+		target := f.Node(m.under)
+		if target == nil {
+			target = f.Sheets[0].Root
+		}
+		for _, n := range m.nodes {
+			if f.Node(n.ID) != nil {
+				continue
+			}
+			c := n.Clone()
+			c.Pos = nil
+			copyAssets(c, model.AssetsDir(m.from), model.AssetsDir(m.to))
+			target.Children = append(target.Children, c)
+		}
+		target.Collapsed = false
+		return nil
+	})
+	if err != nil {
+		return false
+	}
+	m.there = true
+	a.moveDiasTo(m.nodes, m.to)
+	return true
+}
+
+// moveHome is the 撤销 of a move to another map, by the topics' IDs: they
+// are put back where they were here, a step of this map, and taken out of
+// the other.
+func (a *app) moveHome(m *movedOut) {
+	if a.mapFile(m.from) == nil {
+		return
+	}
+	err := a.editMapAt(m.from, "从「"+mapName(m.to)+"」移回", func(f *model.File) error {
+		for i, n := range m.nodes {
+			if f.Node(n.ID) != nil {
+				continue // back already
+			}
+			h, c := m.homes[i], n.Clone()
+			d, _ := f.Sheet(h.sheet)
+			if d == nil {
+				d = f.Sheets[0]
+			}
+			p, _ := d.Find(h.parent)
+			switch {
+			case h.parent == "": // it floated
+				d.Floating = append(d.Floating, c)
+			case p == nil: // where it was is gone: under the middle
+				d.Root.Children = append(d.Root.Children, c)
+			case h.index < 0 && p.Summary == nil && len(p.Children) > 0: // it was the summary's topic
+				p.Summary = &model.Mark{Topic: c}
+			default:
+				p.Children = slices.Insert(p.Children, min(max(h.index, 0), len(p.Children)), c)
+				if h.sum != "" {
+					p.Summarize(h.sum)
+				}
+			}
+		}
+		return nil
+	})
+	if err == nil {
+		a.leaveOther(m)
+	}
 }
 
 // trayEntry is a line of the menu bar icon's menu.

@@ -71,6 +71,52 @@ func (a *app) focusOn(id string) {
 	a.reveal = true
 }
 
+// The menus' items that change the open map, or how it shows, were done
+// behind whatever page showed: on 今天, 收集 or 技能, ⌘T gave the map a
+// canvas, ⌘1–5 turned its view, ⌥0–3 folded it and ⌥↩ showed a branch of
+// it alone, none of it seen. They are done to the map seen.
+
+// toMap shows the open map where another place's page is over it, and
+// tells whether it was showing already.
+func (a *app) toMap() bool {
+	if a.doc == nil {
+		return false
+	}
+	if a.libOpen {
+		a.libOpen = false
+		return false
+	}
+	return true
+}
+
+// menuOnMap is an item that rearranges the map: folds it, opens it to a
+// level, shows a branch alone. With another page over the map it shows
+// the map, as it is, and does no more: what it would rearrange was not
+// being looked at. Chosen again, on the map, it acts.
+func (a *app) menuOnMap(fn func()) {
+	if a.toMap() {
+		fn()
+	}
+}
+
+// menuView is a view of the map chosen in the menu: a way to the map, so
+// the map is shown, in that view.
+func (a *app) menuView(mode int) {
+	a.toMap()
+	a.showView(mode)
+}
+
+// menuNewSheet adds a canvas to the open map, which is shown for it: what
+// is made is seen being made.
+func (a *app) menuNewSheet() {
+	if a.file == nil || a.doc == nil {
+		return
+	}
+	a.toMap()
+	a.mode = viewMap
+	a.addSheet()
+}
+
 // focusBar shows where the branch focused on is in the map, each step a
 // link back to it, over the canvas.
 func (a *app) focusBar(c *ui.Context) {
@@ -327,25 +373,9 @@ func (a *app) paste() bool {
 	var nodes []*model.Node
 	switch {
 	case a.clip != nil && text == a.clipText:
-		ids := map[string]string{} // of topics cut: the ID each had to the one it has now
-		for _, n := range a.clip {
-			c := n.Copy()
-			copyAssets(c, a.clipAssets, model.AssetsDir(a.path))
-			nodes = append(nodes, c)
-			if a.clipCut != nil {
-				now := map[string]string{}
-				pairIDs(now, n, c)
-				for clip, to := range now {
-					if from, ok := a.clipCut[clip]; ok {
-						ids[from] = to
-					}
-				}
-			}
-		}
-		if len(ids) > 0 { // moved once: pasted again, they are copies
-			a.clipCut = nil
-			defer a.carryDias(ids)
-		}
+		var carry func()
+		nodes, carry = a.clipNodes()
+		defer carry()
 	case a.pasteImage():
 		return true
 	case strings.TrimSpace(text) != "":
@@ -365,6 +395,63 @@ func (a *app) paste() bool {
 	}
 	a.reveal = true
 	return true
+}
+
+// clipNodes are the clipboard's topics, to put into the open map: copies,
+// with IDs of their own. Topics cut come back the first time as
+// themselves, by the IDs they had, as a branch moved to another map does:
+// what links to them (mindmap:…#id on a topic, <mindmap:…> in a thought)
+// still finds them, where a cut and a paste, which is how a branch is
+// moved by the keys, left every such link pointing at nothing. Pasted
+// again they are copies; and copies the first time too when one of those
+// IDs is in the map, the cut having been undone. carry, run once they are
+// in the map, has what was drawn of them follow them (carryDias).
+func (a *app) clipNodes() (nodes []*model.Node, carry func()) {
+	cut := a.clipCut
+	a.clipCut = nil // moved once
+	same := cut != nil
+	for _, had := range cut {
+		if a.file.Node(had) != nil {
+			same = false
+			break
+		}
+	}
+	ids := map[string]string{} // of topics cut: the ID each had to the one it has now
+	for _, n := range a.clip {
+		c := n.Copy()
+		if same {
+			c = n.Clone()
+			var back func(m *model.Node)
+			back = func(m *model.Node) {
+				if had, ok := cut[m.ID]; ok {
+					m.ID = had
+					ids[had] = had
+				}
+				for _, ch := range m.Children {
+					back(ch)
+				}
+				if t := m.SummaryTopic(); t != nil {
+					back(t)
+				}
+			}
+			back(c)
+		} else if cut != nil {
+			now := map[string]string{}
+			pairIDs(now, n, c)
+			for clip, to := range now {
+				if had, ok := cut[clip]; ok {
+					ids[had] = to
+				}
+			}
+		}
+		copyAssets(c, a.clipAssets, model.AssetsDir(a.path))
+		nodes = append(nodes, c)
+	}
+	return nodes, func() {
+		if len(ids) > 0 {
+			a.carryDias(ids)
+		}
+	}
 }
 
 // copyAssets copies the pictures of nodes from one map's assets folder to

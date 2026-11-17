@@ -172,6 +172,15 @@ type app struct {
 	// clipCut is, of topics cut, the ID each had by its ID on the
 	// clipboard: pasted, what was drawn of them follows them (carryDias).
 	clipCut map[string]string
+	// movedOut are the branches moved to other maps while the app runs:
+	// an undo that brings one back here takes it out there (movesFollow).
+	movedOut []*movedOut
+	// diaSwept is when the sets of topics that are gone were last looked
+	// for, and in which folder (sweepDias).
+	diaSwept    time.Time
+	diaSweptFor string
+	// imageBusy tells a picture of the canvas is being written.
+	imageBusy bool
 
 	// The canvas: where each canvas of the file is looked at from.
 	cams    map[string]*camera
@@ -973,7 +982,9 @@ func modTime(path string) time.Time {
 
 // mutate changes the map, recording the state before for undo. Edits with
 // the same non-empty key one after another, as the keys typed into one
-// field, make one step.
+// field or the moves of one drag, make one step: until the pointer is
+// pressed again or the field is left (stepEnds), so that two drags of a
+// thing, or a title written, left and written again, are two.
 func (a *app) mutate(key string, fn func()) {
 	if a.doc == nil {
 		return
@@ -982,16 +993,19 @@ func (a *app) mutate(key string, fn func()) {
 		a.hist.Record(a.state())
 	}
 	a.lastEdit = key
+	sums := a.summarized()
 	fn()
 	a.dirty = true
 	a.changed = a.now()
 	a.edits++
+	a.settleSummaries(sums)
 }
 
 func (a *app) undo() {
 	if s, ok := a.hist.Undo(a.state()); ok {
 		a.restore(s)
 		a.dirty, a.changed = true, a.now()
+		a.movesFollow() // a branch moved to another map is taken out of it
 	}
 }
 
@@ -999,6 +1013,7 @@ func (a *app) redo() {
 	if s, ok := a.hist.Redo(a.state()); ok {
 		a.restore(s)
 		a.dirty, a.changed = true, a.now()
+		a.movesFollow()
 	}
 }
 

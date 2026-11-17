@@ -352,10 +352,22 @@ func statusColor(s model.Status) ui.Color {
 // the wheel or the touchpad move it, and Cmd with the wheel zooms. Below it are
 // the tabs of the file's canvases.
 func (a *app) canvasView(c *ui.Context) {
-	ui.Column(c).Grow(1).Children(func() {
+	ui.Column(c).Grow(1).ObserveInput(a.stepEnds).Children(func() {
 		a.canvasArea(c)
 		a.sheetTabs(c)
 	})
+}
+
+// stepEnds ends the step that edits of one key make together (mutate), as
+// the canvas, the outline and the topic's column see their input: at a
+// press of the pointer, which begins another drag or leaves a field (or
+// comes back to it), and at the keys that leave one. Without an end, a
+// floating topic dragged twice was one step to undo, and a title written,
+// left and written again.
+func (a *app) stepEnds(ev ui.InputEvent) {
+	if ev.Kind == ui.InputPointerDown || ev.Kind == ui.InputKeyDown && (ev.Key == ui.KeyTab || ev.Key == ui.KeyEscape) {
+		a.lastEdit = ""
+	}
 }
 
 func (a *app) canvasArea(c *ui.Context) {
@@ -428,7 +440,12 @@ func (a *app) canvasArea(c *ui.Context) {
 			branch[n.ID] = len(shown.Root.Children) + slices.Index(shown.Floating, n)
 		case p == nil:
 		case p == shown.Root:
-			branch[n.ID] = slices.Index(p.Children, n)
+			// The topic of the middle's own summary is no child of it: a
+			// color after the branches', as a floating topic's. (It had the
+			// index -1, and a logic chart with one would not draw at all.)
+			if branch[n.ID] = slices.Index(p.Children, n); branch[n.ID] < 0 {
+				branch[n.ID] = len(p.Children)
+			}
 		default:
 			branch[n.ID] = branch[p.ID]
 		}
@@ -534,7 +551,15 @@ func (a *app) canvasArea(c *ui.Context) {
 		}
 		a.focusBar(c)
 		if shown == a.doc {
-			a.nodeBar(c, r, max(len(shown.Path(a.selected))-1, 0))
+			// By the depth its topic is drawn at, a floating topic's as a
+			// main topic's: the bar's ⋯ is the menu under the pointer's
+			// other key, and by the depth of the tree alone a floating
+			// topic was its middle there, not cut, deleted nor moved.
+			depth := max(len(shown.Path(a.selected))-1, 0)
+			if floating[a.selected] != nil {
+				depth++
+			}
+			a.nodeBar(c, r, depth)
 		}
 		// Zoom and recenter, over the canvas's corner.
 		lifted(ui.Row(c).Absolute().Right(14).Bottom(14).Gap(0).Padding(3, 5).Radius(radiusPill).AlignItems(ui.Center).
@@ -562,7 +587,15 @@ func (a *app) canvasArea(c *ui.Context) {
 			}
 			iconButton(c, iconLevels, "层级", "折叠 / 展开到第几层", 28, true).Menu(a.levelMenu)
 			a.taskFilterKey(c)
-			iconButton(c, iconDownload, "导出", "导出图片、Markdown、XMind…", 28, true).Menu(a.exportMenu)
+			// While a picture is being written its key waits, in its place
+			// and of its size (wait.go: one action, on its key).
+			if waitShown(c, "key:导出图片", a.imageBusy) {
+				ui.Box(c.Key("导出中")).Size(28, 28).Center().Shrink(0).Label("正在导出图片").Tooltip("正在导出图片…").Children(func() {
+					ui.Spinner(c).Size(13, 13)
+				})
+			} else {
+				iconButton(c, iconDownload, "导出", "导出图片、Markdown、XMind…", 28, true).Menu(a.exportMenu)
+			}
 		})
 	})
 }
@@ -631,10 +664,35 @@ func (a *app) sheetTabs(c *ui.Context) {
 			}
 		})
 	})
-	if ui.AlertDialog(c, &a.confirmSheet, "删除画布「"+a.sheetName(a.renamingSheet)+"」？", "画布上的所有节点都会删除，可以用撤销恢复。", "取消", "删除") == 1 {
-		a.deleteSheet(a.renamingSheet)
-		a.renamingSheet = ""
+}
+
+// removeSheet deletes a canvas at once and says so, with the way back
+// (DESIGN.md's States: what is deleted goes at once and the toast offers
+// 撤销; it was asked about first). 撤销 puts that canvas back where it was
+// among the others, by its ID, whatever was done meanwhile.
+func (a *app) removeSheet(id string) {
+	d, at := a.file.Sheet(id)
+	if d == nil || len(a.file.Sheets) <= 1 {
+		return
 	}
+	path := a.path
+	a.deleteSheet(id)
+	a.tellUndo("已删除画布「"+d.Title+"」", func() {
+		f := a.mapFile(path)
+		if f == nil {
+			return
+		}
+		if back, _ := f.Sheet(id); back != nil {
+			return // there again, by an undo
+		}
+		_ = a.editMapAt(path, "撤销删除画布", func(f *model.File) error {
+			f.Sheets = slices.Insert(f.Sheets, min(at, len(f.Sheets)), d.Clone())
+			return nil
+		})
+		if a.path == path {
+			a.showSheet(id)
+		}
+	})
 }
 
 func (a *app) sheetName(id string) string {
@@ -654,7 +712,7 @@ func (a *app) sheetTab(c *ui.Context, d *model.Document) {
 	} else if tab.Hovered() {
 		tab.Background(t.Text.Alpha(0.045))
 	}
-	if a.renamingSheet == d.ID && !a.confirmSheet {
+	if a.renamingSheet == d.ID {
 		tab.Children(func() {
 			in := ui.TextInputBase(c.Key("rename"), &a.sheetTitle).Width(120).AutoFocus()
 			switch {
@@ -693,9 +751,10 @@ func (a *app) sheetTab(c *ui.Context, d *model.Document) {
 			a.later(func() { a.moveSheet(id, 1) })
 		}
 		m.Separator()
-		if m.Item("删除画布…").Disabled(len(a.file.Sheets) == 1).Chosen() {
-			a.renamingSheet, a.confirmSheet = id, true
+		if m.Item("删除画布").Disabled(len(a.file.Sheets) == 1).Chosen() {
+			a.later(func() { a.removeSheet(id) })
 		}
+
 	})
 	tab.Children(func() {
 		text := ui.Text(c, d.Title).FontSize(13).NoWrap()
@@ -1906,7 +1965,7 @@ func (a *app) structurePicker(c *ui.Context, room float32) {
 				}
 				if chip.Clicked() {
 					id := sc.id
-					a.later(func() { a.setStyle("scheme", func(s *model.CanvasStyle) { s.Scheme = id }) })
+					a.later(func() { a.setScheme(id) })
 				}
 				chip.Children(func() {
 					ui.Row(c).Gap(2).PassThrough().Children(func() {

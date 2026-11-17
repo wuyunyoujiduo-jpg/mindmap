@@ -46,6 +46,7 @@ func isDocument(text string) bool {
 			heading = true
 		case listLine.MatchString(raw):
 		case raw != line && !strings.HasPrefix(line, "|"): // goes on from a list's item
+		case strings.HasPrefix(line, ">"): // a quote: an outline's note, as a map is written out (model.Markdown)
 		default:
 			prose = true
 		}
@@ -127,6 +128,8 @@ func parseDocument(text, title string) *model.File {
 				switch {
 				case listLine.MatchString(l):
 					block = append(block, l)
+				case strings.HasPrefix(t, ">") && l != t && len(block) > 0:
+					block = append(block, l) // a quote under an item: its note (model.ParseOutline)
 				case t != "" && l != t && len(block) > 0 && !strings.HasPrefix(t, "|") && !strings.HasPrefix(t, "```"):
 					block[len(block)-1] += " " + t // an item's line going on
 				default:

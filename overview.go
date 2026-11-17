@@ -102,7 +102,7 @@ func (a *app) overviewView(c *ui.Context) {
 					}
 				}
 			})
-			list := func(title string, tasks []model.TaskNode, col ui.Color) {
+			list := func(title string, tasks []model.TaskNode) {
 				if len(tasks) == 0 {
 					return
 				}
@@ -121,11 +121,11 @@ func (a *app) overviewView(c *ui.Context) {
 						}
 					}
 				})
-				_ = col
 			}
-			list("已逾期", late, t.Danger)
-			list("7 天内到期", dueSoon, t.Text)
-			list("近 7 天完成", recent, t.Text)
+			list("已逾期", late)
+			list("7 天内到期", dueSoon)
+			list("近 7 天完成", recent)
+
 			if all == 0 {
 				ui.Text(c, "这个导图还没有任务。选中节点，在右侧勾选「作为任务」即可。").TextColor(t.TextMuted)
 			}

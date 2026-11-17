@@ -69,12 +69,12 @@ var lines = []struct {
 type look struct {
 	style  model.CanvasStyle
 	scheme scheme
-	font   string
 	line   float32
 }
 
 func lookOf(s model.CanvasStyle) look {
-	l := look{style: s, scheme: schemeOf(s.Scheme), font: s.Font, line: 1.8}
+	l := look{style: s, scheme: schemeOf(s.Scheme), line: 1.8}
+
 	for _, w := range lines {
 		if w.id == s.Line {
 			l.line = w.width
@@ -118,7 +118,17 @@ func (a *app) setStyle(key string, fn func(s *model.CanvasStyle)) {
 	a.mutate("style:"+key+":"+d.ID, func() { fn(&d.Style) })
 }
 
+// setScheme gives the canvas shown a color scheme, its branches each a
+// color of it: a scheme chosen for a canvas of one color would have
+// changed the middle and nothing else. The one rule of both places a
+// scheme is chosen in, the canvas's column and the bar's popover, which
+// had each its own.
+func (a *app) setScheme(id string) {
+	a.setStyle("scheme", func(s *model.CanvasStyle) { s.Scheme, s.SingleColor = id, false })
+}
+
 // canvasPanel is the panel's 画布 tab: the shown canvas's structure,
+
 // color scheme, font and branches.
 func (a *app) canvasPanel(c *ui.Context) {
 	t := c.Theme()
@@ -158,8 +168,7 @@ func (a *app) canvasPanel(c *ui.Context) {
 					card.Border(2, t.Accent)
 				}
 				if card.Clicked() {
-					id := sc.id
-					a.setStyle("scheme", func(s *model.CanvasStyle) { s.Scheme, s.SingleColor = id, false })
+					a.setScheme(sc.id)
 				}
 				card.Children(func() {
 					ui.Box(c).Height(46).Draw(func(p *ui.Painter, r ui.Rect) {

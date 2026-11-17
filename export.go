@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"image"
 	"image/png"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,9 +21,39 @@ import (
 
 const exportScale = 2
 
-// askExportImage asks where to save the picture of the canvas shown.
+// A picture is no larger than this, however large the map: its longer
+// side in pixels, and all its pixels. A map of a thousand topics in a
+// column was 2918×49132 at twice its size, 1.47 GB to draw into, with the
+// window still for six seconds. A larger map is drawn at a smaller scale,
+// and the toast says so.
+const (
+	exportMaxSide   = 16384
+	exportMaxPixels = 32 << 20
+)
+
+// exportFit is the scale a map of w by h is drawn at: twice its size, or
+// what fits the picture's bounds.
+func exportFit(w, h float32) float32 {
+	s := float32(exportScale)
+	if side := max(w, h) * s; side > exportMaxSide {
+		s *= exportMaxSide / side
+	}
+	if px := float64(w*s) * float64(h*s); px > exportMaxPixels {
+		s *= float32(math.Sqrt(exportMaxPixels / px))
+	}
+	return s
+}
+
+// askExportImage asks where to save the picture of the canvas shown. The
+// canvas is drawn at once, the window's work; the picture is packed and
+// written away from it, the canvas's export key waiting meanwhile, and a
+// toast says what came of it.
 func (a *app) askExportImage() {
 	if a.doc == nil {
+		return
+	}
+	if a.imageBusy {
+		a.tell("上一张图片还在导出，等它好了再试")
 		return
 	}
 	a.commitEditIfAny()
@@ -36,22 +68,52 @@ func (a *app) askExportImage() {
 		if !strings.EqualFold(filepath.Ext(path), ".png") {
 			path += ".png"
 		}
-		data, err := a.exportImage()
-		if err == nil {
-			err = os.WriteFile(path, data, 0o644)
-		}
+		img, scale, err := a.drawImage()
 		if err != nil {
 			a.saveErr = "导出失败: " + err.Error()
 			return
 		}
-		a.plat.ShowInFolder(path)
+		a.imageBusy = true
+		a.async(func() (any, error) {
+			var buf bytes.Buffer
+			if err := png.Encode(&buf, img); err != nil {
+				return nil, err
+			}
+			return nil, os.WriteFile(path, buf.Bytes(), 0o644)
+		}, func(_ any, err error) {
+			a.imageBusy = false
+			if err != nil {
+				a.saveErr = "导出失败: " + err.Error()
+				return
+			}
+			a.plat.ShowInFolder(path)
+			if scale < exportScale {
+				a.tell(fmt.Sprintf("图片已导出。导图很大，按 %d%% 的大小画的，放大看会不够清楚", int(scale/exportScale*100+0.5)))
+			} else {
+				a.tell("图片已导出")
+			}
+		})
 	})
 }
 
 // exportImage draws the canvas shown into a PNG.
-func (a *app) exportImage() (data []byte, err error) {
+func (a *app) exportImage() ([]byte, error) {
+	img, _, err := a.drawImage()
+	if err != nil {
+		return nil, err
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// drawImage draws the canvas shown into a picture, and tells the scale it
+// was drawn at (exportFit).
+func (a *app) drawImage() (img *image.RGBA, scale float32, err error) {
 	if a.doc == nil {
-		return nil, fmt.Errorf("没有打开的导图")
+		return nil, 0, fmt.Errorf("没有打开的导图")
 	}
 	// What only the screen shows is put aside while drawing.
 	selected, boxes, vp, reveal := a.selected, a.boxes, a.vp, a.reveal
@@ -82,18 +144,17 @@ func (a *app) exportImage() (data []byte, err error) {
 		maxX, maxY = max(maxX, b.X+b.W), max(maxY, b.Y+b.H)
 	}
 	if first {
-		return nil, fmt.Errorf("导图是空的")
+		return nil, 0, fmt.Errorf("导图是空的")
 	}
 	a.exportCam.X, a.exportCam.Y = margin-minX, margin-minY
 	w, h := maxX-minX+2*margin, maxY-minY+2*margin
+	// The scale before the size: each draws a frame, and the size first
+	// drew the whole map once at its own size for nothing.
+	scale = exportFit(w, h)
+	tt.SetScale(scale)
 	tt.SetSize(int(w+0.5), int(h+0.5))
-	tt.SetScale(exportScale)
 	tt.Frame()
-	var buf bytes.Buffer
-	if err := png.Encode(&buf, tt.Image()); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+	return tt.Image(), scale, nil
 }
 
 // exportMenu is the menu of the canvas's export button.

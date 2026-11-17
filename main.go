@@ -599,24 +599,27 @@ func main() {
 				item("技能", "CmdOrCtrl+Alt+4", a.showSkills),
 				item("记一条…", "CmdOrCtrl+J", a.openBar),
 				mygo.Separator(),
-				item("聚焦所选分支", "Alt+Enter", func() { a.focusOn(a.selected) }),
-				item("退出聚焦", "", func() { a.focusOn("") }),
+				// What changes the map, or how it shows, is done to the map
+				// seen: with 今天, 收集 or 技能 over it, these show it first
+				// (menuOnMap, menuView), where they changed it behind the page.
+				item("聚焦所选分支", "Alt+Enter", func() { a.menuOnMap(func() { a.focusOn(a.selected) }) }),
+				item("退出聚焦", "", func() { a.menuOnMap(func() { a.focusOn("") }) }),
 				mygo.Separator(),
-				item("全部折叠", "", func() { a.foldAll() }),
-				item("全部展开", "Alt+0", func() { a.expandTo(0) }),
-				item("展开到第 1 层", "Alt+1", func() { a.expandTo(1) }),
-				item("展开到第 2 层", "Alt+2", func() { a.expandTo(2) }),
-				item("展开到第 3 层", "Alt+3", func() { a.expandTo(3) }),
+				item("全部折叠", "", func() { a.menuOnMap(a.foldAll) }),
+				item("全部展开", "Alt+0", func() { a.menuOnMap(func() { a.expandTo(0) }) }),
+				item("展开到第 1 层", "Alt+1", func() { a.menuOnMap(func() { a.expandTo(1) }) }),
+				item("展开到第 2 层", "Alt+2", func() { a.menuOnMap(func() { a.expandTo(2) }) }),
+				item("展开到第 3 层", "Alt+3", func() { a.menuOnMap(func() { a.expandTo(3) }) }),
 			}},
 			{Label: "视图", Submenu: []*mygo.MenuItem{
-				item("导图", "CmdOrCtrl+1", func() { a.showView(viewMap) }),
-				item("大纲", "CmdOrCtrl+2", func() { a.showView(viewOutline) }),
-				item("看板", "CmdOrCtrl+3", func() { a.showView(viewBoard) }),
-				item("时间线", "CmdOrCtrl+4", func() { a.showView(viewTimeline) }),
-				item("总览", "CmdOrCtrl+5", func() { a.showView(viewOverview) }),
-				item("图解", "CmdOrCtrl+6", func() { a.showView(viewDiagram) }),
+				item("导图", "CmdOrCtrl+1", func() { a.menuView(viewMap) }),
+				item("大纲", "CmdOrCtrl+2", func() { a.menuView(viewOutline) }),
+				item("看板", "CmdOrCtrl+3", func() { a.menuView(viewBoard) }),
+				item("时间线", "CmdOrCtrl+4", func() { a.menuView(viewTimeline) }),
+				item("总览", "CmdOrCtrl+5", func() { a.menuView(viewOverview) }),
+				item("图解", "CmdOrCtrl+6", func() { a.menuView(viewDiagram) }),
 				mygo.Separator(),
-				item("在导图中查找", "CmdOrCtrl+F", func() { a.searchOpen = true; a.mode = viewMap }),
+				item("在导图中查找", "CmdOrCtrl+F", func() { a.menuView(viewMap); a.searchOpen = true }),
 				mygo.Separator(),
 				item("显示/隐藏右侧面板", "CmdOrCtrl+Alt+I", a.togglePanel),
 				mygo.Separator(),
@@ -630,12 +633,8 @@ func main() {
 				item("回到中心", "CmdOrCtrl+Shift+0", a.recenter),
 				mygo.Separator(),
 				item("开始演说", "CmdOrCtrl+Enter", func() { a.startPresenting("") }),
-				item("新建画布", "CmdOrCtrl+T", func() {
-					if a.file != nil {
-						a.mode = viewMap
-						a.addSheet()
-					}
-				}),
+				item("新建画布", "CmdOrCtrl+T", a.menuNewSheet),
+
 				mygo.Separator(),
 				{Role: mygo.RoleToggleFullScreen},
 			}},

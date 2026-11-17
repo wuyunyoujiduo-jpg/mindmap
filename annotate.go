@@ -115,7 +115,93 @@ func (a *app) addFloatingClip(id string, at model.Point) {
 		n.Links = []string{clipScheme + cl.ID}
 	})
 	a.selected, a.multi = n.ID, nil
-	a.tellUndo("已放到画布上，链接着收集里的这一条", a.undo)
+	topic := n.ID
+	a.tellUndo("已放到画布上，链接着收集里的这一条", a.undoTopic("撤销放到画布上",
+		func(f *model.File) bool { d := f.SheetOf(topic); return d != nil && d.IsFloating(topic) },
+		func(f *model.File) { _, _ = f.SheetOf(topic).Delete(topic) }))
+}
+
+// undoTopic is the 撤销 of a toast that takes back one change to a topic of
+// the open map, by the topic's ID: can tells, of the map as it is by then,
+// whether the topic is still as the change left it, and back undoes the
+// change there. It is a step of its own, on whichever map shows by then
+// (editMapAt), and nothing when there is nothing left to take back. An
+// undo of the history, which these toasts had, took back whatever was
+// done last: another edit made meanwhile, or one of another map.
+func (a *app) undoTopic(note string, can func(f *model.File) bool, back func(f *model.File)) func() {
+	path := a.path
+	return func() {
+		if f := a.mapFile(path); f == nil || !can(f) {
+			return
+		}
+		_ = a.editMapAt(path, note, func(f *model.File) error {
+			if can(f) {
+				back(f)
+			}
+			return nil
+		})
+		if a.path == path && a.doc != nil {
+			if n, _ := a.doc.Find(a.selected); n == nil { // what was chosen went with it
+				a.selected, a.multi = a.shownRoot().ID, nil
+			}
+		}
+	}
+}
+
+// stepBack is the 撤销 of a toast for the step just made, whatever it
+// changed: the history's undo, but only while that step is still the last
+// thing done to the map, and the map still the one shown.
+func (a *app) stepBack() func() {
+	path, edits := a.path, a.edits
+	return func() {
+		if a.path == path && a.edits == edits {
+			a.undo()
+		}
+	}
+}
+
+// summarized are the topics of the open map's summaries, by their IDs,
+// before a change (settleSummaries).
+func (a *app) summarized() []string {
+	var ids []string
+	if a.file != nil {
+		a.file.Walk(func(n *model.Node) {
+			if t := n.SummaryTopic(); t != nil {
+				ids = append(ids, t.ID)
+			}
+		})
+	}
+	return ids
+}
+
+// settleSummaries sees, after a change, to the summaries left with no
+// child to sum up: their topics are children now (the model's Delete, Move
+// and Float do so; SettleSummaries for what was taken off otherwise), and
+// the user is told, with the way back for the whole step. were are the
+// summaries' topics before the change.
+func (a *app) settleSummaries(were []string) {
+	if a.file == nil {
+		return
+	}
+	a.file.SettleSummaries()
+	for _, id := range were {
+		d := a.file.SheetOf(id)
+		if d == nil {
+			continue
+		}
+		if n, p := d.Find(id); p != nil && p.SummaryTopic() != n {
+			a.tellUndo("「"+cmpOr(p.Title, "未命名")+"」没有别的子主题了，概要「"+cmpOr(n.Title, "未命名")+"」改成了它的子主题", a.stepBack())
+			return
+		}
+	}
+}
+
+// rootSummaryShown tells whether a structure draws the summary of the
+// topic in the canvas's middle: those that grow one way do, a logic chart,
+// a bracket chart and an org chart; a mind map, with branches on both
+// sides, a timeline and a fishbone have nowhere for it.
+func rootSummaryShown(s model.Structure) bool {
+	return s == model.StructureLogic || s == model.StructureBracket || s == model.StructureOrg
 }
 
 // nodeAt is the topic at a point of the map, in the layout's axes, other
@@ -141,8 +227,56 @@ func (a *app) joinFloating(id, to string) {
 	if n == nil || t == nil || !a.doc.IsFloating(id) {
 		return
 	}
+	var at model.Point
+	if n.Pos != nil {
+		at = *n.Pos
+	}
 	a.moveNode(id, to)
-	a.tellUndo("已挂到「"+cmpOr(t.Title, "未命名")+"」下", a.undo)
+	// 撤销 floats it again where it was, while it is still under that topic.
+	a.tellUndo("已挂到「"+cmpOr(t.Title, "未命名")+"」下", a.undoTopic("撤销挂到主题下",
+		func(f *model.File) bool {
+			d := f.SheetOf(id)
+			if d == nil {
+				return false
+			}
+			_, p := d.Find(id)
+			return p != nil && p.ID == to
+		},
+		func(f *model.File) { _ = f.SheetOf(id).Float(id, at) }))
+}
+
+// floatTopic takes a topic of the tree out of it, as a floating topic at
+// a place, and returns the 撤销 of it: back under the topic it was under,
+// at its place among the children, and that topic's summary, made a child
+// when this was the last (settleSummaries), a summary again. It is nil
+// when the topic cannot float: the middle, a floating topic, a summary's.
+func (a *app) floatTopic(id string, at model.Point) func() {
+	n, p := a.doc.Find(id)
+	if n == nil || p == nil || a.doc.IsSummaryTopic(id) {
+		return nil
+	}
+	parent, i, sum := p.ID, slices.Index(p.Children, n), ""
+	if t := p.SummaryTopic(); t != nil {
+		sum = t.ID
+	}
+	a.mutate("", func() { _ = a.doc.Float(id, at) })
+	return a.undoTopic("撤销设为自由主题",
+		func(f *model.File) bool {
+			d := f.SheetOf(id)
+			if d == nil || !d.IsFloating(id) {
+				return false
+			}
+			np, _ := d.Find(parent)
+			return np != nil
+		},
+		func(f *model.File) {
+			d := f.SheetOf(id)
+			if d.Move(id, parent, i) == nil && sum != "" {
+				if np, _ := d.Find(parent); np != nil {
+					np.Summarize(sum)
+				}
+			}
+		})
 }
 
 // floatDropped takes a topic dragged out of the tree and let go on the
@@ -159,21 +293,35 @@ func (a *app) floatDropped(id string, x, y float32) {
 		return
 	}
 	at.X, at.Y = at.X-b.W/2, at.Y-b.H/2 // the pointer at its middle
-	a.mutate("", func() { _ = a.doc.Float(id, at) })
+	back := a.floatTopic(id, at)
+	if back == nil {
+		return // a summary's topic stays by what it sums up
+	}
 	a.selected, a.multi = id, nil
-	a.tellUndo("已设为自由主题，拖回节点上可以挂回去", a.undo)
+	a.tellUndo("已设为自由主题，拖回节点上可以挂回去", back)
 }
 
 // floatNode takes a node out of the tree, as a floating topic beside where
-// it was.
+// it was. With a branch alone on the canvas (focusOn), where no floating
+// topic shows, it says where the topic went: it was gone without a word.
 func (a *app) floatNode(n *model.Node) {
+	focused := a.focusNode() != nil
 	root := a.boxes.Boxes[a.doc.Root.ID]
 	b, ok := a.boxes.Boxes[n.ID]
 	at := model.Point{X: b.X - root.X + 40, Y: b.Y - root.Y + 60}
-	if !ok {
+	if !ok || focused { // the layout shown is the branch's, not the map's
 		at = model.Point{X: root.W + 200, Y: -120}
 	}
-	a.mutate("", func() { _ = a.doc.Float(n.ID, at) })
+	back := a.floatTopic(n.ID, at)
+	if back == nil {
+		return
+	}
+	if focused {
+		a.selected, a.multi = a.shownRoot().ID, nil
+		a.tellUndo("已设为自由主题：它在整张导图上，退出聚焦就能看到", back)
+		return
+	}
+	a.tellUndo("已设为自由主题，拖回节点上可以挂回去", back)
 }
 
 // Relations: a node's menu starts one, and a click on another ends it.
@@ -616,14 +764,17 @@ func (a *app) annotationMenu(m *ui.Menu, n *model.Node, depth int) {
 		if m.Item("关联线到…").Shortcut(ui.Cmd|ui.Shift, ui.KeyL).Chosen() {
 			a.later(func() { a.startRelation(n) })
 		}
-		if m.Item("概要").Disabled(len(n.Children) == 0 || n.Summary != nil).Chosen() {
+		// Not of the topic in the middle where the structure draws none
+		// there: it was made, edited, and nowhere to be seen.
+		unseen := n == a.shownRoot() && !rootSummaryShown(a.doc.Structure)
+		if m.Item("概要").Disabled(len(n.Children) == 0 || n.Summary != nil || unseen).Chosen() {
 			a.later(func() { a.addSummary(n) })
 		}
 		if m.Item("外框").Disabled(n.Boundary != nil).Chosen() {
 			a.later(func() { a.mutate("", func() { n.Boundary = &model.Mark{} }) })
 		}
 		m.Separator()
-		if depth > 0 && !a.doc.IsFloating(n.ID) && m.Item("设为自由主题").Chosen() {
+		if depth > 0 && !a.doc.IsFloating(n.ID) && !a.doc.IsSummaryTopic(n.ID) && m.Item("设为自由主题").Chosen() {
 			a.later(func() { a.floatNode(n) })
 		}
 		if a.doc.IsFloating(n.ID) && m.Item("挂到节点下…").Chosen() {

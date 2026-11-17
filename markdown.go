@@ -181,60 +181,101 @@ func inlineSpans(text string, size float32, color, accent, codeBg ui.Color, base
 	return spans
 }
 
-// markdownView shows a Markdown text at the font size.
+// mdColors are the colors a Markdown text shows in: its words, what is
+// quieter (a list's marks, a quote), its links, the ground of its code,
+// and the lines of its quotes and tables.
+type mdColors struct{ text, muted, accent, code, line ui.Color }
+
+// markdownView shows a Markdown text at the font size, in the theme's
+// colors.
 func markdownView(c *ui.Context, src string, size float32) {
 	t := c.Theme()
-	codeBg := t.Text.Alpha(0.08)
+	markdownIn(c, src, size, mdColors{t.Text, t.TextMuted, t.Accent, t.Text.Alpha(0.08), t.Border})
+}
+
+// markdownIn shows a Markdown text at the font size in colors of its
+// own, as on a slide, whose ground is not the theme's; its gaps and
+// indents grow with a size larger than a page's text.
+func markdownIn(c *ui.Context, src string, size float32, col mdColors) {
+	t := c.Theme()
+	u := max(1, size/13) // how much larger than a page's text
 	line := func(c *ui.Context, text string, size float32, color ui.Color, bold bool) ui.Element {
-		spans := inlineSpans(text, size, color, t.Accent, codeBg, mdSpanStyle{bold: bold})
+		spans := inlineSpans(text, size, color, col.accent, col.code, mdSpanStyle{bold: bold})
 		if len(spans) == 0 {
 			spans = []ui.Span{{Text: " ", Size: size}}
 		}
 		return ui.RichText(c, spans...).Wrap().Selectable()
 	}
-	ui.Column(c).Gap(6).FillWidth().Children(func() {
+	ui.Column(c).Gap(6 * u).FillWidth().Children(func() {
 		for i, b := range parseMarkdown(src) {
 			c := c.Key(i)
 			switch b.kind {
 			case "h":
-				hs := size + max(0, float32(4-b.level))
-				line(c, b.text, hs, t.Text, true).Margin(4, 0, 0)
+				hs := size + max(0, float32(4-b.level))*u
+				line(c, b.text, hs, col.text, true).Margin(4*u, 0, 0)
 			case "li", "ol":
 				mark := "•"
 				if b.kind == "ol" {
 					mark = b.mark
 				}
-				ui.Row(c).Gap(6).Padding(0, 0, 0, float32(b.level)*14).Children(func() {
-					ui.Text(c, mark).FontSize(size).TextColor(t.TextMuted).Shrink(0)
-					line(c, b.text, size, t.Text, false).Grow(1)
+				ui.Row(c).Gap(6*u).Padding(0, 0, 0, float32(b.level)*14*u).Children(func() {
+					ui.Text(c, mark).FontSize(size).TextColor(col.muted).Shrink(0)
+					line(c, b.text, size, col.text, false).Grow(1)
 				})
 			case "quote":
-				ui.Box(c).Padding(2, 0, 2, 10).BorderWidth(0, 0, 0, 3).BorderColor(t.Border).FillWidth().Children(func() {
-					line(c, b.text, size, t.TextMuted, false)
+				ui.Box(c).Padding(2*u, 0, 2*u, 10*u).BorderWidth(0, 0, 0, 3*u).BorderColor(col.line).FillWidth().Children(func() {
+					line(c, b.text, size, col.muted, false)
 				})
 			case "code":
-				ui.Box(c).Padding(8, 10).Radius(6).Background(codeBg).FillWidth().Children(func() {
+				ui.Box(c).Padding(8*u, 10*u).Radius(6 * u).Background(col.code).FillWidth().Children(func() {
 					ui.RichText(c, highlight(b.text, b.mark, size-1, t)...).Font("monospace").Wrap().Selectable()
 				})
 			case "hr":
 				ui.Divider(c)
 			case "table":
-				ui.Column(c).Radius(6).Border(1, t.Border).FillWidth().Children(func() {
+				ui.Column(c).Radius(6*u).Border(1, col.line).FillWidth().Children(func() {
 					for r, row := range b.rows {
-						rr := ui.Row(c.Key(r)).Padding(4, 8).Gap(8)
+						rr := ui.Row(c.Key(r)).Padding(4*u, 8*u).Gap(8 * u)
 						if r == 0 {
-							rr.Background(codeBg)
+							rr.Background(col.code)
 						}
 						rr.Children(func() {
 							for k, cell := range row {
-								line(c.Key(k), cell, size-1, t.Text, r == 0).Grow(1).Basis(0)
+								line(c.Key(k), cell, size-1, col.text, r == 0).Grow(1).Basis(0)
 							}
 						})
 					}
 				})
 			default:
-				line(c, b.text, size, t.Text, false)
+				line(c, b.text, size, col.text, false)
 			}
 		}
 	})
+}
+
+// markdownPlain is a Markdown text as its words alone, a block a line:
+// for where a few lines of it show small, as on a slide's card.
+func markdownPlain(src string) string {
+	var lines []string
+	for _, b := range parseMarkdown(src) {
+		text := b.text
+		switch b.kind {
+		case "hr", "table":
+			continue
+		case "code":
+		default:
+			var s strings.Builder
+			for _, sp := range inlineSpans(b.text, 12, ui.Color{}, ui.Color{}, ui.Color{}, mdSpanStyle{}) {
+				s.WriteString(sp.Text)
+			}
+			text = s.String()
+		}
+		if b.kind == "li" || b.kind == "ol" {
+			text = "· " + text
+		}
+		if text = strings.TrimSpace(text); text != "" {
+			lines = append(lines, text)
+		}
+	}
+	return strings.Join(lines, "\n")
 }

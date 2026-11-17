@@ -40,7 +40,87 @@ import (
 type diaFile struct {
 	Path    string    `json:"path"` // of the map, relative to the maps folder, with slashes
 	Updated time.Time `json:"updated"`
+	// Gone is since when the set's topic was found in no map (sweepDias):
+	// kept diaKeep longer, for the topic may come back, then deleted.
+	Gone *time.Time `json:"gone,omitempty"`
 	diagram.Set
+}
+
+// A set is of a topic, and a topic deleted left its set for ever: the
+// folder only grew, and was synced whole. But the topic may come back, by
+// an undo, a paste of what was cut (carryDias keeps the set under the ID
+// cut on purpose), a version restored: so a set whose topic is in no map
+// is marked, kept a month more, and deleted then.
+const (
+	diaKeep       = 30 * 24 * time.Hour
+	diaSweepEvery = 24 * time.Hour
+)
+
+// sweepDias looks, as a folder is opened and once a day after, for the
+// sets whose topic is in no map of the folder. The maps are read away from
+// the window's work, the open one taken as it is. What could not be read
+// is not gone: a map that will not load ends the round, and a set whose
+// map is there but was not among those read is left be.
+func (a *app) sweepDias() {
+	now := a.now()
+	if a.diaSweptFor == a.dir && now.Sub(a.diaSwept) < diaSweepEvery {
+		return
+	}
+	a.diaSwept, a.diaSweptFor = now, a.dir
+	if len(a.dias) == 0 || len(a.files) == 0 {
+		return
+	}
+	dir := a.dir
+	paths := make([]string, len(a.files))
+	for i, f := range a.files {
+		paths[i] = f.Path
+	}
+	a.async(func() (any, error) {
+		ids := map[string]bool{}
+		for _, p := range paths {
+			f, err := model.Load(p)
+			if err != nil {
+				return nil, err
+			}
+			f.Walk(func(n *model.Node) { ids[n.ID] = true })
+		}
+		return ids, nil
+	}, func(v any, err error) {
+		ids, _ := v.(map[string]bool)
+		if err != nil || ids == nil || a.dir != dir || a.dias == nil {
+			return
+		}
+		if a.file != nil {
+			a.file.Walk(func(n *model.Node) { ids[n.ID] = true })
+		}
+		sets := make([]*diaFile, 0, len(a.dias))
+		for _, f := range a.dias {
+			sets = append(sets, f)
+		}
+		for _, f := range sets {
+			switch {
+			case ids[f.Node]:
+				if f.Gone != nil { // it came back
+					f.Gone = nil
+					_ = a.writeDia(f)
+				}
+			case !slices.Contains(paths, filepath.Join(dir, filepath.FromSlash(f.Path))) && !gone(filepath.Join(dir, filepath.FromSlash(f.Path))):
+				// Its map is there and was not read: not known.
+			case f.Gone == nil:
+				at := now
+				f.Gone = &at
+				_ = a.writeDia(f)
+			case now.Sub(*f.Gone) >= diaKeep:
+				a.dropDia(f.Node)
+			}
+		}
+	})
+}
+
+// gone tells whether a file is known not to be there.
+func gone(path string) bool {
+	_, err := os.Stat(path)
+	return errors.Is(err, os.ErrNotExist)
 }
 
 // The ways a set is read.
@@ -101,6 +181,7 @@ func (a *app) diaDir() string { return filepath.Join(a.dir, ".library", "diagram
 // loadDias reads the sets again when their folder changed: when one was
 // written, or the sync brought some.
 func (a *app) loadDias() {
+	defer a.sweepDias() // once a day, those of topics that are gone
 	// Looked at once a second, not at every topic of every frame: what
 	// the app writes itself it knows of at once (writeDia).
 	if a.dias != nil && a.diaFor == a.dir && time.Since(a.diaLooked) < time.Second {
@@ -573,6 +654,13 @@ func (a *app) drawDia(node, told string) {
 		}
 		set.Node, set.Title, set.Drawn, set.Seen, set.Told = node, title, a.now(), seen, strings.TrimSpace(told)
 		set.Partial = partial
+		// The map is where it is now, not where it was when the AI was
+		// asked: renamed meanwhile, as a new title of its middle does, the
+		// set was kept under the old path and not seen until the map was
+		// opened again (adoptDias).
+		if a.file != nil && a.file.Node(node) != nil {
+			path, key = a.path, a.mapKey(a.path)
+		}
 		f := &diaFile{Path: key, Set: *set}
 		if err := a.writeDia(f); err != nil {
 			a.diaErr = "保存图解失败：" + err.Error()
@@ -688,13 +776,15 @@ func (a *app) diaSource(id string) {
 func (a *app) carryDias(ids map[string]string) {
 	a.loadDias()
 	key := a.mapKey(a.path)
-	for from := range ids {
+	for from, to := range ids {
 		f := a.dias[from]
-		if f == nil {
-			continue
+		if f == nil || from == to && f.Path == key {
+			continue // none, or the topic is itself still, in its map: its set is its own
 		}
 		// The set stays under the ID the branch had as well: undone, the
-		// cut brings the branch back by that ID, and its set is there.
+		// cut brings the branch back by that ID, and its set is there. (A
+		// branch pasted by its own IDs into another map takes it along,
+		// as one moved there does: moveDiasTo.)
 		moved := diaFile{Path: key, Set: f.Set.Renamed(ids)}
 		_ = a.writeDia(&moved)
 	}
