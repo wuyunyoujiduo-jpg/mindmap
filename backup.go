@@ -50,7 +50,7 @@ func zipFolder(dir, dst string, skip ...string) error {
 			// backup: put back with it, files as they were then read as
 			// changed in the repository alone, and the next sync brought
 			// back what the backup was restored to be rid of.
-			if path != root && (rel == ".sync" || slices.Contains(skip, filepath.Join(dir, rel))) {
+			if path != root && (rel == ".sync" || slices.Contains(skip, filepath.Join(dir, rel)) || slices.Contains(skip, path)) {
 				return filepath.SkipDir
 			}
 			return nil

@@ -34,7 +34,8 @@ func SearchText(l *Library, query, category string, limit int, qv []float32, mod
 // that matches the query. It is what an AI reads of it, the app's and an
 // agent's alike: what looks like a secret in it, or is one sealed, is
 // dots (Mask), before a part is cut out of it, which could cut a secret
-// in two.
+// in two; each part by itself, for over the whole a rule ran from a
+// title into the words the app puts after it.
 func Brief(c *Clip, query string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "[%s] %s（%s", c.ID, c.Label(), KindLabel(c.Kind))
@@ -49,10 +50,10 @@ func Brief(c *Clip, query string) string {
 		b.WriteString("  网址：" + c.URL + "\n")
 	}
 	if c.Desc != "" {
-		b.WriteString("  说明：" + c.Desc + "\n")
+		b.WriteString("  说明：" + Mask(c.Desc) + "\n")
 	}
 	if c.Summary != "" {
-		b.WriteString("  摘要：" + c.Summary + "\n")
+		b.WriteString("  摘要：" + Mask(c.Summary) + "\n")
 	}
 	if c.Note != "" {
 		b.WriteString("  备注：" + Excerpt(Mask(c.Note), query, 200) + "\n")
@@ -60,7 +61,7 @@ func Brief(c *Clip, query string) string {
 	if c.Text != "" {
 		b.WriteString("  片段：" + Excerpt(Mask(c.Text), query, 300) + "\n")
 	}
-	return Mask(b.String())
+	return b.String()
 }
 
 // Full is a clip with up to n characters of its text, its secrets in
@@ -77,10 +78,10 @@ func Full(c *Clip, n int) string {
 		b.WriteString("  同义词：" + strings.Join(c.Synonyms, "、") + "\n")
 	}
 	if c.Analysis != "" {
-		b.WriteString("\n分析：\n" + c.Analysis + "\n")
+		b.WriteString("\n分析：\n" + Mask(c.Analysis) + "\n")
 	}
 	if c.Note != "" {
-		b.WriteString("\n备注：\n" + c.Note + "\n")
+		b.WriteString("\n备注：\n" + Mask(c.Note) + "\n")
 	}
 	if c.Text != "" {
 		text := []rune(Mask(c.Text))
@@ -89,5 +90,5 @@ func Full(c *Clip, n int) string {
 		}
 		b.WriteString("\n全文：\n" + string(text) + "\n")
 	}
-	return Brief(c, "") + Mask(b.String())
+	return Brief(c, "") + b.String()
 }

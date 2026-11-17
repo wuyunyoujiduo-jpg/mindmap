@@ -761,6 +761,7 @@ func (a *app) flush() {
 		// changes made here are kept as a version to restore.
 		a.keepVersion(versions.Conflict)
 		a.conflict, a.dirty = false, false
+		a.hist = model.NewHistory(200) // its steps are of the changes left, not of the file's version
 	}
 	if a.dirty {
 		a.save()

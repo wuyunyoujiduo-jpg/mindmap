@@ -95,10 +95,12 @@ func (a *app) taskToMemo(it taskItem, keep bool) {
 		return
 	}
 	err := a.editMapAt(it.path, "任务改成灵感", func(f *model.File) error {
-		for _, d := range f.Sheets {
-			if dropNode(d.Root, it.node.ID) {
-				break
-			}
+		// From wherever it is on its canvas: a floating topic, which is a
+		// task of the lists as any other, and a summary's, are not under
+		// the central topic's children.
+		if d := f.SheetOf(it.node.ID); d != nil {
+			_, err := d.Delete(it.node.ID)
+			return err
 		}
 		return nil
 	})
@@ -115,20 +117,6 @@ func (a *app) taskToMemo(it taskItem, keep bool) {
 
 // tagInTitle is a tag written in a thought's words.
 var tagInTitle = regexp.MustCompile(`#[^\s#]+`)
-
-// dropNode removes the node of an id from below n.
-func dropNode(n *model.Node, id string) bool {
-	for i, ch := range n.Children {
-		if ch.ID == id {
-			n.Children = slices.Delete(n.Children, i, i+1)
-			return true
-		}
-		if dropNode(ch, id) {
-			return true
-		}
-	}
-	return false
-}
 
 // taskClips are the clips a task links to.
 func (a *app) taskClips(n *model.Node) []*library.Clip {

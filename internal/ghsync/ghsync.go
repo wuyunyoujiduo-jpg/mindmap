@@ -355,16 +355,18 @@ func blobSHA(data []byte) string {
 
 // scan finds the folder's files and their SHAs, and the mounted
 // folders', under their paths.
-func scan(dir string, s *state, mounts map[string]string) (files map[string]string, skipped []string, err error) {
-	files = map[string]string{}
+func scan(dir string, s *state, mounts map[string]string) (files map[string]string, skipped []string, held map[string]bool, err error) {
+	files, held = map[string]string{}, map[string]bool{}
 	hashes := map[string]cached{}
 	// What cannot be read is not gone: it is as it was when both sides
 	// last agreed, so that the sync neither deletes it from the repository
 	// (and then from the other computer) nor sends it. A file locked by
 	// another program, a folder whose permission was lost, a file the
-	// cloud has not brought down were all read as deleted.
+	// cloud has not brought down were all read as deleted. Such a path is
+	// held: this round leaves it be on both sides (syncOnce).
 	asBefore := func(rel string, dir bool) {
 		if !dir {
+			held[rel] = true
 			if sha, ok := s.Base[rel]; ok {
 				files[rel] = sha
 			}
@@ -372,7 +374,7 @@ func scan(dir string, s *state, mounts map[string]string) (files map[string]stri
 		}
 		for path, sha := range s.Base {
 			if strings.HasPrefix(path, rel+"/") {
-				files[path] = sha
+				files[path], held[path] = sha, true
 			}
 		}
 	}
@@ -386,6 +388,10 @@ func scan(dir string, s *state, mounts map[string]string) (files map[string]stri
 			rel, _ := filepath.Rel(root, p)
 			rel = filepath.ToSlash(rel)
 			if rel == "." {
+				if err != nil && prefix != "" { // a folder mounted, not read: all of it as before
+					asBefore(prefix, true)
+					return nil
+				}
 				return err // the folder itself not read: no sync, rather than one of nothing
 			}
 			if prefix != "" {
@@ -438,12 +444,15 @@ func scan(dir string, s *state, mounts map[string]string) (files map[string]stri
 	}
 	err = walk(dir, "", true)
 	for prefix, d := range mounts {
-		if _, e := os.Stat(d); e == nil && err == nil {
+		switch _, e := os.Stat(d); {
+		case e == nil && err == nil:
 			err = walk(d, prefix, false)
+		case e != nil && !errors.Is(e, fs.ErrNotExist): // there, and not to be looked at
+			asBefore(prefix, true)
 		}
 	}
 	s.Hashes = hashes
-	return files, skipped, err
+	return files, skipped, held, err
 }
 
 // Sync merges the folder dir and the repository, as the package says.
@@ -483,7 +492,7 @@ func syncOnce(ctx context.Context, dir string, cfg Config, progress func(string)
 	}
 	s := loadState(dir, cfg)
 	progress("正在检查本地文件…")
-	local, skipped, err := scan(dir, s, cfg.Mounts)
+	local, skipped, held, err := scan(dir, s, cfg.Mounts)
 	if err != nil {
 		return res, err
 	}
@@ -525,12 +534,35 @@ func syncOnce(ctx context.Context, dir string, cfg Config, progress func(string)
 	}
 	type conflict struct{ path, base, local, remote string }
 	var conflicts []conflict
+	// again is set when a path was left as it was though the repository
+	// has another version of it: the commit is then not remembered as
+	// read, so that the next sync reads the repository anew and sees it.
+	// (Remembered, with the path's base moved to the repository's, the
+	// file here read as changed here alone once it could be read again,
+	// and was sent over the other computer's work.)
+	again := false
+	var againMu sync.Mutex
+	leave := func(p string) {
+		againMu.Lock()
+		defer againMu.Unlock()
+		if b := s.Base[p]; b != "" {
+			merged[p] = b
+		} else {
+			delete(merged, p)
+		}
+		again = true
+	}
 	for p := range paths {
 		if slices.Contains(skipped, p) {
 			keep(p, remote[p])
 			continue
 		}
 		b, l, r := s.Base[p], local[p], remote[p]
+		if held[p] { // not read this round: neither sent, pulled nor deleted
+			keep(p, b)
+			again = again || r != b
+			continue
+		}
 		switch {
 		case l == r:
 			keep(p, l)
@@ -577,7 +609,8 @@ func syncOnce(ctx context.Context, dir string, cfg Config, progress func(string)
 			return err
 		}
 		if !unchanged(cfg.local(dir, p), local[p]) {
-			return nil // changed while syncing: the next sync takes it
+			leave(p) // changed while syncing: the next sync takes it, against what both had
+			return nil
 		}
 		return writeAtomic(cfg.local(dir, p), data)
 	}); err != nil {
@@ -588,6 +621,8 @@ func syncOnce(ctx context.Context, dir string, cfg Config, progress func(string)
 	for _, p := range unlink {
 		if unchanged(cfg.local(dir, p), local[p]) {
 			_ = os.Remove(cfg.local(dir, p))
+		} else {
+			leave(p)
 		}
 	}
 	res.Deleted += len(unlink)
@@ -710,6 +745,9 @@ func syncOnce(ctx context.Context, dir string, cfg Config, progress func(string)
 		s.Tree = tree
 	}
 	s.Commit, s.Base, s.At, s.Sent = head, merged, now(), nil
+	if again {
+		s.Commit = "" // the repository is read anew next time
+	}
 	// The files written are hashed again next time.
 	for _, p := range res.Written {
 		delete(s.Hashes, p)

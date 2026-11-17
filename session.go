@@ -140,5 +140,9 @@ func (a *app) renameViews(follow func(string) string) {
 	for p, h := range a.hists {
 		hists[follow(p)] = h
 	}
-	a.views, a.hists = views, hists
+	at := map[string]time.Time{}
+	for p, t := range a.histAt {
+		at[follow(p)] = t
+	}
+	a.views, a.hists, a.histAt = views, hists, at
 }

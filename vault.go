@@ -340,9 +340,15 @@ func (a *app) copyOpened(text string, sealed bool) {
 }
 
 // sealedOut is a clip's words as they go elsewhere, to a map's topic or a
-// task: what is sealed in them, or looks like a secret, in dots, as its
-// card shows it. The secret stays in the clip.
-func sealedOut(s string) string { return library.Mask(s) }
+// task: what is sealed in them in dots. The secret stays in the clip.
+// (Not all that the rules take for a secret: the words go there for
+// good, and the rules take some plain words for one, docs/审查清单.md.)
+func sealedOut(s string) string {
+	if vault.Has(s) || library.Marked(s) {
+		return library.Mask(s)
+	}
+	return s
+}
 
 // lockWhole seals the whole of a clip's text and note, or back.
 func (a *app) lockWhole(clip *library.Clip, on bool) {

@@ -863,7 +863,9 @@ func (a *app) saveTaskDrafts() {
 		// had changed of the task meanwhile (and, a name that was only
 		// trimmed never being the task's, asked for a frame without end).
 		title, note := strings.TrimSpace(a.tasks.title), a.tasks.note
-		setTitle := title != "" && title != a.tasks.titleWas && title != it.node.Title
+		// Trimmed on both sides: a name kept with a space at its end was
+		// written again, trimmed, by details merely opened.
+		setTitle := title != "" && title != strings.TrimSpace(a.tasks.titleWas) && title != strings.TrimSpace(it.node.Title)
 		setNote := note != a.tasks.noteWas && note != it.node.Note
 		nowTitle, nowNote := it.node.Title, it.node.Note
 		if setTitle || setNote {
@@ -917,7 +919,7 @@ func (a *app) taskDetail(c *ui.Context, it taskItem) {
 		ui.Row(c.Key("task-detail-head")).Height(pageHeadHeight).Padding(16, 12, 0, 20).Gap(10).AlignItems(ui.Center).Shrink(0).Children(func() {
 			a.taskCircle(c, it, 20)
 			in := inlineInput(c, &a.tasks.title, textTitle, true, "任务名", "任务名").Grow(1).Shrink(1).MinWidth(0)
-			if in.Submitted() || !in.Focused() && (strings.TrimSpace(a.tasks.title) != a.tasks.titleWas || it.node.Title != a.tasks.titleWas) {
+			if in.Submitted() || !in.Focused() && (strings.TrimSpace(a.tasks.title) != strings.TrimSpace(a.tasks.titleWas) || it.node.Title != a.tasks.titleWas) {
 				a.later(a.saveTaskDrafts)
 			}
 			if iconButton(c, iconClose, "关闭详情", "关闭", 26, true).Clicked() {

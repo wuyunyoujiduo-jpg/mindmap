@@ -738,4 +738,27 @@ func TestUnreadableIsNotDeleted(t *testing.T) {
 	if res := sync1(t, a, cfg); res.Deleted != 0 || f.files()["项目.mindmap.json"] == "" || f.files()["客户/乙.mindmap.json"] == "" {
 		t.Fatalf("unreadable: %+v, repository %v", res, f.files())
 	}
+
+	// The other computer changes one and deletes another meanwhile: not
+	// taken while they cannot be read here, and taken once they can, not
+	// sent back as they were.
+	b := t.TempDir()
+	sync1(t, b, cfg)
+	put(t, b, "项目.mindmap.json", `{"v":2,"from":"b"}`)
+	put(t, b, "客户/甲.mindmap.json", `{"v":2,"from":"b"}`)
+	os.Remove(filepath.Join(b, "客户", "乙.mindmap.json"))
+	sync1(t, b, cfg)
+	sync1(t, a, cfg) // still unreadable
+	os.Chmod(filepath.Join(a, "项目.mindmap.json"), 0o644)
+	os.Chmod(filepath.Join(a, "客户"), 0o755)
+	if read(a, "项目.mindmap.json") != `{"v":1}` {
+		t.Fatalf("written while unreadable: %q", read(a, "项目.mindmap.json"))
+	}
+	res := sync1(t, a, cfg)
+	if res.Pushed != 0 || read(a, "项目.mindmap.json") != `{"v":2,"from":"b"}` || read(a, "客户/甲.mindmap.json") != `{"v":2,"from":"b"}` || read(a, "客户/乙.mindmap.json") != "" {
+		t.Fatalf("readable again: %+v, 项目 %q, 甲 %q, 乙 %q", res, read(a, "项目.mindmap.json"), read(a, "客户/甲.mindmap.json"), read(a, "客户/乙.mindmap.json"))
+	}
+	if got := f.files(); got["项目.mindmap.json"] != `{"v":2,"from":"b"}` || got["客户/乙.mindmap.json"] != "" {
+		t.Fatalf("the repository was put back: %v", got)
+	}
 }

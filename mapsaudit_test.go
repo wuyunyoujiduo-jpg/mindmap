@@ -119,3 +119,26 @@ func TestUndoDoesNotCrossAnOutsideChange(t *testing.T) {
 		t.Fatal("undo took away what was added outside")
 	}
 }
+
+// A task on a floating topic, made a thought, leaves the map as any other.
+func TestFloatingTaskToMemo(t *testing.T) {
+	a, tt := newTestApp(t)
+	n := &model.Node{ID: model.NewID(), Title: "漂着的事", Task: &model.Task{Status: model.StatusTodo}, Pos: &model.Point{X: 300, Y: 40}}
+	a.mutate("", func() { a.doc.Floating = append(a.doc.Floating, n) })
+	a.flush()
+	a.openTasks()
+	tt.Frame()
+	for _, it := range a.taskItems() {
+		if it.node.ID == n.ID {
+			a.taskToMemo(it, false)
+			tt.Frame()
+			a.flush()
+			f, _ := model.Load(it.path)
+			if f.Node(n.ID) != nil || a.file.Node(n.ID) != nil {
+				t.Fatal("made a thought, and still a task of the map")
+			}
+			return
+		}
+	}
+	t.Fatal("a floating topic's task is not in the lists")
+}
