@@ -48,8 +48,9 @@ const smallMost = 3000
 const picturesAtOnce = 3
 
 // wholeRoom is how much the whole pictures kept may take, in bytes, and
-// wholeLeast how many are kept whatever they take: those of the frame
-// shown, a clip's in its details and one shown large.
+// wholeLeast how many are kept whatever they take: a clip's in its
+// details and one shown large. Those the frame shown asks for are kept
+// too, however many they are (keepPicture).
 var wholeRoom = 128 << 20
 
 const wholeLeast = 3

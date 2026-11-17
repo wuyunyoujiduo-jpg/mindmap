@@ -44,6 +44,7 @@ func TestWallWorkedOutOnce(t *testing.T) {
 	for _, c := range a.lib.Clips {
 		before[c.ID] = cardOf(c, a.libQuery)
 	}
+	tried := library.RulesTried()
 	for range 5 {
 		tt.Frame()
 	}
@@ -52,15 +53,133 @@ func TestWallWorkedOutOnce(t *testing.T) {
 			t.Fatalf("the card of %q was worked out again", c.Label())
 		}
 	}
-	// Timed, in case something else reads the texts: five frames of sixty
-	// cards took over a second, each text of twenty thousand characters
-	// tried by every rule.
+	if n := library.RulesTried() - tried; n != 0 {
+		t.Fatalf("the rules of a secret were tried %d times in five frames of a wall that did not change", n)
+	}
+	// The same with a clip's details open, a page of twenty thousand
+	// characters, and with the settings' page of the vault over them: the
+	// rules were tried on it some ten times a frame.
+	a.libSel = a.lib.Clips[0].ID
+	tt.Frame()
+	tt.Frame()
+	tried = library.RulesTried()
+	for range 5 {
+		tt.Frame()
+	}
+	details := library.RulesTried() - tried
+	a.openVaultSettings() // which counts the clips that hold a secret kept as written
+	tt.Frame()
+	tt.Frame()
+	tried = library.RulesTried()
+	for range 5 {
+		tt.Frame()
+	}
+	if settings := library.RulesTried() - tried; details != 0 || settings != 0 {
+		t.Fatalf("the rules were tried %d times in five frames of a clip's details, %d of the vault's settings", details, settings)
+	}
+	// One clip's words changed: the rules are tried on that clip alone.
+	tried = library.RulesTried()
+	a.lib.Clips[5].Note = "改了一个字"
+	tt.Frame()
+	tt.Frame()
+	a.settingsOpen = false
+	tt.Frame()
+	if n := library.RulesTried() - tried; n == 0 || n > 12 {
+		t.Fatalf("one clip changed, and the rules were tried %d times", n)
+	}
+	// Timed too, in case something else reads the texts: five frames of
+	// sixty cards took over a second.
 	start := time.Now()
 	for range 5 {
 		tt.Frame()
 	}
 	if took := time.Since(start); took > 500*time.Millisecond {
 		t.Fatalf("five frames of the wall took %v", took)
+	}
+}
+
+// A card's height is told from no more of its text than fills it, and is
+// the height told from all of it.
+func TestCardHeightReadsItsStart(t *testing.T) {
+	whole := func(clip *library.Clip, cols int) float32 { // as it was told, the whole text cut into lines
+		per := 24
+		if cols == 1 {
+			per = 44
+		}
+		lines := func(s string, most int) float32 {
+			n := 0
+			for _, l := range strings.Split(strings.TrimSpace(s), "\n") {
+				n += 1 + len([]rune(l))/per
+			}
+			return float32(min(n, most))
+		}
+		if isMemo(clip) {
+			return 32 + lines(clip.Text, 7)*24 + 34
+		}
+		h := float32(32 + 24 + 34)
+		if sub := cmpOr(cmpOr(cmpOr(clip.Desc, clip.Summary), cmpOr(clip.Note, clip.Text)), clip.URL); sub != "" {
+			h += lines(sub, 3) * 22
+		}
+		return h
+	}
+	rng := rand.New(rand.NewSource(5))
+	pieces := []string{"", "短", "\n", "\n\n", strings.Repeat("长", 23), strings.Repeat("长", 24), strings.Repeat("字", 44), strings.Repeat("x", 300), " ", "abc"}
+	for range 3000 {
+		var b strings.Builder
+		for range rng.Intn(9) {
+			b.WriteString(pieces[rng.Intn(len(pieces))])
+		}
+		for _, clip := range []*library.Clip{{Kind: library.KindText, Text: b.String()}, {Kind: library.KindLink, Title: "页", Text: b.String()}} {
+			for _, cols := range []int{1, 3} {
+				if got, want := clipTall(clip, cols), whole(clip, cols); got != want {
+					t.Fatalf("%q in %d columns: %v tall, %v by the whole text", b.String(), cols, got, want)
+				}
+			}
+		}
+	}
+}
+
+// The thoughts that name a clip, and the open map's material, are looked
+// for once and again when what they are of changes.
+func TestMentionsAndMaterialFollow(t *testing.T) {
+	a, tt := newTestApp(t)
+	a.cfg.LibraryManual = true
+	clip, _ := a.addClipText("被提到的一条", "手动")
+	other, _ := a.addClipText("另一条", "手动")
+	showWall(a, tt)
+	a.libSel = clip.ID
+	tt.Frame()
+	if tt.HasText("提到它的") {
+		t.Fatal("named before it was")
+	}
+	a.setMemoText(other, "另一条，见 <"+clipScheme+clip.ID+">")
+	tt.Frame()
+	if !tt.HasText("和 1 条相连") || !tt.HasText("提到它的") {
+		t.Fatalf("a thought that names it is not told: %q", tt.Texts())
+	}
+	a.setMemoText(other, "另一条，不提了")
+	tt.Frame()
+	if tt.HasText("提到它的") {
+		t.Fatal("named still, by a thought that names it no more")
+	}
+	// The open map's material: a clip linked, then deleted.
+	a.libOpen = false
+	a.panelTab = tabCanvas
+	tt.Frame()
+	if tt.HasText("本图资料") {
+		t.Fatal("material, before any")
+	}
+	a.mutate("", func() { a.doc.Root.Links = append(a.doc.Root.Links, clipScheme+clip.ID) })
+	tt.Frame()
+	if !tt.HasText("挂着 1 条资料") {
+		t.Fatalf("a clip linked is not counted: %q", tt.Texts())
+	}
+	if err := a.lib.Delete(clip.ID); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if tt.HasText("挂着 1 条资料") || !tt.HasText("1 个链接指向已不存在的资料或节点") {
+		t.Fatalf("a clip deleted is still counted: %q", tt.Texts())
 	}
 }
 

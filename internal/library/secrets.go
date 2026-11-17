@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"unicode"
 	"unicode/utf8"
 
@@ -560,6 +561,14 @@ func (r rule) secret(s string, lo int, m []int) (from, to int, ok bool) {
 	return from, to, r.not == nil || !r.not(s[lo+m[0]:from], s[from:to], s[to:])
 }
 
+// tried counts the times the rules were tried on a text.
+var tried atomic.Int64
+
+// RulesTried is how many times the rules of a secret were tried on a
+// text, since the program began: for a test to tell that a frame of the
+// window tries none, what they say of a clip being kept with the clip.
+func RulesTried() int64 { return tried.Load() }
+
 // masked stands for a secret.
 const masked = "••••••••"
 
@@ -603,6 +612,7 @@ type span struct {
 // not searched by the next pattern, which would find a key in the
 // letters of a token.
 func secretSpans(s string) []span {
+	tried.Add(1)
 	var spans []span
 	for _, r := range secretRules {
 		for _, m := range r.found(s) {
@@ -730,6 +740,7 @@ func HasSecret(s string) bool {
 }
 
 func hasPlain(s string) bool {
+	tried.Add(1)
 	for _, r := range secretRules {
 		if r.finds(s) {
 			return true
