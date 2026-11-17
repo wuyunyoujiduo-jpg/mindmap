@@ -306,7 +306,7 @@ flight "a tag pushed of the version served" 1 0.105.1 refs/tags/v0.105.1 '{"vers
 refuse=matching-refs flight "the tags cannot be asked" 1 0.105.2 $main '{"version": "0.105.1"}' v0.105.1
 
 # The Mac's bash (3.2) takes the first byte of a character not ASCII for
-# a letter of a name: "$release：" was read as an unset variable, and the
+# a letter of a name: the name release before a full-width colon was read as unset, and the
 # release's pruning stopped there (0.105.2). A name before such a
 # character is written in braces.
 if grep -nP '\$[A-Za-z_][A-Za-z0-9_]*[^\x00-\x7F]' "$here"/*.sh "$here"/workflows/*.yml "$here"/../tools/*.sh "$here"/../update.sh; then
