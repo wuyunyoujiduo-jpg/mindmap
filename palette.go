@@ -27,6 +27,7 @@ const (
 	paletteClip   // a clip of the library to link the node a.linkFrom to
 	paletteAttach // a node, of any map, to link a.attachRef to
 	paletteSkill  // a skill of the AI agents to link the node a.linkFrom to
+	paletteGrow   // a topic, of any map, for a branch grown of a tag to go under (grow.go)
 )
 
 // paletteItem is a line of the palette.
@@ -389,7 +390,11 @@ func (a *app) paletteFind() []paletteItem {
 		}
 		return items
 	}
-	if a.paletteMode == paletteMove && q == "" { // the maps' roots
+	place := a.moveToMap // what a topic chosen as a place does
+	if a.paletteMode == paletteGrow {
+		place = a.growUnder
+	}
+	if (a.paletteMode == paletteMove || a.paletteMode == paletteGrow) && q == "" { // the maps' roots
 		for _, f := range a.recentFiles() {
 			file := a.file
 			if f.Path != a.path {
@@ -404,14 +409,14 @@ func (a *app) paletteFind() []paletteItem {
 				if len(file.Sheets) > 1 {
 					where += " · " + d.Title
 				}
-				items = append(items, paletteItem{"导图", d.Root.Title, where, func() { a.moveToMap(path, sheet, id) }, nil})
+				items = append(items, paletteItem{"导图", d.Root.Title, where, func() { place(path, sheet, id) }, nil})
 			}
 		}
 	}
-	if (a.paletteMode == paletteSearch || a.paletteMode == paletteLink || a.paletteMode == paletteMove) && q != "" {
+	if (a.paletteMode == paletteSearch || a.paletteMode == paletteLink || a.paletteMode == paletteMove || a.paletteMode == paletteGrow) && q != "" {
 		act := a.goToNode
-		if a.paletteMode == paletteMove {
-			act = a.moveToMap
+		if a.paletteMode == paletteMove || a.paletteMode == paletteGrow {
+			act = place
 		}
 		if a.paletteMode == paletteLink {
 			act = func(path, _, id string) {
@@ -673,6 +678,7 @@ func (a *app) paletteView(c *ui.Context) {
 			paletteClip:   "在收集里查找要链接的资料…",
 			paletteAttach: "把资料挂到哪个主题？输入关键词查找，或选择建议的主题…",
 			paletteSkill:  "查找要链接的 AI 技能…",
+			paletteGrow:   "长到哪个主题下？输入关键词查找，或选择导图的中心主题…",
 		}[a.paletteMode]
 		if a.paletteMode == paletteAttach && strings.HasPrefix(a.attachRef, skillScheme) {
 			placeholder = "哪个主题要用这个技能？输入关键词查找，或选一张导图的中心主题…"
