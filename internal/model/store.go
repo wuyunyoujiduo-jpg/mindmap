@@ -58,7 +58,7 @@ func Parse(b []byte) (*File, error) {
 	sheets, nodes := map[string]bool{}, map[string]bool{}
 	for i, d := range f.Sheets {
 		if d == nil || d.Root == nil {
-			return nil, errors.New("文件格式错误: 画布缺少根节点")
+			return nil, errors.New("文件格式错误: 画布缺少中心主题")
 		}
 		// A canvas with no ID, as that of a file of version 1, has one made
 		// of its root's: the same each time the file is read, and on each

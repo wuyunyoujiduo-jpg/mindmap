@@ -281,7 +281,7 @@ func (a *app) fromTextView(c *ui.Context) {
 		w, h := c.Size()
 		ui.Column(c).Gap(12).Width(min(640, w-80)).Children(func() {
 			ui.Text(c, "从文本生成导图").FontSize(17).Bold()
-			ui.Text(c, "粘贴需求文档、会议记录或和 AI 的对话，AI 会整理成节点挂在当前画布的中心主题下，你确认后才添加。没有设置 AI 时，按缩进 / 列表直接转成节点。").
+			ui.Text(c, "粘贴需求文档、会议记录或和 AI 的对话，AI 会整理成主题挂在当前画布的中心主题下，你确认后才添加。没有设置 AI 时，按缩进 / 列表直接转成主题。").
 				FontSize(12).TextColor(t.TextMuted).Wrap()
 			area(c.Key("text"), &a.fromText).Lines(10, int(max(10, (h-320)/18))).Placeholder("粘贴文本…").AutoFocus().FillWidth()
 			ui.Row(c).Gap(8).Children(func() {

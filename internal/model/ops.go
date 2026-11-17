@@ -7,9 +7,9 @@ import (
 
 // Errors of the editing operations.
 var (
-	ErrNotFound  = errors.New("节点不存在")
-	ErrRoot      = errors.New("不能对根节点执行此操作")
-	ErrCycle     = errors.New("不能把节点移动到它自己的下级")
+	ErrNotFound  = errors.New("主题不存在")
+	ErrRoot      = errors.New("不能对中心主题执行此操作")
+	ErrCycle     = errors.New("不能把主题移动到它自己的下级")
 	ErrLastSheet = errors.New("至少要保留一个画布")
 )
 

@@ -992,7 +992,7 @@ func editFile(f *model.File, in []aiEdit) ([]aiEdit, error) {
 		id = resolve(id)
 		d := f.SheetOf(id)
 		if d == nil {
-			return nil, nil, fmt.Errorf("找不到节点 %s", id)
+			return nil, nil, fmt.Errorf("找不到主题 %s", id)
 		}
 		n, _ := d.Find(id)
 		return d, n, nil
@@ -1040,7 +1040,7 @@ func editFile(f *model.File, in []aiEdit) ([]aiEdit, error) {
 				return nil, err
 			}
 			if f.SheetOf(parent.ID) != d {
-				return nil, errors.New("不能把节点移到另一个画布")
+				return nil, errors.New("不能把主题移到另一个画布")
 			}
 			if err := d.Move(n.ID, parent.ID, -1); err != nil {
 				return nil, err
@@ -1212,7 +1212,7 @@ func (a *app) aiPanel(c *ui.Context) {
 					{iconPencil, "生成本周周报", func() { a.aiReport(7) }},
 					{iconPencil, "生成今天的日报", func() { a.aiReport(1) }},
 					{iconTarget, "风险扫描", a.aiRiskScan},
-					{iconCheck, "把选中的节点拆解成任务", a.aiBreakDown},
+					{iconCheck, "把选中的主题拆解成任务", a.aiBreakDown},
 					{iconMap, "从文本生成导图…", func() { a.fromTextOpen = true }},
 					{iconFolder, "从代码仓库生成架构…", a.askRepo},
 				}
@@ -1608,8 +1608,8 @@ func (a *app) createMapFromAI(nm *aiNewMap, material []string) (string, error) {
 
 // aiScopes name what the AI sees of the map, and tell of it.
 var aiScopes = []struct{ name, desc string }{
-	{"本画布", "当前画布的全部节点"},
-	{"选中节点", "选中的节点和它下面的分支"},
+	{"本画布", "当前画布的全部主题"},
+	{"选中主题", "选中的主题和它下面的分支"},
 	{"全部画布", "这个文件的所有画布"},
 	{"不带导图", "不发送导图，问别的或新建导图"},
 }

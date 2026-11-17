@@ -296,7 +296,7 @@ func (a *app) moveToMap(path, sheet, id string) {
 	err := a.editMapAt(path, "从「"+mapName(a.path)+"」移来", func(f *model.File) error {
 		d := f.SheetOf(id)
 		if d == nil {
-			return errors.New("目标节点已不存在")
+			return errors.New("目标主题已不存在")
 		}
 		target, _ := d.Find(id)
 		title = target.Title

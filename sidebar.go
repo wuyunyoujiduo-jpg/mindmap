@@ -366,7 +366,7 @@ func (a *app) tagList(c *ui.Context) {
 			a.tagAdding = true
 		}
 		if len(tags) == 0 {
-			ui.Text(c, "标签在所有导图间共用。选中节点后，在右侧「节点」或右键菜单里打标签。").
+			ui.Text(c, "标签在所有导图间共用。选中主题后，在右侧「主题」或右键菜单里打标签。").
 				FontSize(12).TextColor(t.TextMuted).Wrap().Margin(2, 12)
 		}
 	})
@@ -421,7 +421,7 @@ func (a *app) tagRow(c *ui.Context, tag string, count int) {
 			}
 		})
 		m.Separator()
-		if m.Item("删除（从所有导图的节点上移除）").Chosen() {
+		if m.Item("删除（从所有导图的主题上移除）").Chosen() {
 			a.later(func() { a.deleteTag(tag) })
 		}
 	})

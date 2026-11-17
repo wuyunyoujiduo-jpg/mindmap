@@ -199,7 +199,7 @@ func (a *app) nodeRelatedSection(c *ui.Context, n *model.Node) {
 				clip := h.Clip
 				ui.Row(c.Key("nc" + clip.ID)).Gap(6).AlignItems(ui.Center).Children(func() {
 					ui.Box(c).Grow(1).Shrink(1).MinWidth(0).Children(func() { a.clipLink(c, clip) })
-					if ui.Link(c, "挂上", "").FontSize(11).Label("挂上 " + clip.Label()).Tooltip("把这条资料挂到节点上").Clicked() {
+					if ui.Link(c, "挂上", "").FontSize(11).Label("挂上 " + clip.Label()).Tooltip("把这条资料挂到主题上").Clicked() {
 						attach(clipScheme + clip.ID)
 					}
 				})
@@ -215,7 +215,7 @@ func (a *app) nodeRelatedSection(c *ui.Context, n *model.Node) {
 						ui.Text(c, "🔗").FontSize(12).Shrink(0)
 						ui.Text(c, p.title).FontSize(12).TextColor(t.Accent).MaxLines(1)
 					})
-					if ui.Link(c, "挂上", "").FontSize(11).Label("挂上 " + p.title).Tooltip("链接到另一张导图的这个节点").Clicked() {
+					if ui.Link(c, "挂上", "").FontSize(11).Label("挂上 " + p.title).Tooltip("链接到另一张导图的这个主题").Clicked() {
 						attach(a.nodeLinkTo(p.path, p.id))
 					}
 				})
@@ -290,7 +290,7 @@ func (a *app) clipPlacesSection(c *ui.Context, clip *library.Clip) {
 				a.later(func() { a.markToPlace(clip) })
 			}
 		}
-		if softButton(c, "放到导图…", "挂到某张导图的某个节点上").Height(28).Clicked() {
+		if softButton(c, "放到导图…", "挂到某张导图的某个主题上").Height(28).Clicked() {
 			a.later(place)
 		}
 	}, func() {
@@ -311,7 +311,7 @@ func (a *app) clipPlacesSection(c *ui.Context, clip *library.Clip) {
 			}
 			places := a.placesOf(clip)
 			if len(places) == 0 {
-				ui.Text(c, "挂到导图的节点上，资料就和项目、主题串起来了").FontSize(12).TextColor(t.TextMuted).Wrap()
+				ui.Text(c, "挂到导图的主题上，资料就和项目串起来了").FontSize(12).TextColor(t.TextMuted).Wrap()
 				return
 			}
 			for i, p := range places {

@@ -1177,7 +1177,7 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 	ui.Box(c.Key(fmt.Sprint("task-list:", a.tasks.view))).FillWidth().Children(func() {
 		ui.Column(c).Padding(6, 0, 8).Gap(10).FillWidth().Children(func() {
 			if empty && len(done) == 0 {
-				emptyState(c, "tasks", "circle-check", "没有要做的事", "在上面写一句加任务，或在导图里把节点设为任务、给它一个日期", nil)
+				emptyState(c, "tasks", "circle-check", "没有要做的事", "在上面写一句加任务，或在导图里把主题设为任务、给它一个日期", nil)
 				return
 			}
 			if a.tasks.view == tasksInbox {
@@ -2138,7 +2138,7 @@ func (a *app) ensureInbox() error {
 	path := a.inboxPath()
 	if modTime(path).IsZero() {
 		f := model.NewFile(inboxName)
-		f.Sheets[0].Root.Note = "随手记下的想法和待办，之后整理到对应的导图里（右键节点「移到其他导图…」）。"
+		f.Sheets[0].Root.Note = "随手记下的想法和待办，之后整理到对应的导图里（右键主题「移到其他导图…」）。"
 		if err := f.Save(path); err != nil {
 			return err
 		}

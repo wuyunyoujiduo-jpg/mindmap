@@ -304,7 +304,7 @@ func (a *app) nodeStylePanel(c *ui.Context) {
 	n, _ := a.selectedNode()
 	if n == nil {
 		ui.Column(c).Padding(20).Children(func() {
-			ui.Text(c, "选择一个节点设置样式").TextColor(t.TextMuted)
+			ui.Text(c, "选择一个主题设置样式").TextColor(t.TextMuted)
 		})
 		return
 	}

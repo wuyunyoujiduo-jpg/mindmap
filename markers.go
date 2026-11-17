@@ -282,7 +282,7 @@ func (a *app) markerPanel(c *ui.Context) {
 	n, _ := a.selectedNode()
 	ui.Column(c.Key("markers")).Padding(16).Gap(12).Children(func() {
 		if n == nil {
-			ui.Text(c, "选择一个节点添加标记").TextColor(t.TextMuted)
+			ui.Text(c, "选择一个主题添加标记").TextColor(t.TextMuted)
 		}
 		a.markerLegend(c)
 		for _, g := range markerGroups {

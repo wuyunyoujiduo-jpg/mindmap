@@ -127,7 +127,7 @@ func (a *app) overviewView(c *ui.Context) {
 			list("近 7 天完成", recent)
 
 			if all == 0 {
-				ui.Text(c, "这个导图还没有任务。选中节点，在右侧勾选「作为任务」即可。").TextColor(t.TextMuted)
+				ui.Text(c, "这个导图还没有任务。选中主题，在右侧点「＋ 任务」即可。").TextColor(t.TextMuted)
 			}
 		})
 	})

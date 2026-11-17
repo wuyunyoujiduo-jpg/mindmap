@@ -50,7 +50,7 @@ func (a *app) imagePath(img *model.Image) string {
 // writing it into the map's assets folder.
 func (a *app) attachImage(n *model.Node, data []byte, ext string) error {
 	if n == nil || a.path == "" {
-		return errors.New("没有选中的节点")
+		return errors.New("没有选中的主题")
 	}
 	name, b, err := a.saveAsset(data, ext)
 	if err != nil {
@@ -285,7 +285,7 @@ func (a *app) imageSection(c *ui.Context, n *model.Node) {
 				}
 			})
 			if n.Image == nil {
-				ui.Text(c, "也可以选中节点后粘贴图片，或把图片文件拖到节点上。").FontSize(12).TextColor(t.TextMuted).Wrap()
+				ui.Text(c, "也可以选中主题后粘贴图片，或把图片文件拖到主题上。").FontSize(12).TextColor(t.TextMuted).Wrap()
 			}
 		})
 	})

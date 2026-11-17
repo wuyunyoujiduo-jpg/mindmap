@@ -110,7 +110,7 @@ func (a *app) nodePanel(c *ui.Context) {
 		n, _ := a.selectedNode()
 		if n == nil {
 			ui.Column(c).Padding(20).Children(func() {
-				ui.Text(c, "选择一个节点查看详情").TextColor(t.TextMuted)
+				ui.Text(c, "选择一个主题查看详情").TextColor(t.TextMuted)
 			})
 			return
 		}
@@ -336,8 +336,8 @@ func (a *app) nodeFigures(c *ui.Context, n *model.Node) {
 		}
 	}
 	walk(n)
-	fs := []figure{{nodes, "个下级节点"}}
-	words := fmt.Sprintf("下级节点 %d 个", nodes)
+	fs := []figure{{nodes, "个下级主题"}}
+	words := fmt.Sprintf("下级主题 %d 个", nodes)
 	if tasks > 0 {
 		fs = append(fs, figure{tasks - done, "件要做"}, figure{done, "件做完"})
 		words += fmt.Sprintf(" · 任务 %d/%d 完成", done, tasks)

@@ -288,8 +288,8 @@ func (a *app) multiPanel(c *ui.Context) {
 	t := c.Theme()
 	sel := a.selection()
 	ui.Column(c).Padding(12, 16).Gap(14).Children(func() {
-		ui.Textf(c, "已选 %d 个节点", len(sel)).FontSize(15).Bold()
-		ui.Text(c, "按住 ⇧ 或 ⌘ 点击节点加入或移出选择；Esc 取消多选。").FontSize(12).TextColor(t.TextMuted).Wrap()
+		ui.Textf(c, "已选 %d 个主题", len(sel)).FontSize(15).Bold()
+		ui.Text(c, "按住 ⇧ 或 ⌘ 点击主题加入或移出选择；Esc 取消多选。").FontSize(12).TextColor(t.TextMuted).Wrap()
 		ui.Field(c, "任务状态", func() {
 			ui.Row(c).Wrap().Gap(6).Children(func() {
 				for _, s := range model.Statuses {
@@ -355,9 +355,9 @@ func (a *app) copyNodes(cut bool) {
 	a.plat.CopyText(a.clipText)
 	if cut {
 		a.deleteSelection()
-		a.tell("已剪切 " + itoa(len(nodes)) + " 个节点")
+		a.tell("已剪切 " + itoa(len(nodes)) + " 个主题")
 	} else {
-		a.tell("已复制 " + itoa(len(nodes)) + " 个节点")
+		a.tell("已复制 " + itoa(len(nodes)) + " 个主题")
 	}
 }
 

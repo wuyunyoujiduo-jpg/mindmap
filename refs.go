@@ -292,7 +292,7 @@ func (a *app) attachTo(path, nodeID, link, what string) error {
 	err := a.editMapAt(path, "挂上"+what, func(f *model.File) error {
 		n := f.Node(nodeID)
 		if n == nil {
-			return fmt.Errorf("节点已不存在")
+			return fmt.Errorf("主题已不存在")
 		}
 		title = n.Title
 		for _, l := range n.Links {
@@ -471,8 +471,8 @@ func (a *app) mapMaterialSection(c *ui.Context) {
 			}
 			if len(gone) > 0 {
 				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, fmt.Sprintf("%d 个链接指向已不存在的资料或节点", len(gone))).FontSize(12).TextColor(t.Danger).Grow(1).Wrap()
-					if button(c, "清理").FontSize(11).Tooltip("从节点上去掉这些失效的链接（可撤销）").Clicked() {
+					ui.Text(c, fmt.Sprintf("%d 个链接指向已不存在的资料或主题", len(gone))).FontSize(12).TextColor(t.Danger).Grow(1).Wrap()
+					if button(c, "清理").FontSize(11).Tooltip("从主题上去掉这些失效的链接（可撤销）").Clicked() {
 						dead := map[string]bool{}
 						for _, l := range gone {
 							dead[l] = true

@@ -146,7 +146,7 @@ func (a *app) filesSection(c *ui.Context, n *model.Node) {
 				})
 			}
 			ui.Row(c).Margin(0, 0, 0, -8).Gap(2).AlignItems(ui.Center).Children(func() {
-				if ghostButton(c, "添加附件…", "选择要附加到节点的文件").Clicked() {
+				if ghostButton(c, "添加附件…", "选择要附加到主题的文件").Clicked() {
 					id := n.ID
 					a.plat.OpenFile("选择要附加的文件", nil, func(path string) {
 						if node, _ := a.doc.Find(id); node != nil && path != "" {
@@ -157,7 +157,7 @@ func (a *app) filesSection(c *ui.Context, n *model.Node) {
 					})
 				}
 				if len(n.Files) == 0 {
-					ui.Text(c, "或把文件拖到节点上").FontSize(11).TextColor(t.TextMuted)
+					ui.Text(c, "或把文件拖到主题上").FontSize(11).TextColor(t.TextMuted)
 				}
 			})
 		})

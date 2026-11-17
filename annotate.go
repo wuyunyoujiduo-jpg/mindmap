@@ -324,7 +324,7 @@ func (a *app) floatDropped(id string, x, y float32) {
 		return // a summary's topic stays by what it sums up
 	}
 	a.selected, a.multi = id, nil
-	a.tellUndo("已设为自由主题，拖回节点上可以挂回去", back)
+	a.tellUndo("已设为自由主题，拖回主题上可以挂回去", back)
 }
 
 // floatNode takes a node out of the tree, as a floating topic beside where
@@ -347,14 +347,14 @@ func (a *app) floatNode(n *model.Node) {
 		a.tellUndo("已设为自由主题：它在整张导图上，退出聚焦就能看到", back)
 		return
 	}
-	a.tellUndo("已设为自由主题，拖回节点上可以挂回去", back)
+	a.tellUndo("已设为自由主题，拖回主题上可以挂回去", back)
 }
 
 // Relations: a node's menu starts one, and a click on another ends it.
 
 func (a *app) startRelation(n *model.Node) {
 	a.relFrom, a.relTo = n.ID, nil
-	a.tell("点击另一个节点，连上关联线（Esc 取消）")
+	a.tell("点击另一个主题，连上关联线（Esc 取消）")
 }
 
 func (a *app) endRelation(to string) {
@@ -562,7 +562,7 @@ func (a *app) relationHandle(c *ui.Context) {
 	const size = 14
 	h := ui.Box(c.Key("rel-handle")).Absolute().Left(mx-size/2).Top(my-size/2).Size(size, size).Radius(999).
 		Background(t.Background).Border(2.5, ui.Hex("#6366f1")).Cursor(ui.CursorGrab).
-		Label("拖动改变连线形状").Tooltip("拖动改变形状 · Delete 删除")
+		Label("拖动改变关联线形状").Tooltip("拖动改变形状 · Delete 删除")
 	if dx, dy, ok := h.Dragged(); ok {
 		id := rel.ID
 		a.mutate("bend:"+id, func() {
@@ -580,7 +580,7 @@ func (a *app) relationHandle(c *ui.Context) {
 		h.Cursor(ui.CursorGrabbing)
 	}
 	h.ContextMenu(func(m *ui.Menu) {
-		if m.Item("删除连线").Chosen() {
+		if m.Item("删除关联线").Chosen() {
 			a.later(func() { a.removeRelation(rel.ID) })
 		}
 		if m.Item("恢复默认弧度").Disabled(rel.Bend == nil).Chosen() {
@@ -780,7 +780,7 @@ func (a *app) annotationsSection(c *ui.Context, n *model.Node) {
 // annotationMenu is the part of a node's menu that adds these.
 func (a *app) annotationMenu(m *ui.Menu, n *model.Node, depth int) {
 	m.Submenu("插入", func(m *ui.Menu) {
-		if depth > 0 && m.Item("上方的同级节点").Shortcut(ui.Shift, ui.KeyEnter).Chosen() {
+		if depth > 0 && m.Item("上方的同级主题").Shortcut(ui.Shift, ui.KeyEnter).Chosen() {
 			a.later(func() { a.addSiblingAt(false) })
 		}
 		if n.Image == nil && m.Item("粘贴的图片").Shortcut(ui.Cmd, ui.KeyV).Chosen() {
@@ -803,7 +803,7 @@ func (a *app) annotationMenu(m *ui.Menu, n *model.Node, depth int) {
 		if depth > 0 && !a.doc.IsFloating(n.ID) && !a.doc.IsSummaryTopic(n.ID) && m.Item("设为自由主题").Chosen() {
 			a.later(func() { a.floatNode(n) })
 		}
-		if a.doc.IsFloating(n.ID) && m.Item("挂到节点下…").Chosen() {
+		if a.doc.IsFloating(n.ID) && m.Item("挂到主题下…").Chosen() {
 			a.later(func() { a.openPalette(paletteMove) })
 		}
 	})

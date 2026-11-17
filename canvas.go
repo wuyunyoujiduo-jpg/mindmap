@@ -1276,10 +1276,10 @@ func (a *app) nodeMenu(m *ui.Menu, n *model.Node, depth int) {
 	if !a.isSelected(n.ID) {
 		a.selected, a.multi = n.ID, nil
 	}
-	if m.Item("添加子节点").Shortcut(0, ui.KeyTab).Chosen() {
+	if m.Item("添加子主题").Shortcut(0, ui.KeyTab).Chosen() {
 		a.later(func() { a.addChild() })
 	}
-	if m.Item("添加同级节点").Shortcut(0, ui.KeyEnter).Chosen() {
+	if m.Item("添加同级主题").Shortcut(0, ui.KeyEnter).Chosen() {
 		a.later(func() { a.addSibling() })
 	}
 	a.annotationMenu(m, n, depth)
@@ -1311,7 +1311,7 @@ func (a *app) nodeMenu(m *ui.Menu, n *model.Node, depth int) {
 	if m.Item("剪切").Shortcut(ui.Cmd, ui.KeyX).Disabled(depth == 0).Chosen() {
 		a.later(func() { a.copyNodes(true) })
 	}
-	if m.Item("粘贴为子节点").Chosen() {
+	if m.Item("粘贴为子主题").Chosen() {
 		a.later(func() { a.paste() })
 	}
 	m.Separator()
@@ -1371,7 +1371,7 @@ func (a *app) nodeMenu(m *ui.Menu, n *model.Node, depth int) {
 	m.Separator()
 	label := "删除"
 	if len(a.multi) > 0 {
-		label = fmt.Sprintf("删除所选 %d 个节点", len(a.selection()))
+		label = fmt.Sprintf("删除所选 %d 个主题", len(a.selection()))
 	}
 	if m.Item(label).Shortcut(0, ui.KeyDelete).Disabled(depth == 0 && len(a.multi) == 0).Chosen() {
 		a.later(a.deleteSelection)
@@ -2019,7 +2019,7 @@ func (a *app) structurePicker(c *ui.Context, room float32) {
 			}
 		})
 		ui.Row(c).Gap(4).Padding(6, 4, 2).Children(func() {
-			if ghostButton(c, "画布", "连线、字体、背景等更多画布设置").Clicked() {
+			if ghostButton(c, "画布", "分支线、字体、背景等更多画布设置").Clicked() {
 				a.structureOpen = false
 				a.panelTab, a.panelOff = tabCanvas, false
 			}
