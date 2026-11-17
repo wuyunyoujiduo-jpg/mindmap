@@ -146,10 +146,15 @@ type Entry struct {
 	// What its SKILL.md says, of MyMind's copy if there is one.
 	Title, Description, Body string
 	Raw                      string // its SKILL.md, as written (the first 64 KB)
-	Dir                      string // the folder read
-	Files                    []string
-	Script, Secret           bool
-	Issues                   []string
+	// Shown is the head of Raw and About the description as a page shows
+	// them, what looks like a secret in dots (library.Mask): found once,
+	// as the skill is read, for the patterns of a secret are slow on a
+	// long text and a page is drawn at every frame.
+	Shown, About   string
+	Dir            string // the folder read
+	Files          []string
+	Script, Secret bool
+	Issues         []string
 	// Shadowed is that a skill of every session has its name: for the
 	// tools that have both, that one is used.
 	Shadowed bool
@@ -393,6 +398,67 @@ func Scan(env Env) *Report {
 	return r
 }
 
+// Stamp is a word that changes when the folders of skills did: which
+// tools there are, and of each folder a scan lists (MyMind's, what is
+// turned off, the tools' and their own, their plugins' at its head) its
+// time, and of each folder or link in it its time and its SKILL.md's. A
+// scan reads every file of every skill, to tell a copy from another, and
+// walks the plugins' folders; this reads no file, and tells, while the
+// page is not looked at, whether a scan is due.
+func Stamp(env Env) string {
+	h := sha256.New()
+	dir := func(p string) {
+		fi, err := os.Stat(p)
+		if err != nil {
+			return
+		}
+		fmt.Fprintf(h, "%s %d\n", p, fi.ModTime().UnixNano())
+		entries, _ := os.ReadDir(p)
+		for _, d := range entries {
+			name := d.Name()
+			if strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") {
+				continue // not a skill's: what MyMind writes there itself (_machines), a tool's own
+			}
+			at := filepath.Join(p, name)
+			if li, err := os.Lstat(at); err == nil {
+				fmt.Fprintf(h, " %s %d %o", name, li.ModTime().UnixNano(), li.Mode().Type())
+			}
+			if t, err := os.Readlink(at); err == nil {
+				fmt.Fprintf(h, " -> %s", t)
+			}
+			if fi, err := os.Stat(filepath.Join(at, "SKILL.md")); err == nil {
+				fmt.Fprintf(h, " %d %d", fi.ModTime().UnixNano(), fi.Size())
+			}
+			h.Write([]byte{'\n'})
+		}
+	}
+	dir(env.Store)
+	if env.Keep != "" {
+		dir(filepath.Join(env.Keep, disabledDir))
+	}
+	for _, t := range Detect(env.Home, env.Table) {
+		fmt.Fprintf(h, "tool %s\n", t.ID)
+		for _, g := range t.Global {
+			dir(filepath.Join(env.Home, g))
+		}
+		for _, b := range t.Bundled {
+			dir(filepath.Join(env.Home, b))
+		}
+		if t.Plugins != "" {
+			dir(filepath.Join(env.Home, t.Plugins))
+		}
+		for _, rp := range env.Repos {
+			for _, p := range t.Project {
+				dir(filepath.Join(rp.Root, p))
+			}
+		}
+	}
+	for _, rp := range env.Repos {
+		dir(ProjectStore(rp.Root))
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
 // bundledBy is the tool a skill of every session came with, by where it
 // is: each of its folders a link into where a program is installed (a
 // package's node_modules, an app, Homebrew's), or into the tool's own
@@ -591,6 +657,7 @@ func (e *Entry) read(dir string) {
 		e.Body = e.Body[:6000]
 	}
 	e.Secret = library.HasSecret(text)
+	e.Shown, e.About = shown(e.Raw), library.Mask(e.Description)
 	e.Files, e.Script = listFiles(dir)
 	for _, f := range e.Files {
 		if !e.Secret && !strings.HasSuffix(f, "SKILL.md") && smallText(filepath.Join(dir, f)) {
@@ -615,6 +682,19 @@ func (e *Entry) read(dir string) {
 	} else if e.Title != "" && e.Title != e.Name && e.Scope != Plugin {
 		e.Issues = append(e.Issues, fmt.Sprintf("name「%s」和文件夹名「%s」不一样，有的工具会认不出。", e.Title, e.Name))
 	}
+}
+
+// ShownLen is how much of a SKILL.md a page shows, in characters.
+const ShownLen = 3000
+
+// shown is a SKILL.md as a page shows it: its secrets in dots, and of a
+// long one its head.
+func shown(raw string) string {
+	text := library.Mask(raw)
+	if utf8.RuneCountInString(text) > ShownLen {
+		text = string([]rune(text)[:ShownLen]) + "\n…"
+	}
+	return strings.TrimRight(text, "\n")
 }
 
 // Frontmatter reads the head of a SKILL.md: its keys (one line each, or

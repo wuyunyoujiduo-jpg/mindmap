@@ -157,7 +157,6 @@ func (d *desktop) overlayShot(fromApp bool) {
 	// The windows of the screenshot are panels: they show over the app the
 	// shortcut was pressed in, full-screen ones too, without activating
 	// this app, so the other keeps the keyboard when they close.
-	screenshot.Captured = nil
 	ok, err := screenshot.Start(func(png []byte, act screenshot.Action) {
 		logShot("截图完成：%d 字节，操作 %d", len(png), act)
 		if act == screenshot.Save {
@@ -178,7 +177,7 @@ func (d *desktop) overlayShot(fromApp bool) {
 		logShot("截图失败：%v", err)
 		d.win.Update(func() {
 			d.ShowMain()
-			d.app.showShotAlert("截图失败", err.Error()+"\n\n截图记录在「帮助 → 在访达中显示截图记录」里，可以发给开发者。", false)
+			d.app.showShotAlert("截图失败", err.Error()+"\n\n截图记录在「帮助 → "+revealWord()+"截图记录」里，可以发给开发者。", false)
 		})
 	}
 	if !ok && fromApp {
@@ -508,7 +507,7 @@ func main() {
 		if log := plat.ShotLog(); shotUnfinished(log) {
 			logShot("上次截图没有完成")
 			a.showShotAlert("上次截图没有完成",
-				"截图时 MyMind 可能意外退出了。截图记录在「帮助 → 在访达中显示截图记录」里，可以发给开发者。", false)
+				"截图时 MyMind 可能意外退出了。截图记录在「帮助 → "+revealWord()+"截图记录」里，可以发给开发者。", false)
 		}
 		screenshot.WatchMenus() // the shortcuts work with a menu open too
 		if err := plat.SetShotKey(a.shotKey()); err != nil {
@@ -641,7 +640,7 @@ func main() {
 				item("快捷键", "CmdOrCtrl+Shift+/", func() { a.cheatsOpen = true }),
 				item("连接 AI 编程工具（MCP）…", "", func() { a.mcpOpen = true }),
 				mygo.Separator(),
-				item("在访达中显示截图记录", "", func() { plat.ShowInFolder(shotLogPath()) }),
+				item(revealWord()+"截图记录", "", func() { plat.ShowInFolder(shotLogPath()) }),
 			}},
 		}))
 	})
