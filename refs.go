@@ -284,7 +284,7 @@ func (a *app) addRef(r *refs, b backlink, link string) {
 		r.to[clipScheme+id] = append(r.to[clipScheme+id], b)
 		return
 	}
-	if strings.HasPrefix(link, skillScheme) {
+	if strings.HasPrefix(link, skillScheme) || strings.HasPrefix(link, tagScheme) {
 		r.to[link] = append(r.to[link], b)
 		return
 	}

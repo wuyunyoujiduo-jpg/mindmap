@@ -25,7 +25,12 @@ const (
 	linkNode
 	linkClip
 	linkSkill
+	linkTag
 )
+
+// tagScheme starts the link a branch grown of a tag's clips keeps on its
+// first topic, to that tag of 收集: "tag:name" (grow.go).
+const tagScheme = "tag:"
 
 // nodeScheme starts links to nodes: "mindmap:folder/map#id".
 const nodeScheme = "mindmap:"
@@ -44,6 +49,8 @@ func (a *app) parseLink(link string) (kind int, target string, line int) {
 		return linkClip, strings.TrimPrefix(link, clipScheme), 0
 	case strings.HasPrefix(link, skillScheme):
 		return linkSkill, strings.TrimPrefix(link, skillScheme), 0
+	case strings.HasPrefix(link, tagScheme):
+		return linkTag, strings.TrimPrefix(link, tagScheme), 0
 	case strings.HasPrefix(link, nodeScheme):
 		rel, id, _ := strings.Cut(strings.TrimPrefix(link, nodeScheme), "#")
 		path := a.path
@@ -118,6 +125,9 @@ func (a *app) openLink(link string) {
 		a.showClip(target)
 	case linkSkill:
 		a.showSkill(target)
+	case linkTag: // 收集, narrowed to the tag
+		a.openList(kindAll, "")
+		a.libTag = target
 	case linkNode:
 		path, id, _ := strings.Cut(target, "#")
 		if path != a.path {
@@ -200,6 +210,8 @@ func (a *app) linkLabel(link string) (icon, label string) {
 			return "🧩", "（技能已不存在）"
 		}
 		return "🧩", target
+	case linkTag:
+		return "🏷", "收集 #" + target
 	}
 	rel, err := filepath.Rel(a.projectDir(), target)
 	if err != nil || strings.HasPrefix(rel, "..") {

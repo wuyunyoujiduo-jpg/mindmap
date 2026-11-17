@@ -217,6 +217,35 @@ asked for at its foot.
 What is done from any page (a screenshot, the AI, the search) has its
 key in the top row, not on one page's head.
 
+## 长成分支
+
+Built to the second draft of 长成分支 (`grow.go`). 收集 has no new view
+and no grouping but its tags; what is new is one key and one sheet.
+
+- **The key** stands at the right of the page's head, before the search,
+  only while a tag is chosen and it has two clips or more to grow from: a
+  shade key (`key`), the one key of the head. While its sheet shows it is
+  on the accent's tint, as what is chosen; the key that acts is the
+  sheet's.
+- **Once grown**, a quiet chip stands in the key's place, 已在「导图」: 12,
+  the accent on its tint, the corner of a small thing (7); a click goes to
+  the branch. The key comes back beside it, 再长一次, only when the tag has
+  clips the branch does not link to.
+- **The sheet** is the right column, where a clip's details are: its name
+  at 20/700, from what in the caption's size; a part's name 13/700; where
+  it goes a pale block with a key's corner, the map's dot, 「导图 › 主题」
+  and 改 at its end, the whole of it the key. The outline is lines with a
+  hairline under each: the branch's name heavy, a level 16 in, 「N 条来源」
+  at the end in the muted ink, the accent's under the pointer and when
+  open; the sources open under their line, a kind's dot before each. What
+  the clips do not speak of is one line in a dashed box (the one dashed
+  line of the leaf: it marks what is not there). Then the key that acts,
+  放到导图, and 先不.
+- **The wait** is stage lines in the outline's place (Waiting); what
+  failed stays there in the danger's color with 重试.
+- A toast has one key (撤销): the way to the branch, 去看看, is the
+  sheet's, which stays to say where the branch went, and the chip's.
+
 ## What opens a menu
 
 Ends in `chevron`: a small angle drawn as a thin line, the same wherever

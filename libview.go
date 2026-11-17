@@ -28,7 +28,14 @@ func (a *app) libraryView(c *ui.Context) {
 				// The wall takes the room there is: more columns in a wide window.
 				pageColumn(c, "lib-column", true).MaxWidth(100000).Children(func() { a.libraryColumn(c) })
 			})
-			if sel != nil {
+			if a.growShown() {
+				// A branch being grown of the tag chosen, in the clip's place.
+				sheet(c, "grow-sheet", 420, func() {
+					ui.Scroll(c.Key("grow:"+a.collect.grow.tag)).Grow(1).Basis(0).Padding(18, 18, 24).Gap(12).Children(func() {
+						a.growSheet(c)
+					})
+				})
+			} else if sel != nil {
 				// The clip chosen, in a column at the page's right.
 				sheet(c, "clip-sheet", 420, func() {
 					ui.Scroll(c.Key("clip-detail:"+sel.ID)).Grow(1).Basis(0).Padding(14, 18, 20).Gap(12).Children(func() {
@@ -60,6 +67,7 @@ func (a *app) libraryColumn(c *ui.Context) {
 			sub, figs = "", []figure{{len(a.libHits()), "条符合"}}
 		}
 		pageHead(c, "lib-head", "收集", sub, figs, func() {
+			a.growKey(c) // with a tag chosen: its clips grown into a branch of a map (grow.go)
 			// What is being organized and indexed is told in cards at the
 			// window's top right (jobsView), and on the clip itself.
 			if n := len(l.Broken); n > 0 {
@@ -143,7 +151,7 @@ func (a *app) clipWall(c *ui.Context, hits []library.Hit) {
 	if a.sideShown() {
 		room -= sideWidthOf
 	}
-	if a.lib.Find(a.libSel) != nil {
+	if a.lib.Find(a.libSel) != nil || a.collect.grow.tag != "" {
 		room -= min(420, w*0.4)
 	}
 	cols := min(max(int(room/300), 1), 6)
@@ -378,6 +386,8 @@ type collectState struct {
 	embed embedRun
 	// The plugin as it is installed, looked at once in a while (plugin.go).
 	plugin pluginHere
+	// A branch of a map being grown of a tag's clips (grow.go).
+	grow growState
 }
 
 // wallOf is what the wall is narrowed to.
