@@ -630,4 +630,36 @@ by AI, and an AI assistant.
     not by a time (`watchIdle`).
   - Every frame: nothing reads the disk nor walks every map
     (`shellperf_test.go`, `mapsperf_test.go` count it).
+- 0.106 built four drafts the user chose of a list of ways to see what
+  is known (https://claude.ai/artifact/J3GLNjaCpkmJFV5q7aguv7), each
+  corrected first:
+  - 镜头 (`lens.go`): a map colored another way, nothing moving: 分支
+    as it is, 新旧, 来源, 进度, each one hue by steps. It is a row of
+    small words on the canvas with its name first, a mark and bold small
+    letters and a hairline, then the choices: a white bar on the accent's
+    tint read as a second row of tabs, and the name set as the choices
+    as one more of them, the user found. What a lens adds is never
+    inside a topic (`lensCount`). A topic keeps when it last changed
+    (`Node.Changed`, told by prints once a step, `model.Prints`;
+    `File.Dated` for those of before), which is not content and is
+    merged without asking.
+  - 对比 (`diacompare.go`): 图解's fifth kind, options side by side. A
+    cell the map does not speak of is a dashed 导图里没说; the AI judges
+    nothing (`diagram.Verdict` drops a row that does) and its telling is
+    the cells' own words. 我的倾向 is the one thing on a set written by
+    hand, a mark beside the table by the option's name (`Set.Lean`), kept
+    across a redraw. A version before it may write it away.
+  - 长成分支 (`grow.go`): a branch grown from the clips of a tag. 收集
+    gained no new thing: the user refused a second view of it and then
+    any grouping (there are tags). The key is at the head only with a
+    tag chosen; the AI's outline is read in the right column before
+    anything is written; each topic links its clips, and its first the
+    tag (`tag:name`), from which 已在「导图」 and 再长一次 are worked out.
+  - Days of rest (`restDay`, `restFill`): the ground says rest, in the
+    week's column, the month's cell, a list's heading and the small
+    calendar; marks, 休 and 班, are for exceptions alone, an ordinary
+    weekend none. Gray in a calendar means rest and nothing else: today
+    is a breath of the accent (`todayFill`), a day of another month
+    faint figures. The small calendar is the app's own (`datepick.go`),
+    MyGo's having no way to mark a day.
 - The user writes in Chinese; the app's texts are Chinese.
