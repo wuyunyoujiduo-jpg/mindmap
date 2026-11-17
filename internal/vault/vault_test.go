@@ -206,3 +206,43 @@ func TestToken(t *testing.T) {
 		t.Error("IsCode")
 	}
 }
+
+// While a password is tried, which takes Argon2 its time, the vault still
+// answers whether it is unlocked: the window asks at every frame.
+func TestUnlockHoldsNothing(t *testing.T) {
+	was := cost
+	cost = kdf{Time: 8, Memory: 64 * 1024, Threads: 1}
+	defer func() { cost = was }()
+	v := Open(t.TempDir())
+	if _, err := v.Setup("correct horse", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	v.Lock()
+	done := make(chan error, 1)
+	go func() { done <- v.Unlock("correct horse") }()
+	asked := 0
+	for waiting := true; waiting; {
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatal(err)
+			}
+			waiting = false
+		default:
+			v.Unlocked()
+			asked++
+			time.Sleep(time.Millisecond)
+		}
+	}
+	if asked < 10 || !v.Unlocked() {
+		t.Fatalf("asked %d times while it was unlocked: held through it", asked)
+	}
+	// Locked while a password is tried, it stays locked.
+	v.Lock()
+	go func() { done <- v.Unlock("correct horse") }()
+	time.Sleep(50 * time.Millisecond)
+	v.Lock()
+	if err := <-done; err != ErrLocked || v.Unlocked() {
+		t.Fatalf("locked meanwhile, and opened: %v", err)
+	}
+}

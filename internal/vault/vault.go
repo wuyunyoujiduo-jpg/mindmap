@@ -107,6 +107,9 @@ type Vault struct {
 	// spare is where the keys' files are kept a second time, on this
 	// computer alone.
 	spare string
+	// locked counts the times Lock was called: an unlock under way when
+	// one was does not open what was locked after it began.
+	locked int
 }
 
 // Open reads the keys of a folder, which need not exist.
@@ -360,20 +363,36 @@ func (v *Vault) UnlockCode(code string) error {
 }
 
 func (v *Vault) unlock(secret string, of func(*lock) wrap, wrong error) error {
+	// The keys' wraps are taken under the lock and tried outside it:
+	// Argon2 takes a while, and the window asks at every frame whether
+	// the vault is unlocked, so that held through it, an unlock off the
+	// window's thread held the window all the same.
 	v.mu.Lock()
-	defer v.mu.Unlock()
-	if len(v.locks) == 0 {
+	ids, wraps := make([]string, len(v.locks)), make([]wrap, len(v.locks))
+	for i, l := range v.locks {
+		ids[i], wraps[i] = l.ID, of(l)
+	}
+	locked := v.locked
+	v.mu.Unlock()
+	if len(ids) == 0 {
 		return ErrOff
 	}
-	opened := false
-	for _, l := range v.locks {
-		if priv, ok := of(l).open(secret); ok {
-			v.hold(l.ID, priv)
-			opened = true
+	opened := map[string]*[32]byte{}
+	for i, w := range wraps {
+		if priv, ok := w.open(secret); ok {
+			opened[ids[i]] = priv
 		}
 	}
-	if !opened {
+	if len(opened) == 0 {
 		return wrong
+	}
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if v.locked != locked { // locked meanwhile: that was asked last
+		return ErrLocked
+	}
+	for id, priv := range opened {
+		v.hold(id, priv)
 	}
 	return nil
 }
@@ -389,6 +408,7 @@ func (v *Vault) Lock() {
 		*k = [32]byte{}
 	}
 	v.keys, v.memo = nil, nil
+	v.locked++
 }
 
 // Change locks the keys now open by a new password and a new recovery

@@ -9,12 +9,16 @@ package library
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -68,17 +72,10 @@ type Clip struct {
 	// that it be put on one later. What is collected is at home in the
 	// collection, and waits for nothing unless this is set.
 	ToPlace bool `json:"toPlace,omitempty"`
-	// Kept was the other way round, before 0.88: every clip of the week
-	// waited for a place unless kept from it. Read still, and of no use.
-	Kept bool `json:"kept,omitempty"`
 	// Locked says the whole of the text and the note is sealed, not only
 	// what in them looks like a secret (internal/vault): for a password
 	// that nothing tells from a word.
 	Locked bool `json:"locked,omitempty"`
-	// Folder is the folder of maps the clip was kept in, while the maps'
-	// list showed documents beside the maps (before 0.54): kept as it was
-	// written, and shown nowhere.
-	Folder string `json:"folder,omitempty"`
 	// Hash is the SHA-256 of a picture's or file's data, to find it again.
 	Hash    string    `json:"hash,omitempty"`
 	Created time.Time `json:"created"`
@@ -254,20 +251,71 @@ func (l *Library) Add(c *Clip, now time.Time) error {
 }
 
 // AddFile copies a file into the library and keeps a clip of it: a
-// picture or a file.
+// picture or a file. It is copied as it is read, and told from those kept
+// by the same reading: read whole into memory first, a video of a
+// gigabyte took that much and the time to read it twice.
 func (l *Library) AddFile(path, source string, now time.Time) (*Clip, error) {
-	data, err := os.ReadFile(path)
+	src, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
-	kind := KindFile
-	if IsImage(path) {
-		kind = KindImage
+	defer src.Close()
+	if err := os.MkdirAll(l.FilesDir(), 0o755); err != nil {
+		return nil, err
 	}
-	return l.AddData(data, filepath.Base(path), kind, source, now)
+	name := filepath.Base(path)
+	c := &Clip{ID: NewID(), Kind: KindFile, Name: name, Source: source}
+	if IsImage(path) {
+		c.Kind = KindImage
+	}
+	c.File = c.ID + strings.ToLower(filepath.Ext(name))
+	dst := filepath.Join(l.FilesDir(), c.File)
+	tmp := dst + ".tmp"
+	out, err := os.Create(tmp)
+	if err != nil {
+		return nil, err
+	}
+	h := sha256.New()
+	size, err := io.Copy(io.MultiWriter(out, h), src)
+	if e := out.Close(); err == nil {
+		err = e
+	}
+	if err != nil {
+		_ = os.Remove(tmp)
+		return nil, err
+	}
+	c.Hash = hex.EncodeToString(h.Sum(nil))
+	if d := l.Duplicate(&Clip{Hash: c.Hash}); d != nil {
+		_ = os.Remove(tmp)
+		return nil, &DuplicateError{d}
+	}
+	if err := os.Rename(tmp, dst); err != nil {
+		_ = os.Remove(tmp)
+		return nil, err
+	}
+	if c.Kind == KindFile {
+		c.Title = strings.TrimSuffix(name, filepath.Ext(name))
+		// A document's text, of one that has any to read and is no larger
+		// than a document is.
+		if readsText(name) && size <= maxTextFile {
+			if data, err := os.ReadFile(dst); err == nil {
+				c.Text = ExtractText(name, data)
+			}
+		}
+	}
+	if err := l.Add(c, now); err != nil {
+		_ = os.Remove(dst)
+		return nil, err
+	}
+	return c, nil
 }
 
-// AddData keeps data, a picture or file named name, as a clip.
+// maxTextFile is the largest document whose text is read as it is kept.
+const maxTextFile = 64 << 20
+
+// AddData keeps data, a picture or file named name, as a clip: for what
+// is in memory already, as a picture of the clipboard. A file is
+// AddFile's.
 func (l *Library) AddData(data []byte, name, kind, source string, now time.Time) (*Clip, error) {
 	if d := l.Duplicate(&Clip{Hash: hashOf(data)}); d != nil {
 		return nil, &DuplicateError{d}
@@ -304,7 +352,12 @@ func (l *Library) write(c *Clip) error {
 	if l.Vault.On() {
 		c.seal(l.Vault.Seal)
 	}
-	dir := filepath.Join(l.Dir, "clips")
+	return writeClip(l.Dir, c)
+}
+
+// writeClip writes a clip's file in the library of a folder.
+func writeClip(lib string, c *Clip) error {
+	dir := filepath.Join(lib, "clips")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
@@ -338,41 +391,121 @@ func (l *Library) Delete(id string) error {
 	return nil
 }
 
-// Take removes a clip as Delete does, and gives the way to put it back
-// as it was, where it was: for a deletion that can be taken back.
-func (l *Library) Take(id string) (restore func() error, err error) {
+// Taken is a clip taken out of the library, which PutBack puts back.
+type Taken struct {
+	clip *Clip
+	at   int    // where it was among the clips
+	lib  string // the library's folder
+	file string // where its file waits in the trash, "" when it has none
+}
+
+// ID is the ID of the clip taken.
+func (t *Taken) ID() string { return t.clip.ID }
+
+// trashDir is where the files of clips deleted wait to be taken back: a
+// hidden folder of the library's, which the sync leaves alone (a name
+// that begins with a dot, ghsync.Included).
+func trashDir(lib string) string { return filepath.Join(lib, ".trash") }
+
+// Trash removes a clip as Delete does, keeping what PutBack needs to put
+// it back as it was, where it was: for a deletion that can be taken
+// back. Its file is moved into the library's trash, not read: read whole
+// to be written again, a video of a gigabyte held the window, and that
+// much memory until the next thing was said. EmptyTrash clears it.
+func (l *Library) Trash(id string, now time.Time) (*Taken, error) {
 	i := slices.IndexFunc(l.Clips, func(c *Clip) bool { return c.ID == id })
 	if i < 0 {
 		return nil, errors.New("找不到这条记录")
 	}
 	c := l.Clips[i]
-	var file []byte
+	t := &Taken{clip: c, at: i, lib: l.Dir}
 	p := l.FilePath(c)
 	if p != "" {
-		file, _ = os.ReadFile(p)
+		if err := os.MkdirAll(trashDir(l.Dir), 0o755); err != nil {
+			return nil, err
+		}
+		t.file = filepath.Join(trashDir(l.Dir), fmt.Sprintf("%d-%s", now.UnixNano(), c.File))
+		switch err := os.Rename(p, t.file); {
+		case os.IsNotExist(err):
+			t.file = "" // not there, as one not come down yet: the clip alone goes
+		case err != nil:
+			return nil, err
+		}
 	}
-	if err := l.Delete(id); err != nil {
+	if err := os.Remove(filepath.Join(l.Dir, "clips", c.ID+".json")); err != nil && !os.IsNotExist(err) {
+		if t.file != "" {
+			_ = os.Rename(t.file, p)
+		}
 		return nil, err
 	}
-	return func() error {
-		if slices.ContainsFunc(l.Clips, func(x *Clip) bool { return x.ID == c.ID }) {
-			return nil
-		}
-		if p != "" && file != nil {
-			if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-				return err
-			}
-			if err := os.WriteFile(p, file, 0o644); err != nil {
-				return err
-			}
-		}
-		if err := l.write(c); err != nil {
+	l.Clips = slices.Delete(l.Clips, i, i+1)
+	l.changed()
+	return t, nil
+}
+
+// PutBack puts back a clip Trash took: into this library when it is that
+// of the folder the clip was in, which may have been read again since;
+// into its folder alone when another is open.
+func (l *Library) PutBack(t *Taken) error {
+	here := l.Dir == t.lib
+	if here && slices.ContainsFunc(l.Clips, func(x *Clip) bool { return x.ID == t.clip.ID }) {
+		return nil
+	}
+	if t.file != "" {
+		p := filepath.Join(t.lib, "files", t.clip.File)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			return err
 		}
-		l.Clips = slices.Insert(l.Clips, min(i, len(l.Clips)), c)
-		l.changed()
-		return nil
-	}, nil
+		switch err := os.Rename(t.file, p); {
+		case os.IsNotExist(err):
+			return errors.New("删除得太久，文件已经清掉了")
+		case err != nil:
+			return err
+		}
+		t.file = ""
+	}
+	if !here {
+		return writeClip(t.lib, t.clip)
+	}
+	if err := l.write(t.clip); err != nil {
+		return err
+	}
+	l.Clips = slices.Insert(l.Clips, min(t.at, len(l.Clips)), t.clip)
+	l.changed()
+	return nil
+}
+
+// Take removes a clip as Trash does, and gives the way to put it back
+// into this library.
+func (l *Library) Take(id string) (restore func() error, err error) {
+	t, err := l.Trash(id, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	return func() error { return l.PutBack(t) }, nil
+}
+
+// EmptyTrash clears the trash of what was put there before a time: of
+// all of it, for the zero time. What is there since may still be taken
+// back.
+func (l *Library) EmptyTrash(before time.Time) {
+	entries, err := os.ReadDir(trashDir(l.Dir))
+	if err != nil {
+		return
+	}
+	left := 0
+	for _, e := range entries {
+		at, _, _ := strings.Cut(e.Name(), "-")
+		ns, err := strconv.ParseInt(at, 10, 64)
+		if err == nil && !before.IsZero() && !time.Unix(0, ns).Before(before) {
+			left++
+			continue
+		}
+		_ = os.RemoveAll(filepath.Join(trashDir(l.Dir), e.Name()))
+	}
+	if left == 0 {
+		_ = os.Remove(trashDir(l.Dir))
+	}
 }
 
 // Categories are the categories in use, the most used first, with counts.
@@ -447,6 +580,15 @@ var textExts = []string{".txt", ".md", ".markdown", ".csv", ".json", ".yaml", ".
 
 func isTextFile(name string) bool {
 	return slices.Contains(textExts, strings.ToLower(filepath.Ext(name)))
+}
+
+// readsText tells whether ExtractText reads a file of this name.
+func readsText(name string) bool {
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".pdf", ".docx", ".pptx", ".xlsx":
+		return true
+	}
+	return isTextFile(name)
 }
 
 // IsURL tells whether text is a lone web address.

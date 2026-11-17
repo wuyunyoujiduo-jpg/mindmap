@@ -44,25 +44,148 @@ func CanMark(part string) bool {
 	return strings.TrimSpace(part) != "" && !strings.ContainsAny(part, "⟦⟧")
 }
 
-// secretPatterns are the shapes of a secret; of each match the part named
-// keep, if any, stays (a line's name before its value), and the part
-// named tail (a mark's end).
-var secretPatterns = []*regexp.Regexp{
-	marked,
+// A rule is a shape of a secret. Of each match the part named keep, if
+// any, stays (a line's name before its value), and the part named tail (a
+// mark's end). not, when set, tells a value the shape takes that is no
+// secret after all, by what is kept before it and what comes after.
+type rule struct {
+	re  *regexp.Regexp
+	not func(keep, value, after string) bool
+}
+
+// value is what a line that names a secret holds: letters, figures and
+// signs of ASCII, up to a space, a quote, a comma or a semicolon. A
+// sentence in Chinese after the name is none (Token: 这是一个很长的句子).
+const value = `[!#-&(-+\--:<-~]`
+
+// secretRules are the shapes of a secret.
+var secretRules = []rule{
+	{re: marked},
 	// A private key, the whole block.
-	regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|\z)`),
+	{re: regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|\z)`)},
 	// Tokens told by how they begin.
-	regexp.MustCompile(`\bsk-[A-Za-z0-9_\-]{16,}`),
-	regexp.MustCompile(`\bgithub_pat_[A-Za-z0-9_]{20,}`),
-	regexp.MustCompile(`\bgh[pousr]_[A-Za-z0-9]{30,}`),
-	regexp.MustCompile(`\bglpat-[A-Za-z0-9_\-]{16,}`),
-	regexp.MustCompile(`\bxox[abprs]-[A-Za-z0-9\-]{10,}`),
-	regexp.MustCompile(`\bAKIA[0-9A-Z]{16}\b`),
-	regexp.MustCompile(`\bAIza[0-9A-Za-z_\-]{30,}`),
-	regexp.MustCompile(`\beyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}`),
+	{re: regexp.MustCompile(`\bsk-[A-Za-z0-9_\-]{16,}`)},
+	{re: regexp.MustCompile(`\bgithub_pat_[A-Za-z0-9_]{20,}`)},
+	{re: regexp.MustCompile(`\bgh[pousr]_[A-Za-z0-9]{30,}`)},
+	{re: regexp.MustCompile(`\bglpat-[A-Za-z0-9_\-]{16,}`)},
+	{re: regexp.MustCompile(`\bxox[abprs]-[A-Za-z0-9\-]{10,}`)},
+	{re: regexp.MustCompile(`\bAKIA[0-9A-Z]{16}\b`)},
+	{re: regexp.MustCompile(`\bAIza[0-9A-Za-z_\-]{30,}`)},
+	{re: regexp.MustCompile(`\beyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}`)},
 	// A line that names what it holds: KEY=value, "token": "value".
-	regexp.MustCompile(`(?i)(?P<keep>\b[A-Za-z0-9_.\-]*(?:secret|token|passw(?:or)?d|api[_\-]?key|private[_\-]?key|access[_\-]?key)[A-Za-z0-9_.\-]*["']?\s*[=:]\s*["']?)[^\s"',;]{8,}`),
-	regexp.MustCompile(`(?P<keep>(?:密码|口令|密钥)\s*[:：=是]\s*)[^\s，。；,;]{6,}`),
+	{regexp.MustCompile(`(?i)(?P<keep>\b[A-Za-z0-9_.\-]*(?:secret|token|passw(?:or)?d|api[_\-]?key|private[_\-]?key|access[_\-]?key)[A-Za-z0-9_.\-]*["']?\s*[=:]\s*["']?)` + value + `{8,}`), notValue},
+	// The same in Chinese, where a shorter value is one: 密码：abc123. Not
+	// after 是, which is of a sentence (密码是什么时候改的).
+	{regexp.MustCompile(`(?P<keep>(?:密码|口令|密钥)\s*[:：=]\s*)` + value + `{6,}`), ofProgram},
+}
+
+// The name of a secret is a word of sentences and of programs too, and
+// what follows it there is no secret: a word (The secret: understanding…),
+// a name of a program (max_tokens: maxTokensDefault, and password=password)
+// in a call), a thing of one or a call (token = strings.Split(line).
+// Taken for secrets, they were sealed, gone from the search and from what
+// an AI reads, and counted under 含密钥: a rule the user could not refuse.
+// So a value is one when it is written in quotes, or has a figure or a
+// sign in it, or is a word right after an = with nothing of a program
+// after it (token=zyxwvutsrq), or a word after the name in Chinese (密码：
+// helloworld), where no sentence goes on in letters; a password of
+// letters alone after a colon is marked by hand.
+var (
+	// aWord is a value of letters alone.
+	aWord = regexp.MustCompile(`^[A-Za-z_]+$`)
+	// selector is names joined by dots (config.apiKey), of letters
+	// alone: a key may have dots in it too, and has figures (SG.x1….y2…);
+	// call a name called or looked into (strings.Split(line, os.environ[).
+	selector = regexp.MustCompile(`^[A-Za-z_]+(?:\.[A-Za-z_]+)+$`)
+	call     = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.]*[(\[]`)
+)
+
+// ofProgram tells whether a value is a thing of a program, or a call of
+// one.
+func ofProgram(_, v, _ string) bool {
+	return call.MatchString(v) || selector.MatchString(strings.TrimRight(v, ")]}"))
+}
+
+// notValue tells whether what a line that names a secret holds is no
+// secret: a thing of a program, or a word of a sentence.
+func notValue(keep, v, after string) bool {
+	if strings.HasSuffix(keep, `"`) || strings.HasSuffix(keep, "'") {
+		return false // in quotes: written out, whatever it looks like
+	}
+	if ofProgram(keep, v, after) {
+		return true
+	}
+	name := strings.TrimRight(v, ")]}") // the end of a call it is in
+	if !aWord.MatchString(name) {
+		return false
+	}
+	inCall := name != v || strings.HasPrefix(after, ",") || strings.HasPrefix(after, ";")
+	return inCall || !strings.HasSuffix(keep, "=")
+}
+
+// each gives yield the secrets a rule finds in s, in bytes and in their
+// order, till yield says to stop.
+func (r rule) each(s string, yield func(from, to int) bool) {
+	if r.not == nil {
+		for _, m := range r.re.FindAllStringSubmatchIndex(s, -1) {
+			if from, to, _ := r.secret(s, m); !yield(from, to) {
+				return
+			}
+		}
+		return
+	}
+	for at := 0; at < len(s); {
+		m := r.re.FindStringSubmatchIndex(s[at:])
+		if m == nil {
+			return
+		}
+		from, to, ok := r.secret(s[at:], m)
+		switch {
+		case !ok:
+			// No value: what it is may hold the name of one, as a call
+			// does (getToken(password=…): looked at from where it begins.
+			at += max(from, 1)
+		case !yield(at+from, at+to):
+			return
+		default:
+			at += max(m[1], 1)
+		}
+	}
+}
+
+// found are the secrets in s a rule finds.
+func (r rule) found(s string) (out [][2]int) {
+	r.each(s, func(from, to int) bool {
+		out = append(out, [2]int{from, to})
+		return true
+	})
+	return out
+}
+
+// finds tells whether a rule finds a secret in s, with no more of s read
+// than up to the first.
+func (r rule) finds(s string) (found bool) {
+	if r.not == nil {
+		return r.re.MatchString(s)
+	}
+	r.each(s, func(int, int) bool {
+		found = true
+		return false
+	})
+	return found
+}
+
+// secret is the secret of a match of the rule's shape, and whether it is
+// one.
+func (r rule) secret(s string, m []int) (from, to int, ok bool) {
+	from, to = m[0], m[1]
+	if keep := r.re.SubexpIndex("keep"); keep >= 0 && m[2*keep] >= 0 {
+		from = m[2*keep+1]
+	}
+	if tail := r.re.SubexpIndex("tail"); tail >= 0 && m[2*tail] >= 0 {
+		to = m[2*tail]
+	}
+	return from, to, r.not == nil || !r.not(s[m[0]:from], s[from:to], s[to:])
 }
 
 // masked stands for a secret.
@@ -84,6 +207,19 @@ func Mask(s string) string {
 	return s
 }
 
+// ReadLen is how long a text is to read, in runes: a secret sealed in it
+// counts as the dots it shows as, not as its token, which is some hundred
+// and thirty letters for a key of forty (a short note with a key was no
+// short note any more once it was sealed, and had a summary written of
+// it).
+func ReadLen(s string) int {
+	s = strings.TrimSpace(s)
+	if vault.Has(s) {
+		s = vault.Token.ReplaceAllString(s, masked)
+	}
+	return utf8.RuneCountInString(s)
+}
+
 // A span is a secret's place in a text, in bytes.
 type span struct {
 	from, to int
@@ -96,16 +232,9 @@ type span struct {
 // letters of a token.
 func secretSpans(s string) []span {
 	var spans []span
-	for _, re := range secretPatterns {
-		keep, tail := re.SubexpIndex("keep"), re.SubexpIndex("tail")
-		for _, m := range re.FindAllStringSubmatchIndex(s, -1) {
-			sp := span{m[0], m[1], re == marked}
-			if keep >= 0 && m[2*keep] >= 0 {
-				sp.from = m[2*keep+1]
-			}
-			if tail >= 0 && m[2*tail] >= 0 {
-				sp.to = m[2*tail]
-			}
+	for _, r := range secretRules {
+		for _, m := range r.found(s) {
+			sp := span{m[0], m[1], r.re == marked}
 			// One that meets another found before is one secret with it;
 			// one that meets a marked one is left to the mark.
 			joined := false
@@ -229,8 +358,8 @@ func HasSecret(s string) bool {
 }
 
 func hasPlain(s string) bool {
-	for _, re := range secretPatterns {
-		if re.MatchString(s) {
+	for _, r := range secretRules {
+		if r.finds(s) {
 			return true
 		}
 	}
