@@ -690,13 +690,15 @@ func (a *app) diaSource(id string) {
 func (a *app) carryDias(ids map[string]string) {
 	a.loadDias()
 	key := a.mapKey(a.path)
-	for from := range ids {
+	for from, to := range ids {
 		f := a.dias[from]
-		if f == nil {
-			continue
+		if f == nil || from == to && f.Path == key {
+			continue // none, or the topic is itself still, in its map: its set is its own
 		}
 		// The set stays under the ID the branch had as well: undone, the
-		// cut brings the branch back by that ID, and its set is there.
+		// cut brings the branch back by that ID, and its set is there. (A
+		// branch pasted by its own IDs into another map takes it along,
+		// as one moved there does: moveDiasTo.)
 		moved := diaFile{Path: key, Set: f.Set.Renamed(ids)}
 		_ = a.writeDia(&moved)
 	}

@@ -592,7 +592,10 @@ func TestDiagramHands(t *testing.T) {
 		t.Fatalf("drawn again without the line: %+v", a.diaChanges(f))
 	}
 
-	// Cut and pasted elsewhere, the branch keeps its set, by its new IDs.
+	// Cut and pasted elsewhere, the branch is itself still, by the IDs it
+	// had, and its set with it (before 0.105.2 a paste gave new IDs, and
+	// the set followed by them: TestCutAndPasteKeepLinks has that way,
+	// which a cut undone still takes).
 	a.closeDia()
 	a.selectNode(root.ID)
 	a.copyNodes(true)
@@ -606,7 +609,7 @@ func TestDiagramHands(t *testing.T) {
 	tt.Frame()
 	moved := find(t, a, "退货退款")
 	g := a.diaOf(moved.ID)
-	if moved.ID == root.ID || g == nil || a.diaOf(root.ID) != nil {
+	if moved.ID != root.ID || g == nil {
 		t.Fatalf("the set did not follow: %+v", g)
 	}
 	if src := g.Flow.Node("D").Src; len(src) != 2 || src[1] != find(t, a, "超过 500 元主管审").ID || a.diaChanges(g).n != 0 {

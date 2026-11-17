@@ -80,6 +80,9 @@ func (d *Document) Delete(id string) (next string, err error) {
 	}
 	i := slices.Index(p.Children, n)
 	p.Children = slices.Delete(p.Children, i, i+1)
+	if p.settleSummary() { // its last child: the summary's topic is one now
+		return p.Children[0].ID, nil
+	}
 	switch {
 	case i < len(p.Children):
 		return p.Children[i].ID, nil
@@ -123,6 +126,9 @@ func (d *Document) Move(id, newParentID string, index int) error {
 	}
 	np.Children = slices.Insert(np.Children, index, n)
 	np.Collapsed = false
+	if p != nil {
+		p.settleSummary() // the last child it had went elsewhere
+	}
 	return nil
 }
 
@@ -251,6 +257,7 @@ func (d *Document) Float(id string, at Point) error {
 	}
 	i := slices.Index(p.Children, n)
 	p.Children = slices.Delete(p.Children, i, i+1)
+	p.settleSummary()
 	n.Pos = &at
 	d.Floating = append(d.Floating, n)
 	return nil

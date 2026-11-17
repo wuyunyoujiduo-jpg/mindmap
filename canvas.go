@@ -352,10 +352,22 @@ func statusColor(s model.Status) ui.Color {
 // the wheel or the touchpad move it, and Cmd with the wheel zooms. Below it are
 // the tabs of the file's canvases.
 func (a *app) canvasView(c *ui.Context) {
-	ui.Column(c).Grow(1).Children(func() {
+	ui.Column(c).Grow(1).ObserveInput(a.stepEnds).Children(func() {
 		a.canvasArea(c)
 		a.sheetTabs(c)
 	})
+}
+
+// stepEnds ends the step that edits of one key make together (mutate), as
+// the canvas, the outline and the topic's column see their input: at a
+// press of the pointer, which begins another drag or leaves a field (or
+// comes back to it), and at the keys that leave one. Without an end, a
+// floating topic dragged twice was one step to undo, and a title written,
+// left and written again.
+func (a *app) stepEnds(ev ui.InputEvent) {
+	if ev.Kind == ui.InputPointerDown || ev.Kind == ui.InputKeyDown && (ev.Key == ui.KeyTab || ev.Key == ui.KeyEscape) {
+		a.lastEdit = ""
+	}
 }
 
 func (a *app) canvasArea(c *ui.Context) {
@@ -428,7 +440,12 @@ func (a *app) canvasArea(c *ui.Context) {
 			branch[n.ID] = len(shown.Root.Children) + slices.Index(shown.Floating, n)
 		case p == nil:
 		case p == shown.Root:
-			branch[n.ID] = slices.Index(p.Children, n)
+			// The topic of the middle's own summary is no child of it: a
+			// color after the branches', as a floating topic's. (It had the
+			// index -1, and a logic chart with one would not draw at all.)
+			if branch[n.ID] = slices.Index(p.Children, n); branch[n.ID] < 0 {
+				branch[n.ID] = len(p.Children)
+			}
 		default:
 			branch[n.ID] = branch[p.ID]
 		}

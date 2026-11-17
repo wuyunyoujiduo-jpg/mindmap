@@ -327,25 +327,9 @@ func (a *app) paste() bool {
 	var nodes []*model.Node
 	switch {
 	case a.clip != nil && text == a.clipText:
-		ids := map[string]string{} // of topics cut: the ID each had to the one it has now
-		for _, n := range a.clip {
-			c := n.Copy()
-			copyAssets(c, a.clipAssets, model.AssetsDir(a.path))
-			nodes = append(nodes, c)
-			if a.clipCut != nil {
-				now := map[string]string{}
-				pairIDs(now, n, c)
-				for clip, to := range now {
-					if from, ok := a.clipCut[clip]; ok {
-						ids[from] = to
-					}
-				}
-			}
-		}
-		if len(ids) > 0 { // moved once: pasted again, they are copies
-			a.clipCut = nil
-			defer a.carryDias(ids)
-		}
+		var carry func()
+		nodes, carry = a.clipNodes()
+		defer carry()
 	case a.pasteImage():
 		return true
 	case strings.TrimSpace(text) != "":
@@ -365,6 +349,63 @@ func (a *app) paste() bool {
 	}
 	a.reveal = true
 	return true
+}
+
+// clipNodes are the clipboard's topics, to put into the open map: copies,
+// with IDs of their own. Topics cut come back the first time as
+// themselves, by the IDs they had, as a branch moved to another map does:
+// what links to them (mindmap:…#id on a topic, <mindmap:…> in a thought)
+// still finds them, where a cut and a paste, which is how a branch is
+// moved by the keys, left every such link pointing at nothing. Pasted
+// again they are copies; and copies the first time too when one of those
+// IDs is in the map, the cut having been undone. carry, run once they are
+// in the map, has what was drawn of them follow them (carryDias).
+func (a *app) clipNodes() (nodes []*model.Node, carry func()) {
+	cut := a.clipCut
+	a.clipCut = nil // moved once
+	same := cut != nil
+	for _, had := range cut {
+		if a.file.Node(had) != nil {
+			same = false
+			break
+		}
+	}
+	ids := map[string]string{} // of topics cut: the ID each had to the one it has now
+	for _, n := range a.clip {
+		c := n.Copy()
+		if same {
+			c = n.Clone()
+			var back func(m *model.Node)
+			back = func(m *model.Node) {
+				if had, ok := cut[m.ID]; ok {
+					m.ID = had
+					ids[had] = had
+				}
+				for _, ch := range m.Children {
+					back(ch)
+				}
+				if t := m.SummaryTopic(); t != nil {
+					back(t)
+				}
+			}
+			back(c)
+		} else if cut != nil {
+			now := map[string]string{}
+			pairIDs(now, n, c)
+			for clip, to := range now {
+				if had, ok := cut[clip]; ok {
+					ids[had] = to
+				}
+			}
+		}
+		copyAssets(c, a.clipAssets, model.AssetsDir(a.path))
+		nodes = append(nodes, c)
+	}
+	return nodes, func() {
+		if len(ids) > 0 {
+			a.carryDias(ids)
+		}
+	}
 }
 
 // copyAssets copies the pictures of nodes from one map's assets folder to
