@@ -29,6 +29,7 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -66,6 +67,79 @@ type Config struct {
 	// cannot be in the maps folder). The repository is the same whichever
 	// computer's folder it is.
 	Mounts map[string]string
+	// meter is what GitHub says of the calls left, through one Sync.
+	meter *meter
+}
+
+// Reserve is how many of the hour's calls a sync leaves the token's user:
+// GitHub counts them for the user, all tokens together (5000 an hour),
+// and a sync of many files took them all, so that nothing else of the
+// account went through, a release among them.
+const Reserve = 500
+
+// meter keeps what GitHub's answers say of the calls left to the token's
+// user, and when they are counted anew.
+type meter struct {
+	mu    sync.Mutex
+	known bool
+	left  int
+	reset time.Time
+}
+
+func (m *meter) note(h http.Header) {
+	if m == nil {
+		return
+	}
+	left, err := strconv.Atoi(h.Get("X-RateLimit-Remaining"))
+	if err != nil {
+		return
+	}
+	at, _ := strconv.ParseInt(h.Get("X-RateLimit-Reset"), 10, 64)
+	m.mu.Lock()
+	m.known, m.left, m.reset = true, left, time.Unix(at, 0)
+	m.mu.Unlock()
+}
+
+// spare tells whether what is left is to be spared, and until when.
+func (m *meter) spare() (time.Time, bool) {
+	if m == nil {
+		return time.Time{}, false
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.reset, m.known && m.left < Reserve
+}
+
+// LimitError says the calls GitHub allows the token's user in an hour are
+// used up, or (Spared) that the sync stopped short of using them up. The
+// sync goes on after Reset, from where it was.
+type LimitError struct {
+	Reset  time.Time
+	Spared bool
+}
+
+func (e *LimitError) Error() string {
+	when := "稍后"
+	if !e.Reset.IsZero() {
+		when = e.Reset.Local().Format("15:04") + " 后"
+	}
+	if e.Spared {
+		return "这个 GitHub 账号这一小时的调用次数快用完了，剩下的留给别的用途，" + when + "自动接着同步"
+	}
+	return "这个 GitHub 账号这一小时的调用次数用完了（每小时 5000 次，整个账号共用），" + when + "自动接着同步"
+}
+
+// RetryAfter is when a sync that failed for GitHub's limit is worth
+// trying again, zero for another failure.
+func RetryAfter(err error) time.Time {
+	var e *LimitError
+	if errors.As(err, &e) {
+		if e.Reset.IsZero() {
+			return time.Now().Add(10 * time.Minute)
+		}
+		return e.Reset.Add(5 * time.Second)
+	}
+	return time.Time{}
 }
 
 // local is where a file of the repository, by its path, is on this
@@ -225,6 +299,10 @@ type state struct {
 	// unchanged files are not read again.
 	Hashes map[string]cached `json:"hashes"`
 	At     time.Time         `json:"at"`
+	// Sent are the blobs a sync uploaded and did not commit, for it did
+	// not end: the next does not upload them again. A sync of many files
+	// that failed at the last began again at the first, each a call.
+	Sent map[string]bool `json:"sent,omitempty"`
 }
 
 type cached struct {
@@ -344,6 +422,9 @@ func Sync(ctx context.Context, dir string, cfg Config, progress func(string)) (R
 	if progress == nil {
 		progress = func(string) {}
 	}
+	if cfg.meter == nil {
+		cfg.meter = &meter{}
+	}
 	var res Result
 	for attempt := 0; ; attempt++ {
 		r, err := syncOnce(ctx, dir, cfg, progress)
@@ -456,6 +537,11 @@ func syncOnce(ctx context.Context, dir string, cfg Config, progress func(string)
 		progress(fmt.Sprintf("正在下载 %d 个文件…", len(pull)))
 	}
 	if err := cfg.each(ctx, pull, func(p string) error {
+		// What was written stays, and is not asked for again: a download
+		// stopped goes on from where it was by itself.
+		if reset, low := cfg.meter.spare(); low {
+			return &LimitError{Reset: reset, Spared: true}
+		}
 		data, err := cfg.blob(ctx, remote[p])
 		if err != nil {
 			return err
@@ -518,22 +604,43 @@ func syncOnce(ctx context.Context, dir string, cfg Config, progress func(string)
 		progress(fmt.Sprintf("正在上传 %d 个文件…", len(push)))
 		var mu sync.Mutex
 		entries := []treeEntry{}
+		// What was uploaded is kept though the sync fails, so that the
+		// next goes on from there.
+		fail := func(err error) (Result, error) {
+			for _, p := range res.Written {
+				delete(s.Hashes, p)
+			}
+			_ = s.save(dir)
+			return res, err
+		}
+		if s.Sent == nil {
+			s.Sent = map[string]bool{}
+		}
 		if err := cfg.each(ctx, push, func(p string) error {
 			data, err := os.ReadFile(cfg.local(dir, p))
 			if err != nil {
 				return err
 			}
-			sha, err := cfg.putBlob(ctx, data)
-			if err != nil {
-				return err
+			sha := blobSHA(data)
+			mu.Lock()
+			sent := s.Sent[sha]
+			mu.Unlock()
+			if !sent {
+				if reset, low := cfg.meter.spare(); low {
+					return &LimitError{Reset: reset, Spared: true}
+				}
+				if sha, err = cfg.putBlob(ctx, data); err != nil {
+					return err
+				}
 			}
 			mu.Lock()
+			s.Sent[sha] = true
 			entries = append(entries, treeEntry{Path: p, Mode: "100644", Type: "blob", SHA: &sha})
 			merged[p] = sha
 			mu.Unlock()
 			return nil
 		}); err != nil {
-			return res, err
+			return fail(err)
 		}
 		for _, p := range drop {
 			entries = append(entries, treeEntry{Path: p, Mode: "100644", Type: "blob"})
@@ -545,17 +652,20 @@ func syncOnce(ctx context.Context, dir string, cfg Config, progress func(string)
 		}
 		commit, err := cfg.commit(ctx, head, tree, entries, message(len(push), len(drop)))
 		if err != nil {
-			return res, err
+			if c := status(err); c == 404 || c == 422 {
+				s.Sent = nil // a blob kept from before is gone: all are sent again
+			}
+			return fail(err)
 		}
 		if err := cfg.move(ctx, commit); err != nil {
-			return res, err
+			return fail(err)
 		}
 		head = commit
 		res.Pushed, res.Deleted = len(push), res.Deleted+len(drop)
 	}
 	res.Commit = head
 
-	s.Commit, s.Base, s.At = head, merged, now()
+	s.Commit, s.Base, s.At, s.Sent = head, merged, now(), nil
 	// The files written are hashed again next time.
 	for _, p := range res.Written {
 		delete(s.Hashes, p)
@@ -717,6 +827,12 @@ func (cfg Config) each(ctx context.Context, paths []string, fn func(string) erro
 		if ctx.Err() != nil {
 			break
 		}
+		mu.Lock()
+		failed := first != nil
+		mu.Unlock()
+		if failed { // the rest would fail as it did, each a call
+			break
+		}
 		sem <- struct{}{}
 		wg.Add(1)
 		go func() {
@@ -774,14 +890,18 @@ func (cfg Config) request(ctx context.Context, method, p string, in, out any) er
 		return errors.New("还没有填写 GitHub 令牌")
 	}
 	var body io.Reader
+	// A large file takes its time on a slow line: a file that never went
+	// up in two minutes failed the sync each time it was tried.
+	timeout := 2 * time.Minute
 	if in != nil {
 		data, err := json.Marshal(in)
 		if err != nil {
 			return err
 		}
 		body = bytes.NewReader(data)
+		timeout += time.Duration(len(data)/(64<<10)) * time.Second
 	}
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, method, cfg.api()+p, body)
 	if err != nil {
@@ -806,9 +926,20 @@ func (cfg Config) request(ctx context.Context, method, p string, in, out any) er
 	if err != nil {
 		return err
 	}
+	cfg.meter.note(resp.Header)
 	if resp.StatusCode >= 300 {
 		var e struct{ Message string }
 		_ = json.Unmarshal(data, &e)
+		if (resp.StatusCode == 403 || resp.StatusCode == 429) &&
+			(resp.Header.Get("X-RateLimit-Remaining") == "0" || resp.Header.Get("Retry-After") != "" || strings.Contains(strings.ToLower(e.Message), "rate limit")) {
+			var reset time.Time
+			if at, err := strconv.ParseInt(resp.Header.Get("X-RateLimit-Reset"), 10, 64); err == nil && resp.Header.Get("X-RateLimit-Remaining") == "0" {
+				reset = time.Unix(at, 0)
+			} else if after, err := strconv.Atoi(resp.Header.Get("Retry-After")); err == nil {
+				reset = time.Now().Add(time.Duration(after) * time.Second)
+			}
+			return &LimitError{Reset: reset}
+		}
 		return &apiError{resp.StatusCode, e.Message}
 	}
 	if out != nil {

@@ -502,7 +502,16 @@ by AI, and an AI assistant.
   GitHub's history has of before. Its draft is
   https://claude.ai/artifact/8hvLab7D1yKyG8urBNzA71.
 - Sync with GitHub: `internal/ghsync` (a three-way merge over the REST API,
-  state in `<maps folder>/.sync/`), wired in `sync.go`. A map changed on
+  state in `<maps folder>/.sync/`), wired in `sync.go`. GitHub counts the
+  calls of a user, all tokens together, 5000 an hour, and a file sent is
+  a call: a sync of many files that failed began again at the first, and
+  could take every hour's calls without ever ending, so that the
+  releases, which publish by a token of the same account, were refused
+  (0.100.7, 0.100.8, 0.101.1; the user asked what took them, and this is
+  what the code showed, not seen on the user's computer). It goes on from
+  where it stopped (`state.Sent`), leaves the account `Reserve` calls,
+  and waits for the hour to be counted anew (`LimitError`, `RetryAfter`,
+  `app.syncHold`). A map changed on
   both computers is merged topic by topic against the version both came
   from (`model.Merge`, by `Config.Merge`), and where both changed one
   field each its own way a window asks which to keep, as git does

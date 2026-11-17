@@ -381,6 +381,7 @@ type app struct {
 	syncBusy                       bool
 	syncMsg, syncErr, syncCheck    string
 	syncAt, syncTried, syncChanged time.Time
+	syncHold                       time.Time // not synced before: GitHub's calls are used up till then
 	syncLast                       ghsync.Result
 	syncDrafts                     [2]string
 	syncRun                        func(context.Context, string, ghsync.Config, func(string)) (ghsync.Result, error)

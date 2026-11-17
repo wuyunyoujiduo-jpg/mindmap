@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -27,6 +28,13 @@ type fakeGitHub struct {
 	commits map[string][2]string         // commit → tree, parent
 	head    string                       // "" for an empty repository
 	pushes  int
+	// The limit of the calls: left counts down with each when it is set
+	// (limited), told in the answers' headers, and at none every call is
+	// refused. uploads counts the blobs sent.
+	limited bool
+	left    int
+	uploads int
+	drain   int // at this many uploads something else takes the calls left
 }
 
 func newFake() *fakeGitHub {
@@ -98,6 +106,16 @@ func (f *fakeGitHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	var in map[string]any
 	_ = json.NewDecoder(r.Body).Decode(&in)
+	if f.limited {
+		w.Header().Set("X-RateLimit-Reset", fmt.Sprint(limitReset.Unix()))
+		if f.left <= 0 {
+			w.Header().Set("X-RateLimit-Remaining", "0")
+			reply(403, map[string]string{"message": "API rate limit exceeded for user ID 1."})
+			return
+		}
+		f.left--
+		w.Header().Set("X-RateLimit-Remaining", fmt.Sprint(f.left))
+	}
 	switch {
 	case r.Header.Get("Authorization") != "Bearer good":
 		reply(401, map[string]string{"message": "Bad credentials"})
@@ -137,6 +155,9 @@ func (f *fakeGitHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case strings.HasPrefix(p, "/git/blobs/") && r.Method == "GET":
 		reply(200, map[string]string{"content": base64.StdEncoding.EncodeToString(f.blobs[strings.TrimPrefix(p, "/git/blobs/")]), "encoding": "base64"})
 	case p == "/git/blobs":
+		if f.uploads++; f.uploads == f.drain {
+			f.left = 0
+		}
 		data, _ := base64.StdEncoding.DecodeString(in["content"].(string))
 		sha := blobSHA(data)
 		f.blobs[sha] = data
@@ -518,5 +539,79 @@ func TestMounts(t *testing.T) {
 	sync1(t, a, ca)
 	if !strings.Contains(read(skillsA, "review/SKILL.md"), "better") || read(skillsA, "_machines/a.json") != "" {
 		t.Fatal("a did not follow")
+	}
+}
+
+var limitReset = time.Date(2030, 1, 1, 12, 0, 0, 0, time.UTC)
+
+// A sync of many files that GitHub's limit stops goes on, the next time,
+// from where it stopped: it began again at the first file, each a call,
+// and so used up every hour's calls of the account without ever ending.
+func TestLimitStopsAndGoesOn(t *testing.T) {
+	f, cfg := setup(t)
+	dir := t.TempDir()
+	const files = 40
+	for i := range files {
+		put(t, dir, fmt.Sprintf("m%02d.mindmap.json", i), fmt.Sprint("map ", i))
+	}
+	// The calls run out on the way, taken by something else of the account.
+	f.limited, f.left, f.drain = true, 5000, 12
+	_, err := Sync(context.Background(), dir, cfg, nil)
+	var limit *LimitError
+	if !errors.As(err, &limit) || limit.Spared || !limit.Reset.Equal(limitReset) {
+		t.Fatalf("the limit met: %v", err)
+	}
+	if at := RetryAfter(err); !at.After(limitReset) || at.After(limitReset.Add(time.Minute)) {
+		t.Fatalf("tried again at %v", at)
+	}
+	sent := f.uploads
+	if sent == 0 || sent >= files || f.files()["m00.mindmap.json"] != "" {
+		t.Fatalf("%d uploaded before the limit, files in the repository: %v", sent, f.files())
+	}
+	// Counted anew, the rest goes up, and what went up before is not sent again.
+	f.left, f.drain = 5000, 0
+	res := sync1(t, dir, cfg)
+	if res.Pushed != files || f.files()["m39.mindmap.json"] == "" {
+		t.Fatalf("pushed %d, in the repository: %v", res.Pushed, f.files())
+	}
+	if f.uploads != files {
+		t.Fatalf("%d uploads for %d files: %d were sent twice", f.uploads, files, f.uploads-files)
+	}
+	// Nothing is kept of it once it ended.
+	if s := loadState(dir, cfg); len(s.Sent) != 0 {
+		t.Fatalf("%d blobs still noted as sent", len(s.Sent))
+	}
+}
+
+// A sync leaves the account some of its hour's calls: it stops short of
+// the last, saying so, and goes on when they are counted anew.
+func TestLimitSpared(t *testing.T) {
+	f, cfg := setup(t)
+	dir := t.TempDir()
+	for i := range 30 {
+		put(t, dir, fmt.Sprintf("m%02d.mindmap.json", i), fmt.Sprint("map ", i))
+	}
+	f.limited, f.left = true, Reserve+12
+	_, err := Sync(context.Background(), dir, cfg, nil)
+	var limit *LimitError
+	if !errors.As(err, &limit) || !limit.Spared {
+		t.Fatalf("not spared: %v", err)
+	}
+	if f.left < Reserve-8 { // those under way as it was seen went through
+		t.Fatalf("%d calls left of the %d to spare", f.left, Reserve)
+	}
+	if f.uploads == 0 || f.files()["m00.mindmap.json"] != "" {
+		t.Fatalf("%d uploaded", f.uploads)
+	}
+	sent := f.uploads
+	f.left = 5000
+	if res := sync1(t, dir, cfg); res.Pushed != 30 || f.uploads != 30 {
+		t.Fatalf("pushed %d with %d uploads, %d before", res.Pushed, f.uploads, sent)
+	}
+	// A sync with nothing to send is no call but the one that looks.
+	before := f.left
+	sync1(t, dir, cfg)
+	if used := before - f.left; used != 1 {
+		t.Fatalf("an idle sync took %d calls", used)
 	}
 }

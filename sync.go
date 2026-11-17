@@ -192,6 +192,9 @@ func (a *app) syncDue() {
 		return
 	}
 	now := a.now()
+	if now.Before(a.syncHold) {
+		return
+	}
 	wait := syncEvery
 	if a.syncErr != "" {
 		wait = syncRetry
@@ -238,9 +241,12 @@ func (a *app) syncNow() {
 		res, _ := v.(ghsync.Result)
 		if err != nil {
 			a.syncErr = err.Error() // stays said where the sync is, until it is mended
+			// GitHub's calls used up: not tried again till they are
+			// counted anew, each try a call refused.
+			a.syncHold = ghsync.RetryAfter(err)
 			return
 		}
-		a.syncErr, a.syncAt, a.syncLast = "", a.now(), res
+		a.syncErr, a.syncAt, a.syncLast, a.syncHold = "", a.now(), res, time.Time{}
 		if byHand && len(res.Conflicts) == 0 {
 			if res.Synced() {
 				a.tell(fmt.Sprintf("已同步：下载 %d 个、上传 %d 个文件", res.Pulled, res.Pushed))
