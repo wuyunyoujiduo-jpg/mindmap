@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 	"unicode"
@@ -316,6 +317,7 @@ func (a *app) copyClip(clip *library.Clip) {
 
 func (a *app) copyOpened(text string, sealed bool) {
 	if !sealed {
+		text, _ = library.Marks(text) // the marks are the file's
 		a.plat.CopyText(text)
 		a.tell("已复制")
 		return
@@ -326,6 +328,7 @@ func (a *app) copyOpened(text string, sealed bool) {
 			a.tell("这条是用另一个二次密码加密的，用那个密码解锁")
 			return
 		}
+		p, _ = library.Marks(p) // the marks are the file's
 		a.plat.CopyText(p)
 		if a.cfg.VaultKeepClipboard {
 			a.tell("已复制")
@@ -756,70 +759,172 @@ func (a *app) secretKeys(c *ui.Context, clip *library.Clip) {
 	}
 }
 
-// A mark is the part of a clip's field chosen in it, which its key makes
-// a secret.
+// A mark is the part of a clip's field chosen in it, which a key makes a
+// secret, or (un) no secret any more.
 type mark struct {
 	id, field string
-	from, to  int // in runes
+	from, to  int // in runes of the text shown
+	un        bool
+}
+
+// secretField is a field of a clip's details as it is written in: the
+// text without the marks of its secrets (library.Marks), those parts and
+// what the rules find shown in the accent, bold. The user found the marks
+// round a password strange to read: they are the file's alone.
+type secretField struct {
+	shown string
+	parts [][2]int // marked by hand
+}
+
+func (a *app) secretField(full string) secretField {
+	shown, parts := library.Marks(full)
+	return secretField{shown, parts}
+}
+
+// style shows the secrets of the field in their look.
+func (f secretField) style(in ui.Element, t *ui.Theme) {
+	for _, p := range append(library.Found(f.shown), f.parts...) {
+		in.TextRanges(ui.TextRange{Start: p[0], End: p[1], Color: t.Accent, Weight: 700})
+	}
+}
+
+// typed is the field's text to keep once next was typed in it: the parts
+// marked follow the edit. caret is where it left the caret, which tells
+// where it was made when the letters by it are alike.
+func (f secretField) typed(next string, caret int) string {
+	if len(f.parts) == 0 {
+		return next
+	}
+	return library.WithMarks(next, moveParts(f.parts, []rune(f.shown), []rune(next), caret))
+}
+
+// moveParts are the parts of a text after an edit of it, from was to
+// now. What is typed in a part is of it; what is typed at its ends is
+// not, nor what replaces it from outside; a part wholly replaced from
+// its first letter to its last is the new letters (a password changed).
+func moveParts(parts [][2]int, was, now []rune, caret int) [][2]int {
+	// The edit replaced was[p:q] by now[p:p+n].
+	suffix := func(k int) bool { // the last k letters are alike
+		return k <= len(was) && k <= len(now) && slices.Equal(was[len(was)-k:], now[len(now)-k:])
+	}
+	s := -1
+	if k := len(now) - caret; caret >= 0 && k >= 0 && suffix(k) {
+		s = k // the edit ends at the caret
+	} else {
+		for s = 0; s < len(was) && s < len(now) && was[len(was)-1-s] == now[len(now)-1-s]; s++ {
+		}
+	}
+	p := 0
+	for p < len(was)-s && p < len(now)-s && was[p] == now[p] {
+		p++
+	}
+	q, n := len(was)-s, len(now)-s-p
+	delta := n - (q - p)
+	var out [][2]int
+	for _, part := range parts {
+		from, to := part[0], part[1]
+		switch {
+		case from < p || from == p && q > p: // begins before the edit, or with it
+		case from < q || from == p: // in what went, or just after what came
+			from = p + n
+		default:
+			from += delta
+		}
+		switch {
+		case to <= p: // ends before the edit: what is typed at its end is not of it
+		case to < q:
+			to = p
+		default:
+			to += delta
+		}
+		if from < to {
+			out = append(out, [2]int{from, to})
+		}
+	}
+	return out
 }
 
 // markKey gives a field of a clip's details the way to say a part of it
 // is a secret, where no rule tells one (the user had a line of an
 // address, a name and a password, and asked how to hide the password):
 // the part chosen, by a key that shows under the field while one is, and
-// by the field's menu. The part is put between marks (library.MarkOpen),
-// which the app alone writes, and kept, sealed when a second password is
-// set; the field shows it in dots at once, which is what was asked for.
-func (a *app) markKey(c *ui.Context, clip *library.Clip, field string, in ui.Element, text string, set func(string)) {
+// by the field's menu; and the way back, with the caret in a part marked.
+// The part is put between marks in what is kept (library.MarkOpen), which
+// the app alone writes and no field shows, and sealed when a second
+// password is set; the field shows it in dots at once, which is what was
+// asked for.
+func (a *app) markKey(c *ui.Context, clip *library.Clip, field string, in ui.Element, f secretField, set func(full string)) {
 	from, to := in.TextSelection()
 	from, to = min(from, to), max(from, to)
-	chosen := mark{clip.ID, field, from, to}
+	chosen := mark{id: clip.ID, field: field, from: from, to: to}
+	for _, p := range f.parts { // in a part marked, or over one: the way back
+		if from < p[1] && to > p[0] || from == to && from >= p[0] && from <= p[1] {
+			chosen.un = true
+		}
+	}
 	// The part chosen stays the one to mark when the field is left for
 	// the key: a click on the key takes the field's focus first.
 	if in.Focused() {
 		a.marking = mark{}
-		if from != to {
+		if from != to || chosen.un {
 			a.marking = chosen
 		}
 	}
 	do := func(m mark) {
-		a.later(func() { a.markSecret(clip, field, text, m, set) })
+		a.later(func() { a.markSecret(f, m, set) })
 	}
 	in.ContextMenu(func(m *ui.Menu) {
 		m.EditItems()
 		m.Separator()
-		if m.Item("设为密码").Disabled(from == to).Chosen() {
+		if chosen.un {
+			if m.Item("不再当作密码").Chosen() {
+				do(chosen)
+			}
+		} else if m.Item("设为密码").Disabled(from == to).Chosen() {
 			do(chosen)
 		}
 	})
 	if m := a.marking; m.id == clip.ID && m.field == field {
 		ui.Row(c.Key("mark-"+field)).Margin(0, 0, 0, -8).Children(func() {
-			if ghostButton(c, "把选中的设为密码", "选中的这一段会遮住；设了二次密码的话会加密保存").Clicked() {
+			if m.un {
+				if ghostButton(c, "不再当作密码", "这一段照原样显示和保存").Clicked() {
+					do(m)
+				}
+			} else if ghostButton(c, "把选中的设为密码", "选中的这一段会遮住；设了二次密码的话会加密保存").Clicked() {
 				do(m)
 			}
 		})
 	}
 }
 
-// markSecret makes the part m of a field's text a secret.
-func (a *app) markSecret(clip *library.Clip, field, text string, m mark, set func(string)) {
+// markSecret makes the part m of a field's text a secret, or no secret
+// any more.
+func (a *app) markSecret(f secretField, m mark, set func(full string)) {
 	a.marking = mark{}
-	r := []rune(text)
+	r := []rune(f.shown)
 	from, to := max(0, min(m.from, len(r))), max(0, min(m.to, len(r)))
+	if m.un {
+		parts := slices.DeleteFunc(slices.Clone(f.parts), func(p [2]int) bool {
+			return from < p[1] && to > p[0] || from == to && from >= p[0] && from <= p[1]
+		})
+		set(library.WithMarks(f.shown, parts))
+		a.tell("这一段不再当作密码")
+		return
+	}
 	for from < to && unicode.IsSpace(r[from]) { // a word chosen with the space by it
 		from++
 	}
 	for to > from && unicode.IsSpace(r[to-1]) {
 		to--
 	}
-	part := string(r[from:to])
-	if !library.CanMark(part) {
-		if strings.TrimSpace(part) != "" {
-			a.tell("选中的这一段里已经有设为密码的内容了")
-		}
+	if from >= to {
 		return
 	}
-	set(string(r[:from]) + library.MarkOpen + part + library.MarkClose + string(r[to:]))
+	if !library.CanMark(string(r[from:to])) {
+		a.tell("选中的这一段里有 ⟦ ⟧ 这样的符号，不能设为密码")
+		return
+	}
+	set(library.WithMarks(f.shown, append(slices.Clone(f.parts), [2]int{from, to})))
 	a.hideSecrets() // in dots at once
 	if a.vault.On() {
 		a.tell("已设为密码，加密保存了")

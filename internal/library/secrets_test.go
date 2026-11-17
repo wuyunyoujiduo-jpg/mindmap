@@ -75,3 +75,27 @@ func TestSealedOnce(t *testing.T) {
 		t.Errorf("two rules, one secret: %q", got)
 	}
 }
+
+// The marks are the file's: a field shows the text without them, and the
+// parts they held, and puts them back as it keeps it.
+func TestMarksInAndOut(t *testing.T) {
+	const full = "账号 ⟦密:wuy@gmail.com  ttc13!⟧ 备用 ⟦密:第二个⟧。"
+	shown, parts := Marks(full)
+	if shown != "账号 wuy@gmail.com  ttc13! 备用 第二个。" || len(parts) != 2 {
+		t.Fatalf("shown %q, parts %v", shown, parts)
+	}
+	r := []rune(shown)
+	if string(r[parts[0][0]:parts[0][1]]) != "wuy@gmail.com  ttc13!" || string(r[parts[1][0]:parts[1][1]]) != "第二个" {
+		t.Fatalf("parts %v", parts)
+	}
+	if got := WithMarks(shown, parts); got != full {
+		t.Fatalf("put back: %q", got)
+	}
+	if s, p := Marks("没有记号的 || 一行"); s != "没有记号的 || 一行" || p != nil {
+		t.Error("a text with no marks")
+	}
+	// What the rules find shows in the same look.
+	if f := Found("用 sk-abcdefghijklmnopqrstuv 调，密码：Hunter2Hunter2"); len(f) != 2 || f[0] != [2]int{2, 27} {
+		t.Errorf("found %v", f)
+	}
+}

@@ -484,7 +484,14 @@ by AI, and an AI assistant.
   a part is chosen, and the field's menu), put between marks,
   ⟦密:ttc13!⟧ (`library.MarkOpen`, `marked`), which stay round the
   secret or its token so that it is one still when shown and kept
-  again. The marks are the app's alone to write, of signs no text has:
+  again. No field shows the marks (`library.Marks`, `secretField`): the
+  text is written in without them, the parts they hold in the accent,
+  bold, as what the rules find is, and follow what is typed
+  (`moveParts`: in a part is of it, at its ends is not); the caret in
+  one offers 不再当作密码. The user read ⟦密:…⟧ round a password in the
+  field and found it strange (0.101.4): MyGo's fields style runs by
+  color and weight alone (`TextRanges`), so the look is that and no
+  tinted block. The marks are the app's alone to write, of signs no text has:
   first they were ||, to be typed too, and the user asked at once what
   became of words written so already; they would have been hidden, a
   rule not seen nor refused, as every #word a tag had been. The user had a line of an address, a name and a short password

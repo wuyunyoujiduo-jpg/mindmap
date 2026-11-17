@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/vault"
 )
@@ -83,15 +84,17 @@ func Mask(s string) string {
 	return s
 }
 
-// eachSecret is s with each thing that looks like a secret replaced by
-// what with makes of it. The secrets are found in s as it is, all of
-// them, and replaced at once: what is put for one is not searched by the
-// next pattern, which would find a key in the letters of a token.
-func eachSecret(s string, with func(secret string) string) string {
-	type span struct {
-		from, to int
-		fixed    bool // marked by hand: taken as it is
-	}
+// A span is a secret's place in a text, in bytes.
+type span struct {
+	from, to int
+	fixed    bool // marked by hand: taken as it is
+}
+
+// secretSpans are the secrets of s, in their order. They are found in s
+// as it is, all of them, before any is replaced: what is put for one is
+// not searched by the next pattern, which would find a key in the
+// letters of a token.
+func secretSpans(s string) []span {
 	var spans []span
 	for _, re := range secretPatterns {
 		keep, tail := re.SubexpIndex("keep"), re.SubexpIndex("tail")
@@ -122,22 +125,98 @@ func eachSecret(s string, with func(secret string) string) string {
 			}
 		}
 	}
-	if len(spans) == 0 {
-		return s
-	}
 	slices.SortFunc(spans, func(a, b span) int { return a.from - b.from })
-	var b strings.Builder
+	out := spans[:0]
 	at := 0
 	for _, sp := range spans {
 		if sp.from < at { // two grown into each other
 			continue
 		}
+		out, at = append(out, sp), sp.to
+	}
+	return out
+}
+
+// eachSecret is s with each thing that looks like a secret replaced by
+// what with makes of it.
+func eachSecret(s string, with func(secret string) string) string {
+	spans := secretSpans(s)
+	if len(spans) == 0 {
+		return s
+	}
+	var b strings.Builder
+	at := 0
+	for _, sp := range spans {
 		b.WriteString(s[at:sp.from])
 		b.WriteString(with(s[sp.from:sp.to]))
 		at = sp.to
 	}
 	b.WriteString(s[at:])
 	return b.String()
+}
+
+// Marks takes the marks out of a text: what shows of it, and the parts
+// that were marked secrets, as ranges of its runes. The marks are the
+// file's, and are not shown: a field shows the parts in a look of their
+// own (the user found the signs round a password strange).
+func Marks(full string) (shown string, parts [][2]int) {
+	if !strings.Contains(full, MarkOpen) {
+		return full, nil
+	}
+	var b strings.Builder
+	at, runes := 0, 0
+	for _, m := range marked.FindAllStringSubmatchIndex(full, -1) {
+		keep, tail := 2*marked.SubexpIndex("keep"), 2*marked.SubexpIndex("tail")
+		before, part := full[at:m[keep]], full[m[keep+1]:m[tail]]
+		b.WriteString(before)
+		b.WriteString(part)
+		runes += utf8.RuneCountInString(before)
+		parts = append(parts, [2]int{runes, runes + utf8.RuneCountInString(part)})
+		runes += utf8.RuneCountInString(part)
+		at = m[tail+1]
+	}
+	b.WriteString(full[at:])
+	return b.String(), parts
+}
+
+// WithMarks is a text with its parts marked secrets again, as Marks took
+// them out. A part that cannot be marked is left unmarked.
+func WithMarks(shown string, parts [][2]int) string {
+	if len(parts) == 0 {
+		return shown
+	}
+	r := []rune(shown)
+	parts = slices.Clone(parts)
+	slices.SortFunc(parts, func(a, b [2]int) int { return a[0] - b[0] })
+	var b strings.Builder
+	at := 0
+	for _, p := range parts {
+		from, to := max(p[0], at), min(p[1], len(r))
+		if from >= to || !CanMark(string(r[from:to])) {
+			continue
+		}
+		b.WriteString(string(r[at:from]))
+		b.WriteString(MarkOpen + string(r[from:to]) + MarkClose)
+		at = to
+	}
+	b.WriteString(string(r[at:]))
+	return b.String()
+}
+
+// Found are the parts of a text the rules take for secrets, as ranges of
+// its runes: shown in a field as the marked ones are.
+func Found(s string) [][2]int {
+	if !mayHoldSecret(s) {
+		return nil
+	}
+	var parts [][2]int
+	for _, sp := range secretSpans(s) {
+		if !dotted(s[sp.from:sp.to]) {
+			from := utf8.RuneCountInString(s[:sp.from])
+			parts = append(parts, [2]int{from, from + utf8.RuneCountInString(s[sp.from:sp.to])})
+		}
+	}
+	return parts
 }
 
 // HasSecret reports whether s holds what looks like a secret, or one

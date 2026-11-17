@@ -885,12 +885,20 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 			a.secretKeys(c, clip)
 			return el
 		}
+		// Written in without the marks of its secrets, which show in a
+		// look of their own (secretField).
+		f := a.secretField(text)
+		text = f.shown
 		in := inlineArea(c.Key(key), &text, size, 3, maxLines, hint, label).Margin(0, -8)
 		if in.Changed() {
-			changed(text)
-			a.fieldTyped(clip, "text", text, clip.Text)
+			_, caret := in.TextSelection()
+			full := f.typed(text, caret)
+			changed(full)
+			a.fieldTyped(clip, "text", full, clip.Text)
+			f = a.secretField(full)
 		}
-		a.markKey(c, clip, "text", in, text, changed)
+		f.style(in, t)
+		a.markKey(c, clip, "text", in, f, changed)
 		if library.HasSecret(clip.Text) {
 			keys = true
 			a.secretKeys(c, clip)
@@ -919,6 +927,7 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 		}
 		sectionCard(c, kindTile(clip.Kind), kindColor(clip.Kind), label, nil, func() {
 			text, _ := a.fieldText(clip, "text", clip.Text)
+			text, _ = library.Marks(text)
 			ui.Text(c, library.Excerpt(text, "", 3000)).FontSize(textSmall).LineHeight(1.5).TextColor(t.TextMuted).Wrap().Selectable()
 			if library.HasSecret(clip.Text) {
 				keys = true
@@ -933,16 +942,22 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 		if !write {
 			ui.Text(c.Key("clip-note-dots"), note).FontSize(textBody).LineHeight(1.55).Wrap()
 		} else {
+			f := a.secretField(note)
+			note = f.shown
 			in := inlineArea(c.Key("clip-note"), &note, textBody, 1, 10, "为什么收藏它、想怎么用…", "资料备注").Margin(0, -8)
 			set := func(note string) {
 				clip.Note = note
 				a.saveClip(clip)
 			}
 			if in.Changed() {
-				set(note)
-				a.fieldTyped(clip, "note", note, clip.Note)
+				_, caret := in.TextSelection()
+				full := f.typed(note, caret)
+				set(full)
+				a.fieldTyped(clip, "note", full, clip.Note)
+				f = a.secretField(full)
 			}
-			a.markKey(c, clip, "note", in, note, set)
+			f.style(in, t)
+			a.markKey(c, clip, "note", in, f, set)
 		}
 		if !keys { // the secret is here, or in the title
 			a.secretKeys(c, clip)

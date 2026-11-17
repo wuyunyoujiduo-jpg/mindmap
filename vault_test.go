@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -287,7 +288,7 @@ func TestMarkedSecret(t *testing.T) {
 	snapshot(t, tt, "vault-mark")
 	// The password alone, as a part chosen would be.
 	r := []rune(line)
-	a.markSecret(cl, "text", line, mark{cl.ID, "text", len(r) - 7, len(r)}, func(s string) { a.setMemoText(cl, s) })
+	a.markSecret(a.secretField(line), mark{id: cl.ID, field: "text", from: len(r) - 7, to: len(r)}, func(s string) { a.setMemoText(cl, s) })
 	tt.Frame()
 	tt.Frame()
 	const marked = "https://ttc.ttcttc.net/#/login wuy@gmail.com  ⟦密:ttc13!⟧"
@@ -374,6 +375,27 @@ func TestMarkedSecret(t *testing.T) {
 	if got, _ := a.fieldText(cl, "text", cl.Text); got != marked {
 		t.Fatalf("shown: %q", got)
 	}
+	// The field shows it without its marks, and keeps it marked as it is
+	// written in: a word typed before it, and the password changed.
+	f := a.secretField(marked)
+	if f.shown != line || len(f.parts) != 1 || shows("密:") {
+		t.Fatalf("the field: %q, %v, %q", f.shown, f.parts, tt.Texts())
+	}
+	if got := f.typed("新 "+line, 2); got != "新 "+marked {
+		t.Fatalf("typed before it: %q", got)
+	}
+	if got := f.typed(strings.Replace(line, "ttc13!", "new-pass", 1), len([]rune(line))+2); got != strings.Replace(marked, "ttc13!", "new-pass", 1) {
+		t.Fatalf("the password changed: %q", got)
+	}
+	// The way back: with the caret in it, it is a password no more.
+	at := len([]rune(line)) - 3
+	a.markSecret(f, mark{id: cl.ID, field: "text", from: at, to: at, un: true}, func(s string) { a.setMemoText(cl, s) })
+	if got, _ := a.vault.Reveal(cl.Text); got != line {
+		t.Fatalf("unmarked: %q", got)
+	}
+	a.markSecret(a.secretField(line), mark{id: cl.ID, field: "text", from: len(r) - 7, to: len(r)}, func(s string) { a.setMemoText(cl, s) })
+	a.showSecrets(cl)
+	tt.Frame()
 	snapshot(t, tt, "vault-mark-shown")
 	a.setMemoText(cl, marked+" 下月换")
 	if f := file(); strings.Contains(f, "ttc13") || !strings.Contains(f, "下月换") {
@@ -399,4 +421,49 @@ func (a *app) clipMenuDo(t *testing.T, tt *ui.Tester, cl *library.Clip, item str
 	}
 	tt.Frame()
 	tt.Frame()
+}
+
+// The parts of a text marked secrets follow what is typed in it.
+func TestMoveParts(t *testing.T) {
+	for _, c := range []struct {
+		name, was, now string // a part between [ and ], the caret after the edit at |
+	}{
+		{"typed before", "账号 [ttc13!]", "我的|账号 [ttc13!]"},
+		{"typed just before", "账号 [ttc13!]", "账号 x|[ttc13!]"},
+		{"typed in it", "账号 [ttc13!] 后", "账号 [ttcX|13!] 后"},
+		{"typed just after", "账号 [ttc13!]", "账号 [ttc13!] 下月换|"},
+		{"a letter of it deleted", "账号 [ttc13!] 后", "账号 [ttc1|!] 后"},
+		{"replaced whole", "账号 [ttc13!] 后", "账号 [new-pass|] 后"},
+		{"deleted whole", "账号 [ttc13!] 后", "账号 | 后"},
+		{"its end retyped", "账号 [ttc13!] 后", "账号 [ttc99|] 后"},
+		{"replaced from before it", "账号 [ttc13!] 后", "新的| 后"},
+		{"replaced from in it to after", "账号 [ttc13!] 后面", "账号 [tt]别的|面"},
+		{"alike letters, typed before", "a[xc]", "ax|[xc]"},
+		{"alike letters, typed in", "a[xc]", "a[xx|c]"},
+		{"two parts", "[一] 和 [二]", "[一] 和了| [二]"},
+		{"deleted after", "[一] 和 [二] 尾", "[一] 和 [二]|"},
+	} {
+		parse := func(s string) (text []rune, parts [][2]int, caret int) {
+			caret = -1
+			open := 0
+			for _, r := range s {
+				switch r {
+				case '[':
+					open = len(text)
+				case ']':
+					parts = append(parts, [2]int{open, len(text)})
+				case '|':
+					caret = len(text)
+				default:
+					text = append(text, r)
+				}
+			}
+			return text, parts, caret
+		}
+		was, parts, _ := parse(c.was)
+		now, want, caret := parse(c.now)
+		if got := moveParts(parts, was, now, caret); !slices.Equal(got, want) {
+			t.Errorf("%s: %q → %q: parts %v, want %v", c.name, c.was, c.now, got, want)
+		}
+	}
 }
