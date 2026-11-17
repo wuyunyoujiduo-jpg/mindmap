@@ -148,6 +148,13 @@ by AI, and an AI assistant.
     on their days, and those that repeat (`model.Repeat`, `repeatProp`,
     `parseRepeat`) faint on the days they come again (`taskGhost`). A
     task's state, priority and day are set with `segmented` and `dateProp`.
+    A task may have a span of its day (`Task.Time`, `EndTime`,
+    `timeProp`, `parseClock`: 明天 9点到10点半 开会), which the week shows
+    on its chip, a day's tasks of the whole day first and then by their
+    time (`byTime`), and which is when it reminds, set newly. How it
+    repeats is TickTick's, which the user named (0.102): by the year
+    too, by dates of the month or its Nth weekday, ending on a day or
+    after so many times, counted from the day done (`model.Repeat`).
     A task may have a time of its day to remind at, chosen or written,
     in its line too (明天 9点 写周报, `parseRemind`; `Task.Remind`,
     `remindProp`, `reminders.go`: a notification of its own, and one a
