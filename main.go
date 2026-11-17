@@ -467,9 +467,6 @@ func main() {
 	screenshot.Log = logShot
 	plat := &desktop{}
 	cfg := loadConfig()
-	if moveOldDir(&cfg) {
-		log.Printf("导图文件夹已改名为 %s", cfg.Dir)
-	}
 	a := newApp(plat, cfg)
 	plat.app = a
 	if !a.cfg.TourDone {

@@ -90,8 +90,8 @@ func (a *app) parseLink(link string) (kind int, target string, line int) {
 // projectDir is the folder relative links of the open map are in: its
 // project folder, or the map's own.
 func (a *app) projectDir() string {
-	if a.file != nil && a.file.Project != "" {
-		return a.file.Project
+	if dir := a.projectOf(a.path, a.file); dir != "" {
+		return dir
 	}
 	return filepath.Dir(a.path)
 }
@@ -307,7 +307,7 @@ func (a *app) linksSection(c *ui.Context, n *model.Node) {
 					id := n.ID
 					a.plat.OpenFile("选择要链接的文件", nil, func(path string) {
 						if node, _ := a.doc.Find(id); node != nil && path != "" {
-							if rel, err := filepath.Rel(a.projectDir(), path); err == nil && !strings.HasPrefix(rel, "..") && a.file.Project != "" {
+							if rel, err := filepath.Rel(a.projectDir(), path); err == nil && !strings.HasPrefix(rel, "..") && a.projectOf(a.path, a.file) != "" {
 								path = filepath.ToSlash(rel)
 							}
 							a.addLink(node, path)
@@ -363,18 +363,19 @@ func (a *app) projectSection(c *ui.Context) {
 		ui.Text(c, "这里的设置只属于这张导图").FontSize(textSmall).TextColor(t.TextMuted).NoWrap()
 	})
 	rowsField(c, "代码", "", func() {
-		dir := a.file.Project
+		here := a.projectOf(a.path, a.file) // this computer's (config.go)
+		dir := here
 		if dir == "" {
 			dir = "未设置（相对路径从导图所在文件夹算起）"
 		}
 		setRow(c, "项目代码目录", dir, func() {
-			if a.file.Project != "" && button(c, "清除").Clicked() {
-				a.mutate("", func() { a.file.Project = "" })
+			if here != "" && button(c, "清除").Clicked() {
+				a.later(func() { a.setProject("") })
 			}
 			if button(c, "选择…").Clicked() {
 				a.plat.PickFolder(func(dir string) {
 					if dir != "" && a.file != nil {
-						a.mutate("", func() { a.file.Project = dir })
+						a.setProject(dir)
 					}
 				})
 			}

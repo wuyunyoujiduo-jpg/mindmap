@@ -7,9 +7,16 @@
 // two are merged with the version both came from where Config.Merge can
 // (the maps, topic by topic), a clip's newer edit wins, and else the local
 // one stays and the repository's is kept beside it as a copy. A file deleted on one side and changed
-// on the other is kept. What the merge takes from the repository is
-// written into the folder; what it takes from the folder becomes one
-// commit on the branch.
+// on the other is kept, unless it was renamed (Config.Same), when the
+// change is merged into its new name. What the merge takes from the
+// repository is written into the folder; what it takes from the folder
+// becomes one commit on the branch.
+//
+// What the sync remembers is this computer's memory of this folder, and
+// is kept out of the folder (Config.State): in it, a backup put back or
+// a folder a cloud carries brought one computer's memory to another
+// state of the files, which were then read as changed in the repository
+// alone, and what was restored was pulled over.
 package ghsync
 
 import (
@@ -33,6 +40,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -42,7 +50,8 @@ import (
 // over 100 MB and warns over 50 MB.
 const MaxFile = 50 << 20
 
-// stateFile is where the folder's sync state is, in a folder not synced.
+// stateFile is where the folder's sync state was before 0.105.2, and is
+// with no Config.State: in the folder, in a folder of it not synced.
 const stateFile = ".sync/github.json"
 
 // marker is the file that starts an empty repository; not synced.
@@ -69,6 +78,16 @@ type Config struct {
 	// cannot be in the maps folder). The repository is the same whichever
 	// computer's folder it is.
 	Mounts map[string]string
+	// State is the file the sync keeps what it remembers in, on this
+	// computer and out of the folder; "" for the folder's own
+	// .sync/github.json, as before.
+	State string
+	// Same, when not nil, tells whether two files of two paths are one
+	// thing renamed, by what they hold: a map by the IDs of its canvas and
+	// central topic. With it, a file deleted on one side and changed on
+	// the other, whose side that deleted it has a new file that is the
+	// same, is merged into that (Merge) and not brought back.
+	Same func(from, to string, old, renamed []byte) bool
 	// meter is what GitHub says of the calls left, through one Sync.
 	meter *meter
 }
@@ -188,7 +207,14 @@ type Result struct {
 	// those kept apart, the repository's as a copy; Skipped those too
 	// large to sync.
 	Merged, Conflicts, Skipped []string
-	Commit                     string
+	// Unwritten are the repository's files that could not be written or
+	// removed here (a name this system refuses, a folder that may not be
+	// written in): left as they are on both sides, and tried again.
+	Unwritten []string
+	// Renamed are the files merged into another name, by the name they
+	// had: a map renamed on one computer and changed on the other.
+	Renamed map[string]string
+	Commit  string
 }
 
 // Synced reports whether anything moved.
@@ -221,7 +247,8 @@ func Check(ctx context.Context, cfg Config) (*Repo, error) {
 // 403, for a private repository the token may not reach, so that whether
 // it exists is not told. The token's account tells which it is.
 func (cfg Config) explain(ctx context.Context, err error) error {
-	if status(err) != 404 {
+	var e *apiError
+	if status(err) != 404 || errors.As(err, &e) && e.Object {
 		return err
 	}
 	var me struct{ Login string }
@@ -311,6 +338,9 @@ type state struct {
 	// not end: the next does not upload them again. A sync of many files
 	// that failed at the last began again at the first, each a call.
 	Sent map[string]bool `json:"sent,omitempty"`
+	// Exec are the files the repository says may be run (mode 100755), as
+	// of Commit: a skill's script came to the other computer as a text.
+	Exec map[string]bool `json:"exec,omitempty"`
 }
 
 type cached struct {
@@ -319,9 +349,39 @@ type cached struct {
 	SHA  string    `json:"sha"`
 }
 
+// statePath is the file the state of dir's sync is kept in.
+func (cfg Config) statePath(dir string) string {
+	if cfg.State != "" {
+		return cfg.State
+	}
+	return filepath.Join(dir, filepath.FromSlash(stateFile))
+}
+
+// Adopt moves the state a sync before 0.105.2 kept in the folder to
+// state, where it is kept now, when there is none there yet: so that
+// the first sync after is not one of two sides that know nothing of each
+// other. Moved, not copied: left in the folder it would go on with it,
+// to another computer. It reports whether it did.
+func Adopt(dir, state string) bool {
+	old := filepath.Join(dir, filepath.FromSlash(stateFile))
+	data, err := os.ReadFile(old)
+	if err != nil || state == "" {
+		return false
+	}
+	if _, err := os.Stat(state); err == nil {
+		return false
+	}
+	if writeAtomic(state, data) != nil {
+		return false
+	}
+	_ = os.Remove(old)
+	_ = os.Remove(filepath.Dir(old)) // the folder, when nothing else is in it
+	return true
+}
+
 func loadState(dir string, cfg Config) *state {
 	s := &state{}
-	if data, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(stateFile))); err == nil {
+	if data, err := os.ReadFile(cfg.statePath(dir)); err == nil {
 		_ = json.Unmarshal(data, s)
 	}
 	if s.Repo != cfg.Repo || s.Branch != cfg.branch() {
@@ -337,12 +397,12 @@ func loadState(dir string, cfg Config) *state {
 	return s
 }
 
-func (s *state) save(dir string) error {
+func (s *state) save(dir string, cfg Config) error {
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return err
 	}
-	return writeAtomic(filepath.Join(dir, filepath.FromSlash(stateFile)), data)
+	return writeAtomic(cfg.statePath(dir), data)
 }
 
 // blobSHA is git's SHA of a file's content.
@@ -355,8 +415,9 @@ func blobSHA(data []byte) string {
 
 // scan finds the folder's files and their SHAs, and the mounted
 // folders', under their paths.
-func scan(dir string, s *state, mounts map[string]string) (files map[string]string, skipped []string, held map[string]bool, err error) {
-	files, held = map[string]string{}, map[string]bool{}
+// exec are those that may be run (none on Windows, which has no such bit).
+func scan(dir string, s *state, mounts map[string]string) (files map[string]string, skipped []string, held, exec map[string]bool, err error) {
+	files, held, exec = map[string]string{}, map[string]bool{}, map[string]bool{}
 	hashes := map[string]cached{}
 	// What cannot be read is not gone: it is as it was when both sides
 	// last agreed, so that the sync neither deletes it from the repository
@@ -426,6 +487,9 @@ func scan(dir string, s *state, mounts map[string]string) (files map[string]stri
 				skipped = append(skipped, rel)
 				return nil
 			}
+			if runtime.GOOS != "windows" && info.Mode()&0o111 != 0 {
+				exec[rel] = true
+			}
 			if c, ok := s.Hashes[rel]; ok && c.Size == info.Size() && c.Mod.Equal(info.ModTime()) {
 				files[rel], hashes[rel] = c.SHA, c
 				return nil
@@ -452,7 +516,7 @@ func scan(dir string, s *state, mounts map[string]string) (files map[string]stri
 		}
 	}
 	s.Hashes = hashes
-	return files, skipped, held, err
+	return files, skipped, held, exec, err
 }
 
 // Sync merges the folder dir and the repository, as the package says.
@@ -465,24 +529,47 @@ func Sync(ctx context.Context, dir string, cfg Config, progress func(string)) (R
 		cfg.meter = &meter{}
 	}
 	var res Result
+	// A file is said once though two tries each did something with it: a
+	// map merged, the branch moved, and merged again was told as two maps.
+	add := func(to *[]string, more []string) {
+		for _, p := range more {
+			if !slices.Contains(*to, p) {
+				*to = append(*to, p)
+			}
+		}
+	}
 	for attempt := 0; ; attempt++ {
 		r, err := syncOnce(ctx, dir, cfg, progress)
 		res.Pulled += r.Pulled
 		res.Pushed += r.Pushed
 		res.Deleted += r.Deleted
-		res.Written = append(res.Written, r.Written...)
-		res.Merged = append(res.Merged, r.Merged...)
-		res.Conflicts = append(res.Conflicts, r.Conflicts...)
-		res.Skipped, res.Commit = r.Skipped, r.Commit
+		add(&res.Written, r.Written)
+		add(&res.Merged, r.Merged)
+		add(&res.Conflicts, r.Conflicts)
+		res.Skipped, res.Unwritten, res.Commit = r.Skipped, r.Unwritten, r.Commit
+		for from, to := range r.Renamed {
+			if res.Renamed == nil {
+				res.Renamed = map[string]string{}
+			}
+			res.Renamed[from] = to
+		}
 		// Another device pushed in between: merge again with its commit.
 		if errors.Is(err, errMoved) && attempt < 3 {
 			continue
 		}
-		return res, cfg.explain(ctx, err)
+		return res, err
 	}
 }
 
-var errMoved = errors.New("the branch moved")
+var errMoved = errors.New("同步的时候另一台电脑也在上传，这一轮没传上去，下一轮接着同步")
+
+// How a file changed on both sides came out.
+const (
+	mergeApart     = iota // not merged: the two are kept apart
+	mergeDone             // merged into the folder
+	mergeLater            // it changed again meanwhile: left for the next sync
+	mergeUnwritten        // merged, and the folder would not take it
+)
 
 func syncOnce(ctx context.Context, dir string, cfg Config, progress func(string)) (Result, error) {
 	var res Result
@@ -490,31 +577,59 @@ func syncOnce(ctx context.Context, dir string, cfg Config, progress func(string)
 	if cfg.Now != nil {
 		now = cfg.Now
 	}
+	dir = filepath.Clean(dir)
 	s := loadState(dir, cfg)
 	progress("正在检查本地文件…")
-	local, skipped, held, err := scan(dir, s, cfg.Mounts)
+	local, skipped, held, lexec, err := scan(dir, s, cfg.Mounts)
 	if err != nil {
 		return res, err
 	}
 	res.Skipped = skipped
+	// What a sync wrote and worked out is kept though it fails: the files
+	// it wrote are told (the app reads them), and the hashes the scan
+	// made are not made again. A first sync of a large folder that failed
+	// while pulling read and hashed every file anew two minutes later.
+	var mu sync.Mutex // of what the files' work, a few at a time, writes
+	var written []string
+	wrote := func(paths ...string) {
+		mu.Lock()
+		written = append(written, paths...)
+		mu.Unlock()
+	}
+	var rebased [][3]string // a file renamed here as the repository has it: from, to, the blob there
+	fail := func(err error) (Result, error) {
+		res.Written = written
+		for _, r := range rebased {
+			delete(s.Base, r[0])
+			s.Base[r[1]] = r[2]
+		}
+		for _, p := range written {
+			delete(s.Hashes, p)
+		}
+		_ = s.save(dir, cfg)
+		return res, err
+	}
 
 	progress("正在读取 GitHub 仓库…")
+	// Not found here is the repository or the token, which explain tells
+	// apart; a blob or a tree not found later is not.
 	head, err := cfg.head(ctx)
 	if err != nil {
-		return res, err
+		return fail(cfg.explain(ctx, err))
 	}
 	if head == "" { // an empty repository, or no such branch yet
 		if head, err = cfg.start(ctx); err != nil {
-			return res, err
+			return fail(cfg.explain(ctx, err))
 		}
 	}
 	var remote map[string]string
+	var rexec map[string]bool // the repository's files that may be run
 	var tree string
 	if head == s.Commit {
-		remote = s.Base // unchanged since the last sync
+		remote, rexec = s.Base, s.Exec // unchanged since the last sync
 	} else {
-		if remote, tree, err = cfg.tree(ctx, head); err != nil {
-			return res, err
+		if remote, rexec, tree, err = cfg.tree(ctx, head); err != nil {
+			return fail(err)
 		}
 	}
 
@@ -541,10 +656,9 @@ func syncOnce(ctx context.Context, dir string, cfg Config, progress func(string)
 	// file here read as changed here alone once it could be read again,
 	// and was sent over the other computer's work.)
 	again := false
-	var againMu sync.Mutex
 	leave := func(p string) {
-		againMu.Lock()
-		defer againMu.Unlock()
+		mu.Lock()
+		defer mu.Unlock()
 		if b := s.Base[p]; b != "" {
 			merged[p] = b
 		} else {
@@ -552,6 +666,16 @@ func syncOnce(ctx context.Context, dir string, cfg Config, progress func(string)
 		}
 		again = true
 	}
+	// A path that cannot be written here is left, and said: one such path
+	// (a name this system refuses, a folder that may not be written in)
+	// failed the whole sync at the pull, each time, and nothing went up.
+	unwritten := func(p string) {
+		leave(p)
+		mu.Lock()
+		res.Unwritten = append(res.Unwritten, p)
+		mu.Unlock()
+	}
+	var goneHere, goneThere []string // deleted on one side, changed on the other
 	for p := range paths {
 		if slices.Contains(skipped, p) {
 			keep(p, remote[p])
@@ -583,9 +707,11 @@ func syncOnce(ctx context.Context, dir string, cfg Config, progress func(string)
 		case l == "": // deleted here, changed there: kept
 			pull = append(pull, p)
 			keep(p, r)
+			goneHere = append(goneHere, p)
 		case r == "": // deleted there, changed here: kept
 			push = append(push, p)
 			keep(p, l)
+			goneThere = append(goneThere, p)
 		default:
 			conflicts = append(conflicts, conflict{p, b, l, r})
 			keep(p, l)
@@ -593,110 +719,357 @@ func syncOnce(ctx context.Context, dir string, cfg Config, progress func(string)
 	}
 	slices.Sort(pull)
 	slices.Sort(push)
+	slices.Sort(goneHere)
+	slices.Sort(goneThere)
+
+	// The blobs read before they are pulled, to tell a rename: not asked
+	// for twice.
+	fetched := map[string][]byte{}
+	blob := func(sha string) ([]byte, error) {
+		mu.Lock()
+		data, ok := fetched[sha]
+		delete(fetched, sha)
+		mu.Unlock()
+		if ok {
+			return data, nil
+		}
+		return cfg.blob(ctx, sha)
+	}
+	// baseOf is the version both had, nil for none: one the repository
+	// has no more (made anew, its history rewritten) is none, not a
+	// failure of every sync from then on.
+	baseOf := func(sha string) ([]byte, error) {
+		if sha == "" {
+			return nil, nil
+		}
+		old, err := cfg.blob(ctx, sha)
+		if status(err) == 404 {
+			return nil, nil
+		}
+		return old, err
+	}
+
+	// A file deleted on one side and changed on the other is kept, which
+	// is right of a file deleted. But a map renamed is deleted under one
+	// name and new under another (and a map is renamed by a change of its
+	// central topic): the old name came back with the other computer's
+	// changes, and the map was two. Where the side that deleted it has a
+	// new file that is the same thing (Config.Same: a map of the same
+	// IDs), the other's changes are merged into that, and the old name
+	// goes.
+	if cfg.Same != nil && cfg.Merge != nil && len(goneHere)+len(goneThere) > 0 {
+		var newHere, newThere []string
+		for p := range paths {
+			if s.Base[p] != "" || held[p] || slices.Contains(skipped, p) {
+				continue
+			}
+			switch l, r := local[p], remote[p]; {
+			case l != "" && r == "":
+				newHere = append(newHere, p)
+			case l == "" && r != "":
+				newThere = append(newThere, p)
+			}
+		}
+		slices.Sort(newHere)
+		slices.Sort(newThere)
+		const most = 40 // a first sync is no rename: not every new file is read for one
+		taken := map[string]bool{}
+		without := func(list []string, p string) []string {
+			return slices.DeleteFunc(list, func(x string) bool { return x == p })
+		}
+		renamed := func(from, to string) {
+			if res.Renamed == nil {
+				res.Renamed = map[string]string{}
+			}
+			res.Renamed[from] = to
+			res.Merged = append(res.Merged, to)
+		}
+		when := func(here, there string) MergeInfo {
+			w := MergeInfo{BaseAt: s.At}
+			if info, err := os.Stat(cfg.local(dir, here)); err == nil {
+				w.LocalAt = info.ModTime()
+			}
+			w.RemoteAt, w.RemoteFrom = cfg.lastCommit(ctx, head, there)
+			return w
+		}
+		// Renamed here to q, changed there as p.
+		for _, p := range goneHere {
+			if len(newHere) > most {
+				break
+			}
+			var theirs []byte
+			for _, q := range newHere {
+				if taken[q] || path.Ext(q) != path.Ext(p) {
+					continue
+				}
+				mine, err := os.ReadFile(cfg.local(dir, q))
+				if err != nil || blobSHA(mine) != local[q] {
+					continue
+				}
+				if theirs == nil {
+					if theirs, err = cfg.blob(ctx, remote[p]); err != nil {
+						return fail(err)
+					}
+					fetched[remote[p]] = theirs
+				}
+				if !cfg.Same(p, q, theirs, mine) {
+					continue
+				}
+				old, err := baseOf(s.Base[p])
+				if err != nil {
+					return fail(err)
+				}
+				out, ok := cfg.Merge(q, old, mine, theirs, when(q, p))
+				if !ok {
+					break // kept as two, as before
+				}
+				taken[q] = true
+				pull = without(pull, p)
+				delete(fetched, remote[p])
+				if !unchanged(cfg.local(dir, q), local[q]) { // changed while syncing: both wait
+					leave(p)
+					leave(q)
+					push = without(push, q)
+					break
+				}
+				if err := writeFile(cfg.local(dir, q), out, false); err != nil {
+					leave(p)
+					unwritten(q)
+					push = without(push, q)
+					break
+				}
+				wrote(q)
+				delete(merged, p)
+				drop = append(drop, p)
+				renamed(p, q)
+				break
+			}
+		}
+		// Renamed there to q, changed here as p.
+		for _, p := range goneThere {
+			if len(newThere) > most {
+				break
+			}
+			mine, err := os.ReadFile(cfg.local(dir, p))
+			if err != nil || blobSHA(mine) != local[p] {
+				continue
+			}
+			for _, q := range newThere {
+				if taken[q] || path.Ext(q) != path.Ext(p) {
+					continue
+				}
+				theirs, ok := fetched[remote[q]]
+				if !ok {
+					if theirs, err = cfg.blob(ctx, remote[q]); err != nil {
+						return fail(err)
+					}
+					fetched[remote[q]] = theirs
+				}
+				if !cfg.Same(p, q, mine, theirs) {
+					continue
+				}
+				old, err := baseOf(s.Base[p])
+				if err != nil {
+					return fail(err)
+				}
+				out, ok := cfg.Merge(q, old, mine, theirs, when(p, q))
+				if !ok || !holdable(q) || !writable(cfg.local(dir, q)) {
+					break // kept as two, as before
+				}
+				taken[q] = true
+				pull, push = without(pull, q), without(push, p)
+				delete(fetched, remote[q])
+				if !unchanged(cfg.local(dir, p), local[p]) { // changed while syncing: both wait
+					leave(p)
+					leave(q)
+					break
+				}
+				if err := writeFile(cfg.local(dir, q), out, rexec[q]); err != nil {
+					leave(p)
+					unwritten(q)
+					break
+				}
+				_ = os.Remove(cfg.local(dir, p))
+				emptied(filepath.Dir(cfg.local(dir, p)), cfg.root(dir, p))
+				wrote(p, q)
+				rebased = append(rebased, [3]string{p, q, remote[q]})
+				delete(merged, p)
+				push = append(push, q)
+				slices.Sort(push)
+				renamed(p, q)
+				break
+			}
+		}
+	}
 
 	// From the repository.
 	if len(pull) > 0 {
 		progress(fmt.Sprintf("正在下载 %d 个文件…", len(pull)))
 	}
+	pulled := map[string]bool{}
 	if err := cfg.each(ctx, pull, func(p string) error {
 		// What was written stays, and is not asked for again: a download
 		// stopped goes on from where it was by itself.
 		if reset, low := cfg.meter.spare(); low {
 			return &LimitError{Reset: reset, Spared: true}
 		}
-		data, err := cfg.blob(ctx, remote[p])
+		full := cfg.local(dir, p)
+		if !holdable(p) || !writable(full) { // told before it is asked for: no call for it
+			unwritten(p)
+			return nil
+		}
+		data, err := blob(remote[p])
 		if err != nil {
 			return err
 		}
-		if !unchanged(cfg.local(dir, p), local[p]) {
+		if !unchanged(full, local[p]) {
 			leave(p) // changed while syncing: the next sync takes it, against what both had
 			return nil
 		}
-		return writeAtomic(cfg.local(dir, p), data)
+		if err := writeFile(full, data, rexec[p]); err != nil {
+			unwritten(p)
+			return nil
+		}
+		wrote(p)
+		mu.Lock()
+		pulled[p] = true
+		mu.Unlock()
+		return nil
 	}); err != nil {
-		return res, err
+		return fail(err)
 	}
-	res.Pulled = len(pull)
-	res.Written = append(res.Written, pull...)
+	res.Pulled = len(pulled)
 	for _, p := range unlink {
-		if unchanged(cfg.local(dir, p), local[p]) {
-			_ = os.Remove(cfg.local(dir, p))
-		} else {
+		full := cfg.local(dir, p)
+		if !unchanged(full, local[p]) {
 			leave(p)
+			continue
+		}
+		if err := os.Remove(full); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			// Not removed, it is as it was: forgotten, the next sync read
+			// it as new here and sent back what the other computer deleted.
+			unwritten(p)
+			continue
+		}
+		emptied(filepath.Dir(full), cfg.root(dir, p))
+		wrote(p)
+		res.Deleted++
+	}
+	// A file the repository says may be run, here too: one that came
+	// before its mode did, or whose mode alone changed.
+	if runtime.GOOS != "windows" {
+		for p := range rexec {
+			if local[p] != "" && !lexec[p] && !held[p] && !pulled[p] && merged[p] != "" {
+				if info, err := os.Stat(cfg.local(dir, p)); err == nil {
+					_ = os.Chmod(cfg.local(dir, p), runnable(info.Mode().Perm()))
+				}
+			}
 		}
 	}
-	res.Deleted += len(unlink)
-	res.Written = append(res.Written, unlink...)
 
 	for _, c := range conflicts {
 		data, err := cfg.blob(ctx, c.remote)
 		if err != nil {
-			return res, err
+			return fail(err)
 		}
-		if newer, ok := newerClip(cfg.local(dir, c.path), c.path, data); ok {
+		full := cfg.local(dir, c.path)
+		if newer, ok := newerClip(full, c.path, data); ok {
 			if newer { // the repository's edit of the clip is the newer
-				if err := writeAtomic(cfg.local(dir, c.path), data); err != nil {
-					return res, err
+				if err := writeFile(full, data, rexec[c.path]); err != nil {
+					unwritten(c.path)
+					continue
 				}
 				merged[c.path] = c.remote
 				res.Pulled++
-				res.Written = append(res.Written, c.path)
+				wrote(c.path)
 			} else {
 				push = append(push, c.path)
 			}
 			continue
 		}
-		if ok, err := cfg.merge(ctx, dir, c.path, c.base, c.local, data, head, s.At); err != nil {
-			return res, err
-		} else if ok {
+		how, err := cfg.merge(ctx, dir, c.path, c.local, data, head, s.At, func() ([]byte, error) { return baseOf(c.base) })
+		if err != nil {
+			return fail(err)
+		}
+		switch how {
+		case mergeDone:
 			res.Merged = append(res.Merged, c.path)
-			res.Written = append(res.Written, c.path)
+			wrote(c.path)
 			push = append(push, c.path)
+			continue
+		case mergeLater:
+			// Edited while it was merged: as it is, against what both had,
+			// the next time. Kept apart as a conflict instead, the copy was
+			// then merged with no version both came from: what was deleted
+			// came back, and every difference was asked about.
+			leave(c.path)
+			continue
+		case mergeUnwritten:
+			unwritten(c.path)
 			continue
 		}
 		cp := conflictCopy(c.path, now())
-		if err := writeAtomic(cfg.local(dir, cp), data); err != nil {
-			return res, err
+		if err := writeFile(cfg.local(dir, cp), data, false); err != nil {
+			unwritten(c.path)
+			continue
 		}
 		res.Conflicts = append(res.Conflicts, c.path)
-		res.Written = append(res.Written, cp)
+		wrote(cp)
 		merged[cp] = c.remote
 		push = append(push, c.path, cp)
 	}
 
-	// To the repository.
-	if len(push)+len(drop) > 0 {
-		progress(fmt.Sprintf("正在上传 %d 个文件…", len(push)))
-		var mu sync.Mutex
-		entries := []treeEntry{}
-		// What was uploaded is kept though the sync fails, so that the
-		// next goes on from there.
-		fail := func(err error) (Result, error) {
-			for _, p := range res.Written {
-				delete(s.Hashes, p)
+	// To the repository. A file that may be run here and is not said so
+	// there goes up as its mode alone: the blob is there.
+	var modes []string
+	if runtime.GOOS != "windows" {
+		for p := range lexec {
+			if !rexec[p] && !held[p] && local[p] != "" && local[p] == remote[p] && merged[p] == local[p] {
+				modes = append(modes, p)
 			}
-			_ = s.save(dir)
-			return res, err
 		}
+		slices.Sort(modes)
+	}
+	exec := map[string]bool{} // what the repository says may be run, after this sync
+	for p := range rexec {
+		if merged[p] != "" {
+			exec[p] = true
+		}
+	}
+	if len(push)+len(drop)+len(modes) > 0 {
+		progress(fmt.Sprintf("正在上传 %d 个文件…", len(push)))
+		entries := []treeEntry{}
 		if s.Sent == nil {
 			s.Sent = map[string]bool{}
 		}
+		// The blobs the branch has are not sent again: a map renamed took
+		// its pictures' folder along, and each picture was uploaded anew
+		// under its new path, a call each.
+		have := map[string]bool{}
+		for _, sha := range remote {
+			have[sha] = true
+		}
+		sentN := 0
 		if err := cfg.each(ctx, push, func(p string) error {
 			data, err := os.ReadFile(cfg.local(dir, p))
 			if err != nil {
-				return err
+				leave(p) // gone or not to be read since it was scanned: the next sync
+				return nil
 			}
 			sha := blobSHA(data)
+			// Once said to be run, a file stays so: no computer takes it back.
+			run := lexec[p] || rexec[p]
 			if inline(data) { // with the tree, no call of its own
 				text := string(data)
 				mu.Lock()
-				entries = append(entries, treeEntry{Path: p, Content: &text})
-				merged[p] = sha
+				entries = append(entries, treeEntry{Path: p, Content: &text, Exec: run})
+				merged[p], exec[p] = sha, run
+				sentN++
 				mu.Unlock()
 				return nil
 			}
 			mu.Lock()
-			sent := s.Sent[sha]
+			sent := s.Sent[sha] || have[sha]
 			mu.Unlock()
 			if !sent {
 				if reset, low := cfg.meter.spare(); low {
@@ -708,43 +1081,56 @@ func syncOnce(ctx context.Context, dir string, cfg Config, progress func(string)
 			}
 			mu.Lock()
 			s.Sent[sha] = true
-			entries = append(entries, treeEntry{Path: p, SHA: &sha})
-			merged[p] = sha
+			entries = append(entries, treeEntry{Path: p, SHA: &sha, Exec: run})
+			merged[p], exec[p] = sha, run
+			sentN++
 			mu.Unlock()
 			return nil
 		}); err != nil {
 			return fail(err)
 		}
+		for _, p := range modes {
+			sha := local[p]
+			entries = append(entries, treeEntry{Path: p, SHA: &sha, Exec: true})
+			exec[p] = true
+		}
 		for _, p := range drop {
 			entries = append(entries, treeEntry{Path: p})
+			delete(exec, p)
 		}
-		if tree == "" {
-			tree = s.Tree
-		}
-		if tree == "" {
-			if tree, err = cfg.treeOf(ctx, head); err != nil {
-				return res, err
+		if len(entries) > 0 {
+			if tree == "" {
+				tree = s.Tree
 			}
-		}
-		commit, made, err := cfg.commit(ctx, head, tree, entries, message(len(push), len(drop)))
-		if err != nil {
-			if c := status(err); c == 404 || c == 422 {
-				s.Sent = nil // a blob kept from before is gone: all are sent again
+			if tree == "" {
+				if tree, err = cfg.treeOf(ctx, head); err != nil {
+					return fail(err)
+				}
 			}
-			return fail(err)
+			commit, made, err := cfg.commit(ctx, head, tree, entries, message(sentN+len(modes), len(drop)))
+			if err != nil {
+				if c := status(err); c == 404 || c == 422 {
+					s.Sent = nil // a blob kept from before is gone: all are sent again
+				}
+				return fail(err)
+			}
+			if err := cfg.move(ctx, commit); err != nil {
+				return fail(err)
+			}
+			head, tree = commit, made
+			res.Pushed, res.Deleted = sentN, res.Deleted+len(drop)
 		}
-		if err := cfg.move(ctx, commit); err != nil {
-			return fail(err)
-		}
-		head, tree = commit, made
-		res.Pushed, res.Deleted = len(push), res.Deleted+len(drop)
 	}
 	res.Commit = head
+	res.Written = written
 
 	if tree != "" || head != s.Commit {
 		s.Tree = tree
 	}
-	s.Commit, s.Base, s.At, s.Sent = head, merged, now(), nil
+	s.Commit, s.Base, s.Exec, s.At, s.Sent = head, merged, exec, now(), nil
+	if len(s.Exec) == 0 {
+		s.Exec = nil
+	}
 	if again {
 		s.Commit = "" // the repository is read anew next time
 	}
@@ -752,7 +1138,84 @@ func syncOnce(ctx context.Context, dir string, cfg Config, progress func(string)
 	for _, p := range res.Written {
 		delete(s.Hashes, p)
 	}
-	return res, s.save(dir)
+	return res, s.save(dir, cfg)
+}
+
+// holdable tells whether this system can hold a file of the path: on
+// Windows not one with a part that ends in a dot or a space (it drops
+// them without a word, and the file written is another's), that has what
+// its names may not, or that is a device's name.
+func holdable(p string) bool { return holdableOn(runtime.GOOS, p) }
+
+func holdableOn(goos, p string) bool {
+	if goos != "windows" {
+		return true
+	}
+	for _, part := range strings.Split(p, "/") {
+		if part == "" || strings.HasSuffix(part, ".") || strings.HasSuffix(part, " ") ||
+			strings.ContainsAny(part, `<>:"|?*\`) || strings.ContainsFunc(part, func(r rune) bool { return r < 32 }) {
+			return false
+		}
+		name, _, _ := strings.Cut(strings.ToUpper(part), ".")
+		switch name {
+		case "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+			"LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9":
+			return false
+		}
+	}
+	return true
+}
+
+// writable tells whether a file can be written at the path, by making
+// its folder and an empty file beside where it goes.
+func writable(full string) bool {
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		return false
+	}
+	tmp := full + ".sync.tmp"
+	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		return false
+	}
+	f.Close()
+	os.Remove(tmp)
+	return true
+}
+
+// root is the folder a path of the repository is in here: the folder
+// synced, or the one mounted at its path.
+func (c Config) root(dir, p string) string {
+	for prefix, d := range c.Mounts {
+		if strings.HasPrefix(p, prefix+"/") {
+			return filepath.Clean(d)
+		}
+	}
+	return dir
+}
+
+// emptied removes the folders the sync left empty by removing a file, d
+// and those above it, up to root: a folder renamed or deleted on one
+// computer stayed on the other, empty, and showed among the projects. A
+// folder that was empty before is not come to, and one with anything in
+// it but what the system leaves there stays.
+func emptied(d, root string) {
+	for ; d != root && strings.HasPrefix(d, root+string(filepath.Separator)); d = filepath.Dir(d) {
+		entries, err := os.ReadDir(d)
+		if err != nil {
+			return
+		}
+		for _, e := range entries {
+			if n := e.Name(); e.IsDir() || n != ".DS_Store" && n != "Thumbs.db" && n != "desktop.ini" {
+				return
+			}
+		}
+		for _, e := range entries {
+			_ = os.Remove(filepath.Join(d, e.Name()))
+		}
+		if os.Remove(d) != nil {
+			return
+		}
+	}
 }
 
 func message(pushed, dropped int) string {
@@ -813,22 +1276,21 @@ func newerClip(full, p string, data []byte) (newer, ok bool) {
 }
 
 // merge merges a file changed on both sides into the folder, by
-// Config.Merge, and tells whether it did: not when the file changed again
-// while syncing, which the next sync takes up.
-func (cfg Config) merge(ctx context.Context, dir, p, base, local string, remote []byte, head string, baseAt time.Time) (bool, error) {
+// Config.Merge, and tells how it came out: mergeLater when the file
+// changed again while syncing, which the next sync takes up. base reads
+// the version both had.
+func (cfg Config) merge(ctx context.Context, dir, p, local string, remote []byte, head string, baseAt time.Time, base func() ([]byte, error)) (int, error) {
 	if cfg.Merge == nil {
-		return false, nil
+		return mergeApart, nil
 	}
 	full := cfg.local(dir, p)
 	mine, err := os.ReadFile(full)
 	if err != nil || blobSHA(mine) != local {
-		return false, nil
+		return mergeLater, nil
 	}
-	var old []byte
-	if base != "" {
-		if old, err = cfg.blob(ctx, base); err != nil {
-			return false, err
-		}
+	old, err := base()
+	if err != nil {
+		return mergeApart, err
 	}
 	when := MergeInfo{BaseAt: baseAt}
 	if info, err := os.Stat(full); err == nil {
@@ -836,10 +1298,16 @@ func (cfg Config) merge(ctx context.Context, dir, p, base, local string, remote 
 	}
 	when.RemoteAt, when.RemoteFrom = cfg.lastCommit(ctx, head, p)
 	merged, ok := cfg.Merge(p, old, mine, remote, when)
-	if !ok || !unchanged(full, local) {
-		return false, nil
+	if !ok {
+		return mergeApart, nil
 	}
-	return true, writeAtomic(full, merged)
+	if !unchanged(full, local) {
+		return mergeLater, nil
+	}
+	if writeFile(full, merged, false) != nil {
+		return mergeUnwritten, nil
+	}
+	return mergeDone, nil
 }
 
 // lastCommit is when the repository's file was last committed, and from
@@ -914,6 +1382,39 @@ func writeAtomic(p string, data []byte) error {
 	return os.Rename(tmp, p)
 }
 
+// writeFile writes a file of the folder as writeAtomic does, with the
+// mode of the file it takes the place of, and so that it may be run when
+// the repository says so (exec): a skill's script, 0755 on one computer,
+// was 0644 on the other, and 0644 here again once it came back changed.
+func writeFile(p string, data []byte, exec bool) error {
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		return err
+	}
+	perm := os.FileMode(0o644)
+	if info, err := os.Stat(p); err == nil && info.Mode().IsRegular() {
+		perm = info.Mode().Perm()
+	}
+	if exec {
+		perm = runnable(perm)
+	}
+	tmp := p + ".sync.tmp"
+	_ = os.Remove(tmp)
+	if err := os.WriteFile(tmp, data, perm|0o200); err != nil {
+		return err
+	}
+	if runtime.GOOS != "windows" {
+		_ = os.Chmod(tmp, perm) // as it is, whatever the umask
+	}
+	if err := os.Rename(tmp, p); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	return nil
+}
+
+// runnable is a mode with leave to run for whoever may read.
+func runnable(perm os.FileMode) os.FileMode { return perm | perm&0o444>>2 }
+
 // each runs fn for the paths, a few at a time.
 func (cfg Config) each(ctx context.Context, paths []string, fn func(string) error) error {
 	sem := make(chan struct{}, 6)
@@ -955,6 +1456,9 @@ func (cfg Config) each(ctx context.Context, paths []string, fn func(string) erro
 type apiError struct {
 	Status  int
 	Message string
+	// Object is set when what was asked for is a thing of the repository
+	// (a blob, a tree, a commit), not the repository or its branch.
+	Object bool
 }
 
 func (e *apiError) Error() string {
@@ -967,6 +1471,9 @@ func (e *apiError) Error() string {
 		}
 		return "令牌没有这个仓库的权限（需要 Contents 读写）：" + e.Message
 	case 404:
+		if e.Object { // the repository answered: it is there, and reached
+			return "GitHub 仓库里少了同步要用的内容（仓库可能被重建过，或历史被改写过）"
+		}
 		return "找不到仓库，或令牌没有访问它的权限"
 	}
 	return fmt.Sprintf("GitHub 返回 %d：%s", e.Status, e.Message)
@@ -986,23 +1493,41 @@ func (cfg Config) request(ctx context.Context, method, p string, in, out any) er
 	if cfg.Token == "" {
 		return errors.New("还没有填写 GitHub 令牌")
 	}
+	// A large file takes its time on a slow line. No time is set for the
+	// whole of a call: a file of 50 MB never came down in the two minutes
+	// there were, and failed the sync each time with "context deadline
+	// exceeded". A call is given up when nothing moves for a while, up or
+	// down.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var stalled atomic.Bool
+	timer := time.AfterFunc(idle, func() { stalled.Store(true); cancel() })
+	defer timer.Stop()
+	moved := func() { timer.Reset(idle) }
+	silent := func(err error) error {
+		if stalled.Load() {
+			return fmt.Errorf("GitHub %s没有动静，网络太慢或断了：下一轮接着同步", idleSaid())
+		}
+		return err
+	}
 	var body io.Reader
-	// A large file takes its time on a slow line: a file that never went
-	// up in two minutes failed the sync each time it was tried.
-	timeout := 2 * time.Minute
+	var sent []byte
 	if in != nil {
-		data, err := json.Marshal(in)
-		if err != nil {
+		var err error
+		if sent, err = json.Marshal(in); err != nil {
 			return err
 		}
-		body = bytes.NewReader(data)
-		timeout += time.Duration(len(data)/(64<<10)) * time.Second
+		body = &pulse{bytes.NewReader(sent), moved}
 	}
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, method, cfg.api()+p, body)
 	if err != nil {
 		return err
+	}
+	if in != nil { // its length said, as of a reader the client knows
+		req.ContentLength = int64(len(sent))
+		req.GetBody = func() (io.ReadCloser, error) {
+			return io.NopCloser(&pulse{bytes.NewReader(sent), moved}), nil
+		}
 	}
 	req.Header.Set("Authorization", "Bearer "+cfg.Token)
 	req.Header.Set("Accept", "application/vnd.github+json")
@@ -1016,12 +1541,13 @@ func (cfg Config) request(ctx context.Context, method, p string, in, out any) er
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("连不上 GitHub：%w", err)
+		return silent(fmt.Errorf("连不上 GitHub：%w", err))
 	}
 	defer resp.Body.Close()
-	data, err := io.ReadAll(io.LimitReader(resp.Body, 200<<20))
+	moved()
+	data, err := io.ReadAll(io.LimitReader(&pulse{resp.Body, moved}, 200<<20))
 	if err != nil {
-		return err
+		return silent(err)
 	}
 	cfg.meter.note(resp.Header)
 	if resp.StatusCode >= 300 {
@@ -1037,12 +1563,36 @@ func (cfg Config) request(ctx context.Context, method, p string, in, out any) er
 			}
 			return &LimitError{Reset: reset}
 		}
-		return &apiError{resp.StatusCode, e.Message}
+		return &apiError{resp.StatusCode, e.Message, strings.Contains(p, "/git/") && !strings.Contains(p, "/git/ref")}
 	}
 	if out != nil {
 		return json.Unmarshal(data, out)
 	}
 	return nil
+}
+
+// idle is how long a call may go with nothing sent nor received.
+var idle = 2 * time.Minute
+
+func idleSaid() string {
+	if idle >= time.Minute {
+		return fmt.Sprintf("%d 分钟", int(idle/time.Minute))
+	}
+	return idle.String() + " "
+}
+
+// pulse reads, and says each time something was read.
+type pulse struct {
+	r    io.Reader
+	beat func()
+}
+
+func (p *pulse) Read(b []byte) (int, error) {
+	n, err := p.r.Read(b)
+	if n > 0 {
+		p.beat()
+	}
+	return n, err
 }
 
 func status(err error) int {
@@ -1088,31 +1638,34 @@ func (cfg Config) treeOf(ctx context.Context, commit string) (string, error) {
 	return c.Tree.SHA, err
 }
 
-// tree lists the files of a commit that are synced.
-func (cfg Config) tree(ctx context.Context, commit string) (map[string]string, string, error) {
-	sha, err := cfg.treeOf(ctx, commit)
-	if err != nil {
-		return nil, "", err
+// tree lists the files of a commit that are synced, and which of them
+// may be run.
+func (cfg Config) tree(ctx context.Context, commit string) (files map[string]string, exec map[string]bool, sha string, err error) {
+	if sha, err = cfg.treeOf(ctx, commit); err != nil {
+		return nil, nil, "", err
 	}
 	var t struct {
 		Tree []struct {
-			Path, Type, SHA string
+			Path, Type, SHA, Mode string
 		} `json:"tree"`
 		Truncated bool `json:"truncated"`
 	}
 	if err := cfg.call(ctx, "GET", "/git/trees/"+sha+"?recursive=1", nil, &t); err != nil {
-		return nil, "", err
+		return nil, nil, "", err
 	}
 	if t.Truncated {
-		return nil, "", errors.New("仓库里的文件太多，GitHub 列不全")
+		return nil, nil, "", errors.New("仓库里的文件太多，GitHub 列不全")
 	}
-	files := map[string]string{}
+	files, exec = map[string]string{}, map[string]bool{}
 	for _, e := range t.Tree {
 		if e.Type == "blob" && Included(e.Path) {
 			files[e.Path] = e.SHA
+			if e.Mode == "100755" {
+				exec[e.Path] = true
+			}
 		}
 	}
-	return files, sha, nil
+	return files, exec, sha, nil
 }
 
 func (cfg Config) blob(ctx context.Context, sha string) ([]byte, error) {
@@ -1144,10 +1697,14 @@ type treeEntry struct {
 	Path    string
 	SHA     *string
 	Content *string
+	Exec    bool // a file that may be run
 }
 
 func (e treeEntry) MarshalJSON() ([]byte, error) {
 	m := map[string]any{"path": e.Path, "mode": "100644", "type": "blob"}
+	if e.Exec {
+		m["mode"] = "100755"
+	}
 	if e.Content != nil {
 		m["content"] = *e.Content
 	} else {

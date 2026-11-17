@@ -49,27 +49,45 @@ type codeStatus struct {
 	commits int
 	files   int
 	err     string
+	busy    bool // being looked at
 }
 
-// codeStatusOf looks at the code again when what it knows is old.
-func (a *app) codeStatusOf(dir string) codeStatus {
+// codeStatusOf is how far the code has gone since the map's baseline, as
+// last looked at, and whether it was looked at yet. It is looked at
+// again when what is known is old, away from the window's work: git was
+// run four times in the frame that asked, every twenty seconds while
+// the panel showed, and a slow repository held the window still.
+func (a *app) codeStatusOf(dir string) (st codeStatus, known bool) {
 	key := a.path + "\x00" + dir + "\x00"
-	if b := a.file.Baseline; b != nil {
+	b := a.file.Baseline
+	if b != nil {
 		key += b.Commit
 	}
-	if a.codeStat.key == key && a.now().Sub(a.codeStat.at) < 20*time.Second {
-		return a.codeStat
+	if a.codeStat.key != key { // another map, folder or baseline: nothing is known of it
+		a.codeStat = codeStatus{key: key}
 	}
-	st := codeStatus{key: key, at: a.now()}
-	if b := a.file.Baseline; b != nil {
-		commits, changes, err := gitbase.Since(dir, b.Commit)
-		if err != nil {
-			st.err = err.Error()
-		}
-		st.commits, st.files = len(commits), len(changes)
+	if b == nil {
+		return a.codeStat, true
 	}
-	a.codeStat = st
-	return st
+	if !a.codeStat.busy && (a.codeStat.at.IsZero() || a.now().Sub(a.codeStat.at) >= 20*time.Second) {
+		a.codeStat.busy = true
+		commit := b.Commit
+		a.async(func() (any, error) {
+			commits, changes, err := gitbase.Since(dir, commit)
+			st := codeStatus{key: key, commits: len(commits), files: len(changes)}
+			if err != nil {
+				st.err = err.Error()
+			}
+			return st, nil
+		}, func(v any, _ error) {
+			if a.codeStat.key != key {
+				return // of a map or a baseline left meanwhile
+			}
+			a.codeStat, _ = v.(codeStatus)
+			a.codeStat.key, a.codeStat.at = key, a.now()
+		})
+	}
+	return a.codeStat, !a.codeStat.at.IsZero()
 }
 
 // codeSyncField shows the map's code baseline, how far the code has gone
@@ -89,7 +107,11 @@ func (a *app) codeSyncField(c *ui.Context) {
 		label = "用 AI 检查导图"
 	default:
 		sub = "导图对应 " + baselineLabel(bl) + " · 由 AI 更新于 " + bl.At.Local().Format("2006-01-02 15:04")
-		switch st := a.codeStatusOf(dir); {
+		switch st, known := a.codeStatusOf(dir); {
+		case !known: // being looked at: said only if it takes long (wait.go)
+			if waitShown(c, "code-status", true) {
+				note = "正在看代码之后有没有改动…"
+			}
 		case st.err != "":
 			note = st.err
 		case st.files == 0:

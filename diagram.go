@@ -172,7 +172,6 @@ func (a *app) writeDia(f *diaFile) error {
 	a.dias[f.Node] = f
 	a.diaMod = modTime(dir)
 	a.diaVersion++
-	a.syncChange()
 	return nil
 }
 
@@ -183,7 +182,6 @@ func (a *app) dropDia(node string) {
 		delete(a.dias, node)
 		a.diaMod = modTime(a.diaDir())
 		a.diaVersion++
-		a.syncChange()
 	}
 }
 

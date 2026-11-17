@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strings"
 
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
@@ -22,17 +21,9 @@ func rootTitle(f *model.File) string {
 	return nameFor(f.Sheets[0].Root.Title)
 }
 
-var nameUnsafe = regexp.MustCompile(`[/\\:*?"<>|\x00-\x1f]+`)
-
-func nameFor(title string) string {
-	title, _, _ = strings.Cut(title, "\n")
-	title = strings.Join(strings.Fields(nameUnsafe.ReplaceAllString(title, " ")), " ")
-	title = strings.Trim(title, ". ")
-	if r := []rune(title); len(r) > 60 {
-		title = strings.TrimSpace(string(r[:60]))
-	}
-	return title
-}
+// nameFor is a title as a file's name, by the one rule of names
+// (model.CleanName).
+func nameFor(title string) string { return model.CleanName(title) }
 
 var numbered = regexp.MustCompile(` \d+$`)
 

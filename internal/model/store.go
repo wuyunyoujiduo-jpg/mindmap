@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -58,6 +59,13 @@ func Parse(b []byte) (*File, error) {
 	for i, d := range f.Sheets {
 		if d == nil || d.Root == nil {
 			return nil, errors.New("文件格式错误: 画布缺少根节点")
+		}
+		// A canvas with no ID, as that of a file of version 1, has one made
+		// of its root's: the same each time the file is read, and on each
+		// computer that has it. Given a new one each time, the file merged
+		// with another computer's had its one canvas twice.
+		if d.ID == "" && d.Root.ID != "" && !sheets["c"+d.Root.ID] {
+			d.ID = "c" + d.Root.ID
 		}
 		if d.ID == "" || sheets[d.ID] {
 			d.ID = NewID()
@@ -152,20 +160,32 @@ func ListFiles(dir string) ([]FileInfo, error) {
 	return files, nil
 }
 
-// FileName returns the file name for a map named name, with characters
-// file systems refuse replaced.
+// FileName returns the file name for a map named name, as CleanName has
+// it.
 func FileName(name string) string {
-	name = strings.TrimSpace(name)
-	name = strings.Map(func(r rune) rune {
-		if strings.ContainsRune(`/\:*?"<>|`, r) || r < 32 {
-			return '-'
-		}
-		return r
-	}, name)
+	name = CleanName(name)
 	if name == "" {
 		name = "未命名"
 	}
 	return name + Ext
+}
+
+var nameUnsafe = regexp.MustCompile(`[/\\:*?"<>|\x00-\x1f]+`)
+
+// CleanName is a name as a file may have it on any system: its first
+// line, a space for what file names cannot hold, no dot or space at its
+// ends (Windows drops them, and a dot at the head hides the file), and
+// not too long. It is the one rule of the names the app gives: a map
+// renamed by hand and one named after its central topic had each its
+// own, and "a/b" was "a-b" or "a b" by which of them named it.
+func CleanName(name string) string {
+	name, _, _ = strings.Cut(name, "\n")
+	name = strings.Join(strings.Fields(nameUnsafe.ReplaceAllString(name, " ")), " ")
+	name = strings.Trim(name, ". ")
+	if r := []rune(name); len(r) > 60 {
+		name = strings.TrimSpace(string(r[:60]))
+	}
+	return name
 }
 
 // Folder is a folder of mind map files, with the folders in it.

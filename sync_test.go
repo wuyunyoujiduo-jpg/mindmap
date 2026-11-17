@@ -70,7 +70,6 @@ func TestSyncWithGitHub(t *testing.T) {
 	// A change here goes up with the next round, by itself: not at once,
 	// each sync being calls of the account's hour.
 	clock = clock.Add(time.Second)
-	a.syncChange()
 	clock = clock.Add(time.Minute)
 	a.syncDue()
 	if len(runs) != 1 {
@@ -83,7 +82,6 @@ func TestSyncWithGitHub(t *testing.T) {
 	}
 	// Turned off, it waits to be asked.
 	a.cfg.SyncOff = true
-	a.syncChange()
 	clock = clock.Add(time.Hour)
 	a.syncDue()
 	if len(runs) != 2 {

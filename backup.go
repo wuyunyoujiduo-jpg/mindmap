@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"errors"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -12,7 +13,7 @@ import (
 )
 
 // Backups: the maps folder, with the library, versions of pictures and
-// all, zipped into a file. Once a folder for them is chosen, a backup is
+// all, and the AI agents' skills, zipped into a file. Once a folder for them is chosen, a backup is
 // made each day the app runs, and the last backupsKept are kept.
 
 const (
@@ -20,15 +21,48 @@ const (
 	backupsKept  = 14
 )
 
-// zipFolder writes the files of dir, at any depth, into a zip file at dst.
-// Folders named in skip are left out.
-func zipFolder(dir, dst string, skip ...string) error {
+// skillsInBackup is the folder of a backup that holds the AI agents'
+// skills: they were in the maps folder's .skills, and so in every backup,
+// until 0.100.7 moved them to ~/.agents/skills, which the sync mounts and
+// the backup did not follow. Put back, they go to ~/.agents/skills.
+const skillsInBackup = "技能（放回 .agents／skills）"
+
+// zipFolder writes the files of dir, at any depth, into a zip file at
+// dst, under dir's name; and those of the folders of more, each under the
+// name it has there. Folders named in skip are left out.
+func zipFolder(dir, dst string, more map[string]string, skip ...string) error {
 	tmp := dst + ".tmp"
 	out, err := os.Create(tmp)
 	if err != nil {
 		return err
 	}
 	zw := zip.NewWriter(out)
+	files, err := zipInto(zw, dir, filepath.Base(dir), skip)
+	if err == nil && files == 0 {
+		err = errors.New("文件夹里没有可以备份的文件")
+	}
+	names := slices.Sorted(maps.Keys(more))
+	for _, name := range names {
+		if err == nil {
+			_, err = zipInto(zw, more[name], name, skip)
+		}
+	}
+	if cerr := zw.Close(); err == nil {
+		err = cerr
+	}
+	if cerr := out.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	return os.Rename(tmp, dst)
+}
+
+// zipInto writes the files of dir into the zip under the folder name, and
+// tells how many. A folder that is not there holds none.
+func zipInto(zw *zip.Writer, dir, name string, skip []string) (files int, err error) {
 	// A folder that is a link is walked where it leads: WalkDir does not
 	// follow its root, and the backup of such a folder was an empty file
 	// said to be done.
@@ -36,7 +70,6 @@ func zipFolder(dir, dst string, skip ...string) error {
 	if r, err := filepath.EvalSymlinks(dir); err == nil {
 		root = r
 	}
-	files := 0
 	err = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil // what cannot be read is left out
@@ -46,10 +79,10 @@ func zipFolder(dir, dst string, skip ...string) error {
 			return nil
 		}
 		if d.IsDir() {
-			// What the sync remembers of the folder (.sync) is not of the
-			// backup: put back with it, files as they were then read as
-			// changed in the repository alone, and the next sync brought
-			// back what the backup was restored to be rid of.
+			// What the sync remembered of the folder (.sync, before 0.105.2)
+			// is not of the backup: put back with it, files as they were
+			// then read as changed in the repository alone, and the next
+			// sync brought back what the backup was restored to be rid of.
 			if path != root && (rel == ".sync" || slices.Contains(skip, filepath.Join(dir, rel)) || slices.Contains(skip, path)) {
 				return filepath.SkipDir
 			}
@@ -66,7 +99,7 @@ func zipFolder(dir, dst string, skip ...string) error {
 		if err != nil {
 			return err
 		}
-		h.Name = filepath.ToSlash(filepath.Join(filepath.Base(dir), rel))
+		h.Name = filepath.ToSlash(filepath.Join(name, rel))
 		h.Method = zip.Deflate
 		w, err := zw.CreateHeader(h)
 		if err != nil {
@@ -81,20 +114,7 @@ func zipFolder(dir, dst string, skip ...string) error {
 		_, err = io.Copy(w, f)
 		return err
 	})
-	if err == nil && files == 0 {
-		err = errors.New("文件夹里没有可以备份的文件")
-	}
-	if cerr := zw.Close(); err == nil {
-		err = cerr
-	}
-	if cerr := out.Close(); err == nil {
-		err = cerr
-	}
-	if err != nil {
-		os.Remove(tmp)
-		return err
-	}
-	return os.Rename(tmp, dst)
+	return files, err
 }
 
 // backupTo zips the maps folder into a file, in the background, and says
@@ -106,8 +126,13 @@ func (a *app) backupTo(dst string, done func(err error)) {
 	a.flush()
 	a.backupBusy = true
 	dir, skip := a.dir, a.cfg.BackupDir
+	// The AI agents' skills, which are kept out of the maps folder.
+	more := map[string]string{}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		more[skillsInBackup] = skillsStore(home)
+	}
 	a.async(func() (any, error) {
-		return nil, zipFolder(dir, dst, skip)
+		return nil, zipFolder(dir, dst, more, skip)
 	}, func(_ any, err error) {
 		a.backupBusy = false
 		done(err)

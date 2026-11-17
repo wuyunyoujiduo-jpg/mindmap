@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -25,6 +26,7 @@ type fakeGitHub struct {
 	mu      sync.Mutex
 	blobs   map[string][]byte
 	trees   map[string]map[string]string // tree → path → blob
+	execs   map[string]map[string]bool   // tree → the paths of mode 100755
 	commits map[string][2]string         // commit → tree, parent
 	head    string                       // "" for an empty repository
 	pushes  int
@@ -38,12 +40,14 @@ type fakeGitHub struct {
 }
 
 func newFake() *fakeGitHub {
-	return &fakeGitHub{blobs: map[string][]byte{}, trees: map[string]map[string]string{}, commits: map[string][2]string{}}
+	return &fakeGitHub{blobs: map[string][]byte{}, trees: map[string]map[string]string{}, execs: map[string]map[string]bool{}, commits: map[string][2]string{}}
 }
 
 func hashOf(s string) string { h := sha1.Sum([]byte(s)); return hex.EncodeToString(h[:]) }
 
-func (f *fakeGitHub) putTree(files map[string]string) string {
+func (f *fakeGitHub) putTree(files map[string]string) string { return f.putTreeExec(files, nil) }
+
+func (f *fakeGitHub) putTreeExec(files map[string]string, exec map[string]bool) string {
 	keys := make([]string, 0, len(files))
 	for k := range files {
 		keys = append(keys, k)
@@ -52,10 +56,23 @@ func (f *fakeGitHub) putTree(files map[string]string) string {
 	var b strings.Builder
 	for _, k := range keys {
 		b.WriteString(k + "=" + files[k] + ";")
+		if exec[k] {
+			b.WriteString("x;")
+		}
 	}
 	sha := hashOf("tree " + b.String())
-	f.trees[sha] = files
+	f.trees[sha], f.execs[sha] = files, exec
 	return sha
+}
+
+// modeOf is the mode the branch has a file with.
+func (f *fakeGitHub) modeOf(p string) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.execs[f.commits[f.head][0]][p] {
+		return "100755"
+	}
+	return "100644"
 }
 
 func (f *fakeGitHub) putCommit(tree, parent string) string {
@@ -80,20 +97,24 @@ func (f *fakeGitHub) files() map[string]string {
 func (f *fakeGitHub) write(p, content string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	files := map[string]string{}
+	files, exec := map[string]string{}, map[string]bool{}
 	if f.head != "" {
 		for k, v := range f.trees[f.commits[f.head][0]] {
 			files[k] = v
 		}
+		for k := range f.execs[f.commits[f.head][0]] {
+			exec[k] = true
+		}
 	}
 	if content == "" {
 		delete(files, p)
+		delete(exec, p)
 	} else {
 		sha := blobSHA([]byte(content))
 		f.blobs[sha] = []byte(content)
 		files[p] = sha
 	}
-	f.head = f.putCommit(f.putTree(files), f.head)
+	f.head = f.putCommit(f.putTreeExec(files, exec), f.head)
 }
 
 func (f *fakeGitHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -148,11 +169,20 @@ func (f *fakeGitHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		reply(200, map[string]any{"tree": map[string]string{"sha": f.commits[strings.TrimPrefix(p, "/git/commits/")][0]}})
 	case strings.HasPrefix(p, "/git/trees/") && r.Method == "GET":
 		var entries []map[string]string
-		for path, sha := range f.trees[strings.TrimPrefix(p, "/git/trees/")] {
-			entries = append(entries, map[string]string{"path": path, "type": "blob", "sha": sha})
+		tree := strings.TrimPrefix(p, "/git/trees/")
+		for path, sha := range f.trees[tree] {
+			mode := "100644"
+			if f.execs[tree][path] {
+				mode = "100755"
+			}
+			entries = append(entries, map[string]string{"path": path, "type": "blob", "sha": sha, "mode": mode})
 		}
 		reply(200, map[string]any{"tree": entries})
 	case strings.HasPrefix(p, "/git/blobs/") && r.Method == "GET":
+		if _, ok := f.blobs[strings.TrimPrefix(p, "/git/blobs/")]; !ok {
+			reply(404, map[string]string{"message": "Not Found"})
+			return
+		}
 		reply(200, map[string]string{"content": base64.StdEncoding.EncodeToString(f.blobs[strings.TrimPrefix(p, "/git/blobs/")]), "encoding": "base64"})
 	case p == "/git/blobs":
 		if f.uploads++; f.uploads == f.drain {
@@ -163,12 +193,18 @@ func (f *fakeGitHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.blobs[sha] = data
 		reply(201, map[string]string{"sha": sha})
 	case p == "/git/trees":
-		files := map[string]string{}
+		files, exec := map[string]string{}, map[string]bool{}
 		for k, v := range f.trees[in["base_tree"].(string)] {
 			files[k] = v
 		}
+		for k := range f.execs[in["base_tree"].(string)] {
+			exec[k] = true
+		}
 		for _, e := range in["tree"].([]any) {
 			e := e.(map[string]any)
+			if exec[e["path"].(string)] = e["mode"] == "100755"; !exec[e["path"].(string)] {
+				delete(exec, e["path"].(string))
+			}
 			if text, ok := e["content"].(string); ok { // the text itself: its blob is made here
 				if _, both := e["sha"]; both {
 					reply(422, map[string]string{"message": "tree.sha and tree.content given"})
@@ -185,9 +221,10 @@ func (f *fakeGitHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				files[e["path"].(string)] = sha
 			} else {
 				delete(files, e["path"].(string))
+				delete(exec, e["path"].(string))
 			}
 		}
-		reply(201, map[string]string{"sha": f.putTree(files)})
+		reply(201, map[string]string{"sha": f.putTreeExec(files, exec)})
 	case p == "/git/commits":
 		parent := in["parents"].([]any)[0].(string)
 		reply(201, map[string]string{"sha": f.putCommit(in["tree"].(string), parent)})
@@ -760,5 +797,555 @@ func TestUnreadableIsNotDeleted(t *testing.T) {
 	}
 	if got := f.files(); got["项目.mindmap.json"] != `{"v":2,"from":"b"}` || got["客户/乙.mindmap.json"] != "" {
 		t.Fatalf("the repository was put back: %v", got)
+	}
+}
+
+// What the sync remembers is kept out of the folder. In it, a backup put
+// back brought the memory of when it was made: the files, as they were
+// then, read as changed in the repository alone, and the next sync pulled
+// over what had been restored.
+func TestStateOutOfTheFolder(t *testing.T) {
+	f, cfg := setup(t)
+	a, b := t.TempDir(), t.TempDir()
+	ca, cb := cfg, cfg
+	ca.State = filepath.Join(t.TempDir(), "sync", "a.json")
+	cb.State = filepath.Join(t.TempDir(), "sync", "b.json")
+	put(t, a, "计划.mindmap.json", "v1")
+	sync1(t, a, ca)
+	if _, err := os.Stat(filepath.Join(a, ".sync")); err == nil {
+		t.Fatal("the state is in the folder still")
+	}
+	if _, err := os.Stat(ca.State); err != nil {
+		t.Fatal("no state where it is to be kept")
+	}
+	// A backup of then, as one of before 0.105.2 holds it: the files and
+	// the folder's own state.
+	old, _ := os.ReadFile(ca.State)
+	sync1(t, b, cb)
+	put(t, b, "计划.mindmap.json", "v2, which went wrong")
+	sync1(t, b, cb)
+	sync1(t, a, ca)
+	if read(a, "计划.mindmap.json") != "v2, which went wrong" {
+		t.Fatal("a did not follow")
+	}
+	// The backup is put back.
+	put(t, a, "计划.mindmap.json", "v1")
+	os.MkdirAll(filepath.Join(a, ".sync"), 0o755)
+	os.WriteFile(filepath.Join(a, ".sync", "github.json"), old, 0o644)
+	res := sync1(t, a, ca)
+	if read(a, "计划.mindmap.json") != "v1" || res.Pulled != 0 || f.files()["计划.mindmap.json"] != "v1" {
+		t.Fatalf("what was restored was pulled over: %q, %+v, repository %q", read(a, "计划.mindmap.json"), res, f.files()["计划.mindmap.json"])
+	}
+}
+
+// The state a sync of before kept in the folder is moved out of it, once,
+// and the sync goes on from it: nothing is merged anew.
+func TestAdopt(t *testing.T) {
+	f, cfg := setup(t)
+	a := t.TempDir()
+	put(t, a, "计划.mindmap.json", "v1")
+	put(t, a, "笔记.txt", "n1")
+	sync1(t, a, cfg) // as before: the state in the folder
+	f.write("计划.mindmap.json", "v2")
+	os.Remove(filepath.Join(a, "笔记.txt"))
+
+	state := filepath.Join(t.TempDir(), "sync", "a.json")
+	if !Adopt(a, state) {
+		t.Fatal("not adopted")
+	}
+	if _, err := os.Stat(filepath.Join(a, ".sync")); err == nil {
+		t.Fatal("the folder's state is there still")
+	}
+	if Adopt(a, state) {
+		t.Fatal("adopted twice")
+	}
+	cfg.State = state
+	// With what was remembered, the change there is pulled and the file
+	// deleted here is deleted there; with nothing remembered, the two
+	// versions would be a conflict and the file deleted would come back.
+	res := sync1(t, a, cfg)
+	if read(a, "计划.mindmap.json") != "v2" || len(res.Conflicts) != 0 || f.files()["笔记.txt"] != "" || read(a, "笔记.txt") != "" {
+		t.Fatalf("%+v: %q, repository %v", res, read(a, "计划.mindmap.json"), f.files())
+	}
+	// One there already is not replaced.
+	os.MkdirAll(filepath.Join(a, ".sync"), 0o755)
+	os.WriteFile(filepath.Join(a, ".sync", "github.json"), []byte(`{"repo":"other/one"}`), 0o644)
+	if Adopt(a, state) {
+		t.Fatal("the state kept was replaced by one found in the folder")
+	}
+}
+
+// things are files of the form "id=N;words", one thing by its id, merged
+// by joining their words: maps, for the sync's tests.
+func things(cfg Config) Config {
+	id := func(data []byte) string { s, _, _ := strings.Cut(string(data), ";"); return s }
+	words := func(data []byte) string { _, s, _ := strings.Cut(string(data), ";"); return s }
+	cfg.Same = func(from, to string, old, renamed []byte) bool {
+		return strings.HasSuffix(from, ".mindmap.json") && strings.HasSuffix(to, ".mindmap.json") && id(old) == id(renamed)
+	}
+	cfg.Merge = func(p string, base, local, remote []byte, _ MergeInfo) ([]byte, bool) {
+		if !strings.HasSuffix(p, ".mindmap.json") {
+			return nil, false
+		}
+		return []byte(id(local) + ";" + words(local) + "+" + words(remote) + "(" + words(base) + ")"), true
+	}
+	return cfg
+}
+
+// A map renamed on one computer and changed on the other is one map, of
+// the new name, with both changes: the old name came back with the other
+// computer's changes, and the map was two.
+func TestRenamedHereChangedThere(t *testing.T) {
+	f, cfg := setup(t)
+	cfg = things(cfg)
+	a, b := t.TempDir(), t.TempDir()
+	put(t, a, "计划.mindmap.json", "id=1;base")
+	put(t, a, "别的.mindmap.json", "id=2;other")
+	sync1(t, a, cfg)
+	sync1(t, b, cfg)
+
+	// b changes it; a renames it, its central topic changed.
+	put(t, b, "计划.mindmap.json", "id=1;from b")
+	sync1(t, b, cfg)
+	os.Remove(filepath.Join(a, "计划.mindmap.json"))
+	put(t, a, "规划.mindmap.json", "id=1;renamed on a")
+	put(t, a, "新的.mindmap.json", "id=3;new")
+	res := sync1(t, a, cfg)
+
+	const want = "id=1;renamed on a+from b(base)"
+	if read(a, "计划.mindmap.json") != "" || read(a, "规划.mindmap.json") != want {
+		t.Fatalf("on a: 计划 %q, 规划 %q", read(a, "计划.mindmap.json"), read(a, "规划.mindmap.json"))
+	}
+	if got := f.files(); got["计划.mindmap.json"] != "" || got["规划.mindmap.json"] != want || got["新的.mindmap.json"] != "id=3;new" {
+		t.Fatalf("repository %v", got)
+	}
+	if res.Renamed["计划.mindmap.json"] != "规划.mindmap.json" || !slices.Contains(res.Merged, "规划.mindmap.json") {
+		t.Fatalf("%+v", res)
+	}
+	sync1(t, b, cfg)
+	if read(b, "计划.mindmap.json") != "" || read(b, "规划.mindmap.json") != want {
+		t.Fatalf("on b: 计划 %q, 规划 %q", read(b, "计划.mindmap.json"), read(b, "规划.mindmap.json"))
+	}
+	if r := sync1(t, a, cfg); r.Synced() {
+		t.Fatalf("a synced again: %+v", r)
+	}
+
+	// A file deleted here and changed there, with a new file that is
+	// another thing, is kept as before.
+	put(t, b, "别的.mindmap.json", "id=2;changed on b")
+	sync1(t, b, cfg)
+	os.Remove(filepath.Join(a, "别的.mindmap.json"))
+	put(t, a, "无关.mindmap.json", "id=9;nothing of it")
+	sync1(t, a, cfg)
+	if read(a, "别的.mindmap.json") != "id=2;changed on b" || read(a, "无关.mindmap.json") != "id=9;nothing of it" {
+		t.Fatalf("a deletion beat an edit: %q", read(a, "别的.mindmap.json"))
+	}
+}
+
+// The same from the other side: renamed there, changed here.
+func TestRenamedThereChangedHere(t *testing.T) {
+	f, cfg := setup(t)
+	cfg = things(cfg)
+	a, b := t.TempDir(), t.TempDir()
+	put(t, a, "客户/计划.mindmap.json", "id=1;base")
+	sync1(t, a, cfg)
+	sync1(t, b, cfg)
+
+	os.Remove(filepath.Join(b, "客户", "计划.mindmap.json"))
+	put(t, b, "客户/规划.mindmap.json", "id=1;renamed on b")
+	sync1(t, b, cfg)
+	put(t, a, "客户/计划.mindmap.json", "id=1;changed on a")
+	res := sync1(t, a, cfg)
+
+	const want = "id=1;changed on a+renamed on b(base)"
+	if read(a, "客户/计划.mindmap.json") != "" || read(a, "客户/规划.mindmap.json") != want {
+		t.Fatalf("on a: 计划 %q, 规划 %q", read(a, "客户/计划.mindmap.json"), read(a, "客户/规划.mindmap.json"))
+	}
+	if got := f.files(); got["客户/计划.mindmap.json"] != "" || got["客户/规划.mindmap.json"] != want {
+		t.Fatalf("repository %v", got)
+	}
+	if res.Renamed["客户/计划.mindmap.json"] != "客户/规划.mindmap.json" {
+		t.Fatalf("%+v", res)
+	}
+	sync1(t, b, cfg)
+	if read(b, "客户/规划.mindmap.json") != want || read(b, "客户/计划.mindmap.json") != "" {
+		t.Fatalf("on b: %q", read(b, "客户/规划.mindmap.json"))
+	}
+	if r := sync1(t, a, cfg); r.Synced() {
+		t.Fatalf("a synced again: %+v", r)
+	}
+}
+
+// The version both had, gone from the repository (made anew, its history
+// rewritten), is none: the two are merged without it. It failed every
+// sync from then on, saying the repository's name was mistyped.
+func TestBaseGone(t *testing.T) {
+	f, cfg := setup(t)
+	cfg = things(cfg)
+	a, b := t.TempDir(), t.TempDir()
+	put(t, a, "计划.mindmap.json", "id=1;base")
+	sync1(t, a, cfg)
+	sync1(t, b, cfg)
+	put(t, a, "计划.mindmap.json", "id=1;from a")
+	put(t, b, "计划.mindmap.json", "id=1;from b")
+	sync1(t, b, cfg)
+	f.mu.Lock()
+	delete(f.blobs, blobSHA([]byte("id=1;base")))
+	f.mu.Unlock()
+	res, err := Sync(context.Background(), a, cfg, nil)
+	if err != nil {
+		t.Fatalf("the sync failed: %v", err)
+	}
+	if read(a, "计划.mindmap.json") != "id=1;from a+from b()" || len(res.Merged) != 1 {
+		t.Fatalf("%q, %+v", read(a, "计划.mindmap.json"), res)
+	}
+}
+
+// Not found is explained, as a repository mistyped or a token that may
+// not reach it, of the repository alone: not of a file of it.
+func TestNotFoundOfAFileIsNotExplained(t *testing.T) {
+	f, cfg := setup(t)
+	a := t.TempDir()
+	sync1(t, a, cfg)
+	f.write("计划.mindmap.json", "v1")
+	f.mu.Lock()
+	delete(f.blobs, blobSHA([]byte("v1")))
+	f.mu.Unlock()
+	_, err := Sync(context.Background(), a, cfg, nil)
+	if err == nil || strings.Contains(err.Error(), "令牌") || strings.Contains(err.Error(), "重新输入") {
+		t.Fatalf("err %v", err)
+	}
+}
+
+// A map edited while it is merged is left as it is for the next sync,
+// which merges it against what both had. It was kept as a conflict copy,
+// and that merged with no version both came from.
+func TestEditedWhileMerging(t *testing.T) {
+	f, cfg := setup(t)
+	cfg = things(cfg)
+	a, b := t.TempDir(), t.TempDir()
+	put(t, a, "计划.mindmap.json", "id=1;base")
+	sync1(t, a, cfg)
+	sync1(t, b, cfg)
+	put(t, a, "计划.mindmap.json", "id=1;from a")
+	put(t, b, "计划.mindmap.json", "id=1;from b")
+	sync1(t, b, cfg)
+
+	merge := cfg.Merge
+	edited := cfg
+	edited.Merge = func(p string, base, local, remote []byte, w MergeInfo) ([]byte, bool) {
+		put(t, a, "计划.mindmap.json", "id=1;from a, and more") // the user goes on
+		return merge(p, base, local, remote, w)
+	}
+	res := sync1(t, a, edited)
+	if len(res.Conflicts) != 0 || len(res.Merged) != 0 || read(a, "计划 (GitHub 冲突 2026-10-11 1504).mindmap.json") != "" {
+		t.Fatalf("kept apart: %+v", res)
+	}
+	if read(a, "计划.mindmap.json") != "id=1;from a, and more" || f.files()["计划.mindmap.json"] != "id=1;from b" {
+		t.Fatalf("here %q, there %q", read(a, "计划.mindmap.json"), f.files()["计划.mindmap.json"])
+	}
+	// The next sync merges it, against what both had.
+	res = sync1(t, a, cfg)
+	if want := "id=1;from a, and more+from b(base)"; read(a, "计划.mindmap.json") != want || f.files()["计划.mindmap.json"] != want || len(res.Merged) != 1 {
+		t.Fatalf("%q, %+v", read(a, "计划.mindmap.json"), res)
+	}
+}
+
+// A file that may be run is one on the other computer too, and stays one
+// when it comes back changed; one the repository has as a text, from a
+// sync of before, is mended.
+func TestExecutable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no such bit")
+	}
+	mode := func(dir, p string) os.FileMode {
+		info, err := os.Stat(filepath.Join(dir, filepath.FromSlash(p)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return info.Mode().Perm()
+	}
+	f, cfg := setup(t)
+	a, b := t.TempDir(), t.TempDir()
+	put(t, a, ".skills/review/run.sh", "#!/bin/sh\necho 1\n")
+	put(t, a, ".skills/review/SKILL.md", "# Review")
+	put(t, a, ".skills/review/tool.bin", "\x7fELF\x00\x01")
+	os.Chmod(filepath.Join(a, ".skills/review/run.sh"), 0o755)
+	os.Chmod(filepath.Join(a, ".skills/review/tool.bin"), 0o755)
+	sync1(t, a, cfg)
+	if f.modeOf(".skills/review/run.sh") != "100755" || f.modeOf(".skills/review/tool.bin") != "100755" || f.modeOf(".skills/review/SKILL.md") != "100644" {
+		t.Fatalf("modes there: %s %s %s", f.modeOf(".skills/review/run.sh"), f.modeOf(".skills/review/tool.bin"), f.modeOf(".skills/review/SKILL.md"))
+	}
+	sync1(t, b, cfg)
+	if mode(b, ".skills/review/run.sh") != 0o755 || mode(b, ".skills/review/tool.bin") != 0o755 || mode(b, ".skills/review/SKILL.md") != 0o644 {
+		t.Fatalf("modes on b: %v %v %v", mode(b, ".skills/review/run.sh"), mode(b, ".skills/review/tool.bin"), mode(b, ".skills/review/SKILL.md"))
+	}
+	// Changed there and back: run still, here and there.
+	put(t, b, ".skills/review/run.sh", "#!/bin/sh\necho 2\n")
+	os.Chmod(filepath.Join(b, ".skills/review/run.sh"), 0o755)
+	sync1(t, b, cfg)
+	sync1(t, a, cfg)
+	if read(a, ".skills/review/run.sh") != "#!/bin/sh\necho 2\n" || mode(a, ".skills/review/run.sh") != 0o755 || f.modeOf(".skills/review/run.sh") != "100755" {
+		t.Fatalf("after a change: %v, %s", mode(a, ".skills/review/run.sh"), f.modeOf(".skills/review/run.sh"))
+	}
+	// A file's own mode is kept when it is written over.
+	os.Chmod(filepath.Join(a, ".skills/review/SKILL.md"), 0o600)
+	put(t, b, ".skills/review/SKILL.md", "# Review, better")
+	sync1(t, b, cfg)
+	sync1(t, a, cfg)
+	if read(a, ".skills/review/SKILL.md") != "# Review, better" || mode(a, ".skills/review/SKILL.md") != 0o600 {
+		t.Fatalf("written over: %v", mode(a, ".skills/review/SKILL.md"))
+	}
+
+	// One that went up as a text before: its mode goes up alone, no blob
+	// sent, and the other computer's file may be run.
+	f.write(".skills/old/go.sh", "#!/bin/sh\n")
+	sync1(t, a, cfg)
+	sync1(t, b, cfg)
+	if mode(b, ".skills/old/go.sh") != 0o644 {
+		t.Fatalf("a text there: %v", mode(b, ".skills/old/go.sh"))
+	}
+	os.Chmod(filepath.Join(a, ".skills/old/go.sh"), 0o755)
+	f.uploads = 0
+	res := sync1(t, a, cfg)
+	if f.modeOf(".skills/old/go.sh") != "100755" || f.uploads != 0 || res.Pushed != 0 {
+		t.Fatalf("the mode alone: %s, %d uploads, %+v", f.modeOf(".skills/old/go.sh"), f.uploads, res)
+	}
+	sync1(t, b, cfg)
+	if mode(b, ".skills/old/go.sh") != 0o755 {
+		t.Fatalf("on b: %v", mode(b, ".skills/old/go.sh"))
+	}
+	for _, d := range []string{a, b} {
+		if r := sync1(t, d, cfg); r.Synced() || r.Commit != f.head {
+			t.Fatalf("synced again: %+v", r)
+		}
+	}
+	pushes := f.pushes
+	sync1(t, a, cfg)
+	sync1(t, b, cfg)
+	if f.pushes != pushes {
+		t.Fatal("the modes go up again and again")
+	}
+}
+
+// One path that cannot be written here does not stop the rest: it is
+// left on both sides, said, and written once it can be.
+func TestUnwritableDoesNotBlock(t *testing.T) {
+	f, cfg := setup(t)
+	a := t.TempDir()
+	put(t, a, "计划.mindmap.json", "v1")
+	sync1(t, a, cfg)
+	// A name longer than a file's may be, whoever runs this.
+	long := strings.Repeat("长", 100) + ".mindmap.json"
+	f.write(long, "from elsewhere")
+	f.write("别的.mindmap.json", "also from elsewhere")
+	put(t, a, "计划.mindmap.json", "v2")
+
+	res, err := Sync(context.Background(), a, cfg, nil)
+	if err != nil {
+		t.Fatalf("one path stopped the sync: %v", err)
+	}
+	if !slices.Contains(res.Unwritten, long) || read(a, "别的.mindmap.json") != "also from elsewhere" || res.Pulled != 1 {
+		t.Fatalf("%+v", res)
+	}
+	if got := f.files(); got["计划.mindmap.json"] != "v2" || got[long] != "from elsewhere" {
+		t.Fatalf("repository %v", got)
+	}
+	// The next time: still there, still said, nothing lost, and deleted
+	// there it is no more to do.
+	res = sync1(t, a, cfg)
+	if !slices.Contains(res.Unwritten, long) || f.files()[long] != "from elsewhere" {
+		t.Fatalf("the second time: %+v", res)
+	}
+	f.write(long, "")
+	if res = sync1(t, a, cfg); len(res.Unwritten) != 0 {
+		t.Fatalf("gone from the repository: %+v", res)
+	}
+
+	// A folder that may not be written in: its file comes once it may,
+	// and one to be removed from it is not taken as new here meanwhile.
+	if os.Geteuid() == 0 {
+		t.Skip("root writes everywhere")
+	}
+	put(t, a, "客户/乙.mindmap.json", "v1")
+	sync1(t, a, cfg)
+	f.write("客户/甲.mindmap.json", "from elsewhere")
+	f.write("客户/乙.mindmap.json", "")
+	os.Chmod(filepath.Join(a, "客户"), 0o555)
+	t.Cleanup(func() { os.Chmod(filepath.Join(a, "客户"), 0o755) })
+	res = sync1(t, a, cfg)
+	if len(res.Unwritten) != 2 || read(a, "客户/乙.mindmap.json") != "v1" {
+		t.Fatalf("a folder not to be written in: %+v", res)
+	}
+	res = sync1(t, a, cfg)
+	if got := f.files(); got["客户/乙.mindmap.json"] != "" || got["客户/甲.mindmap.json"] != "from elsewhere" || res.Pushed != 0 {
+		t.Fatalf("what could not be removed was sent back: %+v, %v", res, got)
+	}
+	os.Chmod(filepath.Join(a, "客户"), 0o755)
+	res = sync1(t, a, cfg)
+	if len(res.Unwritten) != 0 || read(a, "客户/甲.mindmap.json") != "from elsewhere" || read(a, "客户/乙.mindmap.json") != "" {
+		t.Fatalf("once it may be written in: %+v", res)
+	}
+}
+
+func TestHoldable(t *testing.T) {
+	for p, want := range map[string]bool{
+		"计划.mindmap.json": true, "客户/甲.mindmap.json": true, ".library/files/a b.png": true,
+		"什么?.mindmap.json": false, "说明./x.json": false, "a/结尾空格 /x": false, "CON.mindmap.json": false,
+		"x/nul": false, "a<b>.txt": false, "com1.assets/p.png": false, "console.json": true, "a|b": false, `q"uote`: false,
+	} {
+		if got := holdableOn("windows", p); got != want {
+			t.Errorf("holdableOn(windows, %q) = %v", p, got)
+		}
+		if !holdableOn("darwin", p) {
+			t.Errorf("holdableOn(darwin, %q) = false", p)
+		}
+	}
+}
+
+// A file that takes long to come down comes down, while something of it
+// comes: no time is set for the whole. A call with nothing coming is
+// given up, and said in words.
+func TestSlowDownload(t *testing.T) {
+	was := idle
+	idle = 150 * time.Millisecond
+	t.Cleanup(func() { idle = was })
+	stall := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body := `{"encoding":"utf-8","content":"` + strings.Repeat("x", 6000) + `"}`
+		w.Header().Set("Content-Length", fmt.Sprint(len(body)))
+		w.WriteHeader(200)
+		for i := 0; i < len(body); i += 1000 { // 1.5 times as long as may pass with nothing coming
+			if stall && i == 2000 {
+				select {
+				case <-r.Context().Done():
+				case <-time.After(2 * time.Second):
+				}
+				return
+			}
+			w.Write([]byte(body[i:min(i+1000, len(body))]))
+			w.(http.Flusher).Flush()
+			time.Sleep(40 * time.Millisecond)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	cfg := Config{Repo: "me/notes", Token: "good", API: srv.URL}
+	data, err := cfg.blob(context.Background(), "abc")
+	if err != nil || len(data) != 6000 {
+		t.Fatalf("a slow download: %d bytes, %v", len(data), err)
+	}
+	stall = true
+	start := time.Now()
+	_, err = cfg.blob(context.Background(), "abc")
+	if err == nil || !strings.Contains(err.Error(), "没有动静") || time.Since(start) > time.Second {
+		t.Fatalf("a stalled download: %v after %v", err, time.Since(start))
+	}
+}
+
+// A folder the sync emptied goes: renamed or deleted on one computer, it
+// stayed on the other, empty, among the projects. One empty before stays.
+func TestEmptiedFoldersGo(t *testing.T) {
+	_, cfg := setup(t)
+	a, b := t.TempDir(), t.TempDir()
+	put(t, a, "客户/甲/计划.mindmap.json", "v1")
+	put(t, a, "客户/甲/计划.assets/p.png", "\x89PNG\x00")
+	put(t, a, "留着/别的.mindmap.json", "v1")
+	sync1(t, a, cfg)
+	sync1(t, b, cfg)
+	os.Mkdir(filepath.Join(b, "空的"), 0o755)
+	os.WriteFile(filepath.Join(b, "客户", "甲", ".DS_Store"), []byte("x"), 0o644)
+	os.WriteFile(filepath.Join(b, "留着", "自己的.txt.tmp"), []byte("x"), 0o644) // not synced, and the user's
+
+	os.Rename(filepath.Join(a, "客户"), filepath.Join(a, "老客户"))
+	os.Remove(filepath.Join(a, "留着", "别的.mindmap.json"))
+	sync1(t, a, cfg)
+	sync1(t, b, cfg)
+	if read(b, "老客户/甲/计划.mindmap.json") != "v1" {
+		t.Fatal("b did not follow")
+	}
+	if _, err := os.Stat(filepath.Join(b, "客户")); err == nil {
+		t.Error("the folder renamed is there still, empty")
+	}
+	if _, err := os.Stat(filepath.Join(b, "空的")); err != nil {
+		t.Error("a folder that was empty before is gone")
+	}
+	if _, err := os.Stat(filepath.Join(b, "留着", "自己的.txt.tmp")); err != nil {
+		t.Error("a folder with a file of the user's in it is gone")
+	}
+}
+
+// A file renamed is not sent again: the repository has it.
+func TestRenameUploadsNothing(t *testing.T) {
+	f, cfg := setup(t)
+	a, b := t.TempDir(), t.TempDir()
+	put(t, a, "计划.mindmap.json", "v1")
+	for i := range 5 {
+		put(t, a, fmt.Sprintf("计划.assets/p%d.png", i), fmt.Sprint("\x89PNG\x00", i))
+	}
+	sync1(t, a, cfg)
+	if f.uploads != 5 {
+		t.Fatalf("%d uploads", f.uploads)
+	}
+	os.Rename(filepath.Join(a, "计划.assets"), filepath.Join(a, "规划.assets"))
+	os.Rename(filepath.Join(a, "计划.mindmap.json"), filepath.Join(a, "规划.mindmap.json"))
+	res := sync1(t, a, cfg)
+	if f.uploads != 5 || res.Pushed != 6 {
+		t.Fatalf("%d pictures sent again, %+v", f.uploads-5, res)
+	}
+	sync1(t, b, cfg)
+	if read(b, "规划.assets/p3.png") != "\x89PNG\x003" || read(b, "规划.mindmap.json") != "v1" {
+		t.Fatal("b did not get them")
+	}
+}
+
+// A sync that fails keeps what it worked out and tells what it wrote: the
+// hashes of a large folder were made anew two minutes later, and the app
+// did not read the files that had come.
+func TestFailedSyncKeepsItsWork(t *testing.T) {
+	f, cfg := setup(t)
+	a := t.TempDir()
+	sync1(t, a, cfg)
+	put(t, a, "这里的.mindmap.json", "here")
+	f.write("那边的.mindmap.json", "there")
+	f.write("坏的.mindmap.json", "broken")
+	f.mu.Lock()
+	delete(f.blobs, blobSHA([]byte("broken")))
+	f.mu.Unlock()
+	res, err := Sync(context.Background(), a, cfg, nil)
+	if err == nil {
+		t.Fatal("no error")
+	}
+	if !slices.Contains(res.Written, "那边的.mindmap.json") || read(a, "那边的.mindmap.json") != "there" {
+		t.Fatalf("what was written is not told: %+v", res)
+	}
+	if s := loadState(a, cfg); s.Hashes["这里的.mindmap.json"].SHA != blobSHA([]byte("here")) {
+		t.Fatalf("the hashes are lost: %v", s.Hashes)
+	}
+}
+
+// A map merged, then merged again as the branch moved, is told once.
+func TestMergedToldOnce(t *testing.T) {
+	f, cfg := setup(t)
+	cfg = things(cfg)
+	a, b := t.TempDir(), t.TempDir()
+	put(t, a, "计划.mindmap.json", "id=1;base")
+	sync1(t, a, cfg)
+	sync1(t, b, cfg)
+	put(t, a, "计划.mindmap.json", "id=1;from a")
+	put(t, b, "计划.mindmap.json", "id=1;from b")
+	sync1(t, b, cfg)
+	once := false
+	cfg.Client = &http.Client{Transport: hook{func(r *http.Request) {
+		if !once && r.Method == "POST" && strings.HasSuffix(r.URL.Path, "/git/commits") {
+			once = true
+			f.write("计划.mindmap.json", "id=1;from b again")
+		}
+	}, f}}
+	res := sync1(t, a, cfg)
+	if !once || len(res.Merged) != 1 {
+		t.Fatalf("merged %v", res.Merged)
+	}
+	if strings.ContainsAny(errMoved.Error(), "abcdefghijklmnopqrstuvwxyz") {
+		t.Errorf("not in the user's language: %v", errMoved)
 	}
 }

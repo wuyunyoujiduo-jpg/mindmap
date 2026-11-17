@@ -5,6 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/gitbase"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
 
 // config is what the app remembers between runs.
@@ -63,7 +66,11 @@ type config struct {
 	// NoTray hides the menu bar icon.
 	NoTray bool `json:"noTray,omitempty"`
 	// GitHubAPI is the address of GitHub's API the sync goes to, for
-	// GitHub Enterprise ("" is github.com's).
+	// GitHub Enterprise ("" is github.com's: https://api.github.com; an
+	// Enterprise server's is https://HOST/api/v3). It has no field in the
+	// settings, and is not to have one: it is written here, in
+	// config.json ("githubAPI"), by the few who need it, with the app
+	// closed.
 	GitHubAPI string `json:"githubAPI,omitempty"`
 	// NoReminders turns off the notifications of tasks due.
 	NoReminders bool `json:"noReminders,omitempty"`
@@ -79,11 +86,25 @@ type config struct {
 	ShotKey string `json:"shotKey,omitempty"`
 	// SyncRepo is the GitHub repository, owner/name, that the maps and
 	// the library sync with, with the token that may write to it;
-	// SyncOff stops the sync by itself.
+	// SyncOff stops the sync by itself. SyncBranch is the branch synced
+	// with, "" for main: as GitHubAPI, it has no field in the settings and
+	// is written in config.json ("syncBranch") with the app closed. Every
+	// computer of the user's is to name the same one.
 	SyncRepo   string `json:"syncRepo,omitempty"`
 	SyncBranch string `json:"syncBranch,omitempty"`
 	SyncToken  string `json:"syncToken,omitempty"`
 	SyncOff    bool   `json:"syncOff,omitempty"`
+	// SyncStateOut is set once the sync's state of before 0.105.2, kept in
+	// the maps folder, was looked for and moved out of it (syncState): it
+	// is looked for that once, in the folder the app had then. Found
+	// later, in a backup put back or a folder a cloud brought, it is
+	// another computer's or another time's, and is left alone.
+	SyncStateOut bool `json:"syncStateOut,omitempty"`
+	// Projects are the folders of the maps' code on this computer, by the
+	// maps' paths (projectOf): a map's file names its
+	// repository, the same on every computer, and not where this
+	// computer keeps it, which another computer's choice overwrote.
+	Projects map[string]string `json:"projects,omitempty"`
 	// Icon is the app's icon chosen, "" for the default.
 	Icon string `json:"icon,omitempty"`
 	// LibraryManual leaves new clips for the AI to sort out when asked,
@@ -135,13 +156,7 @@ func loadConfig() config {
 		}
 	}
 	if c.Dir == "" {
-		// Before 0.25.13 the folder was MindMap, and unsaved as the default.
 		c.Dir = defaultDir()
-		if old := oldDefaultDir(); old != "" {
-			if _, err := os.Stat(old); err == nil {
-				c.Dir = old
-			}
-		}
 	}
 	return c
 }
@@ -163,6 +178,75 @@ func (c config) save() {
 	}
 	_ = os.Chmod(tmp, 0o600)
 	_ = os.Rename(tmp, p)
+}
+
+// The folder of a map's code is this computer's to know. A map's file,
+// which the sync carries to every computer, held one computer's absolute
+// path (File.Project): on the other it led nowhere, and chosen anew there
+// it was the first computer's that led nowhere. So the folder chosen
+// here is kept here (config.Projects), and the file names the
+// repository (File.Repo), by which the agents find the map on any
+// computer. File.Project is still read, for the files of before and the
+// computer that wrote it, and still written where it is empty or this
+// computer's own, for the agents of a repository with no remote, which
+// find their map by it (internal/mcp's projectMap).
+
+// projectOf is the folder of a map's code on this computer, "" for none:
+// the one chosen here, else the one its file names when that is a folder
+// of this computer.
+func (a *app) projectOf(path string, f *model.File) string {
+	if dir := a.cfg.Projects[path]; dir != "" {
+		return dir
+	}
+	if f != nil && isDir(f.Project) {
+		return f.Project
+	}
+	return ""
+}
+
+func isDir(path string) bool {
+	if path == "" {
+		return false
+	}
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
+}
+
+// setProject sets the folder of the open map's code on this computer,
+// "" for none. Another computer's folder, in the file, is left as it is.
+func (a *app) setProject(dir string) {
+	if a.file == nil || a.path == "" {
+		return
+	}
+	if dir == "" {
+		delete(a.cfg.Projects, a.path)
+	} else {
+		if a.cfg.Projects == nil {
+			a.cfg.Projects = map[string]string{}
+		}
+		a.cfg.Projects[a.path] = dir
+	}
+	a.cfg.save()
+	repo := ""
+	if dir != "" {
+		repo = gitbase.Remote(dir)
+	}
+	// The file's own folder is this computer's to change when there is
+	// none, or one that is a folder here; and with it the repository
+	// named, which is else set only where none is.
+	project, named := a.file.Project, a.file.Repo
+	if project == "" || isDir(project) {
+		project = dir
+		if repo != "" {
+			named = repo
+		}
+	} else if named == "" {
+		named = repo
+	}
+	if project == a.file.Project && named == a.file.Repo {
+		return
+	}
+	a.mutate("", func() { a.file.Project, a.file.Repo = project, named })
 }
 
 // defaultDir is where maps go until the user picks a folder.

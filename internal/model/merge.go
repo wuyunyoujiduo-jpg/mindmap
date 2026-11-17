@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"slices"
 	"sort"
+	"strings"
 )
 
 // Merge joins two versions of a map changed apart from a version both
@@ -17,6 +18,14 @@ import (
 // other lists of words take what each added and dropped. A topic moved on both sides goes where ours put
 // it; a child order changed on both is ours, with theirs' new children
 // after the sibling they followed there.
+//
+// A picture, a place, a rule of repeating and a baseline are each one
+// value (atoms): taken field by field, two pictures made one of a file
+// and another's size, asked about three times. The markers are one of a
+// group, so they are merged group by group. A summary's topic is a topic
+// as any other, found by its ID, not a part of the one it sums up: a
+// topic moved under it on one side and renamed on the other was in the
+// map twice.
 //
 // base nil merges two versions with no known common one: what is in
 // either is kept, and nothing is deleted.
@@ -84,7 +93,7 @@ func Merge(base, ours, theirs *File) (merged *File, clashes []Clash) {
 	for changed := true; changed; {
 		changed = false
 		for id := range at {
-			p := at[id]
+			p := ownerOf(at[id])
 			if _, ok := content[p]; ok || isSheetKey(p) {
 				continue
 			}
@@ -156,8 +165,26 @@ func Merge(base, ours, theirs *File) (merged *File, clashes []Clash) {
 	build = func(id string) *Node {
 		n := content[id].clone()
 		n.Children = nil
+		if n.Summary != nil {
+			n.Summary.Topic = nil
+		}
 		for _, c := range children(id) {
 			n.Children = append(n.Children, build(c))
+		}
+		// Its summary's topic: the first there, and one more (each side
+		// gave it one) a child.
+		for i, c := range children(sumKey(id)) {
+			if i > 0 {
+				n.Children = append(n.Children, build(c))
+				continue
+			}
+			if n.Summary == nil { // taken off on one side, its topic changed on the other: kept
+				n.Summary = &Mark{}
+			}
+			n.Summary.Topic = build(c)
+		}
+		if n.Summary != nil && n.Summary.Topic == nil && n.Summary.Label == "" {
+			n.Summary = nil // a summary is its topic, which is gone
 		}
 		return n
 	}
@@ -245,8 +272,13 @@ func (m *merger) value(path []string, b, o, t json.RawMessage) json.RawMessage {
 	case bytes.Equal(t, b):
 		return o
 	}
-	if isObject(o) && isObject(t) && (b == nil || isObject(b)) {
+	if isObject(o) && isObject(t) && (b == nil || isObject(b)) && !atom(path) {
 		return m.object(path, b, o, t)
+	}
+	if len(path) > 0 && path[len(path)-1] == "markers" {
+		if v, ok := m.markers(path, b, o, t); ok {
+			return v
+		}
 	}
 	if os, ok := words(o); ok {
 		if ts, ok := words(t); ok {
@@ -261,6 +293,89 @@ func (m *merger) value(path []string, b, o, t json.RawMessage) json.RawMessage {
 		m.clashes = append(m.clashes, c)
 	}
 	return o
+}
+
+// atom tells whether the value at path is one thing, though written as
+// several fields: a picture (its file and size), a place, a line's bend,
+// how a task repeats, the code's baseline.
+func atom(path []string) bool {
+	if len(path) == 0 {
+		return false
+	}
+	switch path[len(path)-1] {
+	case "image", "pos", "bend", "repeat", "baseline":
+		return true
+	}
+	return false
+}
+
+// markers merges a topic's markers, "group:value" and one of a group:
+// group by group, each side's change of a group taken, and a group both
+// changed, each its own way, ours and a clash, whose other choice is the
+// markers with theirs of those groups. ok false when they are not lists.
+func (m *merger) markers(path []string, b, o, t json.RawMessage) (json.RawMessage, bool) {
+	os, ok1 := words(o)
+	ts, ok2 := words(t)
+	bs, ok3 := words(b)
+	if !(ok1 || o == nil) || !(ok2 || t == nil) || !(ok3 || b == nil) {
+		return nil, false
+	}
+	group := func(w string) string {
+		g, _, _ := strings.Cut(w, ":")
+		return g
+	}
+	of := func(ws []string) map[string]string {
+		out := map[string]string{}
+		for _, w := range ws {
+			out[group(w)] = w
+		}
+		return out
+	}
+	bm, om, tm := of(bs), of(os), of(ts)
+	var order []string // ours' groups as they stand, then theirs' new ones
+	for _, ws := range [][]string{os, ts, bs} {
+		for _, w := range ws {
+			if g := group(w); !slices.Contains(order, g) {
+				order = append(order, g)
+			}
+		}
+	}
+	var ours, theirs []string
+	clash := false
+	for _, g := range order {
+		bw, ow, tw := bm[g], om[g], tm[g]
+		switch {
+		case ow == tw, tw == bw:
+			if ow != "" {
+				ours, theirs = append(ours, ow), append(theirs, ow)
+			}
+		case ow == bw:
+			if tw != "" {
+				ours, theirs = append(ours, tw), append(theirs, tw)
+			}
+		default: // both changed it, each its own way
+			clash = true
+			if ow != "" {
+				ours = append(ours, ow)
+			}
+			if tw != "" {
+				theirs = append(theirs, tw)
+			}
+		}
+	}
+	list := func(ws []string) json.RawMessage {
+		if len(ws) == 0 {
+			return nil
+		}
+		data, _ := json.Marshal(ws)
+		return data
+	}
+	if clash && !m.at.quiet {
+		c := m.at
+		c.Field, c.Base, c.Ours, c.Theirs, c.NoBase = slices.Clone(path), b, list(ours), list(theirs), m.noBase
+		m.clashes = append(m.clashes, c)
+	}
+	return list(ours), true
 }
 
 // object merges JSON objects key by key.
@@ -385,6 +500,21 @@ type treeEntry struct {
 func rootKey(sheet string) string  { return "\x00root\x00" + sheet }
 func floatKey(sheet string) string { return "\x00float\x00" + sheet }
 
+// sumKey is where the topic of a topic's summary is: beside its children,
+// not among them.
+func sumKey(node string) string { return sumPrefix + node }
+
+const sumPrefix = "\x00sum\x00"
+
+// ownerOf is the topic a place is of: the topic itself, or the one whose
+// summary it is; a canvas's key as it is.
+func ownerOf(k string) string {
+	if strings.HasPrefix(k, sumPrefix) {
+		return k[len(sumPrefix):]
+	}
+	return k
+}
+
 func isSheetKey(k string) bool { return len(k) > 0 && k[0] == 0 }
 
 // sheetOfKey is the canvas of a root's or floating topics' key; "" for a
@@ -410,6 +540,7 @@ func indexTree(f *File) *treeIndex {
 		for _, c := range n.Children {
 			walk(c, n.ID)
 		}
+		walk(n.SummaryTopic(), sumKey(n.ID))
 	}
 	for _, d := range f.Sheets {
 		x.sheets[d.ID] = d
@@ -428,7 +559,7 @@ func findLoop(at map[string]string) []string {
 	for _, start := range keys(at) {
 		seen := map[string]int{}
 		var path []string
-		for id := start; ; id = at[id] {
+		for id := start; ; id = ownerOf(at[id]) {
 			if done[id] || isSheetKey(id) || id == "" {
 				break
 			}
@@ -518,9 +649,16 @@ func sheetFields(d *Document) json.RawMessage {
 	return data
 }
 
+// nodeFields is a topic's own fields: without its children, nor its
+// summary's topic, which is a topic of its own.
 func nodeFields(n *Node) json.RawMessage {
 	c := *n
 	c.Children = nil
+	if c.Summary != nil && c.Summary.Topic != nil {
+		s := *c.Summary
+		s.Topic = nil
+		c.Summary = &s
+	}
 	data, _ := json.Marshal(c)
 	return data
 }
@@ -602,6 +740,12 @@ func (f *File) TakeTheirs(c Clash) bool {
 			return false
 		}
 		nn.ID, nn.Children = n.ID, n.Children
+		if t := n.SummaryTopic(); t != nil { // its summary's topic is not of its fields
+			if nn.Summary == nil {
+				nn.Summary = &Mark{}
+			}
+			nn.Summary.Topic = t
+		}
 		*n = nn
 	case c.Sheet != "":
 		d, _ := f.Sheet(c.Sheet)
