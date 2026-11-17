@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/sha1"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -140,6 +142,39 @@ func (a *app) followSynced(dir string, renamed map[string]string) {
 			a.modTime = was
 		}
 	}
+}
+
+// openMapGone takes the open map whose file the sync removed, with no
+// new name to follow (followSynced): deleted on the other computer. Not
+// changed here, it is closed, as a map deleted here is, and a version of
+// it is kept; changed here, it is saved under its name, and the next sync
+// sends it back (deleted there, changed here: kept).
+func (a *app) openMapGone(dir string, written []string) {
+	if a.path == "" || a.file == nil {
+		return
+	}
+	rel, err := filepath.Rel(dir, a.path)
+	if err != nil || !slices.Contains(written, filepath.ToSlash(rel)) {
+		return
+	}
+	if _, err := os.Lstat(a.path); !errors.Is(err, fs.ErrNotExist) {
+		return
+	}
+	name := mapName(a.path)
+	if a.dirty || a.conflict || a.editing != "" {
+		a.commitEditIfAny()
+		a.conflict = false
+		a.save() // the file gone, nothing to merge with: written whole
+		a.tell(fmt.Sprintf("「%s」在另一台电脑上删了，这边改过，已留下", name))
+		return
+	}
+	a.keepVersion(versions.BeforeExternal) // to find it by, as it was here
+	a.path, a.file, a.doc = "", nil, nil
+	a.refreshFiles()
+	if len(a.files) > 0 {
+		_ = a.open(a.files[0].Path)
+	}
+	a.tell(fmt.Sprintf("「%s」在另一台电脑上删了", name))
 }
 
 // mergeMapVersions merges a map changed on two computers, topic by topic
@@ -374,6 +409,7 @@ func (a *app) syncNow() {
 		// well: a sync that failed after files came left them unread by
 		// the app, the maps' list and the library as they were before.
 		a.followSynced(dir, res.Renamed)
+		a.openMapGone(dir, res.Written)
 		if len(res.Written) > 0 {
 			// The maps and the library read what came, as they do
 			// any change made outside the app.

@@ -976,6 +976,38 @@ func TestRenamedThereChangedHere(t *testing.T) {
 	}
 }
 
+// Renamed there alone, unchanged here: the files are the repository's,
+// and the rename is said, so that the app follows the map it has open.
+func TestRenamedThereOnly(t *testing.T) {
+	f, cfg := setup(t)
+	cfg = things(cfg)
+	a, b := t.TempDir(), t.TempDir()
+	put(t, a, "客户/计划.mindmap.json", "id=1;base")
+	put(t, a, "别的.mindmap.json", "id=2;other")
+	sync1(t, a, cfg)
+	sync1(t, b, cfg)
+
+	os.Remove(filepath.Join(b, "客户", "计划.mindmap.json"))
+	put(t, b, "客户/规划.mindmap.json", "id=1;renamed on b")
+	os.Remove(filepath.Join(b, "别的.mindmap.json")) // deleted, and nothing new of it
+	put(t, b, "新的.mindmap.json", "id=3;new")
+	sync1(t, b, cfg)
+	res := sync1(t, a, cfg)
+
+	if read(a, "客户/计划.mindmap.json") != "" || read(a, "客户/规划.mindmap.json") != "id=1;renamed on b" || read(a, "别的.mindmap.json") != "" {
+		t.Fatalf("on a: %q, %q", read(a, "客户/计划.mindmap.json"), read(a, "客户/规划.mindmap.json"))
+	}
+	if len(res.Renamed) != 1 || res.Renamed["客户/计划.mindmap.json"] != "客户/规划.mindmap.json" || len(res.Merged) != 0 {
+		t.Fatalf("%+v", res)
+	}
+	if got := f.files(); got["客户/规划.mindmap.json"] != "id=1;renamed on b" || got["客户/计划.mindmap.json"] != "" {
+		t.Fatalf("repository %v", got)
+	}
+	if r := sync1(t, a, cfg); r.Synced() || len(r.Renamed) != 0 {
+		t.Fatalf("a synced again: %+v", r)
+	}
+}
+
 // The version both had, gone from the repository (made anew, its history
 // rewritten), is none: the two are merged without it. It failed every
 // sync from then on, saying the repository's name was mistyped.
