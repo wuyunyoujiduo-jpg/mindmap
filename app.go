@@ -268,6 +268,8 @@ type app struct {
 	placesKey      string                // what placesList was worked out for
 	placesList     []place
 	relatedKey     string // what relatedClips and relatedNodes were worked out for
+	relatedNode    string // the topic they are of, and how long until they are worked out again (relatedOfCached)
+	relatedWait    time.Duration
 	relatedClips   []library.Hit
 	relatedNodes   []place
 	index          map[string]indexEntry // maps read for the search, by path
@@ -315,14 +317,19 @@ type app struct {
 	mapClipsSig   string
 	mapClipsList  []*library.Clip
 	mapIndex      *library.Index
+	othersIndex   *library.Index // the maps but the open one, for a topic's page (searchOtherMaps)
+	othersSig     uint64
 	outlineFocus  string // the node whose line the outline focuses
 	// The outline's lines selected whole, to copy, cut or delete: from
 	// outlineAnchor to outlineEnd, by dragging across lines or Shift+arrows.
 	outlineBlock              bool
 	outlineAnchor, outlineEnd string
-	outlineRowAt              map[string]ui.Rect // where each line was drawn
-	outlineDragFrom           string             // the line pressed, dragged from
-	outlineDragY              float32            // where the pointer is, dragging
+	outlineRowAt              map[string]ui.Rect       // where each line built was drawn
+	outlineDragFrom           string                   // the line pressed, dragged from
+	outlinePressed            bool                     // it is pressed still, in this frame
+	outlineDragY              float32                  // where the pointer is, dragging
+	outlineLists              map[string]*ui.ListState // the outline's list, of each canvas
+	outlineFocusWas           string                   // the focus a frame before: a line it goes to is scrolled to
 
 	// The library of clips.
 	lib           *library.Library

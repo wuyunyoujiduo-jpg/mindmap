@@ -225,15 +225,35 @@ func (a *app) nodeRelatedSection(c *ui.Context, n *model.Node) {
 	})
 }
 
-// relatedOfCached is relatedOf, worked out again as the node, the clips
-// or the maps change, or a query's vector comes.
+// relatedPause is how long the writing of a topic's title rests before
+// what the topic may be about is looked for again.
+const relatedPause = 400 * time.Millisecond
+
+// relatedRuns counts the times relatedOf was worked out, for the tests.
+var relatedRuns int
+
+// relatedOfCached is relatedOf, worked out again as what it is made of
+// changes: the topic's title, tags and links, the clips, the other maps,
+// or a query's vector that comes. Not as anything else of the open map
+// does: a note written, or a topic dragged, a frame a change, looked
+// through the clips and the maps at each. And as the topic's own title is
+// written, once the writing rests (relatedPause), with what was found
+// before shown until then; relatedWait is how long until, for the page to
+// ask for a frame then.
 func (a *app) relatedOfCached(n *model.Node) ([]library.Hit, []place) {
 	q := strings.TrimSpace(n.Title + " " + strings.Join(n.Tags, " "))
-	key := fmt.Sprint(n.ID, q, len(n.Links), a.lib.Version, a.refIndex().sig, a.qvecs[q] != nil)
-	if a.relatedKey != key {
-		a.relatedKey = key
-		a.relatedClips, a.relatedNodes = a.relatedOf(n)
+	key := fmt.Sprint(n.ID, "\n", q, "\n", n.Links, a.lib.Version, a.otherMapsSig(), a.qvecs[q] != nil)
+	a.relatedWait = 0
+	if a.relatedKey == key {
+		return a.relatedClips, a.relatedNodes
 	}
+	if wait := relatedPause - a.now().Sub(a.changed); a.relatedNode == n.ID && wait > 0 {
+		a.relatedWait = wait
+		return a.relatedClips, a.relatedNodes
+	}
+	a.relatedKey, a.relatedNode = key, n.ID
+	a.relatedClips, a.relatedNodes = a.relatedOf(n)
+	relatedRuns++
 	return a.relatedClips, a.relatedNodes
 }
 

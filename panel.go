@@ -175,6 +175,9 @@ func (a *app) nodePanel(c *ui.Context) {
 			})
 
 			clips, nodes := a.relatedOfCached(n)
+			if a.relatedWait > 0 { // looked for again once the writing rests
+				c.After(a.relatedWait)
+			}
 			rels := slices.ContainsFunc(a.doc.Relations, func(r model.Relation) bool { return r.From == n.ID || r.To == n.ID })
 			if links || image || files || len(clips)+len(nodes) > 0 || n.Summary != nil || n.Boundary != nil || rels {
 				sectionCard(c, iconLink, tileBlue, "链接、附件与资料", nil, func() {

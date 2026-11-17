@@ -3,12 +3,15 @@ package main
 import (
 	"context"
 	"crypto/sha1"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -370,6 +373,51 @@ func (a *app) searchMaps(query string, keep func(*library.Clip) bool) []library.
 		a.mapIndex = library.NewIndex(clips)
 	}
 	return a.mapIndex.Search(query, keep)
+}
+
+// otherMapsSig says the maps but the open one as they are: which they
+// are, their files' times, and their analyses.
+func (a *app) otherMapsSig() uint64 {
+	h := fnv.New64a()
+	word := func(s string) { _, _ = h.Write([]byte(s)); _, _ = h.Write([]byte{0}) }
+	word(a.dir)
+	word(a.path)
+	word(strconv.Itoa(a.mapMetaVersion))
+	var at [8]byte
+	for _, f := range a.files {
+		if f.Path == a.path {
+			continue
+		}
+		word(f.Path)
+		binary.LittleEndian.PutUint64(at[:], uint64(f.Modified.UnixNano()))
+		_, _ = h.Write(at[:])
+	}
+	return h.Sum64()
+}
+
+// othersIndexed counts the times the other maps were indexed, for the
+// tests.
+var othersIndexed int
+
+// searchOtherMaps finds the maps other than the open one by the words of
+// their analysis and content: what a topic's page looks in for what the
+// topic may be about (relatedOf), which is never of its own map. Its
+// index is made again when one of those maps changes, not as the open
+// map is written in: looked for with searchMaps, whose index is of every
+// map with the open one as edited, a key typed with a topic's page
+// showing indexed the whole folder again, 150 ms of sixty maps.
+func (a *app) searchOtherMaps(query string) []library.Hit {
+	if sig := a.otherMapsSig(); a.othersIndex == nil || a.othersSig != sig {
+		var clips []*library.Clip
+		for _, c := range a.mapClips() {
+			if mapPathOf(c) != a.path {
+				clips = append(clips, c)
+			}
+		}
+		a.othersIndex, a.othersSig = library.NewIndex(clips), sig
+		othersIndexed++
+	}
+	return a.othersIndex.Search(query, nil)
 }
 
 // mapPathOf is the path of a map found as a clip.
