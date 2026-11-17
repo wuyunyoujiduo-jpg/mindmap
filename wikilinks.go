@@ -9,7 +9,9 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/richtext"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/skills"
 )
 
 // Links both ways, wherever something is written. [[ begun in a thought
@@ -39,6 +41,36 @@ type linkOffer struct {
 // maps, and, once something is written, the skills and the topics of
 // every map; n of each at most.
 func (a *app) linkOffers(part string, n int) []linkOffer {
+	// Worked out once for what is typed and what there is to offer: they
+	// are asked for at every frame while a [[ stands open, and were every
+	// clip's name made and every map gone through each time, a map not
+	// read yet read for it.
+	of := offersFor{part: part, n: n, lib: a.lib, version: a.lib.Version, maps: a.mapsState(), skills: a.skills.report, inbox: a.inboxPath()}
+	if o := &a.collect.offers; o.offersFor != of || !o.made {
+		*o = offersMade{of, true, a.findLinkOffers(part, n)}
+	}
+	return a.collect.offers.list
+}
+
+// offersFor is what the offers of a [[ depend on: what is typed, the
+// clips, the maps (the open one as edited) and the skills.
+type offersFor struct {
+	part    string
+	n       int
+	lib     *library.Library
+	version int
+	maps    string
+	skills  *skills.Report
+	inbox   string
+}
+
+type offersMade struct {
+	offersFor
+	made bool
+	list []linkOffer
+}
+
+func (a *app) findLinkOffers(part string, n int) []linkOffer {
 	var out []linkOffer
 	low := strings.ToLower(strings.TrimSpace(part))
 	for _, cl := range a.clipsNamed(part, n) {
@@ -65,8 +97,11 @@ func (a *app) linkOffers(part string, n int) []linkOffer {
 	}
 	topics := 0
 	for _, fi := range a.recentFiles() {
+		if topics >= n {
+			break // enough of them: no other map is read for more
+		}
 		f := a.mapFile(fi.Path)
-		if f == nil || topics >= n {
+		if f == nil {
 			continue
 		}
 		for _, d := range f.Sheets {

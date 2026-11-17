@@ -32,8 +32,8 @@ const (
 	parts
 )
 
-// of is the part's words.
-func (c *Clip) of(p Part) string {
+// Of is the words of a part of the clip.
+func (c *Clip) Of(p Part) string {
 	switch p {
 	case PartTitle:
 		return c.Title
@@ -79,7 +79,7 @@ func (c *Clip) memo() *worked {
 	if w != nil && w.kind == c.Kind && w.locked == c.Locked && w.url == c.URL && w.name == c.Name && w.file == c.File {
 		same := true
 		for p := range parts {
-			if w.part[p] != c.of(p) {
+			if w.part[p] != c.Of(p) {
 				same = false
 				break
 			}
@@ -90,7 +90,7 @@ func (c *Clip) memo() *worked {
 	}
 	w = &worked{url: c.URL, name: c.Name, file: c.File, kind: c.Kind, locked: c.Locked}
 	for p := range parts {
-		w.part[p] = c.of(p)
+		w.part[p] = c.Of(p)
 	}
 	c.worked = w
 	return w

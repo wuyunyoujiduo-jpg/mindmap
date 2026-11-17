@@ -137,12 +137,19 @@ func TestLibraryClipboardAndCapture(t *testing.T) {
 	a.fetchPage = func(context.Context, string) (library.Page, error) {
 		return library.Page{}, fmt.Errorf("offline")
 	}
+	// What is on the clipboard, kept: what came of it, as it is told.
+	clipboard := func() (clips []*library.Clip, err error) {
+		if !a.clipClipboard("剪贴板", func(out []*library.Clip, _ string, e error) { clips, err = out, e }) {
+			t.Fatal("nothing on the clipboard")
+		}
+		return clips, err
+	}
 	plat.copied = "一段从别处复制的话"
-	if _, err := a.clipClipboard("剪贴板"); err != nil {
+	if _, err := clipboard(); err != nil {
 		t.Fatal(err)
 	}
 	plat.clipImage = testPNG(t, 40, 30)
-	clips, err := a.clipClipboard("剪贴板")
+	clips, err := clipboard()
 	if err != nil || clips[0].Kind != library.KindImage {
 		t.Fatalf("image: %v %+v", err, clips)
 	}

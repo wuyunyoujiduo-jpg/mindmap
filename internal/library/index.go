@@ -37,43 +37,110 @@ type Index struct {
 	clips []*Clip
 	terms []map[string]float64 // of each clip, weighted counts
 	lens  []float64
+	total float64 // of lens
 	avg   float64
 	df    map[string]int // how many clips have each term
 	lower []string       // each clip's text in lower case, for whole phrases
+	at    map[*Clip]int  // where each clip is
 }
 
+// idx is the index of the clips as they are: made when first asked for,
+// and brought up to date from the one before when the clips changed
+// since (Index.renew).
 func (l *Library) idx() *Index {
-	if l.index == nil {
+	switch {
+	case l.index == nil:
 		l.index = NewIndex(l.Clips)
+	case l.stale:
+		l.index = l.index.renew(l.Clips, l.dirty)
 	}
+	l.stale, l.dirty = false, nil
 	return l.index
+}
+
+// touch notes that a clip's words changed, for the index.
+func (l *Library) touch(c *Clip) {
+	if l.index == nil {
+		return
+	}
+	if l.dirty == nil {
+		l.dirty = map[*Clip]bool{}
+	}
+	l.dirty[c], l.stale = true, true
 }
 
 // NewIndex indexes clips.
 func NewIndex(clips []*Clip) *Index {
-	ix := &Index{clips: clips, df: map[string]int{}}
-	total := 0.0
-	for _, c := range clips {
-		tf := map[string]float64{}
-		n := 0.0
-		for _, f := range fieldWeights {
-			for _, t := range Tokens(noSealed(f.of(c))) {
-				tf[t] += f.weight
-				n += f.weight
-			}
-		}
+	ix := &Index{clips: slices.Clone(clips), df: map[string]int{}, at: make(map[*Clip]int, len(clips))}
+	for i, c := range clips {
+		tf, n, lower := termsOf(c)
 		for t := range tf {
 			ix.df[t]++
 		}
 		ix.terms = append(ix.terms, tf)
-		ix.lower = append(ix.lower, strings.ToLower(noSealed(c.Title+"\n"+c.Desc+"\n"+c.Summary+"\n"+c.Note+"\n"+c.Text)+"\n"+strings.Join(c.Tags, " ")+"\n"+strings.Join(c.Synonyms, " ")))
+		ix.lower = append(ix.lower, lower)
 		ix.lens = append(ix.lens, n)
-		total += n
+		ix.total += n
+		ix.at[c] = i
 	}
 	if len(clips) > 0 {
-		ix.avg = total / float64(len(clips))
+		ix.avg = ix.total / float64(len(clips))
 	}
 	return ix
+}
+
+// termsOf are the words of a clip as the index keeps them: its terms,
+// weighted, how many they are, and its text in lower case.
+func termsOf(c *Clip) (tf map[string]float64, n float64, lower string) {
+	tf = map[string]float64{}
+	for _, f := range fieldWeights {
+		for _, t := range Tokens(noSealed(f.of(c))) {
+			tf[t] += f.weight
+			n += f.weight
+		}
+	}
+	lower = strings.ToLower(noSealed(c.Title+"\n"+c.Desc+"\n"+c.Summary+"\n"+c.Note+"\n"+c.Text) + "\n" + strings.Join(c.Tags, " ") + "\n" + strings.Join(c.Synonyms, " "))
+	return tf, n, lower
+}
+
+// renew is the index of clips made from this one, which was of most of
+// them: the words of a clip it has, and that did not change since, are
+// taken as they are, and only the others cut up. The index made anew at
+// each change of the library was most of the second a letter typed in a
+// clip's details took (the words of 800 notes cut up for one of them),
+// and of the wait when one clip came from outside. This one is not to be
+// used after.
+func (ix *Index) renew(clips []*Clip, changed map[*Clip]bool) *Index {
+	nx := &Index{clips: slices.Clone(clips), df: ix.df, at: make(map[*Clip]int, len(clips)),
+		terms: make([]map[string]float64, len(clips)), lens: make([]float64, len(clips)), lower: make([]string, len(clips))}
+	kept := make([]bool, len(ix.clips))
+	for i, c := range clips {
+		if j, ok := ix.at[c]; ok && !changed[c] && !kept[j] {
+			nx.terms[i], nx.lens[i], nx.lower[i] = ix.terms[j], ix.lens[j], ix.lower[j]
+			kept[j] = true
+		} else {
+			nx.terms[i], nx.lens[i], nx.lower[i] = termsOf(c)
+			for t := range nx.terms[i] {
+				nx.df[t]++
+			}
+		}
+		nx.total += nx.lens[i]
+		nx.at[c] = i
+	}
+	for j, k := range kept {
+		if k {
+			continue
+		}
+		for t := range ix.terms[j] { // gone, or changed: its words as they were
+			if nx.df[t]--; nx.df[t] <= 0 {
+				delete(nx.df, t)
+			}
+		}
+	}
+	if len(clips) > 0 {
+		nx.avg = nx.total / float64(len(clips))
+	}
+	return nx
 }
 
 // noSealed is s without the secrets sealed in it: a search is not to find
@@ -98,6 +165,17 @@ type Hit struct {
 // nil, says which clips may be found. An empty query finds every clip
 // kept, newest first.
 func (l *Library) Search(query string, keep func(*Clip) bool) []Hit {
+	// With nothing asked for, the clips as they are: no index is made to
+	// list them, which is what 收集 does whenever it is not searched.
+	if len(Tokens(query)) == 0 {
+		var hits []Hit
+		for _, c := range l.Clips {
+			if keep == nil || keep(c) {
+				hits = append(hits, Hit{Clip: c})
+			}
+		}
+		return hits
+	}
 	return l.idx().Search(query, keep)
 }
 

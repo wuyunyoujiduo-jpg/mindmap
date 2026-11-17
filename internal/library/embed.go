@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/embed"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/vault"
 )
 
 // Semantic search: each clip is turned into a vector by an embedding
@@ -155,23 +156,48 @@ func Cosine(a, b []float32) float64 {
 // for the model may be one asked over the network.
 func EmbedText(c *Clip) string {
 	var b strings.Builder
-	for _, s := range []string{c.Title, c.Desc, c.Summary, c.Category, strings.Join(c.Tags, " "), strings.Join(c.Keywords, " "), strings.Join(c.Synonyms, " "), c.Analysis, c.Note} {
-		if s = strings.TrimSpace(Mask(noSealed(s))); s != "" {
+	for _, s := range []string{c.embedPart(PartTitle), c.embedPart(PartDesc), c.embedPart(PartSummary), Mask(c.Category), Mask(strings.Join(c.Tags, " ")),
+		Mask(strings.Join(c.Keywords, " ")), Mask(strings.Join(c.Synonyms, " ")), c.embedPart(PartAnalysis), c.embedPart(PartNote)} {
+		if s = strings.TrimSpace(s); s != "" {
 			b.WriteString(s + "\n")
 		}
 	}
-	text := []rune(strings.TrimSpace(Mask(noSealed(c.Text))))
-	if len(text) > 1500 {
-		text = text[:1500]
-	}
-	b.WriteString(string(text))
+	// The start of its text, cut where it is: the whole of a long page
+	// was made runes to take the first 1,500 of them.
+	b.WriteString(firstRunes(strings.TrimSpace(c.embedPart(PartText)), 1500))
 	if b.Len() == 0 {
 		b.WriteString(c.Label())
 	}
 	return b.String()
 }
 
-// vector is a clip's vector, with the hash of what it was made of.
+// embedPart is a part of a clip as a vector is made of it: without what
+// is sealed, the rest with its secrets in dots, which the clip keeps
+// worked out (Masked).
+func (c *Clip) embedPart(p Part) string {
+	if s := c.Of(p); vault.Has(s) {
+		return Mask(noSealed(s))
+	}
+	return c.Masked(p)
+}
+
+// firstRunes is the first n characters of s.
+func firstRunes(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	i := 0
+	for at := range s {
+		if i == n {
+			return s[:at]
+		}
+		i++
+	}
+	return s
+}
+
+// vector is a clip's vector, with the hash of what it was made of. Once
+// kept it is not changed: a new one takes its place.
 type vector struct {
 	Hash string    `json:"hash"`
 	V    []float32 `json:"-"`
@@ -183,21 +209,26 @@ type vectorFile struct {
 	Vectors map[string]*vector `json:"vectors"`
 }
 
-func (l *Library) vectorsPath() string { return filepath.Join(l.Dir, "vectors.json") }
+func vectorsPath(dir string) string { return filepath.Join(dir, "vectors.json") }
 
-// loadVectors reads the vectors kept, of the model named.
-func (l *Library) loadVectors(model string) {
-	if l.vecs != nil && l.vecs.Model == model {
-		return
-	}
-	l.vecs = &vectorFile{Model: model, Vectors: map[string]*vector{}}
-	data, err := os.ReadFile(l.vectorsPath())
+// Vectors are the clips' vectors of a model, as read from a library's
+// folder.
+type Vectors struct{ file *vectorFile }
+
+// ReadVectors reads the vectors kept in a library's folder, those of the
+// model named: none when they are of another. It is the file read and
+// every vector of it decoded, some megabytes for a library of thousands,
+// and is done away from the window by who sets Library.VectorsLater: it
+// was done in a frame, each time the library was read again.
+func ReadVectors(dir, model string) *Vectors {
+	out := &vectorFile{Model: model, Vectors: map[string]*vector{}}
+	data, err := os.ReadFile(vectorsPath(dir))
 	if err != nil {
-		return
+		return &Vectors{out}
 	}
 	var f vectorFile
 	if json.Unmarshal(data, &f) != nil || f.Model != model {
-		return
+		return &Vectors{out}
 	}
 	for id, v := range f.Vectors {
 		raw, err := base64.StdEncoding.DecodeString(v.Data)
@@ -209,34 +240,75 @@ func (l *Library) loadVectors(model string) {
 			v.V[i] = math.Float32frombits(binary.LittleEndian.Uint32(raw[i*4:]))
 		}
 		v.Data = ""
-		l.vecs.Vectors[id] = v
+		out.Vectors[id] = v
+	}
+	return &Vectors{out}
+}
+
+// UseVectors gives the library the vectors read for it. Those it has of
+// the same model already, made meanwhile, stay.
+func (l *Library) UseVectors(v *Vectors) {
+	if v == nil || v.file == nil {
+		return
+	}
+	if l.vecs != nil && l.vecs.Model == v.file.Model {
+		for id, made := range l.vecs.Vectors {
+			v.file.Vectors[id] = made
+		}
+	}
+	l.vecs = v.file
+	l.Version++ // what is found by meaning is found now
+}
+
+// HasVectors tells whether the library has the vectors of a model: read,
+// or given.
+func (l *Library) HasVectors(model string) bool { return l.vecs != nil && l.vecs.Model == model }
+
+// loadVectors reads the vectors kept, of the model named.
+func (l *Library) loadVectors(model string) {
+	if !l.HasVectors(model) {
+		l.vecs = ReadVectors(l.Dir, model).file
 	}
 }
 
-func (l *Library) saveVectors() error {
-	f := vectorFile{Model: l.vecs.Model, Vectors: map[string]*vector{}}
+// VectorsWriter is the work of writing the vectors as they are now, to
+// be done away from the window: the whole file is written, which for a
+// library of thousands is some megabytes made and written, and was done
+// in the window's turn after every sixteen clips of a first indexing.
+// One at a time: two would write the same file.
+func (l *Library) VectorsWriter() func() error {
+	if l.vecs == nil {
+		return func() error { return nil }
+	}
+	model, dir := l.vecs.Model, l.Dir
+	keep := make(map[string]*vector, len(l.vecs.Vectors))
 	for id, v := range l.vecs.Vectors {
-		if l.Find(id) == nil {
-			continue
+		if l.Find(id) != nil {
+			keep[id] = v
 		}
-		raw := make([]byte, len(v.V)*4)
-		for i, x := range v.V {
-			binary.LittleEndian.PutUint32(raw[i*4:], math.Float32bits(x))
+	}
+	return func() error {
+		f := vectorFile{Model: model, Vectors: make(map[string]*vector, len(keep))}
+		for id, v := range keep {
+			raw := make([]byte, len(v.V)*4)
+			for i, x := range v.V {
+				binary.LittleEndian.PutUint32(raw[i*4:], math.Float32bits(x))
+			}
+			f.Vectors[id] = &vector{Hash: v.Hash, Data: base64.StdEncoding.EncodeToString(raw)}
 		}
-		f.Vectors[id] = &vector{Hash: v.Hash, Data: base64.StdEncoding.EncodeToString(raw)}
+		data, err := json.Marshal(f)
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
+		tmp := vectorsPath(dir) + ".tmp"
+		if err := os.WriteFile(tmp, data, 0o644); err != nil {
+			return err
+		}
+		return os.Rename(tmp, vectorsPath(dir))
 	}
-	data, err := json.Marshal(f)
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(l.Dir, 0o755); err != nil {
-		return err
-	}
-	tmp := l.vectorsPath() + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, l.vectorsPath())
 }
 
 // embedHash is the hash of a clip's EmbedText, kept until it changes.
@@ -265,7 +337,12 @@ func textHash(s string) string {
 // Vector is a clip's vector of the model, nil when it has none or its
 // text changed since.
 func (l *Library) Vector(c *Clip, model string) []float32 {
-	l.loadVectors(model)
+	if !l.HasVectors(model) {
+		if l.VectorsLater {
+			return nil // not read yet
+		}
+		l.loadVectors(model)
+	}
 	v := l.vecs.Vectors[c.ID]
 	if v == nil || v.Hash != l.embedHash(c) {
 		return nil
@@ -273,26 +350,57 @@ func (l *Library) Vector(c *Clip, model string) []float32 {
 	return v.V
 }
 
-// Unembedded are the clips whose vector of the model is missing or out of
-// date, with the texts to make them of.
-func (l *Library) Unembedded(model string) (ids, texts []string) {
+// ToEmbed are the clips whose vector of the model is missing or out of
+// date, by their IDs: what a run of making vectors has to do, taken once
+// for the run (asked again after each sixteen of them, every clip was
+// looked at, and the text of each one left made, some two hundred times
+// over for a library of three thousand). None while the vectors are yet
+// to be read (VectorsLater): what is kept is not made again.
+func (l *Library) ToEmbed(model string) []string {
+	if l.VectorsLater && !l.HasVectors(model) {
+		return nil
+	}
+	var ids []string
 	for _, c := range l.Clips {
 		if l.Vector(c, model) == nil {
 			ids = append(ids, c.ID)
+		}
+	}
+	return ids
+}
+
+// EmbedTexts are the texts to make the vectors of clips of, those of
+// them that are there still.
+func (l *Library) EmbedTexts(ids []string) (there, texts []string) {
+	for _, id := range ids {
+		if c := l.Find(id); c != nil {
+			there = append(there, id)
 			texts = append(texts, EmbedText(c))
 		}
 	}
-	return ids, texts
+	return there, texts
+}
+
+// Unembedded are the clips whose vector of the model is missing or out of
+// date, with the texts to make them of.
+func (l *Library) Unembedded(model string) (ids, texts []string) {
+	return l.EmbedTexts(l.ToEmbed(model))
+}
+
+// KeepVectors keeps the vectors of clips, made of the texts given, in
+// memory: VectorsWriter writes them.
+func (l *Library) KeepVectors(model string, ids, texts []string, vecs [][]float32) {
+	l.loadVectors(model)
+	for i, id := range ids {
+		l.vecs.Vectors[id] = &vector{Hash: textHash(texts[i]), V: vecs[i]}
+	}
 }
 
 // SetVectors keeps the vectors of clips, made of the texts given, and
 // writes them.
 func (l *Library) SetVectors(model string, ids, texts []string, vecs [][]float32) error {
-	l.loadVectors(model)
-	for i, id := range ids {
-		l.vecs.Vectors[id] = &vector{Hash: textHash(texts[i]), V: vecs[i]}
-	}
-	return l.saveVectors()
+	l.KeepVectors(model, ids, texts, vecs)
+	return l.VectorsWriter()()
 }
 
 // SearchMeaning ranks the clips kept by how near their vectors are to the

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -62,15 +63,74 @@ func (a *app) embedQueries(queries []string, done func()) {
 	})
 }
 
+// An embedRun is a run of making the clips' vectors: what is left of it
+// to do, taken once (the clips were all gone through again after each
+// batch, and the text of every one left made each time), and how many
+// batches are kept in memory and not written yet.
+type embedRun struct {
+	lib     *library.Library
+	model   string
+	todo    []string
+	unsaved int
+}
+
+const (
+	embedBatch = 16 // clips a batch
+	// embedWriteEvery is how many batches are made between two writings
+	// of the vectors' file, which is written whole: after each batch, a
+	// first indexing wrote some megabytes in the window's turn every
+	// second or so, and the window stuttered.
+	embedWriteEvery = 8
+)
+
 // embedLibrary makes the vectors of the clips that have none or changed,
-// a batch at a time, in the background.
+// a batch at a time, in the background. The vectors kept are read first,
+// and written as they are made, away from the window as well.
 func (a *app) embedLibrary() {
 	e := a.embedder()
 	if !e.On() || a.embedBusy || a.lib == nil || a.embedErr != "" {
 		return
 	}
-	ids, texts := a.lib.Unembedded(e.Name())
-	if len(ids) == 0 {
+	lib, model := a.lib, e.Name()
+	run := &a.collect.embed
+	if run.lib != lib || run.model != model {
+		*run = embedRun{lib: lib, model: model}
+	}
+	if !lib.HasVectors(model) {
+		a.embedBusy = true
+		dir := lib.Dir
+		a.async(func() (any, error) { return library.ReadVectors(dir, model), nil }, func(v any, _ error) {
+			a.embedBusy = false
+			if vs, ok := v.(*library.Vectors); ok && lib == a.lib {
+				lib.UseVectors(vs)
+				a.embedLibrary()
+			}
+		})
+		return
+	}
+	var ids, texts []string
+	for len(ids) == 0 {
+		if len(run.todo) == 0 {
+			// Looked at again when a run is done, for what changed meanwhile.
+			if run.todo = lib.ToEmbed(model); len(run.todo) == 0 {
+				break
+			}
+		}
+		if a.embedTotal == 0 {
+			a.embedTotal, a.embedSince, a.embedResult = len(run.todo), a.now(), ""
+		}
+		a.embedLeft = len(run.todo)
+		n := min(embedBatch, len(run.todo))
+		ids, texts = lib.EmbedTexts(run.todo[:n]) // those of them there still
+		run.todo = run.todo[n:]
+	}
+	// What was made and is not written yet is, with the next batch's work
+	// or, the run over, by itself.
+	var write func() error
+	if run.unsaved >= embedWriteEvery || len(ids) == 0 && run.unsaved > 0 {
+		write, run.unsaved = lib.VectorsWriter(), 0
+	}
+	if len(ids) == 0 && write == nil {
 		// A run over: said, when it was long enough to have shown.
 		if a.embedTotal > 1 && a.now().Sub(a.embedSince) > 2*time.Second {
 			a.embedResult = fmt.Sprintf("已为 %d 条建立语义索引", a.embedTotal)
@@ -78,33 +138,42 @@ func (a *app) embedLibrary() {
 		a.embedTotal, a.embedLeft = 0, 0
 		return
 	}
-	if a.embedTotal == 0 {
-		a.embedTotal, a.embedSince, a.embedResult = len(ids), a.now(), ""
-	}
-	a.embedLeft = len(ids)
-	const batch = 16
-	if len(ids) > batch {
-		ids, texts = ids[:batch], texts[:batch]
-	}
 	a.embedBusy = true
 	embed := a.embed
-	lib := a.lib
 	a.async(func() (any, error) {
+		if write != nil {
+			if err := write(); err != nil {
+				return nil, err
+			}
+		}
+		if len(ids) == 0 {
+			return [][]float32(nil), nil
+		}
 		return embed(context.Background(), e, texts)
 	}, func(v any, err error) {
 		a.embedBusy = false
-		if err != nil {
-			a.embedErr = err.Error()
-			a.embedTotal, a.embedLeft = 0, 0
-			return
-		}
 		if lib != a.lib {
 			a.embedTotal, a.embedLeft = 0, 0
 			return // another folder since
 		}
-		if err := lib.SetVectors(e.Name(), ids, texts, v.([][]float32)); err != nil {
+		vecs, _ := v.([][]float32)
+		if err == nil && len(vecs) != len(ids) {
+			err = errors.New("向量模型的回复有误")
+		}
+		if err != nil {
 			a.embedErr = err.Error()
+			a.embedTotal, a.embedLeft = 0, 0
+			run.todo = nil
+			if run.unsaved > 0 { // what was made before it failed is kept
+				keep := lib.VectorsWriter()
+				run.unsaved, a.embedBusy = 0, true
+				a.async(func() (any, error) { return nil, keep() }, func(any, error) { a.embedBusy = false })
+			}
 			return
+		}
+		if len(ids) > 0 {
+			lib.KeepVectors(model, ids, texts, vecs)
+			run.unsaved++
 		}
 		// Nothing of the library's that is synced was written: the vectors
 		// are this computer's, made again on another.
@@ -568,23 +637,40 @@ func (a *app) localModel() *embed.Model {
 	return loadLocalModel()
 }
 
+// mentions are the thoughts that name a clip and those it names, as of a
+// state of the library and of the clip's text.
+type mentions struct {
+	lib      *library.Library
+	version  int
+	id, text string
+	by, of   []*library.Clip
+}
+
 // clipMentions tells which thoughts name a clip (<clip:id> in their words)
 // and which it names: the links among what is collected, both ways, each a
 // click from the other. Nothing shows for a clip with neither.
 func (a *app) clipMentions(c *ui.Context, clip *library.Clip) {
 	t := c.Theme()
-	mark := "<" + clipScheme + clip.ID + ">"
-	var by, of []*library.Clip
-	for _, cl := range a.lib.Clips {
-		if cl.ID != clip.ID && strings.Contains(cl.Text, mark) {
-			by = append(by, cl)
+	// Looked for once for the clip and the library as they are: every
+	// clip's text was read for its name at each frame its details showed.
+	m := &a.collect.mentions
+	if m.lib != a.lib || m.version != a.lib.Version || m.id != clip.ID || m.text != clip.Text {
+		*m = mentions{lib: a.lib, version: a.lib.Version, id: clip.ID, text: clip.Text}
+		mark := "<" + clipScheme + clip.ID + ">"
+		for _, cl := range a.lib.Clips {
+			if cl.ID != clip.ID && strings.Contains(cl.Text, mark) {
+				m.by = append(m.by, cl)
+			}
+		}
+		if strings.Contains(clip.Text, "<"+clipScheme) {
+			for _, found := range clipRef.FindAllStringSubmatch(clip.Text, -1) {
+				if cl := a.lib.Find(found[1]); cl != nil && cl.ID != clip.ID && !slices.Contains(m.of, cl) {
+					m.of = append(m.of, cl)
+				}
+			}
 		}
 	}
-	for _, m := range clipRef.FindAllStringSubmatch(clip.Text, -1) {
-		if cl := a.lib.Find(m[1]); cl != nil && cl.ID != clip.ID && !slices.Contains(of, cl) {
-			of = append(of, cl)
-		}
-	}
+	by, of := m.by, m.of
 	if len(by)+len(of) == 0 {
 		return
 	}

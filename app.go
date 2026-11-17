@@ -879,6 +879,7 @@ func (a *app) mergeOutside() bool {
 
 // flush saves unsaved changes, and how the map is left.
 func (a *app) flush() {
+	a.keepTyped() // and what was typed in a clip's details (collecttyped.go)
 	if a.dirty && !a.conflict {
 		a.save() // which merges what changed outside, or finds that it cannot
 	}

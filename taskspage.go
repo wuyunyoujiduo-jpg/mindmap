@@ -2138,7 +2138,7 @@ func (a *app) ensureInbox() error {
 	path := a.inboxPath()
 	if modTime(path).IsZero() {
 		f := model.NewFile(inboxName)
-		f.Sheets[0].Root.Note = "随手记下的想法和待办，之后整理到对应的导图里（右键节点「移到其他导图…」）。"
+		f.Sheets[0].Root.Note = "随手记下的想法和待办，之后整理到对应的导图里（在主题的菜单里选「移到其他导图…」）。"
 		if err := f.Save(path); err != nil {
 			return err
 		}

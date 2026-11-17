@@ -289,6 +289,15 @@ func (a *app) jobs() []jobCard {
 		out = append(out, jobCard{key: "embed", title: a.embedResult, line: "现在可以按意思搜索了", done: true,
 			close: func() { a.embedResult = "" }, open: func() { a.embedResult = ""; a.openList(kindAll, "") }})
 	}
+	if ad := a.collect.adding; ad.done < ad.total { // files being copied into 收集 (keepFiles)
+		frac := float32(-1) // one file: how far it is cannot be told
+		if ad.total > 1 {
+			frac = float32(ad.done) / float32(ad.total)
+		}
+		out = append(out, jobCard{key: "add-files", icon: "file-text", title: "存到收集",
+			line: fmt.Sprintf("第 %d 个，共 %d 个文件", min(ad.done+1, ad.total), ad.total), frac: frac, since: ad.since,
+			open: func() { a.openList(kindAll, "") }})
+	}
 	if a.orgTotal > 1 {
 		frac := float32(a.orgDone) / float32(a.orgTotal)
 		out = append(out, jobCard{key: "organize", icon: "sparkles", title: "AI 整理资料",

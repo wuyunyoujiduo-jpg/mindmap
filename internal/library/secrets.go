@@ -537,7 +537,7 @@ func (r rule) found(s string) (out [][2]int) {
 // finds tells whether a rule finds a secret in s, with no more of s read
 // than up to the first.
 func (r rule) finds(s string) (found bool) {
-	if r.not == nil {
+	if r.not == nil && r.near == nil {
 		return r.re.MatchString(s)
 	}
 	r.each(s, func(int, int) bool {
@@ -884,6 +884,7 @@ func (l *Library) SealAll() (n int, err error) {
 			continue
 		}
 		delete(l.hashes, c.ID)
+		l.touch(c)
 		n++
 	}
 	if n > 0 {
@@ -987,6 +988,7 @@ func (l *Library) UnsealAll() (n, left int, err error) {
 			continue
 		}
 		delete(l.hashes, c.ID)
+		l.touch(c)
 		n++
 	}
 	if n > 0 {

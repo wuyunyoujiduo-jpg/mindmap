@@ -405,13 +405,19 @@ func (a *app) takeBack(it agentItem) {
 		a.tell("没有撤回：" + err.Error())
 		return
 	}
-	var restoreClip func() error
+	// Its clip goes as any clip deleted does, and comes back into the
+	// library as it is then (deleteClipUndoably): put back into the one it
+	// was taken from, it was lost when that one had been read again since.
+	var taken *library.Taken
 	if e.Clip != "" && a.lib.Find(e.Clip) != nil {
-		if restoreClip, err = a.lib.Take(e.Clip); err == nil {
+		a.closeVideos(e.Clip)
+		if taken, err = a.lib.Trash(e.Clip, a.now()); err == nil {
 			a.noteLibraryWrite()
+			a.clipGone(e.Clip)
 			if a.libSel == e.Clip {
 				a.libSel = ""
 			}
+			a.emptyTrashLater()
 		}
 	}
 	a.tasks.agentsRead = time.Time{}
@@ -423,7 +429,7 @@ func (a *app) takeBack(it agentItem) {
 		said = "已删除"
 	}
 	a.tellUndo(said, func() {
-		if restoreClip != nil && restoreClip() == nil {
+		if taken != nil && a.lib.PutBack(taken) == nil {
 			a.noteLibraryWrite()
 		}
 		_ = a.editMapAt(it.path, "放回 AI 记下的："+e.Text, func(f *model.File) error {

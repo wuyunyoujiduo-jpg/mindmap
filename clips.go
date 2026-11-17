@@ -39,11 +39,15 @@ func (a *app) clipKey() string {
 
 // openLibrary reads the library of the maps folder.
 func (a *app) openLibrary() {
+	a.keepTyped() // what was typed in the one left, before it is
 	dir := library.In(a.dir)
 	l, err := library.Open(dir)
 	if err != nil {
 		l = &library.Library{Dir: dir}
 	}
+	// Its vectors are read away from the window, when they are first
+	// wanted (embedLibrary).
+	l.VectorsLater = true
 	a.lib, a.libSel = l, ""
 	// What was deleted long enough ago to be taken back no more.
 	l.EmptyTrash(a.now().Add(-trashLife))
@@ -51,31 +55,43 @@ func (a *app) openLibrary() {
 	a.libMod = modTime(filepath.Join(dir, "clips"))
 }
 
-// checkLibrary reads the library again when clips were added or changed
-// outside the app, as by an AI agent.
+// checkLibrary takes what was added to the library or changed in it
+// outside the app, as by an AI agent or a sync: the files that changed,
+// and those alone (library.Reload). The whole of it read again for one
+// clip, every clip looked at by the rules of a secret, and its vectors
+// read again in the frame after, held the window for about a second in a
+// library of some size.
 func (a *app) checkLibrary() {
 	if a.lib == nil {
 		return
 	}
-	mt := modTime(filepath.Join(a.lib.Dir, "clips"))
+	dir := filepath.Join(a.lib.Dir, "clips")
+	mt := modTime(dir)
 	if mt.Equal(a.libMod) || a.libWorking != "" {
 		return
 	}
-	known := map[string]bool{}
-	for _, c := range a.lib.Clips {
-		known[c.ID] = true
+	if len(a.collect.typed.ids) > 0 { // what was typed is kept first, not read over
+		a.keepTyped()
+		mt = modTime(dir)
 	}
-	sel := a.libSel
-	a.openLibrary()
-	a.libSel = sel
+	fresh, _, gone, err := a.lib.Reload()
+	if err != nil {
+		return // not to be read now: looked at again in a while
+	}
+	a.libMod = mt
+	// The vault's keys may have come with them, and what came unsealed is
+	// sealed: keepVault's part, for a library that stays the one it was.
+	a.vault.Reload()
+	if a.vaultSweep() > 0 {
+		a.noteLibraryWrite()
+	}
 	// Clips kept by agents are read and sorted out as the app's own.
-	for _, c := range a.lib.Clips {
-		if !known[c.ID] && c.Organized == nil {
+	for _, c := range fresh {
+		if c.Organized == nil {
 			a.enqueueClip(c.ID, !a.cfg.LibraryManual)
 		}
-		delete(known, c.ID)
 	}
-	for id := range known { // deleted elsewhere
+	for _, id := range gone { // deleted elsewhere
 		a.clipGone(id)
 	}
 }
@@ -118,7 +134,9 @@ func (a *app) addClipText(text, source string) (*library.Clip, error) {
 	return a.kept(c, a.lib.Add(c, a.now()))
 }
 
-// addClipFile copies a file into the library: a picture or a file.
+// addClipFile copies a file into the library and keeps a clip of it, at
+// once: for a file at hand. The files the user gives go by keepFiles,
+// which copies them away from the window.
 func (a *app) addClipFile(path, source string) (*library.Clip, error) {
 	return a.kept(a.lib.AddFile(path, source, a.now()))
 }
@@ -129,25 +147,69 @@ func (a *app) addClipImage(data []byte, source string) (*library.Clip, error) {
 	return a.kept(a.lib.AddData(data, name, library.KindImage, source, a.now()))
 }
 
-// addClipFiles keeps files, each of them: one that cannot be kept does
-// not stop those after it (the first that failed ended it, and nothing
-// was said of the rest). It returns the clips kept, how many files could
-// not be, and what the first of those said.
-func (a *app) addClipFiles(files []string, source string) (kept []*library.Clip, failed int, first error) {
+// adding is the files being copied into the library: how many were
+// given, how many are done, and since when (jobs' card of them).
+type adding struct {
+	total, done int
+	since       time.Time
+}
+
+// keepFiles keeps files, each of them, one after the other: one that
+// cannot be kept does not stop those after it (the first that failed
+// ended it, and nothing was said of the rest). Each is copied away from
+// the window's thread and kept as its copy is done, its card coming on
+// the wall then: copied in the window's turn, a video of a gigabyte held
+// the window for as long as it took. then is given the clips kept, how
+// many files could not be, and what the first of those said, once all
+// are done; a card says how far they are when they take long (jobs).
+func (a *app) keepFiles(files []string, source string, then func(kept []*library.Clip, failed int, first error)) {
+	var todo []string
 	for _, f := range files {
-		if info, err := os.Stat(f); err != nil || info.IsDir() {
-			continue
+		if info, err := os.Stat(f); err == nil && !info.IsDir() {
+			todo = append(todo, f)
 		}
-		c, err := a.addClipFile(f, source)
-		if err != nil {
-			if failed++; first == nil {
-				first = fmt.Errorf("%s：%w", filepath.Base(f), err)
-			}
-			continue
-		}
-		kept = append(kept, c)
 	}
-	return kept, failed, first
+	if len(todo) == 0 {
+		then(nil, 0, nil)
+		return
+	}
+	ad := &a.collect.adding
+	if ad.done >= ad.total {
+		*ad = adding{since: a.now()}
+	}
+	ad.total += len(todo)
+	var kept []*library.Clip
+	failed := 0
+	var first error
+	var next func(i int)
+	next = func(i int) {
+		if i == len(todo) {
+			then(kept, failed, first)
+			return
+		}
+		f, lib := todo[i], a.lib
+		a.async(func() (any, error) { return lib.CopyFile(f, source) }, func(v any, err error) {
+			ad.done++
+			var c *library.Clip
+			if copied, _ := v.(*library.Copied); err == nil && copied != nil {
+				if lib == a.lib {
+					c, err = a.kept(lib.AddCopied(copied, a.now()))
+				} else { // another folder was opened meanwhile
+					copied.Drop()
+					err = errors.New("换了文件夹，没有存下")
+				}
+			}
+			if err != nil {
+				if failed++; first == nil {
+					first = fmt.Errorf("%s：%w", filepath.Base(f), err)
+				}
+			} else if c != nil {
+				kept = append(kept, c)
+			}
+			next(i + 1)
+		})
+	}
+	next(0)
 }
 
 // filesFailed says how many files could not be kept, of how many, and why
@@ -163,70 +225,75 @@ func filesFailed(failed, kept int, first error) string {
 }
 
 // clipClipboard keeps what is on the clipboard: the files copied, else a
-// picture, else the text. It returns the clips kept, and says in a toast
-// how many of the files could not be.
-func (a *app) clipClipboard(source string) ([]*library.Clip, error) {
-	out, missed, err := a.clipClipboardAll(source)
-	if err == nil && missed != "" {
-		a.tell(missed)
-	}
-	return out, err
-}
-
-// clipClipboardAll is clipClipboard, with what it would say of the files
-// that could not be kept beside those that were (missed) left to say.
-func (a *app) clipClipboardAll(source string) (out []*library.Clip, missed string, err error) {
-	out, failed, first := a.addClipFiles(a.plat.ClipboardFiles(), source)
-	switch {
-	case len(out) > 0 && failed > 0:
-		return out, filesFailed(failed, len(out), first), nil
-	case len(out) > 0:
-		return out, "", nil
-	case failed > 0:
-		return nil, "", errors.New(filesFailed(failed, 0, first))
-	}
-	if data := a.plat.ClipboardImage(); len(data) > 0 {
-		c, err := a.addClipImage(data, source)
-		if err != nil {
-			return nil, "", err
+// picture, else the text. then is given the clips kept, what there is to
+// say of the files that could not be kept beside those that were
+// (missed), or why nothing was; at once for a picture or a text, and for
+// files once they are copied. It reports whether there was anything on
+// the clipboard to keep.
+func (a *app) clipClipboard(source string, then func(out []*library.Clip, missed string, err error)) bool {
+	files := a.plat.ClipboardFiles()
+	had := len(files) > 0 || len(a.plat.ClipboardImage()) > 0 || strings.TrimSpace(a.plat.ClipboardText()) != ""
+	a.keepFiles(files, source, func(out []*library.Clip, failed int, first error) {
+		switch {
+		case len(out) > 0 && failed > 0:
+			then(out, filesFailed(failed, len(out), first), nil)
+			return
+		case len(out) > 0:
+			then(out, "", nil)
+			return
+		case failed > 0:
+			then(nil, "", errors.New(filesFailed(failed, 0, first)))
+			return
 		}
-		return []*library.Clip{c}, "", nil
-	}
-	text := a.plat.ClipboardText()
-	if strings.TrimSpace(text) == "" {
-		return nil, "", errors.New("剪贴板是空的")
-	}
-	c, err := a.addClipText(text, source)
-	if err != nil {
-		return nil, "", err
-	}
-	return []*library.Clip{c}, "", nil
+		if data := a.plat.ClipboardImage(); len(data) > 0 {
+			c, err := a.addClipImage(data, source)
+			if err != nil {
+				then(nil, "", err)
+				return
+			}
+			then([]*library.Clip{c}, "", nil)
+			return
+		}
+		text := a.plat.ClipboardText()
+		if strings.TrimSpace(text) == "" {
+			then(nil, "", errors.New("剪贴板是空的"))
+			return
+		}
+		c, err := a.addClipText(text, source)
+		if err != nil {
+			then(nil, "", err)
+			return
+		}
+		then([]*library.Clip{c}, "", nil)
+	})
+	return had
 }
 
 // clipFromShortcut keeps the clipboard when the global shortcut is
 // pressed, in any app, and says so in a notification.
 func (a *app) clipFromShortcut() {
 	a.dupe = false
-	clips, missed, err := a.clipClipboardAll("剪贴板")
-	if err != nil {
-		a.plat.Notify("没有存到收集", err.Error())
-		return
-	}
-	if missed != "" { // some of the files and not others
-		a.plat.Notify("有文件没有存到收集", missed)
-		a.tell(missed)
-		return
-	}
-	if a.dupe && len(clips) == 1 {
-		a.plat.Notify("已经收藏过", clips[0].Label())
-		return
-	}
-	body := clips[0].Label()
-	if len(clips) > 1 {
-		body = fmt.Sprintf("%s 等 %d 项", body, len(clips))
-	}
-	a.plat.Notify("已存到收集", body)
-	a.tell("已存到收集")
+	a.clipClipboard("剪贴板", func(clips []*library.Clip, missed string, err error) {
+		if err != nil {
+			a.plat.Notify("没有存到收集", err.Error())
+			return
+		}
+		if missed != "" { // some of the files and not others
+			a.plat.Notify("有文件没有存到收集", missed)
+			a.tell(missed)
+			return
+		}
+		if a.dupe && len(clips) == 1 {
+			a.plat.Notify("已经收藏过", clips[0].Label())
+			return
+		}
+		body := clips[0].Label()
+		if len(clips) > 1 {
+			body = fmt.Sprintf("%s 等 %d 项", body, len(clips))
+		}
+		a.plat.Notify("已存到收集", body)
+		a.tell("已存到收集")
+	})
 }
 
 // clipJob is a clip waiting for its page to be read or for the AI.

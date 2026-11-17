@@ -144,7 +144,10 @@ func (a *app) lockVault() {
 	a.hideSecrets()
 }
 
-func (a *app) hideSecrets() { a.secretShown, a.drafts = "", nil }
+func (a *app) hideSecrets() {
+	a.secretShown, a.drafts = "", nil
+	a.collect.sames = nil // what was worked out of a text shown opened goes with it
+}
 
 // vaultUsed puts off the time the secrets lock by themselves.
 func (a *app) vaultUsed() {
@@ -189,6 +192,9 @@ func (a *app) closeVaultAsk() {
 // vaultTick locks the secrets when their time is up, clears the
 // clipboard of one copied, and hides those shown of a clip left.
 func (a *app) vaultTick(c *ui.Context, now time.Time) {
+	// What was typed in a clip's details is kept when due (collecttyped.go):
+	// from here, which runs at every frame whatever page shows.
+	a.typedDue(c, now)
 	if a.vault == nil {
 		return
 	}
@@ -241,7 +247,16 @@ func (a *app) fieldText(clip *library.Clip, field, stored string) (text string, 
 	if d, ok := a.drafts[clip.ID+"\x00"+field]; ok && d.sealed == stored {
 		return d.plain, true
 	}
-	if !library.HasSecret(stored) {
+	// Whether it holds a secret, and what it is in dots, the clip has
+	// worked out for its words as they are (library.Clip.Holds): asked of
+	// the rules at every frame for each part shown, they read the whole
+	// of a long page some ten times a frame.
+	holds, masked := library.HasSecret, library.Mask
+	if p, ok := fieldParts[field]; ok && clip.Of(p) == stored {
+		holds = func(string) bool { return clip.Holds(p) }
+		masked = func(string) string { return clip.Masked(p) }
+	}
+	if !holds(stored) {
 		return stored, true
 	}
 	if a.secretShown == clip.ID {
@@ -254,8 +269,12 @@ func (a *app) fieldText(clip *library.Clip, field, stored string) (text string, 
 			return p, true
 		}
 	}
-	return library.Mask(stored), false
+	return masked(stored), false
 }
+
+// fieldParts are the parts of a clip its details' fields show.
+var fieldParts = map[string]library.Part{"title": library.PartTitle, "desc": library.PartDesc, "text": library.PartText,
+	"note": library.PartNote, "analysis": library.PartAnalysis}
 
 // lineField is a line of a clip's details that may hold a secret, its
 // title or the line saying what it is, as content and note are: shown
@@ -275,7 +294,8 @@ func (a *app) lineField(t *ui.Theme, clip *library.Clip, field, stored string, i
 		keep(full)
 		f = a.secretField(full)
 	}
-	f.style(in, t)
+	a.typedLeft(clip, field, in)
+	a.styleSecrets(in, field, f, t)
 	return in
 }
 
@@ -325,12 +345,18 @@ func (a *app) showSecrets(clip *library.Clip) {
 // theSecret is the one secret of a clip, when it has one alone: what its
 // key to copy copies.
 func theSecret(clip *library.Clip) (string, bool) {
-	all := library.Secrets(clip.Title + "\n" + clip.Text + "\n" + clip.Note)
-	if len(all) != 1 {
-		return "", false
-	}
-	return all[0], true
+	// Found once for the clip's words: its key is drawn at every frame.
+	s, _ := clip.Once(theSecretOf{}, func() any {
+		if all := library.Secrets(clip.Title + "\n" + clip.Text + "\n" + clip.Note); len(all) == 1 {
+			return all[0]
+		}
+		return ""
+	}).(string)
+	return s, s != ""
 }
+
+// theSecretOf is what theSecret is kept under (Clip.Once).
+type theSecretOf struct{}
 
 // copySecret copies the one secret of a clip, without showing it.
 func (a *app) copySecret(clip *library.Clip) {
@@ -845,9 +871,15 @@ func (a *app) secretField(full string) secretField {
 	return secretField{shown, parts}
 }
 
-// style shows the secrets of the field in their look.
-func (f secretField) style(in ui.Element, t *ui.Theme) {
-	for _, p := range append(library.Found(f.shown), f.parts...) {
+// styleSecrets shows the secrets of a field of a clip's details in their
+// look: the parts marked, and what the rules find, which are asked once
+// for a text as it stands and not at every frame it shows (same).
+func (a *app) styleSecrets(in ui.Element, field string, f secretField, t *ui.Theme) {
+	found, _ := a.same("found:"+field, f.shown, func() any { return library.Found(f.shown) }).([][2]int)
+	for _, p := range found {
+		in.TextRanges(ui.TextRange{Start: p[0], End: p[1], Color: t.Accent, Weight: 700})
+	}
+	for _, p := range f.parts {
 		in.TextRanges(ui.TextRange{Start: p[0], End: p[1], Color: t.Accent, Weight: 700})
 	}
 }

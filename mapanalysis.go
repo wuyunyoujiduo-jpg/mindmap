@@ -3,12 +3,15 @@ package main
 import (
 	"context"
 	"crypto/sha1"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -322,14 +325,7 @@ func (a *app) mapAnalysisSection(c *ui.Context) {
 // analysis, and their nodes' titles and notes as text. They are made
 // again when a map or an analysis changes, and never kept as clips.
 func (a *app) mapClips() []*library.Clip {
-	a.loadMapMetas()
-	sig := fmt.Sprint(a.dir, a.mapMetaVersion, len(a.files))
-	for _, f := range a.files {
-		sig += f.Path + f.Modified.String()
-	}
-	if a.path != "" && a.file != nil {
-		sig += a.changed.String() + fmt.Sprint(a.edits) // the open map, as edited
-	}
+	sig := a.mapsState()
 	if sig == a.mapClipsSig {
 		return a.mapClipsList
 	}
@@ -361,6 +357,66 @@ func (a *app) mapClips() []*library.Clip {
 	}
 	a.mapClipsSig, a.mapClipsList, a.mapIndex = sig, clips, nil
 	return clips
+}
+
+// mapsSeen is the maps as they were when what is worked out of them
+// (mapClips, and the links of every map with it) was last asked for.
+type mapsSeen struct {
+	dir     string
+	metas   int             // the analyses, by their count of changes
+	list    *model.FileInfo // the list of the maps' files, which each scan of the folder makes anew
+	n       int
+	sum     uint64      // of their paths and times
+	path    string      // the open map, as edited
+	file    *model.File //
+	edits   int
+	changed time.Time
+	frame   int // the frame the analyses' folder was last looked at in, and one more
+	version int
+}
+
+// mapsState names the state of the maps: another when a map's file, the
+// open map as edited, or an analysis changed. It is asked for by every
+// card of 收集's wall, at every frame (the map a clip is on), and was a
+// look at the analyses' folder and a string of every map's path and time
+// each time, 29 ms a frame for 150 maps and 120 cards: now a count, moved
+// on by comparing what the app holds, with the folder looked at once a
+// frame and the files' paths and times gone through only when the folder
+// of maps was scanned again.
+func (a *app) mapsState() string {
+	s := &a.collect.maps
+	if s.frame != a.vidFrame+1 { // the analyses, as written or brought by the sync
+		s.frame = a.vidFrame + 1
+		a.loadMapMetas()
+	}
+	moved := s.version == 0 || s.dir != a.dir || s.metas != a.mapMetaVersion
+	var list *model.FileInfo
+	if len(a.files) > 0 {
+		list = &a.files[0]
+	}
+	if list != s.list || len(a.files) != s.n {
+		h := fnv.New64a()
+		for _, f := range a.files {
+			h.Write([]byte(f.Path))
+			var at [9]byte
+			binary.LittleEndian.PutUint64(at[:], uint64(f.Modified.UnixNano()))
+			h.Write(at[:]) // and a byte between two
+		}
+		moved = moved || len(a.files) != s.n || h.Sum64() != s.sum
+		s.list, s.n, s.sum = list, len(a.files), h.Sum64()
+	}
+	path, file := a.path, a.file
+	if path == "" || file == nil {
+		path, file = "", nil
+	}
+	if path != s.path || file != s.file || file != nil && (s.edits != a.edits || !s.changed.Equal(a.changed)) {
+		moved = true
+	}
+	if moved {
+		s.dir, s.metas, s.path, s.file, s.edits, s.changed = a.dir, a.mapMetaVersion, path, file, a.edits, a.changed
+		s.version++
+	}
+	return strconv.Itoa(s.version)
 }
 
 // searchMaps finds maps by the words of their analysis and content.

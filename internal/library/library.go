@@ -116,9 +116,13 @@ func KindLabel(kind string) string {
 
 // Library is the clips of a folder, held in memory, newest first.
 type Library struct {
-	Dir    string
-	Clips  []*Clip
-	index  *Index
+	Dir   string
+	Clips []*Clip
+	index *Index
+	// stale says the index is of the clips as they were, dirty which of
+	// them had their words changed since: idx makes it good.
+	stale  bool
+	dirty  map[*Clip]bool
 	vecs   *vectorFile
 	hashes map[string]cachedHash // of the clips' EmbedText
 	dups   *dupIndex             // the clips by what makes them the same
@@ -132,20 +136,55 @@ type Library struct {
 	// Vault seals what of a clip looks like a secret as the clip is
 	// written, once a second password is set.
 	Vault *vault.Vault
+	// VectorsLater says the clips' vectors are read by who holds the
+	// library, away from its own work (ReadVectors, UseVectors): till
+	// they are given, it has none, and asks for none to be made.
+	VectorsLater bool
+	// seen is each clip's file as it was last read or written here, by
+	// its name: what Reload tells a file changed outside by. twice says
+	// some clip was in two files.
+	seen  map[string]seenFile
+	twice bool
+}
+
+// A seenFile is a clip's file as it was read or written: its size and
+// time, and the clip it read as, nil for one that would not read.
+type seenFile struct {
+	size int64
+	mod  time.Time
+	clip *Clip
 }
 
 // Open reads the library of a folder, which need not exist yet.
 func Open(dir string) (*Library, error) {
 	l := &Library{Dir: dir, Vault: vault.Open(filepath.Join(dir, "vault"))}
-	entries, err := os.ReadDir(filepath.Join(dir, "clips"))
-	if err != nil && !os.IsNotExist(err) {
+	var err error
+	if l.Clips, l.Broken, l.seen, l.twice, err = readClips(dir); err != nil {
 		return nil, err
 	}
-	at := map[string]int{}       // where the clip of an ID is in l.Clips
+	l.sort()
+	return l, nil
+}
+
+// readClips reads the clips' files of a library's folder, all of them.
+func readClips(dir string) (clips []*Clip, broken []string, seen map[string]seenFile, twice bool, err error) {
+	entries, err := os.ReadDir(filepath.Join(dir, "clips"))
+	if err != nil && !os.IsNotExist(err) {
+		return nil, nil, nil, false, err
+	}
+	seen = map[string]seenFile{}
+	at := map[string]int{}       // where the clip of an ID is in clips
 	named := map[string]string{} // and the file it was first read from
 	for _, e := range entries {
 		if e.IsDir() || filepath.Ext(e.Name()) != ".json" {
 			continue
+		}
+		// Its size and time first: changed while it is read, it is read
+		// again by the next Reload (as is one whose size and time could
+		// not be had, kept as none).
+		var f seenFile
+		if info, err := e.Info(); err == nil {
+			f.size, f.mod = info.Size(), info.ModTime()
 		}
 		data, err := os.ReadFile(filepath.Join(dir, "clips", e.Name()))
 		if err != nil {
@@ -153,40 +192,244 @@ func Open(dir string) (*Library, error) {
 		}
 		var c Clip
 		if json.Unmarshal(data, &c) != nil || c.ID == "" {
-			l.Broken = append(l.Broken, e.Name())
+			broken = append(broken, e.Name())
+			seen[e.Name()] = f
 			continue
 		}
+		f.clip = &c
+		seen[e.Name()] = f
 		// A second file of one clip, as a cloud's copy "abc 2.json" is:
 		// the one updated later is the clip, the other is said with the
 		// files that could not be read. Both loaded were two cards of one
 		// key, and Find's index was made again at every call.
 		if i, ok := at[c.ID]; ok {
+			twice = true
 			stray := e.Name()
 			if stray == c.ID+".json" { // the clip's own file: the other is the stray
 				stray = named[c.ID]
 			}
-			l.Broken = append(l.Broken, stray)
-			if c.Updated.After(l.Clips[i].Updated) {
-				l.Clips[i] = &c
+			broken = append(broken, stray)
+			if c.Updated.After(clips[i].Updated) {
+				clips[i] = &c
 			}
 			continue
 		}
-		at[c.ID], named[c.ID] = len(l.Clips), e.Name()
-		l.Clips = append(l.Clips, &c)
+		at[c.ID], named[c.ID] = len(clips), e.Name()
+		clips = append(clips, &c)
 	}
+	return clips, broken, seen, twice, nil
+}
+
+// Reload reads again what changed in the library's folder since it was
+// read or written here: the clips' files that came, that went, and that
+// are of another size or time (an agent's add_clip, what a sync brought).
+// It returns the clips that are new, those that changed and the IDs of
+// those gone. The whole library read again for one file, on the window's
+// thread, held the window for about a second in a library of some size.
+//
+// A clip that changed is changed in place: who holds it holds it as it is
+// now. A file that cannot be read now is left as it was read before, not
+// taken for gone. With a clip in two files, which is rare and is told by
+// which was updated last, everything is read again as Open reads it.
+func (l *Library) Reload() (fresh, changed []*Clip, gone []string, err error) {
+	dir := filepath.Join(l.Dir, "clips")
+	entries, err := os.ReadDir(dir)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, nil, nil, err
+	}
+	there := map[string]bool{}
+	differ := map[string]seenFile{} // the files to read, as they are now
+	for _, e := range entries {
+		if e.IsDir() || filepath.Ext(e.Name()) != ".json" {
+			continue
+		}
+		there[e.Name()] = true
+		info, err := e.Info()
+		if err != nil {
+			continue // not to be looked at now: as it was
+		}
+		if was, ok := l.seen[e.Name()]; !ok || was.size != info.Size() || !was.mod.Equal(info.ModTime()) {
+			differ[e.Name()] = seenFile{size: info.Size(), mod: info.ModTime()}
+		}
+	}
+	var removed []string
+	for name := range l.seen {
+		if !there[name] {
+			removed = append(removed, name)
+		}
+	}
+	if len(differ)+len(removed) == 0 {
+		return nil, nil, nil, nil
+	}
+	if l.twice {
+		return l.reloadAll()
+	}
+	// Read those that differ. A clip's ID is in one file: found in two,
+	// all is read again.
+	owner := map[string]string{} // an ID's file, of the files as they will be
+	for name, f := range l.seen {
+		if _, d := differ[name]; f.clip != nil && there[name] && !d {
+			owner[f.clip.ID] = name
+		}
+	}
+	for name, f := range differ {
+		data, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			delete(differ, name) // as it was, and read when it can be
+			if was := l.seen[name]; was.clip != nil {
+				owner[was.clip.ID] = name
+			}
+			continue
+		}
+		var c Clip
+		if json.Unmarshal(data, &c) == nil && c.ID != "" {
+			f.clip = &c
+			differ[name] = f
+		}
+	}
+	for name, f := range differ {
+		if f.clip == nil {
+			continue
+		}
+		if other, ok := owner[f.clip.ID]; ok && other != name {
+			return l.reloadAll()
+		}
+		owner[f.clip.ID] = name
+	}
+
+	// What leaves its file: the clip of a file gone, or of one that reads
+	// as another clip now, or as none.
+	left := map[string]*Clip{}
+	for _, name := range removed {
+		if c := l.seen[name].clip; c != nil {
+			left[c.ID] = c
+		}
+		delete(l.seen, name)
+	}
+	for name, f := range differ {
+		if was := l.seen[name].clip; was != nil && (f.clip == nil || f.clip.ID != was.ID) {
+			left[was.ID] = was
+		}
+	}
+	have := make(map[string]*Clip, len(l.Clips))
+	for _, c := range l.Clips {
+		have[c.ID] = c
+	}
+	names := make([]string, 0, len(differ))
+	for name := range differ {
+		names = append(names, name)
+	}
+	slices.Sort(names) // as a folder is read
+	for _, name := range names {
+		f := differ[name]
+		switch c := f.clip; {
+		case c == nil: // would not read: said with the broken ones
+		case have[c.ID] != nil:
+			// A clip the library has, in its file or in one renamed: in
+			// place.
+			was := have[c.ID]
+			delete(left, c.ID)
+			*was = *c
+			f.clip = was
+			changed = append(changed, was)
+			l.touch(was)
+			delete(l.hashes, was.ID)
+		default:
+			l.Clips = append(l.Clips, c)
+			have[c.ID] = c
+			fresh = append(fresh, c)
+		}
+		l.seen[name] = f
+	}
+	if len(left) > 0 {
+		l.Clips = slices.DeleteFunc(l.Clips, func(c *Clip) bool { return left[c.ID] == c })
+		for id := range left {
+			gone = append(gone, id)
+			delete(l.hashes, id)
+		}
+		slices.Sort(gone)
+	}
+	l.Broken = nil
+	for name, f := range l.seen {
+		if f.clip == nil {
+			l.Broken = append(l.Broken, name)
+		}
+	}
+	slices.Sort(l.Broken)
+	l.dups = nil
 	l.sort()
-	return l, nil
+	return fresh, changed, gone, nil
+}
+
+// reloadAll reads every clip's file again, as Open does, and tells what
+// came, what is there still and what went.
+func (l *Library) reloadAll() (fresh, changed []*Clip, gone []string, err error) {
+	clips, broken, seen, twice, err := readClips(l.Dir)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	was := map[string]bool{}
+	for _, c := range l.Clips {
+		was[c.ID] = true
+	}
+	for _, c := range clips {
+		if was[c.ID] {
+			changed = append(changed, c)
+			delete(was, c.ID)
+		} else {
+			fresh = append(fresh, c)
+		}
+	}
+	for id := range was {
+		gone = append(gone, id)
+	}
+	slices.Sort(gone)
+	l.Clips, l.Broken, l.seen, l.twice = clips, broken, seen, twice
+	l.index, l.dirty, l.dups, l.hashes = nil, nil, nil, nil
+	l.sort()
+	return fresh, changed, gone, nil
+}
+
+// wrote notes a clip's file as it was just written, so that Reload does
+// not take it for changed outside.
+func (l *Library) wrote(c *Clip) {
+	name := c.ID + ".json"
+	info, err := os.Stat(filepath.Join(l.Dir, "clips", name))
+	if err != nil {
+		return
+	}
+	if l.seen == nil {
+		l.seen = map[string]seenFile{}
+	}
+	if _, had := l.seen[name]; !had {
+		// A clip read from a file of another name has two files now.
+		for other, f := range l.seen {
+			if f.clip == c && other != name {
+				l.twice = true
+			}
+		}
+	}
+	l.seen[name] = seenFile{info.Size(), info.ModTime(), c}
+}
+
+// forget drops what is known of a clip's files, as it is deleted.
+func (l *Library) forget(c *Clip) {
+	for name, f := range l.seen {
+		if f.clip == c {
+			delete(l.seen, name)
+		}
+	}
 }
 
 func (l *Library) sort() {
 	slices.SortStableFunc(l.Clips, func(a, b *Clip) int { return b.Created.Compare(a.Created) })
-	l.index = nil
+	l.stale = true
 	l.Version++
 }
 
 // changed drops what was worked out from the clips.
 func (l *Library) changed() {
-	l.index, l.dups = nil, nil
+	l.stale, l.dups = true, nil
 	l.Version++
 }
 
@@ -254,16 +497,37 @@ func (l *Library) Add(c *Clip, now time.Time) error {
 }
 
 // AddFile copies a file into the library and keeps a clip of it: a
-// picture or a file. It is copied as it is read, and told from those kept
-// by the same reading: read whole into memory first, a video of a
-// gigabyte took that much and the time to read it twice.
+// picture or a file. It is CopyFile and AddCopied one after the other,
+// for who has no window to keep waiting.
 func (l *Library) AddFile(path, source string, now time.Time) (*Clip, error) {
+	c, err := l.CopyFile(path, source)
+	if err != nil {
+		return nil, err
+	}
+	return l.AddCopied(c, now)
+}
+
+// A Copied is a file copied into the library's folder, yet to be kept as
+// a clip (AddCopied) or dropped (Drop).
+type Copied struct {
+	clip     *Clip
+	tmp, dst string
+}
+
+// CopyFile copies a file into the library's folder, and reads what there
+// is to read of it: the long part of keeping a file, which touches no
+// clip and may be done away from who holds the library (a video of a
+// gigabyte was copied in the window's turn). It is copied as it is read,
+// and told from those kept by the same reading: read whole into memory
+// first, it took that much memory and the time to read it twice.
+func (l *Library) CopyFile(path, source string) (*Copied, error) {
 	src, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer src.Close()
-	if err := os.MkdirAll(l.FilesDir(), 0o755); err != nil {
+	files := filepath.Join(l.Dir, "files")
+	if err := os.MkdirAll(files, 0o755); err != nil {
 		return nil, err
 	}
 	name := filepath.Base(path)
@@ -272,7 +536,7 @@ func (l *Library) AddFile(path, source string, now time.Time) (*Clip, error) {
 		c.Kind = KindImage
 	}
 	c.File = c.ID + strings.ToLower(filepath.Ext(name))
-	dst := filepath.Join(l.FilesDir(), c.File)
+	dst := filepath.Join(files, c.File)
 	tmp := dst + ".tmp"
 	out, err := os.Create(tmp)
 	if err != nil {
@@ -288,29 +552,38 @@ func (l *Library) AddFile(path, source string, now time.Time) (*Clip, error) {
 		return nil, err
 	}
 	c.Hash = hex.EncodeToString(h.Sum(nil))
-	if d := l.Duplicate(&Clip{Hash: c.Hash}); d != nil {
-		_ = os.Remove(tmp)
-		return nil, &DuplicateError{d}
-	}
-	if err := os.Rename(tmp, dst); err != nil {
-		_ = os.Remove(tmp)
-		return nil, err
-	}
 	if c.Kind == KindFile {
 		c.Title = strings.TrimSuffix(name, filepath.Ext(name))
 		// A document's text, of one that has any to read and is no larger
 		// than a document is.
 		if readsText(name) && size <= maxTextFile {
-			if data, err := os.ReadFile(dst); err == nil {
+			if data, err := os.ReadFile(tmp); err == nil {
 				c.Text = ExtractText(name, data)
 			}
 		}
 	}
-	if err := l.Add(c, now); err != nil {
-		_ = os.Remove(dst)
+	return &Copied{clip: c, tmp: tmp, dst: dst}, nil
+}
+
+// Drop removes a file copied that is not to be kept after all.
+func (c *Copied) Drop() { _ = os.Remove(c.tmp) }
+
+// AddCopied keeps a clip of a file CopyFile copied, unless it is kept
+// already: then the copy is dropped, and a *DuplicateError says which.
+func (l *Library) AddCopied(c *Copied, now time.Time) (*Clip, error) {
+	if d := l.Duplicate(&Clip{Hash: c.clip.Hash}); d != nil {
+		c.Drop()
+		return nil, &DuplicateError{d}
+	}
+	if err := os.Rename(c.tmp, c.dst); err != nil {
+		c.Drop()
 		return nil, err
 	}
-	return c, nil
+	if err := l.Add(c.clip, now); err != nil {
+		_ = os.Remove(c.dst)
+		return nil, err
+	}
+	return c.clip, nil
 }
 
 // maxTextFile is the largest document whose text is read as it is kept.
@@ -346,16 +619,22 @@ func (l *Library) AddData(data []byte, name, kind, source string, now time.Time)
 // Save writes a changed clip.
 func (l *Library) Save(c *Clip, now time.Time) error {
 	c.Updated = now
-	l.changed()
 	delete(l.hashes, c.ID)
-	return l.write(c)
+	err := l.write(c) // which seals what is to be: the index has its words after
+	l.touch(c)
+	l.changed()
+	return err
 }
 
 func (l *Library) write(c *Clip) error {
 	if l.Vault.On() {
 		c.seal(l.Vault.Seal)
 	}
-	return writeClip(l.Dir, c)
+	if err := writeClip(l.Dir, c); err != nil {
+		return err
+	}
+	l.wrote(c)
+	return nil
 }
 
 // writeClip writes a clip's file in the library of a folder.
@@ -390,6 +669,7 @@ func (l *Library) Delete(id string) error {
 		_ = os.Remove(p)
 	}
 	l.Clips = slices.Delete(l.Clips, i, i+1)
+	l.forget(c)
 	l.changed()
 	return nil
 }
@@ -442,6 +722,7 @@ func (l *Library) Trash(id string, now time.Time) (*Taken, error) {
 		return nil, err
 	}
 	l.Clips = slices.Delete(l.Clips, i, i+1)
+	l.forget(c)
 	l.changed()
 	return t, nil
 }
@@ -476,16 +757,6 @@ func (l *Library) PutBack(t *Taken) error {
 	l.Clips = slices.Insert(l.Clips, min(t.at, len(l.Clips)), t.clip)
 	l.changed()
 	return nil
-}
-
-// Take removes a clip as Trash does, and gives the way to put it back
-// into this library.
-func (l *Library) Take(id string) (restore func() error, err error) {
-	t, err := l.Trash(id, time.Now())
-	if err != nil {
-		return nil, err
-	}
-	return func() error { return l.PutBack(t) }, nil
 }
 
 // EmptyTrash clears the trash of what was put there before a time: of
