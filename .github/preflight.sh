@@ -17,7 +17,7 @@ fail() {
 semver='^[0-9]+\.[0-9]+\.[0-9]+$'
 
 version="$(jq -er '.version | strings' mygo.json)" || fail "mygo.json 里读不到 version。"
-[[ "$version" =~ $semver ]] || fail "mygo.json 的 version「$version」不是 x.y.z 的样子。"
+[[ "$version" =~ $semver ]] || fail "mygo.json 的 version「${version}」不是 x.y.z 的样子。"
 tag="v$version"
 
 case "${GITHUB_REF:-}" in
@@ -46,10 +46,10 @@ esac
 base="$(jq -er '.updates.url | strings' mygo.json)" || fail "mygo.json 里读不到 updates.url。"
 manifest="${base%/}/update-darwin-arm64.json"
 live="$(curl -fsSL --retry 3 --retry-delay 2 --max-time 60 "$manifest" | jq -er '.version | strings')" ||
-  fail "读不到线上的更新清单（$manifest），没法确认 $version 比线上的新，没有发布。过一会儿重新运行。"
-[[ "$live" =~ $semver ]] || fail "线上的更新清单里的版本「$live」不是 x.y.z 的样子，没有发布。"
+  fail "读不到线上的更新清单（${manifest}），没法确认 $version 比线上的新，没有发布。过一会儿重新运行。"
+[[ "$live" =~ $semver ]] || fail "线上的更新清单里的版本「${live}」不是 x.y.z 的样子，没有发布。"
 newest="$(printf '%s\n%s\n' "$live" "$version" | sort -V | tail -n 1)"
 if [ "$version" = "$live" ] || [ "$newest" != "$version" ]; then
   fail "mygo.json 的版本 $version 不比线上的 $live 新：是不是从旧的代码发布，或者忘了改版本号？没有发布。"
 fi
-echo "可以发布 $tag：线上是 $live。"
+echo "可以发布 ${tag}：线上是 ${live}。"

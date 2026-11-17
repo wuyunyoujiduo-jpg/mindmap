@@ -194,7 +194,7 @@ jobs:
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             at="$(gh api "repos/$GITHUB_REPOSITORY/commits/$tag" --jq .sha)"
             if [ "$at" != "$GITHUB_SHA" ]; then
-              echo "::error::Release $tag 已经有了，而且是另一次提交（$at）的，没有动它。"
+              echo "::error::Release $tag 已经有了，而且是另一次提交（${at}）的，没有动它。"
               exit 1
             fi
             gh release upload "$tag" build/*/*.dmg --repo "$GITHUB_REPOSITORY" --clobber

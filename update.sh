@@ -44,7 +44,7 @@ gh auth status >/dev/null 2>&1 || fail "GitHub 命令行工具还没有登录：
 # The release to install.
 if [ -n "$version" ]; then
 	tag="v$version"
-	gh release view "$tag" -R "$REPO" >/dev/null 2>&1 || fail "找不到版本 $tag。"
+	gh release view "$tag" -R "$REPO" >/dev/null 2>&1 || fail "找不到版本 ${tag}。"
 else
 	tag="$(gh release view -R "$REPO" --json tagName -q .tagName)" || fail "无法读取最新版本。"
 fi
@@ -60,7 +60,7 @@ if [ "$have" = "$want" ] && [ "$force" = 0 ]; then
 	exit 0
 fi
 if [ -n "$have" ]; then
-	say "更新 $APP_NAME：$have → $want"
+	say "更新 ${APP_NAME}：$have → $want"
 else
 	say "安装 $APP_NAME $want"
 fi
@@ -84,7 +84,7 @@ names="$(gh release view "$tag" -R "$REPO" --json assets -q '.assets[].name')" |
 name="$(printf '%s\n' "$names" | grep -E "[-.]$arch\\.dmg\$" | head -n 1 || true)"
 if [ -z "$name" ]; then
 	if printf '%s\n' "$names" | grep -Eq '[-.](arm64|amd64)\.dmg$'; then
-		fail "版本 $want 没有这台 Mac（$arch）的安装包。"
+		fail "版本 $want 没有这台 Mac（${arch}）的安装包。"
 	fi
 	name="$(printf '%s\n' "$names" | grep -E '\.dmg$' | head -n 1 || true)"
 fi
@@ -94,7 +94,7 @@ dmg="$work/$name"
 
 # Quit the app if it runs, so that it saves; it saves as it quits.
 if pgrep -xq "$APP_NAME"; then
-	say "退出正在运行的 $APP_NAME…"
+	say "退出正在运行的 ${APP_NAME}…"
 	osascript -e "quit app \"$APP_NAME\"" >/dev/null 2>&1 || true
 	for _ in $(seq 1 50); do
 		pgrep -xq "$APP_NAME" || break
@@ -103,7 +103,7 @@ if pgrep -xq "$APP_NAME"; then
 	pgrep -xq "$APP_NAME" && fail "$APP_NAME 没有退出，请手动退出后再试。"
 fi
 
-say "安装到 $APP_DIR…"
+say "安装到 ${APP_DIR}…"
 mkdir -p "$mnt"
 hdiutil attach -quiet -nobrowse -readonly -mountpoint "$mnt" "$dmg" || fail "无法打开安装包。"
 src="$mnt/$APP_NAME.app"

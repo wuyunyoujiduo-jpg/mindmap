@@ -37,7 +37,7 @@ stop() {
   exit 1
 }
 case "$max" in
-'' | *[!0-9]*) stop "PRUNE_MAX「$max」不是数字" ;;
+'' | *[!0-9]*) stop "PRUNE_MAX「${max}」不是数字" ;;
 esac
 
 work="$(mktemp -d)"
@@ -117,7 +117,7 @@ awk -F"$tab" 'NR == FNR { keep[$0] = 1; next } !($2 in keep)' "$work/keep" "$wor
 all="$(wc -l <"$work/assets" | tr -d ' ')"
 total="$(wc -l <"$work/archives" | tr -d ' ')"
 gone="$(wc -l <"$work/gone" | tr -d ' ')"
-echo "清理 $release：共 $all 个文件，其中更新包和增量包 $total 个，$gone 个已经没有清单用到。"
+echo "清理 ${release}：共 $all 个文件，其中更新包和增量包 $total 个，$gone 个已经没有清单用到。"
 if [ "$gone" -eq 0 ]; then
   exit 0
 fi

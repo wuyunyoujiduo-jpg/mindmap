@@ -17,5 +17,5 @@ if [ "${1:-}" = "-u" ]; then
 	go get "github.com/egoist/mygo@$latest"
 	go mod tidy
 	go build ./... && go vet ./... && go test ./...
-	echo "已升级到 MyGo $latest；看看 https://github.com/egoist/mygo/releases 有哪些新功能"
+	echo "已升级到 MyGo ${latest}；看看 https://github.com/egoist/mygo/releases 有哪些新功能"
 fi
