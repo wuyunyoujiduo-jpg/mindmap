@@ -881,5 +881,3 @@ func TestOtherMapsAnalysisWaitsAsEveryWait(t *testing.T) {
 		t.Fatal("the wait is not over with the analysis")
 	}
 }
-
-var _ = ui.KeyEnter
