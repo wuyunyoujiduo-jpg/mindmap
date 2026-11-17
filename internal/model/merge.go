@@ -239,6 +239,9 @@ func Merge(base, ours, theirs *File) (merged *File, clashes []Clash) {
 		}
 	}
 	merged.Version = FormatVersion
+	// Each side took away another child of a topic with a summary: its
+	// summary is over nothing now, and becomes a child as when one does it.
+	merged.SettleSummaries()
 	return merged, m.clashes
 }
 

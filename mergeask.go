@@ -59,6 +59,21 @@ func (a *app) queueMerge(m *mergeAsk) {
 	if len(m.theirs) != len(m.clashes) {
 		m.theirs = make([]bool, len(m.clashes))
 	}
+	// Added to what waits of the same map, not in its place: the first
+	// questions were then never asked, and this computer's values stayed
+	// with nothing said. One asked twice is asked once, by its newer value.
+	for _, x := range a.merges {
+		if x.path != m.path {
+			continue
+		}
+		for i, c := range x.clashes {
+			if !slices.ContainsFunc(m.clashes, func(n model.Clash) bool {
+				return n.Node == c.Node && n.Sheet == c.Sheet && slices.Equal(n.Field, c.Field)
+			}) {
+				m.clashes, m.where, m.under, m.theirs = append(m.clashes, c), append(m.where, x.where[i]), append(m.under, x.under[i]), append(m.theirs, x.theirs[i])
+			}
+		}
+	}
 	a.merges = slices.DeleteFunc(a.merges, func(x *mergeAsk) bool { return x.path == m.path })
 	a.merges = append(a.merges, m)
 	a.mergeOpen = true

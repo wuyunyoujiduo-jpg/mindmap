@@ -397,6 +397,36 @@ func loadState(dir string, cfg Config) *state {
 	return s
 }
 
+// strange tells whether the folder scanned has none of the files the
+// state remembers of it, of three or more, by their names and by what
+// is in them (files moved to other names, a folder renamed, are the
+// folder still): those of the folder itself, not of what is mounted in
+// it, which has its own place.
+func (s *state) strange(local map[string]string, mounts map[string]string) bool {
+	here := map[string]bool{}
+	for _, sha := range local {
+		here[sha] = true
+	}
+	known := 0
+	for p, sha := range s.Base {
+		if here[sha] {
+			return false
+		}
+		mounted := false
+		for prefix := range mounts {
+			mounted = mounted || strings.HasPrefix(p, prefix+"/")
+		}
+		if mounted || p == marker {
+			continue
+		}
+		if _, here := local[p]; here {
+			return false
+		}
+		known++
+	}
+	return known >= 3
+}
+
 func (s *state) save(dir string, cfg Config) error {
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
@@ -608,6 +638,15 @@ func syncOnce(ctx context.Context, dir string, cfg Config, progress func(string)
 		}
 		_ = s.save(dir, cfg)
 		return res, err
+	}
+	// A folder that has none of the files it had at the last sync is not
+	// that folder gone empty, as far as can be told: it is another folder
+	// at its path, or a disk that is not there. Nothing is then known in
+	// common, and the two sides are put together, nothing deleted. (Who
+	// did empty the folder gets the files back, and deletes them where
+	// they are meant to be gone.)
+	if s.strange(local, cfg.Mounts) {
+		s.Commit, s.Tree, s.Base, s.Sent, s.Exec = "", "", map[string]string{}, nil, nil
 	}
 
 	progress("正在读取 GitHub 仓库…")

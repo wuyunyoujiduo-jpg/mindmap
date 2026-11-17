@@ -102,3 +102,22 @@ func TestRepeatingTaskMarkerFollows(t *testing.T) {
 		t.Fatalf("after a tick: status %v, marker %q, times %d", n.Task.Status, n.Markers[0], n.Task.Times)
 	}
 }
+
+// Each side takes away another child of a topic that has a summary: the
+// merged topic's summary is over nothing, and is settled as a child.
+func TestMergeSettlesSummaries(t *testing.T) {
+	f := NewFile("项目")
+	d := f.Sheets[0]
+	a, _ := d.AddChild(d.Root.ID, "甲")
+	a1, _ := d.AddChild(a.ID, "甲一")
+	a2, _ := d.AddChild(a.ID, "甲二")
+	a.AddSummary("小结")
+	ours, theirs := f.Clone(), f.Clone()
+	ours.Sheets[0].Delete(a1.ID)
+	theirs.Sheets[0].Delete(a2.ID)
+	merged, _ := Merge(f, ours, theirs)
+	n := merged.Node(a.ID)
+	if n == nil || n.SummaryTopic() != nil && len(n.Children) == 0 {
+		t.Fatalf("a summary over no child: %+v", n)
+	}
+}

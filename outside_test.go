@@ -535,3 +535,49 @@ func TestAttachCopiesAway(t *testing.T) {
 		t.Fatal("a file that is not there")
 	}
 }
+
+// What an agent wrote of its session into the open map's file while the
+// map was being edited is kept: its record is not of the content, and a
+// file read as the same was saved over it.
+func TestOutsideLogKept(t *testing.T) {
+	a, tt := newTestApp(t)
+	tt.Frame()
+	front := find(t, a, "前端").ID
+	a.mutate("", func() { a.file.Node(front).Title = "界面层" })
+	changeOnDisk(t, a, func(f *model.File) {
+		f.Log = append(f.Log, model.LogEntry{ID: "l1", At: testNow, Kind: "session", Text: "改了登录"})
+	}, 2*time.Minute)
+	tt.Frame()
+	a.now = func() time.Time { return testNow.Add(3 * time.Minute) }
+	tt.Frame()
+	a.flush()
+	f, err := model.Load(a.path)
+	if err != nil || len(f.Log) != 1 || f.Node(front).Title != "界面层" || a.conflict {
+		t.Fatalf("the agent's record: %d entries, title %q, conflict %v (%v)", len(f.Log), f.Node(front).Title, a.conflict, err)
+	}
+}
+
+// Another map renamed does not make the open map's file count as read;
+// and a maps folder made anew is not the folder a sync remembers.
+func TestFollowedLeavesTheOpenMapsTime(t *testing.T) {
+	a, _ := newTestApp(t)
+	was := a.modTime
+	later := testNow.Add(time.Hour)
+	os.Chtimes(a.path, later, later)
+	a.followed(func(p string) string { return p }) // some other map renamed
+	if !a.modTime.Equal(was) {
+		t.Fatal("the open map's file was taken as read")
+	}
+
+	dir := filepath.Join(t.TempDir(), "新的文件夹")
+	state := syncStatePath(dir)
+	if state == "" {
+		t.Skip("no config dir")
+	}
+	os.MkdirAll(filepath.Dir(state), 0o755)
+	os.WriteFile(state, []byte(`{"base":{"a.mindmap.json":"x"}}`), 0o644)
+	a.openDir(dir)
+	if _, err := os.Stat(state); err == nil {
+		t.Fatal("a folder made anew kept the memory of the one before at its path")
+	}
+}

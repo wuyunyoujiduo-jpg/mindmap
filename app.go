@@ -574,6 +574,18 @@ func newApp(plat platform, cfg config) *app {
 // has none.
 func (a *app) openDir(dir string) {
 	a.dir = dir
+	// A folder that is not there and is made now is not the folder the
+	// sync remembers at this path (one moved, renamed or put in the bin
+	// while the app was closed, or a disk not yet there): with its
+	// memory, every file of before read as deleted here, and was deleted
+	// from the repository and then from the other computer.
+	if _, err := os.Stat(dir); errors.Is(err, os.ErrNotExist) {
+		for _, p := range []string{syncStatePath(dir), mergesPath(dir)} {
+			if p != "" {
+				_ = os.Remove(p)
+			}
+		}
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		a.saveErr = err.Error()
 	}
@@ -855,6 +867,12 @@ func (a *app) mergeOutside() bool {
 		return false
 	}
 	if model.SameContent(theirs, a.base) { // written, and the same: nothing to merge
+		// But for the agents' record, which is not of the content: what
+		// one wrote of its session meanwhile is kept, not saved over.
+		if m, _ := model.Merge(a.base, a.file, theirs); m != nil {
+			a.file.Log = m.Log
+		}
+		a.base = theirs
 		a.modTime, a.conflict = at, false
 		return true
 	}

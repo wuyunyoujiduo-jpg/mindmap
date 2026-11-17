@@ -19,10 +19,11 @@ on:
 permissions:
   contents: read
 
-# One at a time. A release may publish meanwhile: what its new manifest
-# names of the files listed here, the manifest read here names too.
+# Never while a release runs (build.yml's group): between a release's
+# upload of its files and of the manifests that name them, those files
+# are named by no manifest, and would be taken for old ones and deleted.
 concurrency:
-  group: prune-updates
+  group: release
   cancel-in-progress: false
 
 jobs:

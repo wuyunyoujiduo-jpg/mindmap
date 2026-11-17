@@ -1349,3 +1349,24 @@ func TestMergedToldOnce(t *testing.T) {
 		t.Errorf("not in the user's language: %v", errMoved)
 	}
 }
+
+// A folder with none of the files it had at the last sync, by name or by
+// content, is not that folder emptied: nothing is deleted from the
+// repository for it. A folder renamed inside it is the folder still.
+func TestStrangeFolderDeletesNothing(t *testing.T) {
+	f, cfg := setup(t)
+	a := t.TempDir()
+	cfg.State = filepath.Join(t.TempDir(), "state.json")
+	put(t, a, "项目.mindmap.json", `{"v":1}`)
+	put(t, a, "客户/甲.mindmap.json", `{"v":2}`)
+	put(t, a, "客户/乙.mindmap.json", `{"v":3}`)
+	sync1(t, a, cfg)
+
+	// Another folder at its path, with the guide alone.
+	b := t.TempDir()
+	put(t, b, "使用指南.mindmap.json", `{"guide":true}`)
+	res := sync1(t, b, cfg)
+	if got := f.files(); res.Deleted != 0 || got["项目.mindmap.json"] == "" || got["客户/乙.mindmap.json"] == "" || read(b, "项目.mindmap.json") == "" {
+		t.Fatalf("a strange folder: %+v, repository %v", res, got)
+	}
+}

@@ -250,9 +250,13 @@ var pathFollowers []func(a *app, follow func(string) string)
 // favorites, the maps opened last, the folders shown open, the folders
 // of the maps' code, and what else keeps a path (pathFollowers).
 func (a *app) followed(follow func(string) string) {
+	was := a.path
 	a.path = follow(a.path)
 	a.renameViews(follow)
-	if a.path != "" {
+	// Only when it is the open map that moved: taken whenever anything
+	// was renamed, a change the same sync had brought to the open map
+	// counted as read, was never loaded, and the next save wrote over it.
+	if a.path != "" && a.path != was {
 		a.modTime = modTime(a.path)
 	}
 	for _, list := range [][]string{a.cfg.Favorites, a.cfg.Recent, a.cfg.OpenFolders} {
