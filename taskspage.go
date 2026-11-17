@@ -2508,3 +2508,15 @@ func toggleDay(days []int, d int) []int {
 	}
 	return append(slices.Clone(days), d)
 }
+
+// A map renamed or moved is followed by the project chosen on 今天 and by
+// the task whose details show (sidebar.go's pathFollowers): left at the
+// old path, the project's page was empty under its old name.
+func init() {
+	pathFollowers = append(pathFollowers, func(a *app, follow func(string) string) {
+		a.tasks.onMap = follow(a.tasks.onMap)
+		if i := strings.LastIndex(a.tasks.sel, "#"); i >= 0 {
+			a.tasks.sel = follow(a.tasks.sel[:i]) + a.tasks.sel[i:]
+		}
+	})
+}
