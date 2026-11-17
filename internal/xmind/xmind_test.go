@@ -211,3 +211,50 @@ func TestImportNullTopics(t *testing.T) {
 		t.Fatalf("read %+v", root)
 	}
 }
+
+// A map going out and coming back keeps the files attached to its topics,
+// which are in the archive, and its links to its own topics, which name
+// them by the IDs they have here.
+func TestAttachmentsAndOwnLinks(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.assets")
+	os.MkdirAll(src, 0o755)
+	os.WriteFile(filepath.Join(src, "a1b2c3.pdf"), []byte("%PDF-1.4 合同"), 0o644)
+
+	d := model.New("项目")
+	a, _ := d.AddChild(d.Root.ID, "合同")
+	a.Files = []model.Attachment{{File: "a1b2c3.pdf", Name: "合同 v2.pdf"}, {File: "missing.txt", Name: "丢了的.txt"}}
+	b, _ := d.AddChild(d.Root.ID, "跟进")
+	b.Links = []string{"mindmap:#" + a.ID, "mindmap:别的导图#" + a.ID, "https://example.com"}
+	b.Task = &model.Task{Status: model.StatusTodo, After: []string{a.ID}}
+	f := &model.File{Version: model.FormatVersion, Sheets: []*model.Document{d}}
+	var buf bytes.Buffer
+	if err := Export(&buf, f, src); err != nil {
+		t.Fatal(err)
+	}
+	assets := filepath.Join(dir, "back.assets")
+	g := importBytes(t, buf.Bytes(), assets)
+	ga, gb := g.Sheets[0].Root.Children[0], g.Sheets[0].Root.Children[1]
+	if len(ga.Files) != 1 || ga.Files[0].Name != "合同 v2.pdf" {
+		t.Fatalf("attachments %+v", ga.Files)
+	}
+	if data, err := os.ReadFile(filepath.Join(assets, ga.Files[0].File)); err != nil || string(data) != "%PDF-1.4 合同" {
+		t.Fatalf("the attached file did not come back: %v %q", err, data)
+	}
+	if ga.ID == a.ID {
+		t.Fatal("the test expects new IDs")
+	}
+	want := []string{"mindmap:#" + ga.ID, "mindmap:别的导图#" + a.ID, "https://example.com"}
+	if !slices.Equal(gb.Links, want) || !slices.Equal(gb.Task.After, []string{ga.ID}) {
+		t.Fatalf("links %q after %q, want %q", gb.Links, gb.Task.After, want)
+	}
+	// A name in the archive that would leave the assets folder is not one
+	// a file is written under.
+	im := importer{read: func(string) ([]byte, error) { return []byte("x"), nil }, assetsDir: assets}
+	if got := im.attachment("../../逃出去.txt"); got == "" || got != filepath.Base(got) || got == "逃出去.txt" {
+		t.Fatalf("written as %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "逃出去.txt")); err == nil {
+		t.Fatal("written outside the assets folder")
+	}
+}

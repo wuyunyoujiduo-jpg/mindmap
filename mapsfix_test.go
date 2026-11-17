@@ -1,9 +1,14 @@
 package main
 
 import (
+	"fmt"
+	"image/png"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/diagram"
@@ -448,6 +453,170 @@ func TestStepsEndWithTheDragAndTheField(t *testing.T) {
 	a.undo()
 	if n, _ = a.doc.Find(id); n.Title != "架构" {
 		t.Fatalf("after the second undo %q", n.Title)
+	}
+}
+
+// The set of a topic deleted is not kept for ever: found in no map it is
+// marked, kept a month more (the topic may come back), and deleted then.
+func TestDiagramsOfTopicsGoneAreSwept(t *testing.T) {
+	a, tt := newTestApp(t)
+	tt.Frame()
+	now := testNow
+	a.now = func() time.Time { return now }
+	set := func(title string) (string, string) {
+		t.Helper()
+		n, _ := a.doc.AddChild(a.doc.Root.ID, title)
+		f := &diaFile{Path: a.mapKey(a.path), Set: diagram.Set{Node: n.ID, Objects: []diagram.Object{{Name: "退货单", Kind: "单据"}}}}
+		if err := a.writeDia(f); err != nil {
+			t.Fatal(err)
+		}
+		return n.ID, filepath.Join(a.diaDir(), diaName(n.ID))
+	}
+	stays, staysFile := set("留着的")
+	goes, goesFile := set("要删的")
+	back, backFile := set("删了又回来的")
+	a.flush()
+	sweep := func(after time.Duration) {
+		now = now.Add(after)
+		a.diaSwept = time.Time{}
+		a.sweepDias()
+	}
+	del := func(id string) {
+		a.selected, a.multi = id, nil
+		a.deleteSelected()
+	}
+	del(goes)
+	del(back)
+	a.flush()
+	sweep(0)
+	if a.dias[stays].Gone != nil || a.dias[goes] == nil || a.dias[goes].Gone == nil || a.dias[back].Gone == nil {
+		t.Fatalf("after the first look: %+v", a.dias)
+	}
+	if !exists(goesFile) || !exists(backFile) {
+		t.Fatal("deleted at once: an undo would bring the topic back without its set")
+	}
+	a.undo() // the second topic is back
+	if a.file.Node(back) == nil {
+		t.Fatal("not undone")
+	}
+	sweep(10 * 24 * time.Hour)
+	if a.dias[back] == nil || a.dias[back].Gone != nil || !exists(goesFile) {
+		t.Fatal("a topic back keeps its set, and one gone ten days is kept still")
+	}
+	sweep(25 * 24 * time.Hour)
+	if exists(goesFile) || a.dias[goes] != nil {
+		t.Fatal("the set of a topic gone for more than a month is still there")
+	}
+	if !exists(staysFile) || !exists(backFile) || a.diaOf(stays) == nil || a.diaOf(back) == nil {
+		t.Fatal("the sets of topics that are there were swept")
+	}
+	// A map that cannot be read: nothing is known to be gone.
+	del(back)
+	a.flush()
+	bad := filepath.Join(a.dir, "坏的.mindmap.json")
+	if err := os.WriteFile(bad, []byte("{"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a.refreshFiles()
+	sweep(40 * 24 * time.Hour)
+	sweep(40 * 24 * time.Hour)
+	if !exists(backFile) {
+		t.Fatal("swept though a map could not be read")
+	}
+}
+
+func exists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+// A set drawn while its map was renamed is the map's as it is named now.
+func TestDiagramDrawnWhileTheMapIsRenamed(t *testing.T) {
+	a, tt := newTestApp(t)
+	fake := &fakeClaude{replies: []string{claudeText(refundSet)}}
+	a.sendAI = fake.send
+	a.cfg.AIKey = "sk-ant-test"
+	root := refundBranch(t, a)
+	a.selectNode(root.ID)
+	tt.Frame()
+	var answer func()
+	a.async = func(work func() (any, error), done func(any, error)) { answer = func() { done(work()) } }
+	a.drawDia(root.ID, "")
+	if answer == nil {
+		t.Fatal("the AI was not asked")
+	}
+	a.flush()
+	to := filepath.Join(a.dir, model.FileName("改了名的导图"))
+	if err := os.Rename(a.path, to); err != nil {
+		t.Fatal(err)
+	}
+	a.moved(a.path, to)
+	answer()
+	tt.Frame()
+	if a.path != to || a.diaOf(root.ID) == nil {
+		t.Fatalf("the set was kept under the path the map had: %q", a.diaErr)
+	}
+}
+
+// The picture of a map however large has bounds: a thousand topics in a
+// column were 2918×49132 pixels. It is drawn smaller, said so, and its key
+// waits while it is written.
+func TestExportImageOfALargeMapIsBounded(t *testing.T) {
+	a, tt := newTestApp(t)
+	a.mutate("", func() {
+		p, _ := a.doc.AddChild(a.doc.Root.ID, "很长的一列")
+		for i := range 700 {
+			_, _ = a.doc.AddChild(p.ID, fmt.Sprintf("第 %d 个主题", i+1))
+		}
+	})
+	tt.Frame()
+	var waiting []func()
+	a.async = func(work func() (any, error), done func(any, error)) {
+		waiting = append(waiting, func() { done(work()) })
+	}
+	out := filepath.Join(t.TempDir(), "大图.png")
+	a.plat.(*fakePlatform).savePath = out
+	a.askExportImage()
+	if len(waiting) != 1 || !a.imageBusy {
+		t.Fatalf("the picture is written on the window's time (%d waiting, err %q)", len(waiting), a.saveErr)
+	}
+	tt.Frame()
+	if _, ok := tt.Find("正在导出图片"); !ok {
+		t.Fatal("no sign of the wait on the export key")
+	}
+	a.askExportImage() // again meanwhile: not begun twice
+	if len(waiting) != 1 {
+		t.Fatal("a second picture begun while the first is written")
+	}
+	waiting[0]()
+	tt.Frame()
+	if _, ok := tt.Find("导出"); !ok || a.imageBusy {
+		t.Fatal("the export key did not come back")
+	}
+	file, err := os.Open(out)
+	if err != nil {
+		t.Fatal(err, a.saveErr)
+	}
+	defer file.Close()
+	cfg, err := png.DecodeConfig(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if max(cfg.Width, cfg.Height) > exportMaxSide || cfg.Width*cfg.Height > exportMaxPixels {
+		t.Fatalf("a picture of %d×%d", cfg.Width, cfg.Height)
+	}
+	if cfg.Height < exportMaxSide-8 {
+		t.Fatalf("smaller than it need be: %d×%d", cfg.Width, cfg.Height)
+	}
+	if !strings.Contains(a.notice, "%") {
+		t.Fatalf("not said that it was drawn smaller: %q", a.notice)
+	}
+	// A map that fits is drawn at twice its size, as ever.
+	if s := exportFit(1200, 900); s != exportScale {
+		t.Fatalf("a small map at %v", s)
+	}
+	if s := exportFit(6000, 6000); s*6000*s*6000 > exportMaxPixels*1.001 {
+		t.Fatalf("a square map at %v", s)
 	}
 }
 

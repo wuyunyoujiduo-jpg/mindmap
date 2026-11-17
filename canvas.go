@@ -579,7 +579,15 @@ func (a *app) canvasArea(c *ui.Context) {
 			}
 			iconButton(c, iconLevels, "层级", "折叠 / 展开到第几层", 28, true).Menu(a.levelMenu)
 			a.taskFilterKey(c)
-			iconButton(c, iconDownload, "导出", "导出图片、Markdown、XMind…", 28, true).Menu(a.exportMenu)
+			// While a picture is being written its key waits, in its place
+			// and of its size (wait.go: one action, on its key).
+			if waitShown(c, "key:导出图片", a.imageBusy) {
+				ui.Box(c.Key("导出中")).Size(28, 28).Center().Shrink(0).Label("正在导出图片").Tooltip("正在导出图片…").Children(func() {
+					ui.Spinner(c).Size(13, 13)
+				})
+			} else {
+				iconButton(c, iconDownload, "导出", "导出图片、Markdown、XMind…", 28, true).Menu(a.exportMenu)
+			}
 		})
 	})
 }

@@ -29,6 +29,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -116,14 +117,16 @@ type extension struct {
 	Content  json.RawMessage `json:"content"`
 }
 
-// topicExtra is what a topic carries that XMind has no place for.
+// topicExtra is what a topic carries that XMind has no place for. Its
+// attached files are in the archive's resources, as its picture is.
 type topicExtra struct {
-	Task     *model.Task      `json:"task,omitempty"`
-	Markers  []string         `json:"markers,omitempty"`
-	Style    *model.NodeStyle `json:"style,omitempty"`
-	Links    []string         `json:"links,omitempty"`
-	Summary  *model.Mark      `json:"summary,omitempty"`
-	Boundary *model.Mark      `json:"boundary,omitempty"`
+	Task     *model.Task        `json:"task,omitempty"`
+	Markers  []string           `json:"markers,omitempty"`
+	Style    *model.NodeStyle   `json:"style,omitempty"`
+	Links    []string           `json:"links,omitempty"`
+	Files    []model.Attachment `json:"files,omitempty"`
+	Summary  *model.Mark        `json:"summary,omitempty"`
+	Boundary *model.Mark        `json:"boundary,omitempty"`
 }
 
 // sheetExtra is what a sheet carries that XMind has no place for.
@@ -349,9 +352,12 @@ func exportTopic(n *model.Node, pictures map[string]bool) *topic {
 		t.Children.Summary = []*topic{exportTopic(st, pictures)}
 		t.Summaries = []summary{{ID: model.NewID(), Range: fmt.Sprintf("(0,%d)", len(n.Children)-1), TopicID: st.ID}}
 	}
-	if n.Task != nil || len(n.Markers) > 0 || n.Style != nil || len(n.Links) > 0 || n.Boundary != nil {
+	for _, a := range n.Files { // into the archive, beside the pictures
+		pictures[a.File] = true
+	}
+	if n.Task != nil || len(n.Markers) > 0 || n.Style != nil || len(n.Links) > 0 || n.Boundary != nil || len(n.Files) > 0 {
 		extra, _ := json.Marshal(topicExtra{Task: n.Task, Markers: n.Markers, Style: n.Style, Links: n.Links,
-			Boundary: n.Boundary})
+			Files: n.Files, Boundary: n.Boundary})
 		t.Extensions = []extension{{Provider: provider, Content: extra}}
 	}
 	return t
@@ -401,8 +407,30 @@ func Import(r io.ReaderAt, size int64, assetsDir string) (*model.File, error) {
 	if len(out.Sheets) == 0 {
 		return nil, fmt.Errorf("XMind 文件里没有画布")
 	}
+	im.relink(out)
 	out.Version = model.FormatVersion
 	return out, nil
+}
+
+// relink has what names a topic of the map by its ID name it by the ID it
+// has here: every topic gets a new one, and a link to a topic of the map
+// itself (mindmap:#id), copied as it was, led nowhere.
+func (im *importer) relink(f *model.File) {
+	const own = "mindmap:#"
+	f.Walk(func(n *model.Node) {
+		for i, l := range n.Links {
+			if id, ok := im.ids[strings.TrimPrefix(l, own)]; ok && strings.HasPrefix(l, own) {
+				n.Links[i] = own + id
+			}
+		}
+		if n.Task != nil {
+			for i, id := range n.Task.After {
+				if to, ok := im.ids[id]; ok {
+					n.Task.After[i] = to
+				}
+			}
+		}
+	})
 }
 
 type importer struct {
@@ -501,6 +529,11 @@ func (im *importer) topic(t *topic) *model.Node {
 			if extra.Links != nil {
 				n.Links = extra.Links
 			}
+			for _, a := range extra.Files {
+				if file := im.attachment(a.File); file != "" {
+					n.Files = append(n.Files, model.Attachment{File: file, Name: a.Name})
+				}
+			}
 			if extra.Markers != nil {
 				n.Markers = extra.Markers
 			}
@@ -527,7 +560,35 @@ func addMarker(markers []string, m string) []string {
 	return append(markers, m)
 }
 
+// attachment copies a file attached to a topic out of the archive into the
+// assets folder, and returns its name there: the one it had when that is a
+// plain name and free, else a new one.
+func (im *importer) attachment(name string) string {
+	data, err := im.read("resources/" + name)
+	if err != nil || im.assetsDir == "" {
+		return ""
+	}
+	if err := os.MkdirAll(im.assetsDir, 0o755); err != nil {
+		return ""
+	}
+	file := name
+	if _, err := os.Stat(filepath.Join(im.assetsDir, file)); err == nil || !plainName.MatchString(name) {
+		file = model.NewID() + strings.ToLower(path.Ext(path.Base(name)))
+		if !plainName.MatchString(file) {
+			file = model.NewID()
+		}
+	}
+	if err := os.WriteFile(filepath.Join(im.assetsDir, file), data, 0o644); err != nil {
+		return ""
+	}
+	return file
+}
+
+// plainName is a file's name that names nothing outside its folder.
+var plainName = regexp.MustCompile(`^[0-9A-Za-z_-][0-9A-Za-z_.-]{0,127}$`)
+
 // picture copies a topic's picture into the assets folder.
+
 func (im *importer) picture(src string, w, h int) *model.Image {
 	name := strings.TrimPrefix(src, "xap:")
 	if img, ok := im.saved[name]; ok {

@@ -56,18 +56,46 @@ func (d *Document) Ancestors(a, b string) bool {
 // ParseOutline makes nodes of text: a line each, nested by indentation,
 // as an outline or a Markdown list is written. Bullets, checkboxes and
 // numbers before a line's text are taken off; a checked box makes a done
-// task and an empty one a task to do. Headings ("# ") nest by their level.
+// task and an empty one a task to do, and what its line says of it in
+// brackets at its end, as Markdown writes it, is the task's (taskMarks).
+// Headings ("# ") nest by their level. A quoted line ("> ") is of the note
+// of the line above it; a line that begins 〔概要〕 is the topic of the
+// summary of the node it is under, after that node's children.
 func ParseOutline(text string) []*Node {
+	roots, _ := parseOutline(text, false)
+	return roots
+}
+
+// ParseCanvas reads a canvas as Markdown writes one, and gives its nodes
+// and its floating topics: as ParseOutline, and the tags at a line's end
+// (#tag) and the mark of a floating topic at its head too. Those two are
+// read of a map written out only, not of whatever is pasted or an AI
+// answers: there a #word at a line's end is words.
+func ParseCanvas(text string) (nodes, floating []*Node) {
+	return parseOutline(text, true)
+}
+
+func parseOutline(text string, written bool) (roots, floating []*Node) {
 	type level struct {
 		indent int
 		node   *Node
 	}
-	var roots []*Node
 	var stack []level
+	noted := map[*Node]bool{}
 	for _, raw := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
 		line := strings.TrimRight(strings.ReplaceAll(raw, "\t", "    "), " ")
 		trimmed := strings.TrimLeft(line, " ")
 		if trimmed == "" || strings.HasPrefix(trimmed, "---") {
+			continue
+		}
+		if strings.HasPrefix(trimmed, ">") && len(stack) > 0 { // of the note of the line above
+			n := stack[len(stack)-1].node
+			q := strings.TrimPrefix(strings.TrimLeft(raw, " \t")[1:], " ")
+			if noted[n] {
+				n.Note += "\n"
+			}
+			n.Note += q
+			noted[n] = true
 			continue
 		}
 		indent := len(line) - len(trimmed)
@@ -85,6 +113,13 @@ func ParseOutline(text string) []*Node {
 		if i := strings.Index(trimmed, ". "); i > 0 && i <= 3 && strings.Trim(trimmed[:i], "0123456789") == "" {
 			trimmed = strings.TrimSpace(trimmed[i+2:])
 		}
+		summary, floats := false, false
+		var at *Point
+		if strings.HasPrefix(trimmed, SummaryPrefix) {
+			summary, trimmed = true, strings.TrimSpace(trimmed[len(SummaryPrefix):])
+		} else if written {
+			trimmed, at, floats = floatingMark(trimmed)
+		}
 		switch {
 		case strings.HasPrefix(trimmed, "[ ] "):
 			task, trimmed = &Task{Status: StatusTodo}, trimmed[4:]
@@ -92,26 +127,44 @@ func ParseOutline(text string) []*Node {
 			task, trimmed = &Task{Status: StatusDone}, trimmed[4:]
 		}
 		title, links := trailingLinks(strings.TrimSpace(trimmed))
+		var tags []string
+		if written {
+			title, tags = trailingTags(title)
+		}
+		if task != nil {
+			title = taskMarks(title, task)
+		}
+		if written && title == untitled {
+			title = ""
+		}
 		n := NewNode(title)
-		n.Task = task
-		n.Links = links
+		n.Task, n.Links, n.Tags = task, links, tags
 		for len(stack) > 0 && stack[len(stack)-1].indent >= indent {
 			stack = stack[:len(stack)-1]
 		}
-		if len(stack) == 0 {
+		switch {
+		case floats:
+			n.Pos = at
+			floating = append(floating, n)
+		case len(stack) == 0:
 			roots = append(roots, n)
-		} else {
+		default:
 			p := stack[len(stack)-1].node
-			p.Children = append(p.Children, n)
+			if summary && p.Summary == nil && len(p.Children) > 0 {
+				p.Summary = &Mark{Topic: n}
+			} else {
+				p.Children = append(p.Children, n)
+			}
 		}
 		stack = append(stack, level{indent, n})
 	}
-	return roots
+	return roots, floating
 }
 
 // trailingLinks takes the links written at a line's end, after a space,
-// as "<clip:id>", "<mindmap:map#id>", "<skill:name>" or "<https://…>", off its title, as
-// the AI writes them in outlines; "List<String>" stays a title.
+// as "<clip:id>", "<mindmap:map#id>", "<skill:name>", "<https://…>" or
+// "<file:path>", off its title, as the AI writes them in outlines and
+// Markdown writes a node's; "List<String>" stays a title.
 func trailingLinks(line string) (string, []string) {
 	var links []string
 	for strings.HasSuffix(line, ">") {
@@ -120,9 +173,18 @@ func trailingLinks(line string) (string, []string) {
 			break
 		}
 		l := line[i+2 : len(line)-1]
-		if strings.ContainsAny(l, " <>") || !(strings.HasPrefix(l, "clip:") || strings.HasPrefix(l, "mindmap:") || strings.HasPrefix(l, "skill:") ||
-			strings.HasPrefix(l, "http://") || strings.HasPrefix(l, "https://")) {
+		known := strings.HasPrefix(l, fileStart)
+		for _, s := range linkStarts {
+			known = known || strings.HasPrefix(l, s)
+		}
+		if strings.ContainsAny(l, " <>") || !known {
 			break
+		}
+		// A space of a map's name or a file's path, written as %20.
+		if strings.HasPrefix(l, fileStart) {
+			l = strings.ReplaceAll(l[len(fileStart):], "%20", " ")
+		} else if strings.HasPrefix(l, "mindmap:") {
+			l = strings.ReplaceAll(l, "%20", " ")
 		}
 		links = append([]string{l}, links...)
 		line = strings.TrimSpace(line[:i])
