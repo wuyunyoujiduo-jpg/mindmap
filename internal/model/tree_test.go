@@ -55,6 +55,30 @@ func TestParseOutline(t *testing.T) {
 	}
 }
 
+// A line is of the note above it when it begins "> ", or is ">" alone:
+// not any line that begins with >; and a quote with no line above it is
+// lines, without the mark.
+func TestParseOutlineQuotes(t *testing.T) {
+	nodes := ParseOutline("会议纪要\n>= 5 人\n>不是备注")
+	if len(nodes) != 3 || nodes[0].Note != "" || nodes[1].Title != ">= 5 人" || nodes[2].Title != ">不是备注" {
+		t.Fatalf("%d topics, the first with the note %q", len(nodes), nodes[0].Note)
+	}
+	nodes = ParseOutline("标题\n> 备注\n>\n> 第三行\n下一个")
+	if len(nodes) != 2 || nodes[0].Note != "备注\n\n第三行" || nodes[1].Title != "下一个" {
+		t.Fatalf("%d topics, the note %q", len(nodes), nodes[0].Note)
+	}
+	nodes = ParseOutline("> 引用的第一行\n> 引用的第二行\n>\n正文\n> 正文的备注")
+	if len(nodes) != 3 || nodes[0].Title != "引用的第一行" || nodes[0].Note != "" || nodes[1].Title != "引用的第二行" ||
+		nodes[2].Title != "正文" || nodes[2].Note != "正文的备注" {
+		t.Fatalf("a quote with no line above it: %d topics, the first %q with the note %q", len(nodes), nodes[0].Title, nodes[0].Note)
+	}
+	// What is pasted has no tags read of it, and a \ the app wrote is taken off.
+	nodes = ParseOutline(MarkdownNodes([]*Node{NewNode("修复 #bug"), NewNode("〔概要〕不是概要")}))
+	if len(nodes) != 2 || nodes[0].Title != "修复 #bug" || nodes[1].Title != "〔概要〕不是概要" {
+		t.Fatalf("copied and pasted: %q, %q", nodes[0].Title, nodes[len(nodes)-1].Title)
+	}
+}
+
 func TestFloating(t *testing.T) {
 	d := New("根")
 	a, _ := d.AddChild(d.Root.ID, "A")

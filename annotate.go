@@ -196,6 +196,32 @@ func (a *app) settleSummaries(were []string) {
 	}
 }
 
+// healSummaries does so for a map as it is opened or read again, whose
+// file may have such a summary already: written before the app saw to
+// them, or left so by a merge. It is done there, and not in the first
+// change made to the map: no step of the user's holds it, and no 撤销 of
+// theirs takes it back with what they did. The map is marked changed only
+// when one was mended. quiet says nothing of it, where what read the map
+// again has its own word to say.
+func (a *app) healSummaries(quiet bool) {
+	if a.file == nil {
+		return
+	}
+	made := a.file.SettleSummaries()
+	if len(made) == 0 {
+		return
+	}
+	a.dirty, a.changed = true, a.now()
+	if quiet {
+		return
+	}
+	if len(made) > 1 {
+		a.tell(fmt.Sprintf("%d 个概要没有可概括的子主题，之前看不见，现在是所在主题的子主题", len(made)))
+		return
+	}
+	a.tell("概要「" + cmpOr(made[0].Title, "未命名") + "」没有可概括的子主题，之前看不见，现在是所在主题的子主题")
+}
+
 // rootSummaryShown tells whether a structure draws the summary of the
 // topic in the canvas's middle: those that grow one way do, a logic chart,
 // a bracket chart and an org chart; a mind map, with branches on both

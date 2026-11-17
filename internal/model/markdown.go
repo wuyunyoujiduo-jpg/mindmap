@@ -120,7 +120,7 @@ func itemLine(n *Node) string {
 			b.WriteString("[ ] ")
 		}
 	}
-	title := oneLine(n.Title)
+	title := escapeTitle(oneLine(n.Title))
 	if title == "" {
 		title = untitled
 	}
@@ -175,7 +175,8 @@ func oneLine(s string) string {
 }
 
 // trailingTags takes the tags written at a line's end, each after a space
-// as #tag, off its title.
+// as #tag, off its title. A number is not one: "Issue #42" came in as
+// "Issue" with a tag 42.
 func trailingTags(line string) (string, []string) {
 	var tags []string
 	for {
@@ -184,13 +185,57 @@ func trailingTags(line string) (string, []string) {
 			break
 		}
 		tag := line[i+2:]
-		if tag == "" || strings.ContainsAny(tag, " \t#") {
+		if !tagWord(tag) {
 			break
 		}
 		tags = append([]string{tag}, tags...)
 		line = strings.TrimRight(line[:i], " ")
 	}
 	return line, tags
+}
+
+// tagWord tells whether what follows a # at a line's end is read as a
+// tag: a word, not of digits alone.
+func tagWord(tag string) bool {
+	return tag != "" && !strings.ContainsAny(tag, " \t#") && strings.Trim(tag, "0123456789") != ""
+}
+
+// escapeTitle writes a title so that none of its own words is read back
+// as a mark of the outline: a #word at its end, which would be a tag, and
+// 〔概要〕 or 〔自由主题 at its head, a summary's topic or a floating one's,
+// each get a \ before them (and one more before those that have one, so
+// that every title comes back as it was). unescapeTitle takes it off.
+func escapeTitle(title string) string {
+	if marked(strings.TrimLeft(title, `\`)) {
+		title = `\` + title
+	}
+	if i := strings.LastIndex(title, " "); i >= 0 && tagMarked(title[i+1:]) {
+		title = title[:i+1] + `\` + title[i+1:]
+	}
+	return title
+}
+
+func unescapeTitle(title string) string {
+	if strings.HasPrefix(title, `\`) && marked(strings.TrimLeft(title, `\`)) {
+		title = title[1:]
+	}
+	if i := strings.LastIndex(title, " "); i >= 0 && strings.HasPrefix(title[i+1:], `\`) && tagMarked(title[i+1:]) {
+		title = title[:i+1] + title[i+2:]
+	}
+	return title
+}
+
+// marked tells whether a title begins as a summary's topic or a floating
+// one is written.
+func marked(title string) bool {
+	return strings.HasPrefix(title, SummaryPrefix) || strings.HasPrefix(title, FloatingPrefix)
+}
+
+// tagMarked tells whether a title's last word is a tag as written, after
+// any \ before it.
+func tagMarked(word string) bool {
+	word = strings.TrimLeft(word, `\`)
+	return strings.HasPrefix(word, "#") && tagWord(word[1:])
 }
 
 // taskMarks reads what a task's line says of it in brackets at its end, as

@@ -350,7 +350,7 @@ func (a *app) copyNodes(cut bool) {
 			pairIDs(a.clipCut, c, n) // the clipboard's ID to the one it had
 		}
 	}
-	a.clipAssets = model.AssetsDir(a.path)
+	a.clipAssets, a.clipFrom = model.AssetsDir(a.path), a.path
 	a.clipText = model.MarkdownNodes(nodes)
 	a.plat.CopyText(a.clipText)
 	if cut {
@@ -404,12 +404,16 @@ func (a *app) paste() bool {
 // still finds them, where a cut and a paste, which is how a branch is
 // moved by the keys, left every such link pointing at nothing. Pasted
 // again they are copies; and copies the first time too when one of those
-// IDs is in the map, the cut having been undone. carry, run once they are
-// in the map, has what was drawn of them follow them (carryDias).
+// IDs is in the map, the cut having been undone, or when the map is not
+// the one they were cut from: that map's steps outlive its being left,
+// and ⌘Z there brought the topics back by the IDs another map had by
+// then, one 图解 and one place in the links' index serving both. carry,
+// run once they are in the map, has what was drawn of them follow them
+// (carryDias).
 func (a *app) clipNodes() (nodes []*model.Node, carry func()) {
 	cut := a.clipCut
 	a.clipCut = nil // moved once
-	same := cut != nil
+	same := cut != nil && a.clipFrom == a.path
 	for _, had := range cut {
 		if a.file.Node(had) != nil {
 			same = false

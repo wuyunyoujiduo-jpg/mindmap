@@ -707,12 +707,23 @@ func TestTodaySideProjects(t *testing.T) {
 	a.addTask("交报销", nil) // into the inbox
 	search := find(t, a, "搜索")
 	a.mutate("", func() { search.SetStatus(model.StatusDone, a.now()) }) // so that a ring shows how far
+	// Maps never opened stand by when they were written, the last first:
+	// each its own time, 项目0 the last. Written one after another they
+	// had the times the clock's tick gave them, and 项目0, when its tick
+	// was before the others', stood last, under the window's foot, where
+	// the pointer does not reach it: one run in nine failed so.
+	written := time.Now().Add(-time.Minute)
 	for i := range 8 {
 		f := model.NewFile(fmt.Sprint("项目", i))
 		n := model.NewNode("一件事")
 		n.SetStatus(model.StatusTodo, a.now())
 		f.Sheets[0].Root.Children = append(f.Sheets[0].Root.Children, n)
-		if err := f.Save(filepath.Join(a.dir, model.FileName(fmt.Sprint("项目", i)))); err != nil {
+		path := filepath.Join(a.dir, model.FileName(fmt.Sprint("项目", i)))
+		if err := f.Save(path); err != nil {
+			t.Fatal(err)
+		}
+		at := written.Add(-time.Duration(i) * time.Second)
+		if err := os.Chtimes(path, at, at); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -749,6 +760,9 @@ func TestTodaySideProjects(t *testing.T) {
 	// Folded: a few, and the way to them all.
 	if !tt.HasText("全部项目") || tt.HasText("只看 项目7") && tt.HasText("只看 项目0") && tt.HasText("只看 项目3") && tt.HasText("只看 项目5") && tt.HasText("只看 项目1") && tt.HasText("只看 项目2") && tt.HasText("只看 项目4") && tt.HasText("只看 项目6") {
 		t.Fatalf("not folded: %q", tt.Texts())
+	}
+	if !tt.HasText("只看 项目0") || tt.HasText("只看 项目7") {
+		t.Fatalf("folded, not the maps written last show: %q", tt.Texts())
 	}
 	snapshot(t, tt, "today-side")
 	if err := tt.Click("全部项目"); err != nil {

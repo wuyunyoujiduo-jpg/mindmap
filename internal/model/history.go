@@ -11,6 +11,7 @@ type History struct {
 	// weigh.
 	bytes int64
 	keep  int
+	steps uint64 // how many steps were recorded, the number of the last
 }
 
 // State is what a step of the history restores.
@@ -19,6 +20,7 @@ type State struct {
 	Sheet    string // the ID of the canvas shown
 	Selected string // the ID of the node selected
 	weight   int64  // about the bytes its file holds, once in a history
+	step     uint64 // the number of the step it is the state before, or after
 }
 
 // NewHistory returns a history keeping up to limit steps.
@@ -118,9 +120,33 @@ func (h *History) trim() {
 
 // Record saves the state before a change and forgets what could be redone.
 func (h *History) Record(s State) {
-	h.undo = append(h.undo, s.clone())
+	s = s.clone()
+	h.steps++
+	s.step = h.steps
+	h.undo = append(h.undo, s)
 	h.redo = nil
 	h.trim()
+}
+
+// LastStep is the number of the step recorded last: what a change that
+// must follow its own undo and redo keeps (Step).
+func (h *History) LastStep() uint64 { return h.steps }
+
+// Step says where the step of a number is: 1 when it is made and can be
+// undone, -1 when it is undone and can be made again, 0 when it is
+// neither, forgotten for its age or for a step recorded after its undo.
+func (h *History) Step(step uint64) int {
+	for _, s := range h.undo {
+		if s.step == step {
+			return 1
+		}
+	}
+	for _, s := range h.redo {
+		if s.step == step {
+			return -1
+		}
+	}
+	return 0
 }
 
 // Undo returns the state before the last change, given the current one,
@@ -132,7 +158,9 @@ func (h *History) Undo(cur State) (State, bool) {
 	s := h.undo[len(h.undo)-1]
 	h.undo[len(h.undo)-1] = State{}
 	h.undo = h.undo[:len(h.undo)-1]
-	h.redo = append(h.redo, cur.clone())
+	cur = cur.clone()
+	cur.step = s.step // the same step, from its other side
+	h.redo = append(h.redo, cur)
 	return s.clone(), true
 }
 
@@ -144,7 +172,9 @@ func (h *History) Redo(cur State) (State, bool) {
 	s := h.redo[len(h.redo)-1]
 	h.redo[len(h.redo)-1] = State{}
 	h.redo = h.redo[:len(h.redo)-1]
-	h.undo = append(h.undo, cur.clone())
+	cur = cur.clone()
+	cur.step = s.step
+	h.undo = append(h.undo, cur)
 	h.trim()
 	return s.clone(), true
 }

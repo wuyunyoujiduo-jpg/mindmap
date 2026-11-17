@@ -172,7 +172,10 @@ type app struct {
 	clipText   string
 	// clipCut is, of topics cut, the ID each had by its ID on the
 	// clipboard: pasted, what was drawn of them follows them (carryDias).
-	clipCut map[string]string
+	// clipFrom is the map they were cut from, the one map where a paste
+	// gives them back by those IDs (clipNodes).
+	clipCut  map[string]string
+	clipFrom string
 	// movedOut are the branches moved to other maps while the app runs:
 	// an undo that brings one back here takes it out there (movesFollow).
 	movedOut []*movedOut
@@ -646,6 +649,7 @@ func (a *app) open(path string) error {
 	a.modTime = modTime(path)
 	a.dirty, a.saveErr, a.lastEdit = false, "", ""
 	a.savedAt = time.Time{}
+	a.healSummaries(false) // a summary its file had with no child, mended now and in no step of the user's
 	a.restoreView(f)
 	a.adoptDias()
 	a.cfg.File = path
@@ -1025,6 +1029,7 @@ func (a *app) state() model.State {
 func (a *app) restore(s model.State) {
 	a.edits++
 	a.file, a.doc = s.File, nil
+	a.healSummaries(true) // of a file read again, or a merge's
 	a.editing, a.lastEdit = "", ""
 	if d, _ := a.file.Sheet(s.Sheet); d == nil {
 		s.Sheet = a.file.Sheets[0].ID
