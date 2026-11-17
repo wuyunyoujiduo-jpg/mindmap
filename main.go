@@ -630,6 +630,14 @@ func main() {
 				item("只亮没做完的任务", "", func() { a.taskFilter = taskFilterOpen; a.mode = viewMap }),
 				item("只亮本周的任务", "", func() { a.taskFilter = taskFilterWeek; a.mode = viewMap }),
 				mygo.Separator(),
+				// The canvas's lenses (lens.go), as its row at the lower left.
+				{Label: "镜头", Submenu: []*mygo.MenuItem{
+					item("分支", "", func() { a.menuLens(lensBranch) }),
+					item("新旧", "", func() { a.menuLens(lensAge) }),
+					item("来源", "", func() { a.menuLens(lensSrc) }),
+					item("进度", "", func() { a.menuLens(lensTask) }),
+				}},
+				mygo.Separator(),
 				item("放大", "CmdOrCtrl+=", func() { a.zoomStep(true) }),
 				item("缩小", "CmdOrCtrl+-", func() { a.zoomStep(false) }),
 				item("实际大小", "CmdOrCtrl+0", func() { a.setZoom(1) }),

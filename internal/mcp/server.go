@@ -390,6 +390,7 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 // write saves a map an agent changed, keeping the versions before and after.
 func (s *Server) write(path string, before, after *model.File, summary string) error {
 	now := s.Now()
+	model.StampChanges(before, after, now) // when each topic it changed did
 	_, _ = s.Versions.Save(path, before, versions.BeforeAI, "", now)
 	if err := after.Save(path); err != nil {
 		return err

@@ -46,6 +46,7 @@ const (
 	iconForward // on: a chevron to the right
 	iconFilter  // what shows is narrowed: three lines, each shorter
 	iconDiagram // a topic's 图解: a step and the next, joined
+	iconLens    // the canvas's lenses: a circle, half of it filled
 )
 
 // glyph is an icon drawn in a box of the given side, as a piece of text.
@@ -151,6 +152,12 @@ func drawIcon(p *ui.Painter, r ui.Rect, s float32, ic icon, col ui.Color) {
 		p.StrokePath(roundedRect(cx-h*0.8, cy-h*0.7, h*0.42, h*1.4, h*0.08), w, col)
 		p.StrokePath(roundedRect(cx-h*0.25, cy-h*0.7, h*0.42, h*1.4, h*0.08), w, col)
 		p.StrokePath(new(ui.Path).MoveTo(cx+h*0.35, cy-h*0.55).LineTo(cx+h*0.68, cy-h*0.68).LineTo(cx+h*0.95, cy+h*0.62).LineTo(cx+h*0.62, cy+h*0.75).Close(), w, col)
+	case iconLens: // a circle, its right half filled: one thing seen two ways
+		r := h * 0.72
+		const k = 0.5523 // a quarter of a circle as a curve
+		p.StrokePath(new(ui.Path).Circle(cx, cy, r), w, col)
+		p.FillPath(new(ui.Path).MoveTo(cx, cy-r).CubeTo(cx+r*k, cy-r, cx+r, cy-r*k, cx+r, cy).
+			CubeTo(cx+r, cy+r*k, cx+r*k, cy+r, cx, cy+r).Close(), col)
 	case iconDiagram: // two boxes, the second lower and further on, a line from one to the other
 		p.StrokePath(roundedRect(cx-h*0.85, cy-h*0.75, h*0.9, h*0.62, h*0.14), w, col)
 		p.StrokePath(roundedRect(cx-h*0.05, cy+h*0.13, h*0.9, h*0.62, h*0.14), w, col)

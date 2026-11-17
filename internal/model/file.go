@@ -38,6 +38,11 @@ type File struct {
 	// it: what a session did, a decision, a thing written down, a change
 	// to the map. The newest last.
 	Log []LogEntry `json:"log,omitempty"`
+	// Dated is the time of the topics that say none of their own
+	// (Node.Changed): the file's as it was when it was first read by an
+	// app that keeps them (Load). Without it they took the file's time,
+	// which is now at every save.
+	Dated time.Time `json:"dated,omitzero"`
 }
 
 // Kinds of a log's entry.
@@ -224,7 +229,7 @@ func (f *File) MoveSheet(from, to int) {
 // Clone returns a deep copy of the file.
 func (f *File) Clone() *File {
 	c := &File{Version: f.Version, Project: f.Project, GitHub: f.GitHub, Sheets: make([]*Document, len(f.Sheets)),
-		Measures: slices.Clone(f.Measures), Color: f.Color, Repo: f.Repo}
+		Measures: slices.Clone(f.Measures), Color: f.Color, Repo: f.Repo, Dated: f.Dated}
 	for _, e := range f.Log {
 		e.Nodes = slices.Clone(e.Nodes)
 		c.Log = append(c.Log, e)

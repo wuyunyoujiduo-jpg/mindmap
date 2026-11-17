@@ -66,6 +66,8 @@ type fileView struct {
 	Sheet string              `json:"sheet"`
 	Mode  int                 `json:"mode"`
 	Cams  map[string]camState `json:"cams"`
+	// Lens is how the map's canvas was colored (lens.go); "" by its branches.
+	Lens string `json:"lens,omitempty"`
 }
 
 func viewsPath() string {
@@ -110,7 +112,7 @@ func (a *app) rememberView() {
 		return
 	}
 	a.cam().selected = a.selected
-	v := &fileView{Sheet: a.doc.ID, Mode: a.mode, Cams: map[string]camState{}}
+	v := &fileView{Sheet: a.doc.ID, Mode: a.mode, Cams: map[string]camState{}, Lens: a.lens}
 	if v.Mode == viewDiagram { // a diagram is come back from, to the map
 		v.Mode = viewMap
 	}
@@ -137,7 +139,11 @@ func (a *app) restoreView(f *model.File) {
 		a.hist = newHistory()
 	}
 	sheet := f.Sheets[0].ID
+	a.lens, a.lensRoot = lensBranch, false // a map never looked at through one is by its branches
 	if v := a.views[a.path]; v != nil {
+		if lensNamed(v.Lens) {
+			a.lens = v.Lens
+		}
 		for id, c := range v.Cams {
 			if d, _ := f.Sheet(id); d == nil {
 				continue

@@ -382,6 +382,8 @@ func (a *app) canvasArea(c *ui.Context) {
 		a.selected, a.multi = shown.Root.ID, nil
 	}
 	a.progress = progressOf(shown.Root)
+	lens := a.lensLooks() // nil by the branches, and in a picture
+	a.lensShown, a.lensQuiet = lens, lens != nil && a.lensOver()
 	r := layout.Compute(shown, a.measure(c), layoutOptions(a.doc.Structure))
 	if shown == a.doc {
 		r = a.layoutFloating(r, a.measure(c), layoutOptions(a.doc.Structure))
@@ -486,8 +488,13 @@ func (a *app) canvasArea(c *ui.Context) {
 		}
 		a.justFloated = false
 		a.multi = nil
+		if lens != nil && !a.overNode() && !a.overLensRow(c) && a.editing == "" && a.relFrom == "" {
+			// Under a lens the bare canvas is nothing chosen: the right
+			// column says the lens again.
+			a.selected, a.lensRoot = shown.Root.ID, false
+		}
 	}
-	if cv.DoubleClicked() && !exporting && shown == a.doc && !a.overNode() {
+	if cv.DoubleClicked() && !exporting && shown == a.doc && !a.overNode() && !a.overLensRow(c) {
 		x, y := a.pointer[0], a.pointer[1]
 		a.later(func() { // a floating topic where it was double-clicked
 			a.addFloatingAt(x, y)
@@ -499,11 +506,18 @@ func (a *app) canvasArea(c *ui.Context) {
 	}
 	cv.Draw(func(p *ui.Painter, rect ui.Rect) {
 		color := func(id string) ui.Color {
+			if lens != nil {
+				return hairline(t) // a lens has one hue, and it is the topics'
+			}
 			col := lk.branch(branch[id])
 			if a.filtering() {
 				col = col.Alpha(0.3)
 			}
 			return col
+		}
+		relations := ui.Hex("#6366f1")
+		if lens != nil {
+			relations = faint(t)
 		}
 		view := rect
 		if exporting {
@@ -514,7 +528,7 @@ func (a *app) canvasArea(c *ui.Context) {
 			a.drawBoundaries(p, r, shown, rect.X+cam.X, rect.Y+cam.Y, z, color)
 			drawEdges(p, r, a.doc.Structure, rect.X+cam.X, rect.Y+cam.Y, z, lk.line, view, soft)
 			a.drawSummaries(p, r, shown, rect.X+cam.X, rect.Y+cam.Y, z, color)
-			a.drawRelations(p, r, rect.X+cam.X, rect.Y+cam.Y, z, ui.Hex("#6366f1"))
+			a.drawRelations(p, r, rect.X+cam.X, rect.Y+cam.Y, z, relations)
 		}
 		if exporting {
 			lines()
@@ -541,7 +555,11 @@ func (a *app) canvasArea(c *ui.Context) {
 			if floating[n.ID] != nil {
 				depth++ // floating topics look as main topics
 			}
-			a.nodeView(c.Key(n.ID), n, depth, box, lk.branch(branch[n.ID]))
+			col := lk.branch(branch[n.ID])
+			if lens != nil {
+				col = t.TextMuted // what a topic draws in its branch's color: its ring, its key to fold
+			}
+			a.nodeView(c.Key(n.ID), n, depth, box, col)
 		})
 		if exporting {
 			return
@@ -559,11 +577,13 @@ func (a *app) canvasArea(c *ui.Context) {
 			if floating[a.selected] != nil {
 				depth++
 			}
-			a.nodeBar(c, r, depth)
+			if !a.lensQuiet { // nothing chosen: no topic's bar
+				a.nodeBar(c, r, depth)
+			}
 		}
 		// Zoom and recenter, over the canvas's corner.
 		lifted(ui.Row(c).Absolute().Right(14).Bottom(14).Gap(0).Padding(3, 5).Radius(radiusPill).AlignItems(ui.Center).
-			Background(cardColor(t)), t).Children(func() {
+			Background(cardColor(t)), t).Bind(&a.canvasBar).Children(func() {
 			if iconButton(c, iconMinus, "缩小", "缩小 ⌘-", 28, true).Clicked() {
 				a.zoomStep(false)
 			}
@@ -597,6 +617,7 @@ func (a *app) canvasArea(c *ui.Context) {
 				iconButton(c, iconDownload, "导出", "导出图片、Markdown、XMind…", 28, true).Menu(a.exportMenu)
 			}
 		})
+		a.lensBar(c)
 	})
 }
 
@@ -776,7 +797,9 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 	cam := a.cam()
 	z := cam.Zoom
 	p := a.parts(n)
-	selected := a.isSelected(n.ID)
+	// Under a lens with nothing chosen (lensOver) the middle, which is
+	// what is chosen then, shows no ring: nothing is.
+	selected := a.isSelected(n.ID) && !(depth == 0 && a.lensQuiet)
 	editing := n.ID == a.editing
 	side := 0 // where a node dragged over it would go: -1 before it, 1 after
 
@@ -861,6 +884,28 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 	if st.Border != "" {
 		el.Border(max(st.BorderWidth, 1)*z, ui.Hex(st.Border))
 	}
+	// Through a lens (lens.go) a topic is a step of the lens's one hue,
+	// whatever its branch's color or its own: its fill, its words in the
+	// ink; the step that has none is white with a hairline, its words
+	// muted. Its shape stays, and the middle stays in the ink.
+	lt, lensed := lensTopic{}, false
+	if a.lensShown != nil && depth > 0 {
+		lt, lensed = a.lensShown.topics[n.ID]
+	}
+	if lensed {
+		var plain bool
+		fill, plain = lensFill(t, a.lensShown.lens, lt.step)
+		filled, onFill = false, t.Text
+		el.Background(fill).BorderWidth(0, 0, 0, 0)
+		if plain {
+			onFill = t.TextMuted
+			el.Border(1, hairline(t))
+		}
+		el.TextColor(onFill)
+		if el.Hovered() {
+			el.Tooltip(a.lensFact(n.ID))
+		}
+	}
 	el.Font(a.doc.Style.Font)
 	if selected {
 		el.Border(2*z, t.Accent)
@@ -904,6 +949,9 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 		}
 		if el.DoubleClicked() {
 			a.startEdit(n.ID)
+		}
+		if depth == 0 && el.Clicked() {
+			a.lensRoot = true // chosen by hand: under a lens its page shows, not the lens's
 		}
 		if depth == 0 {
 			// The central node carries the whole map: dragging it moves
@@ -991,6 +1039,10 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 	muted := t.TextMuted
 	if filled {
 		muted = onFill.Alpha(0.75)
+	}
+	linkCol := accentOn(filled, onFill, t.Accent)
+	if lensed {
+		linkCol = muted // a lens has one hue: the links' accent would be a second
 	}
 	el.Children(func() {
 		if side != 0 { // a bar on the edge the node dragged would go by
@@ -1124,7 +1176,7 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 		last := 0
 		for _, r := range titleLinks(n.Title) {
 			spans = append(spans, ui.Span{Text: n.Title[last:r[0]]},
-				ui.Span{Text: n.Title[r[0]:r[1]], Color: accentOn(filled, onFill, t.Accent), Underline: true})
+				ui.Span{Text: n.Title[r[0]:r[1]], Color: linkCol, Underline: true})
 			last = r[1]
 		}
 		spans = append(spans, ui.Span{Text: n.Title[last:]})
@@ -1234,11 +1286,14 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 				})
 			}
 			mark.Children(func() {
-				ui.Text(c, linksMark(links)).FontSize((markSize + 1) * z).TextColor(accentOn(filled, onFill, t.Accent)).NoWrap()
+				ui.Text(c, linksMark(links)).FontSize((markSize + 1) * z).TextColor(linkCol).NoWrap()
 			})
 		}
 	})
 
+	if lensed && a.lensShown.lens == lensSrc && lt.n > 0 {
+		a.lensCount(c, n, [4]float32{box.X, box.Y, box.W, box.H}, a.boxes.Left[n.ID], lt.n)
+	}
 	// The button opening and closing the children, just right of the box.
 	if len(n.Children) > 0 && (n.Collapsed || selected) {
 		s := 18 * z

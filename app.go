@@ -262,6 +262,18 @@ type app struct {
 	codeStat       codeStatus            // how far the code has gone since the baseline
 	refs           *refs                 // the links of every map (refs.go)
 	edits          int                   // counts the open map's changes, for what is worked out from it
+	prints         model.Prints          // what the open map's topics said before the step being made (mutate)
+	printsOf       *model.File           // the file they are of
+	printsAt       int                   // and the count of its changes they are as of
+	stepTopics     []*model.Node         // the topics the step's first change changed
+	lens           string                // how the canvas is colored (lens.go); "" by its branches
+	lensRoot       bool                  // under a lens, the middle was chosen by hand: its page shows, not the lens's
+	lensMemo       *lensData             // the lens's looks, worked out once a change
+	lensShown      *lensData             // those the canvas being built shows, nil by the branches
+	lensQuiet      bool                  // and whether nothing is chosen under it (lensOver)
+	lensRuns       int                   // how many times they were worked out, for the tests
+	lensRow        ui.Handle             // the lens's row on the canvas, and the canvas's own bar: measured,
+	canvasBar      ui.Handle             // so that the one stands over the other where both do not fit
 	nodeIdx        map[string]*nodeIndex // maps' nodes by their words (matcher.go)
 	qpending       map[string]bool       // queries whose vectors are being made
 	attachRef      string                // the material the palette places (paletteAttach)
@@ -1019,8 +1031,15 @@ func (a *app) mutate(key string, fn func()) {
 	if a.doc == nil {
 		return
 	}
-	if key == "" || key != a.lastEdit {
+	step := key == "" || key != a.lastEdit
+	if step {
 		a.hist.Record(a.state())
+		// What the topics say now, to tell after the change which of them
+		// it changed (model.Prints): taken again only when the file is
+		// another, or changed by another way than this.
+		if a.printsOf != a.file || a.printsAt != a.edits {
+			a.prints = model.PrintsOf(a.file)
+		}
 	}
 	a.lastEdit = key
 	sums := a.summarized()
@@ -1029,6 +1048,17 @@ func (a *app) mutate(key string, fn func()) {
 	a.changed = a.now()
 	a.edits++
 	a.settleSummaries(sums)
+	if step {
+		// Once a step, not a key: the next keys of a step are of the
+		// topics its first changed, a title's letters of that title.
+		a.stepTopics = a.prints.Stamp(a.file, a.changed)
+		a.printsOf, a.printsAt = a.file, a.edits
+	} else {
+		at := a.changed.Truncate(time.Second)
+		for _, n := range a.stepTopics {
+			n.Changed = at
+		}
+	}
 }
 
 func (a *app) undo() {

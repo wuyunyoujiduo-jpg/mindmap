@@ -6,6 +6,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 )
 
 // Merge joins two versions of a map changed apart from a version both
@@ -78,12 +79,12 @@ func Merge(base, ours, theirs *File) (merged *File, clashes []Clash) {
 				at[id] = tn.at
 			}
 		case on != nil:
-			if bn != nil && on.at == bn.at && sameJSON(nodeFields(on.n), nodeFields(bn.n)) {
+			if bn != nil && on.at == bn.at && saysSame(on.n, bn.n) {
 				continue // theirs deleted it, ours left it
 			}
 			content[id], at[id] = on.n, on.at
 		case tn != nil:
-			if bn != nil && tn.at == bn.at && sameJSON(nodeFields(tn.n), nodeFields(bn.n)) {
+			if bn != nil && tn.at == bn.at && saysSame(tn.n, bn.n) {
 				continue
 			}
 			content[id], at[id] = tn.n, tn.at
@@ -267,6 +268,9 @@ type merger struct {
 // value merges one JSON value three ways; nil is none.
 func (m *merger) value(path []string, b, o, t json.RawMessage) json.RawMessage {
 	b, o, t = orNil(b), orNil(o), orNil(t)
+	if len(path) == 1 && (path[0] == "changed" || path[0] == "dated") {
+		return when(o, t, path[0] == "changed")
+	}
 	switch {
 	case bytes.Equal(o, t):
 		return o
@@ -294,6 +298,33 @@ func (m *merger) value(path []string, b, o, t json.RawMessage) json.RawMessage {
 		c := m.at
 		c.Field, c.Base, c.Ours, c.Theirs, c.NoBase = slices.Clone(path), b, o, t, m.noBase
 		m.clashes = append(m.clashes, c)
+	}
+	return o
+}
+
+// saysSame tells whether a topic is as it was, when it changed aside: a
+// side written by an app that keeps no such time has none, and a topic
+// deleted on the other side is not one it changed for that.
+func saysSame(n, was *Node) bool {
+	x, y := *n, *was
+	x.Changed, y.Changed = time.Time{}, time.Time{}
+	return sameJSON(nodeFields(&x), nodeFields(&y))
+}
+
+// when merges the time a topic last changed, the later of the two, and the
+// time of a file's topics that say none, the earlier: neither is asked,
+// and one side's having none (a file written by an app before them) takes
+// nothing from the other's.
+func when(o, t json.RawMessage, later bool) json.RawMessage {
+	var ot, tt time.Time
+	if json.Unmarshal(o, &ot) != nil || ot.IsZero() {
+		return t
+	}
+	if json.Unmarshal(t, &tt) != nil || tt.IsZero() {
+		return o
+	}
+	if tt.After(ot) == later {
+		return t
 	}
 	return o
 }

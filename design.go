@@ -81,6 +81,16 @@ func faint(t *ui.Theme) ui.Color {
 	return ui.Hex("#A9A9AF")
 }
 
+// teal is the hue of the lens 来源 (lens.go), and of nothing else: calm,
+// and none of the colors that mean something elsewhere (the accent for
+// what acts, green for done, red for late).
+func teal(t *ui.Theme) ui.Color {
+	if t.Dark {
+		return ui.Hex("#4CC7D3")
+	}
+	return ui.Hex("#0E8F9C")
+}
+
 // pageHeadHeight is the height of a page's heading: more than the
 // toolbar's, for its name stands under the window's edge with room over it.
 const pageHeadHeight = 56

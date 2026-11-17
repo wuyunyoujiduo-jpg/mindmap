@@ -15,6 +15,7 @@ colors:
   primary: "#5B5BD6"      # the one accent: Apple's is blue, MyMind's its own violet-blue
   danger: "#E5484D"
   success: "#30A46C"
+  teal: "#0E8F9C"         # the lens 来源's hue, and nothing else's (dark #4CC7D3)
 
 typography:
   page-title:  { fontSize: 26px, fontWeight: 700, letterSpacing: -0.7px }
@@ -289,6 +290,49 @@ option leant to has the accent's dot and 倾向这个 at 700, the others a
 faint 点一下标出 until one is marked. More than four options are cards down
 the page, white with a hairline (things of a kind), an option's name and
 its one key, 标为倾向, at the head.
+## A map's lenses
+
+镜头 (`lens.go`) color one map another way, and move nothing: a topic's
+box is where it is by its branches, so what a lens adds is never in the
+topic (来源's count is a small tablet on its corner, `lensCount`).
+
+- **The row** (`lensBar`) is words on the canvas at its lower left, not a
+  card: no ground, no shadow. First its name, which is not a choice and
+  does not look as one: a small mark (`iconLens`, a circle half filled)
+  and 镜头 at 11/700, +0.6, muted; a hairline 14 high; then the choices
+  at 12, muted: 分支 · 新旧 · 来源 · 进度, the one chosen in the ink, 700,
+  on the pale block (radius 7), each as wide as its word in bold so that
+  none moves when another is chosen. A white floating bar with the
+  accent's tint was a second row of tabs under the map's, the user found,
+  and the name set as the choices one more of them.
+- **The legend** is at the lower right, as faint: swatches 14 by 10,
+  radius 3, a hairline round each, words at 11 in the faint ink.
+- **Clear of the canvas's bar**, which is at the foot on the right: the
+  row stands beside it, in its middle, while both fit, and over it when
+  they do not, by what the two measure; the legend over the bar, and over
+  the row when the row is there (`TestLensRowKeepsClear`).
+- **One hue by steps.** 分支 is the canvas as it is. The others fill
+  every topic with one hue mixed into the leaf (in Oklab), words in the
+  ink; the step that has none is white with a hairline, its words muted;
+  the lines between topics are the hairline's gray, a topic's own marks
+  (its links, its key to fold) gray too; the middle stays in the ink.
+  新旧: the accent at 34, 20 and 9 of a hundred for this week, this
+  month, three months (7, 30 and 90 days, fixed), white beyond. 来源: the
+  teal at 30 and 13 for three clips or more, one or two, white for none.
+  进度: done the success at 22, doing the accent at 14, something late
+  the danger at 16, white for what is no task: the three colors that
+  mean so everywhere, a step each. On the dark leaf each is 1.4 times as
+  much, a tint reading as less there.
+- **The teal** is this lens's alone. It is no second accent: nothing
+  acts, is chosen or links in it.
+- **The right column** with nothing chosen (the middle, not chosen by
+  hand: it shows no ring then, and no topic's bar) says the lens
+  (`lensPanel`): its name as a topic's (20/700), two figures (`figures`),
+  a part's name, and lines to go to with a hairline under each, a word at
+  the end of a line in the caption's size. A topic chosen has its page,
+  with the lens's fact a caption under its name. The bare canvas clicked
+  is nothing chosen again.
+- A picture of the map and its slides are never through a lens.
 
 ## AI 技能's page
 

@@ -77,6 +77,8 @@ func (a *app) inspector(c *ui.Context) {
 			switch {
 			case a.doc != nil && a.panelTab == tabNode && len(a.multi) > 0:
 				a.multiPanel(c)
+			case a.doc != nil && a.panelTab == tabNode && a.lensOver():
+				a.lensPanel(c) // a lens on and nothing chosen: what the lens shows
 			case a.doc == nil || a.panelTab == tabNode:
 				a.nodePanel(c)
 			case a.panelTab == tabStyle:
@@ -123,6 +125,9 @@ func (a *app) nodePanel(c *ui.Context) {
 				a.mutate("title:"+n.ID, func() { n.Title = title })
 			}
 			a.fieldTitleTags(in, "panel:"+n.ID, n, title, true)
+			if fact := a.lensFact(n.ID); fact != "" { // what the lens on the canvas tells of it
+				ui.Text(c.Key("lens-fact"), fact).FontSize(textCaption).TextColor(t.TextMuted).Margin(-8, 0, 0)
+			}
 			if in.Focused() {
 				a.titleTagOffer(c, in, "panel:"+n.ID, title, func(part, tag string) { a.takeFieldTag(n, part, tag) })
 			}

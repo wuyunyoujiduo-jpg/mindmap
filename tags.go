@@ -138,9 +138,14 @@ func (a *app) editTagEverywhere(tag, to string) {
 			continue
 		}
 		f, err := model.Load(info.Path)
-		if err != nil || !edit(f) {
+		if err != nil {
 			continue
 		}
+		was := model.PrintsOf(f)
+		if !edit(f) {
+			continue
+		}
+		was.Stamp(f, a.now()) // when each topic it changed did
 		if err := f.Save(info.Path); err != nil {
 			a.saveErr = err.Error()
 		}

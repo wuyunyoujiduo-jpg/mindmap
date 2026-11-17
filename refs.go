@@ -349,6 +349,7 @@ func (a *app) editMapAt(path, note string, fn func(f *model.File) error) error {
 		return err
 	}
 	now := a.now()
+	model.StampChanges(before, f, now) // when each topic it changed did
 	_, _ = a.versions.Save(path, before, versions.Auto, "", now)
 	if err := f.Save(path); err != nil {
 		return err
