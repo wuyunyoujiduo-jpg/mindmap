@@ -24,7 +24,6 @@ func TestListHasMapsOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	clip.Folder = "项目资料" // as an earlier version kept it
 	a.refreshFiles()
 	a.setFolderOpen(dir, true)
 	a.showProjects()

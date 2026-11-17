@@ -281,7 +281,9 @@ func (a *app) dropOnMap(path string, d fileDrag) {
 		return
 	}
 	if err := a.attachTo(path, f.Sheets[0].Root.ID, link, "导图"); err != nil {
-		a.libErr = err.Error()
+		// Said where it is seen: in 收集's line of errors, it showed on
+		// 收集's page alone, and a map is dropped on a map elsewhere.
+		a.tell("没有链接上：" + err.Error())
 	}
 }
 

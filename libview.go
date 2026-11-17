@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"slices"
 	"strings"
 	"time"
@@ -289,22 +288,73 @@ func (a *app) libraryDialogs(c *ui.Context) {
 // deleteClipUndoably deletes a clip and says so, with the way to take it
 // back.
 func (a *app) deleteClipUndoably(id string) {
-	restore, err := a.lib.Take(id)
+	a.closeVideos(id)
+	taken, err := a.lib.Trash(id, a.now())
 	if err != nil {
-		a.libErr = err.Error()
+		a.libFail(err.Error())
 		return
 	}
 	a.noteLibraryWrite()
+	a.clipGone(id)
 	if a.libSel == id {
 		a.libSel = ""
 	}
+	a.emptyTrashLater()
 	a.tellUndo("已删除", func() {
-		if err := restore(); err != nil {
-			a.libErr = err.Error()
+		// Into the library as it is now: read again since, as after a
+		// sync, the one the clip was taken from is no longer shown.
+		if err := a.lib.PutBack(taken); err != nil {
+			a.tell("没能恢复：" + err.Error())
 			return
 		}
 		a.noteLibraryWrite()
 	})
+}
+
+// trashLife is how long the file of a clip deleted waits in the library's
+// trash to be taken back: longer than the toast that offers it shows.
+const trashLife = 10 * time.Minute
+
+// emptyTrashLater clears the trash, once what was just put there has
+// waited its time, of what has: the room a large file took is given back
+// without the app being left first.
+func (a *app) emptyTrashLater() {
+	if a.post == nil {
+		return // no window: cleared as a library is next opened
+	}
+	post := a.post
+	time.AfterFunc(trashLife+time.Second, func() {
+		post(func() {
+			if a.lib != nil {
+				a.lib.EmptyTrash(a.now().Add(-trashLife))
+			}
+		})
+	})
+}
+
+// collectState is more of what 收集 holds from a frame to the next.
+type collectState struct {
+	// The category of the clip catFor, as it is typed in its details.
+	catFor, catText string
+	// The pictures read (thumbs.go).
+	pics pictures
+}
+
+// collectShown tells whether 收集's page shows.
+func (a *app) collectShown() bool {
+	return a.libOpen && !a.projOpen && !a.skillsOpen && !a.tasks.open && !a.libHome
+}
+
+// libFail says what went wrong with a thing collected where it is looked
+// at: on 收集's page in the line under its head, which stays till it is
+// read; on any other page in a toast. Kept for 收集's page alone, what
+// failed on 今天 or on a map was said where nobody was looking.
+func (a *app) libFail(msg string) {
+	if a.collectShown() {
+		a.libErr = msg
+		return
+	}
+	a.tell(msg)
 }
 
 // libHits are the clips the search and the filters find.
@@ -379,18 +429,16 @@ func (a *app) searchClips() []library.Hit {
 	return hits
 }
 
-// dropClips keeps files dropped on the library.
+// dropClips keeps files dropped on the library: each of them, one that
+// cannot be kept not stopping those after it, and how many could not is
+// said.
 func (a *app) dropClips(files []string) {
-	for _, f := range files {
-		if info, err := os.Stat(f); err != nil || info.IsDir() {
-			continue
-		}
-		clip, err := a.addClipFile(f, "拖入")
-		if err != nil {
-			a.libErr = err.Error()
-			return
-		}
-		a.libSel = clip.ID
+	clips, failed, err := a.addClipFiles(files, "拖入")
+	if n := len(clips); n > 0 {
+		a.libSel = clips[n-1].ID
+	}
+	if failed > 0 {
+		a.libFail(filesFailed(failed, len(clips), err))
 	}
 }
 
@@ -496,7 +544,7 @@ func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 			if clip.Kind == library.KindImage {
 				// Its picture small, read away from the window's work; a
 				// pale block in its room until it is.
-				if b, loading := a.filePicture(a.lib.FilePath(clip), true); b != nil {
+				if b, loading := a.cardPicture(a.lib.FilePath(clip)); b != nil {
 					ui.Image(c, b).Height(110).FillWidth().Fit(ui.Cover).Radius(8).PassThrough()
 				} else if loading {
 					ui.Box(c.Key("picture-loading")).Height(110).FillWidth().Radius(8).Background(blockFill(t)).PassThrough()
@@ -671,7 +719,7 @@ func clipCopyText(c *library.Clip) string {
 
 func (a *app) saveClip(c *library.Clip) {
 	if err := a.lib.Save(c, a.now()); err != nil {
-		a.libErr = err.Error()
+		a.libFail("没有存下：" + err.Error())
 	}
 	a.noteLibraryWrite()
 }
@@ -679,7 +727,7 @@ func (a *app) saveClip(c *library.Clip) {
 // clipIntoMap adds a clip to the open map and shows it there.
 func (a *app) clipIntoMap(clip *library.Clip) {
 	if err := a.clipToMap(clip); err != nil {
-		a.libErr = err.Error()
+		a.libFail(err.Error())
 		return
 	}
 	a.libOpen = false
@@ -749,7 +797,8 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 	})
 
 	if clip.Kind == library.KindImage {
-		// Whole, once read; the small one of its card meanwhile.
+		// Whole, once read; a small one of it meanwhile, of the same shape
+		// (its card's is cut to the card's).
 		b, _ := a.filePicture(a.lib.FilePath(clip), false)
 		if b == nil {
 			b, _ = a.filePicture(a.lib.FilePath(clip), true)
@@ -970,24 +1019,40 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 	// Properties.
 	sectionCard(c, iconTag, tileBlue, "信息", nil, func() {
 		propRow(c, "分类", func() {
-			cat := clip.Category
-			in := inlineInput(c.Key("clip-cat"), &cat, textBody, false, "未分类", "资料分类")
+			// The field holds what is typed, a space at its end too, and
+			// the clip the same without the spaces at its ends, which the
+			// field shows once it is left: the field showing the clip's at
+			// every letter, the space of "ML ops" was gone before the o
+			// came.
+			st := &a.collect
+			if st.catFor != clip.ID || strings.TrimSpace(st.catText) != clip.Category {
+				st.catFor, st.catText = clip.ID, clip.Category
+			}
+			in := inlineInput(c.Key("clip-cat"), &st.catText, textBody, false, "未分类", "资料分类")
 			if in.Changed() {
-				clip.Category = strings.TrimSpace(cat)
+				clip.Category = strings.TrimSpace(st.catText)
 				a.saveClip(clip)
+			} else if !in.Focused() {
+				st.catText = clip.Category
 			}
 		})
 		propRow(c, "标签", func() {
 			for _, tag := range clip.Tags {
 				tag := tag
-				chip := tagChip(c.Key("tag:"+tag), tag, "#"+tag, false, textSmall).Tooltip("点击筛选；右键移除")
+				off := func() {
+					clip.Tags = slices.DeleteFunc(slices.Clone(clip.Tags), func(s string) bool { return s == tag })
+					a.saveClip(clip)
+				}
+				chip, x := clipTagChip(c.Key("tag:"+tag), tag)
 				if chip.Clicked() {
 					a.libTag = tag
 				}
+				if x {
+					a.later(off)
+				}
 				chip.ContextMenu(func(m *ui.Menu) {
 					if m.Item("移除标签").Chosen() {
-						clip.Tags = slices.DeleteFunc(slices.Clone(clip.Tags), func(s string) bool { return s == tag })
-						a.saveClip(clip)
+						off()
 					}
 				})
 			}
@@ -1028,6 +1093,31 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 		aiPart()
 	}
 	a.relatedSection(c, clip)
+}
+
+// clipTagChip is a tag of a clip in its details: the tag, which narrows
+// 收集 to it, and a ✕ of its own that takes it off the clip. It was taken
+// off by the pointer's other key alone, which a phone has not, and which
+// nothing on the tag said. It reports the ✕ pressed.
+func clipTagChip(c *ui.Context, tag string) (chip ui.Element, off bool) {
+	t := c.Theme()
+	size := float32(textSmall)
+	ink := t.Text.MixOklab(t.TextMuted, 0.7)
+	chip = ui.Row(c).Padding(size*0.15, size*0.25, size*0.15, size*0.5).Gap(size * 0.35).Radius(999).AlignItems(ui.Center).
+		Cursor(ui.CursorPointer).Background(t.Text.Alpha(0.055)).Label("标签 " + tag).Tooltip("只看这个标签")
+	chip.Children(func() {
+		ui.Box(c).Size(size*0.45, size*0.45).Radius(999).Background(tagColor(tag)).Shrink(0).PassThrough()
+		ui.Text(c, "#"+tag).FontSize(size).TextColor(ink).NoWrap().PassThrough()
+		x := ui.Box(c.Key("off")).Size(16, 16).Radius(8).Center().Cursor(ui.CursorPointer).Label("去掉标签 " + tag).Tooltip("去掉这个标签").
+			Background(t.Text.Alpha(0)).Transition(easeLook)
+		if x.Hovered() {
+			x.Background(t.Text.Alpha(0.1))
+		}
+		press(x, 0.9)
+		x.Children(func() { glyph(c, iconClose, 7, ink) })
+		off = x.Clicked()
+	})
+	return chip, off
 }
 
 // showLibrary opens the library in the main area.

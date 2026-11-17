@@ -98,6 +98,20 @@ func (a *app) sweepVideos() {
 	a.vidFrame++
 }
 
+// closeVideos closes the players of a clip now, not a frame on: its file
+// is about to be moved away, which a system that holds an open file in
+// its place (Windows) refuses.
+func (a *app) closeVideos(id string) {
+	for _, k := range []string{"card:" + id, "play:" + id} {
+		if v := a.vids[k]; v != nil {
+			if v.p != nil {
+				v.p.Close()
+			}
+			delete(a.vids, k)
+		}
+	}
+}
+
 // holdFirst keeps a player at its first picture: once it has one, paused
 // and back at its start. It plays till then, without sound, for a player
 // paused before its first picture shows none.
@@ -134,7 +148,7 @@ func (a *app) videoCard(c *ui.Context, clip *library.Clip, hovered bool) {
 	a.lookPoster(clip)
 	var pic *ui.Bitmap
 	if a.vidPosterHas[clip.ID] {
-		pic, _ = a.filePicture(poster, true)
+		pic, _ = a.cardPicture(poster)
 	}
 	ui.Box(c.Key("video-face")).Height(110).FillWidth().Radius(8).Clip().Background(ui.Hex("#1d1d1f")).PassThrough().Children(func() {
 		if pic != nil {
@@ -273,7 +287,7 @@ func (a *app) videoPlayer(c *ui.Context, clip *library.Clip, w, h float32, big b
 				}
 			}
 			if !big {
-				if textKey(c, "放大", "放大播放", "放大播放（Esc 收回）").Clicked() {
+				if textKey(c, "放大", "放大播放", "放大播放").Clicked() {
 					a.videoBig = clip.ID
 				}
 			}
@@ -521,12 +535,35 @@ func pictureSum(img *image.RGBA) uint64 {
 
 // posterPath is where a video's poster is kept: with the app's cache, not
 // the library, which is synced. Its length is in a file beside it.
-func posterPath(c *library.Clip) string {
+func posterPath(c *library.Clip) string { return posterPathOf(c.ID) }
+
+func posterPathOf(id string) string {
 	dir, err := os.UserCacheDir()
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(dir, "MyMind", "posters", c.ID+".jpg")
+	return filepath.Join(dir, "MyMind", "posters", id+".jpg")
+}
+
+// clipGone clears what the app keeps of a clip beside the library, once
+// the clip is deleted, here or elsewhere: a video's poster and its
+// length, in the app's cache, which stayed there for good. Of a clip
+// taken back the poster is taken again.
+func (a *app) clipGone(id string) {
+	delete(a.vidPosterAsked, id)
+	delete(a.vidPosterHas, id)
+	delete(a.vidLens, id)
+	delete(a.vidShots, id)
+	p := posterPathOf(id)
+	if p == "" {
+		return
+	}
+	a.forgetPicture(p)
+	a.async(func() (any, error) {
+		_ = os.Remove(p)
+		_ = os.Remove(strings.TrimSuffix(p, ".jpg") + ".len")
+		return nil, nil
+	}, func(any, error) {})
 }
 
 // savePoster keeps a video's poster and its length.
@@ -539,8 +576,7 @@ func (a *app) savePoster(c *library.Clip, pic []byte, dur time.Duration) {
 	}
 	if os.WriteFile(p, pic, 0o644) == nil {
 		_ = os.WriteFile(strings.TrimSuffix(p, ".jpg")+".len", []byte(strconv.FormatInt(int64(dur/time.Millisecond), 10)), 0o644)
-		delete(a.bitmaps, p) // read as missing before: read again
-		delete(a.bitmaps, "thumb:"+p)
+		a.forgetPicture(p) // read as missing before: read again
 		a.vidPosterHas[c.ID] = true
 	}
 }

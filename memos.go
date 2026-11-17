@@ -18,15 +18,41 @@ import (
 // memoTag is a #tag in a text: # then what is up to a space or another #.
 var memoTag = regexp.MustCompile(`#[^\s#，。,.!！?？;；:：、（）()\[\]{}"'“”]+`)
 
-// memoTags are the #tags written in a text, without their #.
+// memoTags are the #tags written in a text, without their #. A # that
+// is of something else is none: in a web address or after a letter, a
+// figure or a slash (…/guide#install-2, C#, /#/login), and before a color
+// (#E8A13A, #fff), which were made tags of the note.
 func memoTags(text string) []string {
 	var out []string
-	for _, m := range memoTag.FindAllString(text, -1) {
-		if t := strings.TrimPrefix(m, "#"); !slices.Contains(out, t) {
+	var urls [][]int
+	if strings.Contains(text, "://") {
+		urls = titleURL.FindAllStringIndex(text, -1)
+	}
+	for _, m := range memoTag.FindAllStringIndex(text, -1) {
+		if m[0] > 0 {
+			if c := text[m[0]-1]; c == '/' || c == '_' || c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' {
+				continue
+			}
+		}
+		if slices.ContainsFunc(urls, func(u []int) bool { return m[0] > u[0] && m[0] < u[1] }) {
+			continue
+		}
+		if t := text[m[0]+1 : m[1]]; !colorWord(t) && !slices.Contains(out, t) {
 			out = append(out, t)
 		}
 	}
 	return out
+}
+
+// colorWord tells whether what follows a # is a color (hexColor): with a
+// figure of ten in it, as a topic's title takes it (tagWord), or all one
+// letter (fff). Other letters alone may be a word (#decade, #CAD), and
+// are a tag as they were.
+func colorWord(s string) bool {
+	if !hexColor.MatchString(s) {
+		return false
+	}
+	return strings.ContainsAny(s, "0123456789") || strings.Count(strings.ToLower(s), strings.ToLower(s[:1])) == len(s)
 }
 
 // isMemo tells whether a clip is one of 灵感: a text of the library.

@@ -527,8 +527,13 @@ func main() {
 		watchPinch(func(m float64) { a.post(func() { a.pinch(float32(m)) }) })
 		a.async = func(work func() (any, error), done func(any, error)) {
 			go func() {
-				v, err := work()
-				win.Update(func() { done(v, err) })
+				// A panic in it is an error of it, not the end of the app
+				// (guarded).
+				v, err := guarded(work)
+				win.Update(func() {
+					a.panicked(err)
+					done(v, err)
+				})
 			}()
 		}
 		// The agents and their skills, looked at now and whenever the app

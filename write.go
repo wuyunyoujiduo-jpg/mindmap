@@ -280,11 +280,10 @@ func (a *app) clipsNamed(part string, n int) []*library.Clip {
 	return out
 }
 
-func (a *app) clipsByTime() []*library.Clip {
-	clips := slices.Clone(a.lib.Clips)
-	slices.SortStableFunc(clips, func(x, y *library.Clip) int { return y.Created.Compare(x.Created) })
-	return clips
-}
+// clipsByTime are the notes and clips, those kept last first: as the
+// library holds them (it was a copy of them all, sorted again, at every
+// letter typed after a # or a [[).
+func (a *app) clipsByTime() []*library.Clip { return a.lib.Clips }
 
 // refName is the name a clip is referred to by in a note: its label,
 // short, with no space, for the name ends where a space is.

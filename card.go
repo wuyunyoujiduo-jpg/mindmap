@@ -215,7 +215,7 @@ func drawPencilFlower(p *ui.Painter, x, y float32, st cardStyle) {
 	cx, cy := x+30, y-70
 	for i := range 6 {
 		a := float64(i) * 3.14159 / 3
-		px, py := cx+float32(9*cosf(a)), cy+float32(9*sinf(a))
+		px, py := cx+float32(9*math.Cos(a)), cy+float32(9*math.Sin(a))
 		p.FillPath(new(ui.Path).Circle(px, py, 7.5), st.accent)
 		p.StrokePath(new(ui.Path).Circle(px, py, 7.5), 2, ink)
 	}
@@ -316,7 +316,7 @@ func (a *app) cardWindow(c *ui.Context) {
 					if inkButton(c, "保存图片…", true).Clicked() {
 						a.saveCard(o, clip)
 					}
-					if iconButton(c, iconClose, "关闭", "关闭（Esc）", 28, true).Clicked() {
+					if iconButton(c, iconClose, "关闭", "关闭", 28, true).Clicked() {
 						a.cardOpen = false
 					}
 				})
@@ -344,13 +344,10 @@ func (a *app) saveCard(o cardOpts, clip *library.Clip) {
 			err = os.WriteFile(path, data, 0o644)
 		}
 		if err != nil {
-			a.libErr = "保存图片失败：" + err.Error()
+			a.libFail("保存图片失败：" + err.Error())
 			return
 		}
 		a.tell("已保存卡片")
 		a.plat.ShowInFolder(path)
 	})
 }
-
-func cosf(a float64) float64 { return math.Cos(a) }
-func sinf(a float64) float64 { return math.Sin(a) }

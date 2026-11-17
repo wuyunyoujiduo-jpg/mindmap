@@ -27,6 +27,63 @@ func TestMask(t *testing.T) {
 	}
 }
 
+// The name of a secret is a word of sentences and of programs too: what
+// follows it there is left as it is, and a value still is one.
+func TestSecretRules(t *testing.T) {
+	for _, plain := range []string{
+		"密码是什么时候改的我忘了",
+		"Token: 这是一个很长的中文句子，后面还有很多字要写下去",
+		"max_tokens: maxTokensDefault,",
+		"token = strings.Split(line",
+		"The secret: understanding…",
+		"The secret: understanding your users before you build",
+		`password = os.Getenv("DB_PASSWORD")`,
+		"apiKey: config.apiKey,",
+		"secret: process.env.SECRET_KEY",
+		"conn = connect(user=user, password=password)",
+		"client := NewClient(api_key=apiKeyValue, timeout=30)",
+		"token := parser.nextToken()",
+		"headers[token] = os.environ[name]",
+		"密钥: config.secretKey 这样取",
+		"口令是 abc123456 那个",
+		"password: undefined;",
+	} {
+		if got := Mask(plain); got != plain || HasSecret(plain) || len(Found(plain)) != 0 {
+			t.Errorf("no secret, and taken for one: %q → %q", plain, got)
+		}
+		if got := SealIn(plain, func(string) (string, bool) { return "⟦mm1.aaaaaa.AAAA⟧", true }); got != plain {
+			t.Errorf("no secret, and sealed: %q → %q", plain, got)
+		}
+	}
+	for _, c := range []struct{ in, secret string }{
+		{"密码: Abc12345!", "Abc12345!"},
+		{"password=hunter2hunter2", "hunter2hunter2"},
+		{"OPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwx", "sk-abcdefghijklmnopqrstuvwx"},
+		{"token: ghp_abcdefghijklmnopqrstuvwxyz0123456789", "ghp_abcdefghijklmnopqrstuvwxyz0123456789"},
+		{"password: hunter2hunter2", "hunter2hunter2"},
+		{"账号 bob, password: hunter2hunter2, 服务器在机房", "hunter2hunter2"},
+		{"token=zyxwvutsrq", "zyxwvutsrq"},
+		{`{"password": "correcthorse"}`, "correcthorse"},
+		{"password = 'john.smith'", "john.smith"},
+		{"数据库密码：Hunter2Hunter2，别外传", "Hunter2Hunter2"},
+		{"密码：helloworld", "helloworld"},
+		{"密码：abc12345（记得改）", "abc12345"},
+		{"口令=abc123", "abc123"},
+		{"wifi 密码: abc123 记得换", "abc123"},
+		{"SECRET_KEY=dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWdu)", "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWdu)"},
+		{"token: getToken(password=hunter2hunter2)", "hunter2hunter2)"}, // in what is no value itself
+		{"SENDGRID_API_KEY=SG.abcDEF123ghiJKL456mnoPQ.xyz789ABCdef012GHIjkl345MNOpqr678STUvwx901", "SG.abcDEF123ghiJKL456mnoPQ.xyz789ABCdef012GHIjkl345MNOpqr678STUvwx901"}, // dots, as names of a program have
+		{"client.login(user, password=hunter2hunter2)", "hunter2hunter2)"},
+	} {
+		if got := Secrets(c.in); len(got) != 1 || got[0] != c.secret || !HasSecret(c.in) {
+			t.Errorf("a secret, and not found: %q → %q", c.in, got)
+		}
+		if got := Mask(c.in); strings.Contains(got, c.secret) || !strings.Contains(got, masked) {
+			t.Errorf("a secret, and shown: %q → %q", c.in, got)
+		}
+	}
+}
+
 // What the user marks is a secret where no rule tells one.
 func TestMarked(t *testing.T) {
 	const line = "https://ttc.ttcttc.net/#/login wuy@gmail.com  ⟦密:ttc13!⟧"
