@@ -37,7 +37,7 @@ const nodeScheme = "mindmap:"
 
 // editors open the project's files, by the setting's value.
 var editors = []struct{ id, name string }{
-	{"vscode", "VS Code"}, {"cursor", "Cursor"}, {"default", "默认程序"}, {"finder", "在 Finder 中显示"},
+	{"vscode", "VS Code"}, {"cursor", "Cursor"}, {"default", "默认程序"}, {"finder", revealWord()},
 }
 
 // parseLink tells what a link is: for a file, its path made absolute and
@@ -404,7 +404,7 @@ func (a *app) projectSection(c *ui.Context) {
 			for i, e := range editors {
 				names[i] = e.name
 				if e.id == "finder" {
-					names[i] = "Finder" // short enough for its part
+					names[i] = folderAppWord() // short enough for its part
 				}
 				if e.id == cur {
 					at = i

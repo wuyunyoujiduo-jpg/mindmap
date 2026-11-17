@@ -34,6 +34,18 @@ func revealOn(goos string) string {
 	return "在文件夹中显示"
 }
 
+// folderAppWord is the system's program of files, by its name alone, for
+// where revealWord is too long (a choice among a few).
+func folderAppWord() string {
+	switch runtime.GOOS {
+	case "darwin":
+		return "访达"
+	case "windows":
+		return "资源管理器"
+	}
+	return "文件夹"
+}
+
 func (a *app) shotKey() string {
 	if a.cfg.ShotKey != "" {
 		return a.cfg.ShotKey

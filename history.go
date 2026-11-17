@@ -86,7 +86,7 @@ func (a *app) brokenBar(c *ui.Context) {
 		if button(c, "从历史版本恢复").Clicked() {
 			a.later(func() { a.restoreBroken(path) })
 		}
-		if button(c, "在 Finder 中显示").Clicked() {
+		if button(c, revealWord()).Clicked() {
 			a.plat.ShowInFolder(path)
 		}
 		if button(c, "忽略").Clicked() {
