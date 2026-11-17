@@ -3,11 +3,13 @@ package mcp
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/gitbase"
@@ -22,24 +24,97 @@ import (
 // maxChanges is how many changed files read_map lists.
 const maxChanges = 120
 
-// projectDir is where a map's relative links are: its project folder, or
-// the map's own.
-func projectDir(path string, f *model.File) string {
-	if f.Project != "" {
+// The folder of a map's code is this computer's to know (the app's
+// projectOf, config.go): a map's file, which the sync carries to every
+// computer, names one computer's path (File.Project), which on another
+// leads nowhere. The server read and wrote the file's alone: on the other
+// computer it looked for the code where it was not, and a folder given
+// there took the place of the first computer's. It goes by the app's rule:
+// the folder chosen on this computer (ProjectsHere), else the file's own
+// when that is a folder here; and what is chosen is kept here
+// (KeepProjectHere), the file's own changed only where it has none or one
+// that is a folder of this computer.
+
+var (
+	hereMu sync.Mutex
+	here   = map[string]string{}
+
+	// ProjectsHere are the folders of the maps' code chosen on this
+	// computer, by the maps' paths, and KeepProjectHere keeps one. The
+	// program sets them to the app's settings (config.Projects); until
+	// then they are kept while it runs.
+	ProjectsHere = func() map[string]string {
+		hereMu.Lock()
+		defer hereMu.Unlock()
+		return maps.Clone(here)
+	}
+	KeepProjectHere = func(path, dir string) {
+		hereMu.Lock()
+		defer hereMu.Unlock()
+		here[path] = dir
+	}
+)
+
+func isDir(path string) bool {
+	if path == "" {
+		return false
+	}
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
+}
+
+// ProjectOf is the folder of a map's code on this computer, "" for none:
+// the one chosen here, else the one its file names when that is a folder
+// of this computer.
+func ProjectOf(path string, f *model.File) string {
+	if dir := ProjectsHere()[path]; dir != "" {
+		return dir
+	}
+	if isDir(f.Project) {
 		return f.Project
 	}
+	return ""
+}
+
+// projectDir is where a map's relative links are: its project folder on
+// this computer, or the map's own.
+func projectDir(path string, f *model.File) string {
+	if dir := ProjectOf(path, f); dir != "" {
+		return dir
+	}
 	return filepath.Dir(path)
+}
+
+// projectOf is ProjectOf for a session: with none known, the folder the
+// agent works in when it is the map's repository (File.Repo), which is
+// how the map was found on this computer (projectMap).
+func (s *Server) projectOf(path string, f *model.File) string {
+	if dir := ProjectOf(path, f); dir != "" {
+		return dir
+	}
+	if r := s.root(""); r != "" && f.Repo != "" && gitbase.Remote(r) == f.Repo {
+		return r
+	}
+	return ""
 }
 
 // BaselineText is read_map's part on the code: the baseline, and what
 // changed since it, by node.
 func BaselineText(path string, f *model.File) string {
+	return baselineText(path, f, ProjectOf(path, f))
+}
+
+// baselineText is BaselineText with the folder of the map's code, "" for
+// none known.
+func baselineText(path string, f *model.File, project string) string {
 	var b strings.Builder
 	b.WriteString("\n## 代码基线\n\n")
 	bl := f.Baseline
-	dir := projectDir(path, f)
-	if f.Project != "" {
-		fmt.Fprintf(&b, "项目代码目录：%s\n", f.Project)
+	dir := project
+	if project != "" {
+		fmt.Fprintf(&b, "项目代码目录：%s\n", project)
+	} else {
+		dir = filepath.Dir(path)
 	}
 	if bl == nil {
 		b.WriteString("还没有记录代码基线。分析完代码、把导图更新到和代码一致后，用 set_baseline 记下当前 commit；以后更新导图只需看这之后的改动，不用重新扫描整个项目。\n")
@@ -177,8 +252,11 @@ func contains(ns []*model.Node, n *model.Node) bool {
 }
 
 // setBaseline records the commit a map is up to date with: commit, or the
-// one checked out in the project's folder.
-func setBaseline(path string, f *model.File, projectArg, commit string, now time.Time) (string, error) {
+// one checked out in the project's folder, project (the one known on this
+// computer, "" for none) or the one given, which is kept as the app keeps
+// one chosen in it (setProject): here, and in the file where the file has
+// none or one that is a folder of this computer.
+func setBaseline(path string, f *model.File, project, projectArg, commit string, now time.Time) (string, error) {
 	if projectArg != "" {
 		abs, err := filepath.Abs(projectArg)
 		if err != nil {
@@ -187,9 +265,22 @@ func setBaseline(path string, f *model.File, projectArg, commit string, now time
 		if !gitbase.IsRepo(abs) {
 			return "", fmt.Errorf("%s 不是 git 仓库", abs)
 		}
-		f.Project = abs
+		KeepProjectHere(path, abs)
+		repo := gitbase.Remote(abs)
+		if f.Project == "" || isDir(f.Project) {
+			f.Project = abs
+			if repo != "" {
+				f.Repo = repo
+			}
+		} else if f.Repo == "" {
+			f.Repo = repo
+		}
+		project = abs
 	}
-	dir := projectDir(path, f)
+	dir := project
+	if dir == "" {
+		dir = filepath.Dir(path)
+	}
 	if !gitbase.IsRepo(dir) {
 		return "", errors.New("这张导图还没有项目代码目录：请传 project_dir（项目代码仓库的绝对路径）")
 	}

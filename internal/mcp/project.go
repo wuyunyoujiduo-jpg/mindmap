@@ -97,13 +97,14 @@ func (s *Server) projectMap(dir string, create bool) (path string, f *model.File
 	// and parsed them all, each time. The one found is read anew, for it
 	// is what the caller changes and writes.
 	var unbound, byRepo string
+	here := ProjectsHere() // the folders chosen on this computer, in the app
 	for _, p := range files {
 		g, err := s.peek(p)
 		if err != nil {
 			continue
 		}
-		if samePath(g.Project, root) {
-			if g, err = model.Load(p); err != nil || !samePath(g.Project, root) {
+		if samePath(g.Project, root) || samePath(here[p], root) {
+			if g, err = model.Load(p); err != nil || !samePath(g.Project, root) && !samePath(here[p], root) {
 				continue // changed since it was looked at
 			}
 			if g.Repo == "" {
@@ -172,11 +173,11 @@ func sortBranch(f *model.File) *model.Node {
 
 // log adds an entry to a map's log, with who reported it and where the
 // code was.
-func (s *Server) log(f *model.File, kind, text string, e model.LogEntry) model.LogEntry {
+func (s *Server) log(path string, f *model.File, kind, text string, e model.LogEntry) model.LogEntry {
 	e.Kind, e.Text, e.At, e.Agent = kind, text, s.Now(), s.Agent
 	if e.Commit == "" {
-		dir := f.Project
-		if r := s.root(""); r != "" && (samePath(r, f.Project) || f.Repo != "" && gitbase.Remote(r) == f.Repo) {
+		dir := ProjectOf(path, f)
+		if r := s.root(""); r != "" && (samePath(r, dir) || f.Repo != "" && gitbase.Remote(r) == f.Repo) {
 			dir = s.Cwd // the worktree the agent is in, and its branch
 		}
 		if h, err := gitbase.HeadOf(dir); dir != "" && err == nil {
@@ -282,7 +283,7 @@ func (s *Server) capture(args map[string]any) (string, error) {
 		if isInbox {
 			return "已记到收集（" + c.ID + "）。", nil
 		}
-		s.log(f, model.LogIdea, firstLine(text), model.LogEntry{Clip: c.ID})
+		s.log(path, f, model.LogIdea, firstLine(text), model.LogEntry{Clip: c.ID})
 		if err := s.save(path, before, f, "记下一条想法"); err != nil {
 			return "", err
 		}
@@ -323,7 +324,7 @@ func (s *Server) capture(args map[string]any) (string, error) {
 		parent.Children = append(parent.Children, n)
 		parent.Collapsed = false
 		if !isInbox {
-			s.log(f, model.LogTask, n.Title, model.LogEntry{Nodes: []string{n.ID}})
+			s.log(path, f, model.LogTask, n.Title, model.LogEntry{Nodes: []string{n.ID}})
 		}
 		if err := s.save(path, before, f, "记下待办："+n.Title); err != nil {
 			return "", err
@@ -383,7 +384,7 @@ func (s *Server) logDecision(args map[string]any) (string, error) {
 		}
 		e.Nodes = []string{node.ID}
 	}
-	s.log(f, model.LogDecision, title, e)
+	s.log(path, f, model.LogDecision, title, e)
 	if err := s.save(path, before, f, "记下决策："+title); err != nil {
 		return "", err
 	}
@@ -420,7 +421,7 @@ func (s *Server) logSession(args map[string]any) (string, error) {
 		b.Children = append(b.Children, nodes...)
 		b.Collapsed = false
 	}
-	s.log(f, model.LogSession, summary, model.LogEntry{Nodes: ids(nodes)})
+	s.log(path, f, model.LogSession, summary, model.LogEntry{Nodes: ids(nodes)})
 	if err := s.save(path, before, f, firstLine(summary)); err != nil {
 		return "", err
 	}
@@ -464,8 +465,8 @@ const (
 func (s *Server) briefOf(path string, f *model.File) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# 项目「%s」（MyMind 导图 %s）\n", f.Sheets[0].Root.Title, s.rel(path))
-	if f.Project != "" {
-		fmt.Fprintf(&b, "代码目录：%s\n", f.Project)
+	if dir := s.projectOf(path, f); dir != "" {
+		fmt.Fprintf(&b, "代码目录：%s\n", dir)
 	}
 	var doing, todo []model.TaskNode
 	for _, t := range f.Tasks() {
@@ -550,7 +551,7 @@ func (s *Server) briefOf(path string, f *model.File) string {
 		}
 	}
 	if f.Baseline != nil {
-		b.WriteString(BaselineText(path, f))
+		b.WriteString(baselineText(path, f, s.projectOf(path, f)))
 	}
 	return b.String()
 }
