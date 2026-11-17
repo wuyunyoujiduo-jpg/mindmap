@@ -467,3 +467,101 @@ func TestMoveParts(t *testing.T) {
 		}
 	}
 }
+
+// What was sealed by a rule that is no more is sealed still once the part
+// it is in was shown and written in, in each part of the details, and
+// once a clip sealed whole is so no more: opened bare and kept by the
+// rules of now, it was kept in the open, synced, and read to an AI.
+func TestSealedOnceStaysSealed(t *testing.T) {
+	vault.Quick()
+	a, tt := newTestApp(t)
+	if _, err := a.vault.Setup("correct horse", a.now()); err != nil {
+		t.Fatal(err)
+	}
+	seal := func(s string) string {
+		tok, ok := a.vault.Seal(s)
+		if !ok {
+			t.Fatal("not sealed")
+		}
+		return tok
+	}
+	// Each where no rule of now finds it.
+	secrets := []string{"plumtree", "understanding", "orchardgate", "maxTokensDefault"}
+	cl := &library.Clip{Kind: library.KindText, Title: "路由器 " + seal(secrets[0]), Desc: "The secret: " + seal(secrets[1]),
+		Text: "家里 wifi " + seal(secrets[2]) + " 在楼下", Note: "max_tokens: " + seal(secrets[3]) + ","}
+	if err := a.lib.Add(cl, a.now()); err != nil {
+		t.Fatal(err)
+	}
+	file := func() string {
+		data, _ := os.ReadFile(filepath.Join(a.lib.Dir, "clips", cl.ID+".json"))
+		return string(data)
+	}
+	kept := func(when string) {
+		t.Helper()
+		c := a.lib.Find(cl.ID)
+		f := file()
+		for _, s := range secrets {
+			if strings.Contains(f, s) || strings.Contains(c.Title+c.Desc+c.Text+c.Note, s) {
+				t.Fatalf("%s: %q was sealed, and is kept as written:\n%s", when, s, f)
+			}
+			if strings.Contains(library.Brief(c, "")+library.Full(c, 5000)+c.Label(), s) {
+				t.Fatalf("%s: %q is read to an AI", when, s)
+			}
+		}
+		open := *c
+		if !a.lib.Unseal(&open) {
+			t.Fatalf("%s: not to be opened any more", when)
+		}
+		all, _ := library.Marks(open.Title + open.Desc + open.Text + open.Note)
+		all = strings.ReplaceAll(all, "X", "") // what is typed below, in a secret perhaps
+		for _, s := range secrets {
+			if !strings.Contains(all, s) {
+				t.Fatalf("%s: %q is lost: %q", when, s, all)
+			}
+		}
+		if !c.Secret() || !c.Sealed() {
+			t.Fatalf("%s: no clip with a secret any more", when)
+		}
+	}
+	kept("as it was made")
+	a.openList(kindAll, "")
+	a.libSel = cl.ID
+	tt.Frame()
+	a.showSecrets(cl)
+	tt.Frame()
+	if a.secretShown != cl.ID {
+		t.Fatal("the secrets are not shown")
+	}
+	for _, field := range []string{"title", "desc", "text", "note"} { // shown as they are, with no sign round them
+		c := a.lib.Find(cl.ID)
+		stored := map[string]string{"title": c.Title, "desc": c.Desc, "text": c.Text, "note": c.Note}[field]
+		if text, write := a.fieldText(c, field, stored); !write || !strings.Contains(text, library.MarkOpen) || strings.Contains(a.secretField(text).shown, "⟦") {
+			t.Fatalf("%s opened to be written in: %q", field, text)
+		}
+	}
+	for _, label := range []string{"资料标题", "资料说明", "资料内容", "资料备注"} {
+		if err := tt.Click(label); err != nil {
+			t.Fatalf("%s: %v: %q", label, err, tt.Texts())
+		}
+		tt.Frame()
+		tt.Type("X")
+		tt.Frame()
+		tt.Frame()
+		kept("written in " + label)
+	}
+	open := *a.lib.Find(cl.ID)
+	if !a.lib.Unseal(&open) || strings.Count(open.Title+open.Desc+open.Text+open.Note, "X") != 4 {
+		t.Fatalf("what was typed is not kept: %q %q %q %q", open.Title, open.Desc, open.Text, open.Note)
+	}
+
+	// Sealed whole and back: what was sealed in it is sealed in it still.
+	a.lockWhole(a.lib.Find(cl.ID), true)
+	tt.Frame()
+	kept("sealed whole")
+	a.lockWhole(a.lib.Find(cl.ID), false)
+	tt.Frame()
+	if c := a.lib.Find(cl.ID); c.Locked || !strings.Contains(c.Text, "家里 wifi ") {
+		t.Fatalf("not opened from whole: %q", c.Text)
+	}
+	kept("sealed whole no more")
+}

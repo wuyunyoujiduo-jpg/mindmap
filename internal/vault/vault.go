@@ -535,6 +535,18 @@ func (v *Vault) open(token string) (string, bool) {
 	return "", false
 }
 
+// Opened is what one token seals, opened once: a text sealed whole may
+// hold tokens sealed before it, which are left as they are, for who is to
+// know where each secret was (Reveal opens them all).
+func (v *Vault) Opened(token string) (plain string, ok bool) {
+	if v == nil {
+		return "", false
+	}
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return v.open(token)
+}
+
 // Reveal is s with the secrets sealed in it opened; ok is false when one
 // could not be, which is left as it is.
 func (v *Vault) Reveal(s string) (plain string, ok bool) {

@@ -130,3 +130,105 @@ func TestSealIn(t *testing.T) {
 		t.Errorf("Secrets: %q", got)
 	}
 }
+
+// What was sealed is sealed again when the part it is in was opened,
+// written in and kept, whatever the rules say of it now: sealed by a rule
+// that is no more, or by one that was made narrower since, a secret was
+// kept in the open on the first edit of its field.
+func TestSealedStaysSealed(t *testing.T) {
+	now := time.Date(2026, 11, 17, 9, 0, 0, 0, time.UTC)
+	dir := t.TempDir()
+	l, _ := Open(dir)
+	if _, err := l.Vault.Setup("correct horse", now); err != nil {
+		t.Fatal(err)
+	}
+	file := func(c *Clip) string {
+		data, _ := os.ReadFile(filepath.Join(dir, "clips", c.ID+".json"))
+		return string(data)
+	}
+	for i, c := range []struct{ before, secret, after string }{
+		// What no rule finds now, nor is to: sealed by a rule of before.
+		{"wifi ", "plumtree", " 在楼下"},
+		{"密码是", "什么都行的那个", ""},
+		{"The secret: ", "understanding", " of it"},
+		{"password: ", "undefined", ""},
+		{"max_tokens: ", "maxTokensDefault", ","},
+		{"token = ", "strings.Split(line", ""},
+		{"", "Abcdefgh", ""}, // the whole of the part
+		// And each kind the rules were found to miss, and find again.
+		{"wifi password: ", "correcthorsebattery", ""},
+		{"password = ", "correcthorse", ""},
+		{"Server=db;Password=", "hunterhunter", ";"},
+		{"password: ", "hunter(2)x", ""},
+		{"密码：", "abc(123)", ""},
+		{"密码：", "zhang.san", ""},
+		{"password=", "first.last", ""},
+		{"API_KEY: ", "abcdefghijklmnopqrstuvwxyzabcdef", ""},
+		{"client_secret: ", "qwertyuiopasdfghjklz", ""},
+		{"密码：", "Abc中文12345", ""},
+		{"password: ", "pässword1234", ""},
+		{"密码是", "abc12345", ""},
+		{"OPENAI_API_KEY=", "sk-proj-9fK2mB7tLx0QaZr4Hn8Qx7b", "\n第二行"},
+	} {
+		tok, ok := l.Vault.Seal(c.secret)
+		if !ok {
+			t.Fatal("not sealed")
+		}
+		for _, field := range []string{"text", "note", "title", "desc"} {
+			clip := &Clip{ID: NewID(), Kind: KindText, Text: "一条", Created: now, Updated: now}
+			at := map[string]*string{"text": &clip.Text, "note": &clip.Note, "title": &clip.Title, "desc": &clip.Desc}[field]
+			*at = c.before + tok + c.after
+			if err := l.write(clip); err != nil {
+				t.Fatal(err)
+			}
+			l.Clips = append(l.Clips, clip)
+			// Opened to be written in, a word added at each end, and kept.
+			open, ok := l.ToEdit(*at, false)
+			if shown, _ := Marks(open); !ok || shown != c.before+c.secret+c.after {
+				t.Fatalf("%d %s: opened as %q", i, field, open)
+			}
+			*at = "改 " + open + " 完"
+			if err := l.Save(clip, now); err != nil {
+				t.Fatal(err)
+			}
+			if f := file(clip); strings.Contains(f, c.secret) || strings.Contains(*at, c.secret) || !vault.Has(*at) {
+				t.Errorf("%d %s: %q was sealed, and is kept as written after an edit: %q", i, field, c.secret, *at)
+			}
+			if !clip.Secret() || !clip.Sealed() || clip.Unsealed() {
+				t.Errorf("%d %s: not a clip with a secret any more: %q", i, field, *at)
+			}
+			if strings.Contains(Brief(clip, "")+Full(clip, 5000)+clip.Label()+EmbedText(clip), c.secret) {
+				t.Errorf("%d %s: %q is read to an AI", i, field, c.secret)
+			}
+			// It is the same secret still, where it was.
+			again, ok := l.ToEdit(*at, false)
+			if shown, _ := Marks(again); !ok || shown != "改 "+c.before+c.secret+c.after+" 完" {
+				t.Errorf("%d %s: opened again as %q", i, field, again)
+			}
+		}
+	}
+
+	// Sealed whole, with a secret sealed in it before: the whole is the
+	// text again, and the secret in it one still when it is whole no more.
+	inner, _ := l.Vault.Seal("plumtree")
+	text := "路由器 admin / " + inner + " 就这个"
+	whole, _ := l.Vault.Seal(text)
+	open, ok := l.ToEdit(whole, true)
+	if shown, parts := Marks(open); !ok || shown != "路由器 admin / plumtree 就这个" || len(parts) != 1 {
+		t.Fatalf("a text sealed whole, opened: %q", open)
+	}
+	clip := &Clip{ID: NewID(), Kind: KindText, Text: open, Created: now}
+	l.Clips = append(l.Clips, clip)
+	if err := l.Save(clip, now); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(file(clip), "plumtree") || !strings.Contains(clip.Text, "路由器 admin / ") {
+		t.Errorf("sealed whole no more, the secret in it is kept as written: %q", clip.Text)
+	}
+
+	// Locked, nothing is opened, and what is there is left to the letter.
+	l.Vault.Lock()
+	if got, ok := l.ToEdit(clip.Text, false); ok || got != clip.Text {
+		t.Errorf("opened while locked: %q", got)
+	}
+}

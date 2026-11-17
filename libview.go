@@ -780,20 +780,20 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 	ui.Column(c).Gap(2).Margin(4, -6, 0).Children(func() {
 		// A part with a secret in it is in dots, and not written in, till
 		// the secrets are asked for (fieldText).
-		title, write := a.fieldText(clip, "title", clip.Title)
-		if in := inlineInput(c.Key("clip-title"), &title, textHeadline, true, clip.Label(), "资料标题"); in.Changed() && write {
+		a.lineField(t, clip, "title", clip.Title, func(title *string) ui.Element {
+			return inlineInput(c.Key("clip-title"), title, textHeadline, true, clip.Label(), "资料标题")
+		}, func(title string) {
 			clip.Title = title
 			a.saveClip(clip)
 			a.fieldTyped(clip, "title", title, clip.Title)
-		}
-		desc, write := a.fieldText(clip, "desc", clip.Desc)
-		in := inlineArea(c.Key("clip-desc"), &desc, textBody, 1, 4, "加一句说明，说清这是什么（AI 整理时自动生成）", "资料说明")
-		in.TextColor(t.TextMuted)
-		if in.Changed() && write {
+		})
+		a.lineField(t, clip, "desc", clip.Desc, func(desc *string) ui.Element {
+			return inlineArea(c.Key("clip-desc"), desc, textBody, 1, 4, "加一句说明，说清这是什么（AI 整理时自动生成）", "资料说明").TextColor(t.TextMuted)
+		}, func(desc string) {
 			clip.Desc = desc
 			a.saveClip(clip)
 			a.fieldTyped(clip, "desc", desc, clip.Desc)
-		}
+		})
 	})
 
 	if clip.Kind == library.KindImage {
@@ -889,6 +889,7 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 			if analysisShown(clip) {
 				if a.foldKey(c, "analysis:"+clip.ID, "分析要点", "") {
 					analysis, _ := a.fieldText(clip, "analysis", clip.Analysis) // a secret in it in dots, till shown
+					analysis, _ = library.Marks(analysis)                       // the marks are the file's
 					markdownView(c.Key("clip-analysis"), analysis, textBody)
 				}
 			}

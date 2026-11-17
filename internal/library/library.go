@@ -80,10 +80,13 @@ type Clip struct {
 	Hash    string    `json:"hash,omitempty"`
 	Created time.Time `json:"created"`
 	Updated time.Time `json:"updated"`
+	// What was worked out of its words, kept while they are those (memo.go).
+	worked *worked
 }
 
-// Label is the clip's title, else the start of its text, URL or name.
-func (c *Clip) Label() string {
+// label is the clip's title, else the start of its text, URL or name
+// (Label, which works it out once).
+func (c *Clip) label() string {
 	for _, s := range []string{c.Title, c.Text, c.Note, c.URL, c.Name} {
 		if s = strings.TrimSpace(Mask(s)); s != "" { // a secret is never a title
 			s, _, _ = strings.Cut(s, "\n")

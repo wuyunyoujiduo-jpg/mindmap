@@ -84,6 +84,86 @@ func TestSecretRules(t *testing.T) {
 	}
 }
 
+// The rules that left the words of sentences and programs alone left real
+// secrets too (a reading of them over some hundred and thirty lines told
+// which): each is found, beside what must stay as it is written.
+func TestSecretsNotMissed(t *testing.T) {
+	for _, c := range []struct{ in, secret string }{
+		// Letters alone after an = with spaces round it.
+		{"password = correcthorse", "correcthorse"},
+		{"aws_secret_access_key = wJalrXUtnFEMIKEXAMPLEKEYbPxRfiCY", "wJalrXUtnFEMIKEXAMPLEKEYbPxRfiCY"},
+		// Letters alone after an =, and a sign that ends a value after them.
+		{"Server=db;User=sa;Password=hunterhunter;", "hunterhunter"},
+		{"mysql --password=hunterhunter; ls", "hunterhunter"},
+		{"export API_KEY=abcdefghijkl; echo done", "abcdefghijkl"},
+		{"login(user, password=hunterhunter)", "hunterhunter)"},
+		// A bracket after its first letters is no call by itself.
+		{"password: hunter(2)x", "hunter(2)x"},
+		{"密码：abc(123)", "abc(123)"},
+		{"密码：Abcd[12]", "Abcd[12]"},
+		// Letters joined by dots are a password where no program is written.
+		{"密码：zhang.san", "zhang.san"},
+		{"password=first.last", "first.last"},
+		{"refresh_token: Abcdef.Ghijkl", "Abcdef.Ghijkl"},
+		// Letters alone after a colon, long or of mixed case.
+		{"API_KEY: abcdefghijklmnopqrstuvwxyzabcdef", "abcdefghijklmnopqrstuvwxyzabcdef"},
+		{"client_secret: qwertyuiopasdfghjklz", "qwertyuiopasdfghjklz"},
+		{"X-Api-Key: abcdefghijklmnop", "abcdefghijklmnop"},
+		{"wifi password: correcthorsebattery", "correcthorsebattery"},
+		{"password: CorrectHorse", "CorrectHorse"},
+		{"token: aBcDeFgHiJ", "aBcDeFgHiJ"},
+		// Letters of other alphabets in it.
+		{"密码：Abc中文12345", "Abc中文12345"},
+		{"password: pässword1234", "pässword1234"},
+		// 是, and the value right after it.
+		{"wifi 密码是abc12345", "abc12345"},
+		{"家里的密码是Hunter2Hunter2，别外传", "Hunter2Hunter2"},
+		// A word with the name of a secret in it is no name for one.
+		{"password=monkeybusiness", "monkeybusiness"},
+	} {
+		if got := Secrets(c.in); len(got) != 1 || got[0] != c.secret || !HasSecret(c.in) {
+			t.Errorf("a secret, and not found: %q → %q", c.in, got)
+		}
+		if got := Mask(c.in); strings.Contains(got, c.secret) || !strings.Contains(got, masked) {
+			t.Errorf("a secret, and shown: %q → %q", c.in, got)
+		}
+		sealed := SealIn(c.in, func(p string) (string, bool) { return "⟦mm1.aaaaaa." + strings.Repeat("A", 8) + "⟧", true })
+		if strings.Contains(sealed, c.secret) {
+			t.Errorf("a secret, and kept as written: %q → %q", c.in, sealed)
+		}
+	}
+	for _, plain := range []string{
+		// What the reading of the whole found taken for secrets.
+		"密码是什么时候改的我忘了",
+		"Token: 这是一个很长的中文句子，后面还有很多字要写下去",
+		"max_tokens: maxTokensDefault,",
+		"token = strings.Split(line",
+		"tokenizer = AutoTokenizer.from_pretrained(model)",
+		"The secret: understanding…",
+		// And what is like them.
+		"The Secret: Understanding your users",
+		"token = client.get(url).json()",
+		"api_key = sys.argv[1]",
+		"token = tokens[0]",
+		"password = userInput",
+		"secret = some_other_name",
+		"callback({ token: accessToken, user })",
+		"password: undefined;",
+		"password = null",
+		"密码：我的生日加名字",
+		"密码是iPhone的锁屏密码",
+		"密码是 abc12345 那个", // a space after 是: a sentence goes on
+		"密钥: getKey(name)",
+		"token: response.data.token",
+		"password = form.value",
+		"Token: 用GPT4生成的那个",
+	} {
+		if got := Mask(plain); got != plain || HasSecret(plain) || len(Found(plain)) != 0 {
+			t.Errorf("no secret, and taken for one: %q → %q", plain, got)
+		}
+	}
+}
+
 // What the user marks is a secret where no rule tells one.
 func TestMarked(t *testing.T) {
 	const line = "https://ttc.ttcttc.net/#/login wuy@gmail.com  ⟦密:ttc13!⟧"

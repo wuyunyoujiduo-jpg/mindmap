@@ -184,9 +184,11 @@ func TestWholePicturesHaveARoom(t *testing.T) {
 			t.Fatal(err)
 		}
 		paths = append(paths, p)
+		a.sweepVideos() // a frame each
 		if b, _ := a.filePicture(p, false); b == nil {
 			t.Fatal("not read")
 		}
+		a.sweepVideos()
 		a.filePicture(paths[0], false) // the first is looked at all along
 	}
 	whole := 0
@@ -204,6 +206,39 @@ func TestWholePicturesHaveARoom(t *testing.T) {
 	// One that went is read again when shown.
 	if b, _ := a.filePicture(paths[1], false); b == nil {
 		t.Fatal("not read again")
+	}
+
+	// What one frame shows is kept, all of it, though it takes more than
+	// the room: one of four photos on a slide was put out by the one read
+	// after it, and read again, at every frame.
+	a.sweepVideos()
+	for range 3 { // the frame built three times over, nothing new to read after the first
+		for _, p := range paths {
+			if b, _ := a.filePicture(p, false); b == nil {
+				t.Fatal("not read")
+			}
+		}
+	}
+	for _, p := range paths {
+		if a.bitmaps[p] == nil {
+			t.Fatalf("a picture the frame shows made room for another: %s", filepath.Base(p))
+		}
+	}
+	// A frame that shows one of them alone lets the others go.
+	a.sweepVideos()
+	extra := filepath.Join(dir, "z.png")
+	if err := os.WriteFile(extra, testPNG(t, 520, 500), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a.filePicture(extra, false)
+	whole = 0
+	for k, b := range a.bitmaps {
+		if b != nil && wholeKey(k) && strings.HasPrefix(k, dir) {
+			whole++
+		}
+	}
+	if whole != wholeLeast {
+		t.Fatalf("%d whole pictures kept once the frame showed one", whole)
 	}
 }
 

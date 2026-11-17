@@ -245,11 +245,38 @@ func (a *app) fieldText(clip *library.Clip, field, stored string) (text string, 
 		return stored, true
 	}
 	if a.secretShown == clip.ID {
-		if p, ok := a.vault.Reveal(stored); ok {
+		// Opened to be written in: what was sealed in it and the rules
+		// would not find again is between marks, a secret still when it is
+		// kept (library.ToEdit). Opened bare, a password sealed by a rule
+		// of before was kept in the open on the first letter typed by it.
+		whole := clip.Locked && (field == "text" || field == "note")
+		if p, ok := a.lib.ToEdit(stored, whole); ok {
 			return p, true
 		}
 	}
 	return library.Mask(stored), false
+}
+
+// lineField is a line of a clip's details that may hold a secret, its
+// title or the line saying what it is, as content and note are: shown
+// without the marks of its secrets, which follow what is typed and are
+// kept with it (secretField). keep is given the line to keep.
+func (a *app) lineField(t *ui.Theme, clip *library.Clip, field, stored string, input func(text *string) ui.Element, keep func(full string)) ui.Element {
+	text, write := a.fieldText(clip, field, stored)
+	f := a.secretField(text)
+	text = f.shown
+	in := input(&text)
+	if !write {
+		return in
+	}
+	if in.Changed() {
+		_, caret := in.TextSelection()
+		full := f.typed(text, caret)
+		keep(full)
+		f = a.secretField(full)
+	}
+	f.style(in, t)
+	return in
 }
 
 // fieldTyped notes what was typed in a part of a clip, once kept: a
@@ -380,12 +407,19 @@ func (a *app) lockWhole(clip *library.Clip, on bool) {
 		// (as showSecrets does): of a clip sealed by two keys, one of them
 		// not open, what was opened stayed in memory unsealed, not kept,
 		// and was written so by the next thing that saved the clip.
+		// Its text and note alone, which were sealed whole; and each as it
+		// is opened to be written in, so that what was sealed in it before
+		// it was sealed whole is a secret still (library.ToEdit). All of
+		// the clip opened and kept by the rules of now, a secret sealed
+		// by a rule of before was kept in the open.
 		open := *clip
-		if !a.lib.Unseal(&open) {
+		text, ok1 := a.lib.ToEdit(clip.Text, true)
+		note, ok2 := a.lib.ToEdit(clip.Note, true)
+		if !ok1 || !ok2 {
 			a.tell("这条是用另一个二次密码加密的，用那个密码解锁")
 			return
 		}
-		open.Locked = false
+		open.Text, open.Note, open.Locked = text, note, false
 		sealed := *clip
 		*clip = open
 		// What looks like a secret in it is sealed again as it is kept.
