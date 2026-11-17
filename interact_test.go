@@ -413,6 +413,36 @@ func TestMapShowsOpenTasksAlone(t *testing.T) {
 	snapshot(t, tt, "map-open-tasks")
 }
 
+func TestParseClock(t *testing.T) {
+	for _, c := range []struct{ in, rest, from, until string }{
+		{"明天 9点到10点半 开会", "明天 开会", "09:00", "10:30"},
+		{"14:00-15:30 评审", "评审", "14:00", "15:30"},
+		{"下午3点到5点 写方案", "写方案", "15:00", "17:00"},
+		{"上午11点-1点 午会", "午会", "11:00", "13:00"},
+		{"周五 9:00～9:45 站会", "周五 站会", "09:00", "09:45"},
+		{"明天 9点 写周报", "明天 写周报", "09:00", ""},
+		{"写3点总结", "写3点总结", "", ""},
+	} {
+		rest, from, until := parseClock(c.in)
+		if strings.Join(strings.Fields(rest), " ") != c.rest || from != c.from || until != c.until {
+			t.Errorf("%q → %q, %q, %q; want %q, %q, %q", c.in, rest, from, until, c.rest, c.from, c.until)
+		}
+	}
+	now := time.Date(2026, 11, 17, 10, 0, 0, 0, time.UTC) // a Tuesday
+	for _, c := range []struct{ in, rest, label string }{
+		{"每月最后一天 交房租", "交房租", "每月 最后一天"},
+		{"每月15号 还信用卡", "还信用卡", "每月 15 日"},
+		{"每年 体检", "体检", "每年"},
+		{"每2周 复盘", "复盘", "每 2 周"},
+		{"每隔三天 浇花", "浇花", "每 3 天"},
+	} {
+		rest, rep, _ := parseRepeat(c.in, now)
+		if rest != c.rest || rep == nil || rep.Label() != c.label {
+			t.Errorf("%q → %q, %v; want %q, %q", c.in, rest, rep.Label(), c.rest, c.label)
+		}
+	}
+}
+
 func TestParseRemind(t *testing.T) {
 	for _, c := range []struct{ in, rest, remind string }{
 		{"明天 9点 写周报", "明天 写周报", "09:00"},

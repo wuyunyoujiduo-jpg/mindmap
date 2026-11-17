@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -446,7 +447,7 @@ func TestTaskRepeats(t *testing.T) {
 	}
 	tt.Frame()
 	tt.Frame()
-	if err := tt.Click("每 2"); err != nil {
+	if err := tt.Click("间隔 加一"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
@@ -464,6 +465,20 @@ func TestTaskRepeats(t *testing.T) {
 		t.Fatalf("made up: %q", got)
 	}
 	snapshot(t, tt, "task-repeat-custom")
+	// It ends after so many times, as it is said.
+	if err := tt.Click("重复几次后结束"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Frame()
+	for _, x := range a.taskItems() {
+		if x.node.Title == "写周报" {
+			it = &x
+		}
+	}
+	if got := it.node.Task.Repeat.Label(); got != "每 2 周的周一、五，共 10 次" {
+		t.Fatalf("with an end: %q", got)
+	}
 	// The month shows it on the days it comes again, faint.
 	a.tasks.sel = ""
 	a.tasks.view = tasksMonth
@@ -493,4 +508,60 @@ func TestTaskRepeats(t *testing.T) {
 	if it.done() || !it.node.Task.Due.After(first) || it.node.Task.Times != 1 {
 		t.Fatalf("after done: done %v, due %v (was %v), times %d", it.done(), it.node.Task.Due, first, it.node.Task.Times)
 	}
+}
+
+// A task given a time of its day shows it in the week, those of the whole
+// day first; the time is set in its details by its beginning and how long.
+func TestTaskTimeSpan(t *testing.T) {
+	a, tt := newTestApp(t)
+	a.addTask("今天 14:00-15:30 评审方案", nil)
+	a.addTask("今天 9点 站会", nil)
+	a.addTask("今天 整理收件箱", nil)
+	a.openTasks()
+	a.tasks.view = tasksWeek
+	tt.Frame()
+	tt.Frame()
+	for _, want := range []string{"14:00–15:30", "9:00"} {
+		if !tt.HasText(want) {
+			t.Fatalf("no %q in the week: %q", want, tt.Texts())
+		}
+	}
+	var titles []string
+	for _, it := range byTime(a.taskItems(), today(a.now())) {
+		titles = append(titles, it.node.Title)
+	}
+	if i, j, k := slices.Index(titles, "整理收件箱"), slices.Index(titles, "站会"), slices.Index(titles, "评审方案"); i < 0 || !(i < j && j < k) {
+		t.Fatalf("order %q", titles)
+	}
+	snapshot(t, tt, "task-week-times")
+	var it taskItem
+	for _, x := range a.taskItems() {
+		if x.node.Title == "站会" {
+			it = x
+		}
+	}
+	if it.node.Task.Remind != "09:00" || it.node.Task.EndTime != "" {
+		t.Fatalf("站会: %+v", it.node.Task)
+	}
+	a.tasks.view = tasksAll
+	a.showTask(it)
+	tt.Frame()
+	tt.Frame()
+	if err := tt.Click("结束时间"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.ChooseMenuItem("9:30（30 分钟）"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Frame()
+	for _, x := range a.taskItems() {
+		if x.node.Title == "站会" {
+			it = x
+		}
+	}
+	if got := it.node.Task.Span(); got != "9:00–9:30" {
+		t.Fatalf("span %q", got)
+	}
+	snapshot(t, tt, "task-time")
 }

@@ -58,6 +58,9 @@ type tasksState struct {
 	// remindText what is written, remindBad that it was not understood.
 	remindOwn, remindText string
 	remindBad             bool
+	// spanOwn is the task whose time of day is being written, as remind's.
+	spanOwn, spanText string
+	spanBad           bool
 	// What the agents reported, as last gathered; how far back the list
 	// looks (agentRanges); and when it was looked at before this time,
 	// what came since being marked as new.
@@ -195,8 +198,12 @@ func (a *app) setTaskDone(it taskItem, done bool) {
 		st = model.StatusDone
 	}
 	was := it.node.Task.Status // before the edit: the node may be the map's own
+	rep := it.node.Task.Repeat
+	if rep != nil && rep.Ended(rep.Next(it.node.Task.Due, a.now()), it.node.Task.Times+1) {
+		rep = nil // its last time: done as any task
+	}
 	a.editTask(it, "完成任务", func(n *model.Node) { n.SetStatus(st, a.now()) })
-	switch rep := it.node.Task.Repeat; {
+	switch {
 	case done && rep != nil:
 		a.tell("做完一次，下一次：" + dayLabel(rep.Next(it.node.Task.Due, a.now()), a.now()))
 	case done:
@@ -269,7 +276,8 @@ func (a *app) addTask(line string, day *time.Time) {
 	// is the task's links, not words of its title.
 	links := tokenLinks(line)
 	line = strings.TrimSpace(refToken.ReplaceAllString(line, ""))
-	line, remind := parseRemind(line)
+	line, from, until := parseClock(line)
+	remind := from // a time written is when it is, and when it reminds
 	line, rep, first := parseRepeat(line, a.now())
 	title, due, prio := parseTaskLine(line, a.now())
 	if title == "" {
@@ -288,6 +296,7 @@ func (a *app) addTask(line string, day *time.Time) {
 	n := model.NewNode(title)
 	n.SetStatus(model.StatusTodo, a.now())
 	n.Task.Due, n.Task.Priority, n.Task.Repeat, n.Task.Remind = due, prio, rep, remind
+	n.Task.Time, n.Task.EndTime = from, until
 	n.Links = links
 	path := a.inboxPath()
 	if err := a.ensureInbox(); err != nil {
@@ -308,8 +317,8 @@ func (a *app) addTask(line string, day *time.Time) {
 	if rep != nil {
 		when += "，" + rep.Label()
 	}
-	if remind != "" {
-		when += "，" + strings.TrimPrefix(remind, "0") + " 提醒"
+	if span := n.Task.Span(); span != "" {
+		when += " " + span
 	}
 	a.tell("已加到收件箱：" + title + "（" + when + "）")
 	a.tasks.read = time.Time{}
@@ -319,11 +328,21 @@ func (a *app) addTask(line string, day *time.Time) {
 // 晚上8点15, 15:30.
 var remindWord = regexp.MustCompile(`(上午|早上|中午|下午|晚上)?\s*(\d{1,2})(?:[:：](\d{2})|[点时](半|\d{1,2})?分?)`)
 
+// spanTo is what joins the two ends of a time of day: 9点到10点, 9:00-10:30.
+var spanTo = regexp.MustCompile(`^\s*(?:到|至|-|~|～|–|—)\s*`)
+
 // parseRemind takes the time to be reminded at out of a task's line: the
-// line without it, and the time as 15:04, or none. A time is one that
-// stands by itself or after a day's word (明天9点), not a number of things
-// (写3点总结).
+// line without it, and the time as 15:04, or none.
 func parseRemind(line string) (rest, remind string) {
+	rest, remind, _ = parseClock(line)
+	return rest, remind
+}
+
+// parseClock takes the time of day out of a task's line: the line without
+// it, and when it begins and, of a span (9点到10点半, 14:00-15:30), ends,
+// as 15:04, or none. A time is one that stands by itself or after a day's
+// word (明天9点), not a number of things (写3点总结).
+func parseClock(line string) (rest, from, until string) {
 	for _, m := range remindWord.FindAllStringSubmatchIndex(line, -1) {
 		part := func(i int) string {
 			if m[2*i] < 0 {
@@ -333,12 +352,38 @@ func parseRemind(line string) (rest, remind string) {
 		}
 		before, after := []rune(line[:m[0]]), []rune(line[m[1]:])
 		period := part(1)
+		// Of a span, its end: written after it, joined by 到 or a dash.
+		end, endAt := "", m[1]
+		if j := spanTo.FindStringIndex(line[m[1]:]); j != nil {
+			tail := line[m[1]+j[1]:]
+			if e := remindWord.FindStringSubmatchIndex(tail); e != nil && e[0] == 0 {
+				eh, _ := strconv.Atoi(tail[e[4]:e[5]])
+				emin := 0
+				switch {
+				case e[6] >= 0:
+					emin, _ = strconv.Atoi(tail[e[6]:e[7]])
+				case e[8] >= 0 && tail[e[8]:e[9]] == "半":
+					emin = 30
+				case e[8] >= 0:
+					emin, _ = strconv.Atoi(tail[e[8]:e[9]])
+				}
+				if e[2] >= 0 {
+					if p := tail[e[2]:e[3]]; (p == "下午" || p == "晚上" || p == "中午" && eh < 11) && eh < 12 {
+						eh += 12
+					}
+				}
+				end, endAt = fmt.Sprintf("%d:%d", eh, emin), m[1]+j[1]+e[1]
+			}
+		}
+		if end != "" {
+			after = []rune(line[endAt:])
+		}
 		spaced := unicode.IsSpace([]rune(line[m[0]:])[0]) // the space before it is in what was found
 		if n := len(before); n > 0 && period == "" && !spaced && !unicode.IsSpace(before[n-1]) && !strings.ContainsRune("天晚早午上", before[n-1]) {
 			continue
 		}
 		clock := part(3) != "" // 15:30
-		if !clock && period == "" && part(4) == "" && len(after) > 0 && !unicode.IsSpace(after[0]) {
+		if end == "" && !clock && period == "" && part(4) == "" && len(after) > 0 && !unicode.IsSpace(after[0]) {
 			continue // 3点建议: three things, not three o'clock
 		}
 		h, _ := strconv.Atoi(part(2))
@@ -360,9 +405,23 @@ func parseRemind(line string) (rest, remind string) {
 		if h > 23 || min > 59 {
 			continue
 		}
-		return strings.TrimSpace(line[:m[0]] + " " + line[m[1]:]), fmt.Sprintf("%02d:%02d", h, min)
+		from = fmt.Sprintf("%02d:%02d", h, min)
+		if end != "" {
+			var eh, emin int
+			fmt.Sscanf(end, "%d:%d", &eh, &emin)
+			if eh*60+emin <= h*60+min && eh < 12 { // 下午3点到5点: five in the afternoon too
+				eh += 12
+			}
+			if eh <= 24 && emin <= 59 && eh*60+emin > h*60+min {
+				until = fmt.Sprintf("%02d:%02d", eh, emin)
+				if eh == 24 {
+					until = "23:59"
+				}
+			}
+		}
+		return strings.TrimSpace(line[:m[0]] + " " + line[endAt:]), from, until
 	}
-	return line, ""
+	return line, "", ""
 }
 
 var (
@@ -832,6 +891,7 @@ func (a *app) taskDetail(c *ui.Context, it taskItem) {
 						}
 					})
 					dateProp(c, "日期", "截止日期", task.Due, a.now(), func(d *time.Time) { a.later(func() { a.setTaskDay(it, d) }) })
+					a.timeProp(c, it)
 					a.repeatProp(c, it)
 					a.remindProp(c, it)
 				})
@@ -1369,6 +1429,142 @@ func (a *app) remindProp(c *ui.Context, it taskItem) {
 	}
 }
 
+// clockMinutes is a time of day written 15:04 as minutes from midnight,
+// and clockText the other way.
+func clockMinutes(s string) int {
+	var h, m int
+	fmt.Sscanf(s, "%d:%d", &h, &m)
+	return h*60 + m
+}
+
+func clockText(m int) string { return fmt.Sprintf("%02d:%02d", m/60, m%60) }
+
+// spanLengths are the lengths offered for a task's time, in minutes.
+var spanLengths = []int{30, 60, 90, 120, 180}
+
+func spanLengthName(m int) string {
+	switch {
+	case m < 60:
+		return fmt.Sprintf("%d 分钟", m)
+	case m%60 == 0:
+		return fmt.Sprintf("%d 小时", m/60)
+	}
+	return fmt.Sprintf("%.1f 小时", float64(m)/60)
+}
+
+// timeProp is when in its day a task is done: the whole day, or from a
+// time, to another or not, as TickTick's: the beginning chosen by the half
+// hour, morning, afternoon and evening each a submenu, the end by how long
+// it takes; or written, 9:00-10:30, 下午3点到5点. A time newly given is
+// when it reminds too, where it reminded of nothing or of the time before.
+func (a *app) timeProp(c *ui.Context, it taskItem) {
+	t := c.Theme()
+	task := it.node.Task
+	set := func(from, until string) {
+		a.later(func() {
+			a.editTask(it, "改时间", func(n *model.Node) {
+				was := n.Task.Time
+				n.Task.Time, n.Task.EndTime = from, until
+				if from != "" && (n.Task.Remind == "" || n.Task.Remind == was) {
+					n.Task.Remind = from
+				}
+			})
+		})
+	}
+	propRow(c, "时间", func() {
+		if task.Due == nil {
+			ui.Text(c, "先定个日期，再定几点").FontSize(textSmall).TextColor(faint(t))
+			return
+		}
+		if task.Time != "" || a.tasks.spanOwn == it.key() {
+			if chipButton(c, "全天", "时间 全天", "不定几点，这一天做").Clicked() {
+				a.tasks.spanOwn = ""
+				set("", "")
+			}
+		} else {
+			ui.Text(c, "全天").FontSize(textSmall).TextColor(t.TextMuted).Padding(0, 4, 0, 0)
+		}
+		from := "几点开始"
+		if task.Time != "" {
+			from = strings.TrimPrefix(task.Time, "0")
+		}
+		dropButton(c, "time-from", from, "开始时间", "从几点开始").Menu(func(m *ui.Menu) {
+			for _, part := range []struct {
+				name     string
+				from, to int
+			}{{"上午", 6, 12}, {"下午", 12, 18}, {"晚上", 18, 24}} {
+				m.Submenu(part.name, func(m *ui.Menu) {
+					for h := part.from; h < part.to; h++ {
+						for _, mm := range []int{0, 30} {
+							at := clockText(h*60 + mm)
+							if m.Item(strings.TrimPrefix(at, "0")).Checked(task.Time == at).Chosen() {
+								until := ""
+								if task.EndTime != "" { // as long as it was
+									if e := clockMinutes(at) + clockMinutes(task.EndTime) - clockMinutes(task.Time); e < 24*60 {
+										until = clockText(e)
+									}
+								}
+								set(at, until)
+							}
+						}
+					}
+				})
+			}
+			m.Separator()
+			if m.Item("自定义…").Chosen() {
+				a.tasks.spanOwn, a.tasks.spanText, a.tasks.spanBad = it.key(), task.Span(), false
+			}
+		})
+		if task.Time == "" {
+			return
+		}
+		ui.Text(c, "到").FontSize(textSmall).TextColor(t.TextMuted)
+		until := "不定结束"
+		if task.EndTime != "" {
+			until = strings.TrimPrefix(task.EndTime, "0")
+		}
+		dropButton(c, "time-until", until, "结束时间", "做多久").Menu(func(m *ui.Menu) {
+			begin := clockMinutes(task.Time)
+			for _, l := range spanLengths {
+				if begin+l >= 24*60 {
+					break
+				}
+				at := clockText(begin + l)
+				if m.Item(strings.TrimPrefix(at, "0") + "（" + spanLengthName(l) + "）").Checked(task.EndTime == at).Chosen() {
+					set(task.Time, at)
+				}
+			}
+			m.Separator()
+			if m.Item("不定结束").Checked(task.EndTime == "").Chosen() {
+				set(task.Time, "")
+			}
+		})
+	})
+	// A time of one's own, written: 9:00-10:30, 下午3点到5点.
+	if a.tasks.spanOwn == it.key() && task.Due != nil {
+		ui.Row(c.Key("span-own")).Padding(0, 0, 0, 52).Gap(8).AlignItems(ui.Center).FillWidth().Children(func() {
+			in := ui.TextInputBase(c.Key("span-text"), &a.tasks.spanText).Placeholder("如 9:00-10:30").Label("自定义时间").AutoFocus().
+				FontSize(textSmall).Width(132).Padding(5, 8).Radius(radiusSmall).Background(blockFill(t))
+			if in.Submitted() {
+				if _, from, until := parseClock(strings.TrimSpace(a.tasks.spanText)); from != "" {
+					set(from, until)
+					a.tasks.spanOwn = ""
+				} else {
+					a.tasks.spanBad = true
+				}
+			}
+			if in.Changed() {
+				a.tasks.spanBad = false
+			}
+			if a.tasks.spanBad {
+				ui.Text(c, "没看懂，写成 9:00-10:30 这样").FontSize(textCaption).TextColor(t.Danger)
+			} else {
+				ui.Text(c, "写好后记下").FontSize(textCaption).TextColor(faint(t))
+			}
+		})
+	}
+}
+
 // countsAsTask reports whether a task not done is counted among what is
 // to do: an idea with no day is not, wherever it is counted (the lists'
 // counts and the projects' are one count: 全部 said 12 beside a project
@@ -1510,7 +1706,9 @@ func (a *app) taskRow(c *ui.Context, it taskItem, overdue bool) {
 			if task.Due == nil {
 				label = "开始 " + label
 			}
-			if task.Remind != "" && task.Due != nil && !it.done() {
+			if span := task.Span(); span != "" && task.Due != nil {
+				label += " " + span // when in its day
+			} else if task.Remind != "" && task.Due != nil && !it.done() {
 				label += " " + strings.TrimPrefix(task.Remind, "0") // when it reminds
 			}
 			if task.Repeat != nil {
@@ -1780,10 +1978,8 @@ func (a *app) weekView(c *ui.Context, items []taskItem) {
 				})
 				ui.Scroll(c.Key("scroll")).Grow(1).Children(func() {
 					ui.Column(c).Gap(4).FillWidth().Children(func() {
-						for _, it := range items {
-							if dd := it.date(); dd != nil && sameDay(*dd, d) {
-								a.taskChip(c, it)
-							}
+						for _, it := range byTime(items, d) {
+							a.taskChip(c, it, true)
 						}
 						for _, it := range items { // and those that come again on it
 							if a.comesAgain(it, d, d) {
@@ -1811,7 +2007,7 @@ func (a *app) monthView(c *ui.Context, items []taskItem) {
 			byDay[k] = append(byDay[k], it)
 		}
 		if rp := it.node.Task.Repeat; rp != nil && it.node.Task.Due != nil && !it.done() {
-			for _, d := range rp.Coming(*it.node.Task.Due, start, start.AddDate(0, 0, 41)) {
+			for _, d := range rp.Coming(*it.node.Task.Due, it.node.Task.Times, start, start.AddDate(0, 0, 41)) {
 				k := d.Format("2006-01-02")
 				again[k] = append(again[k], it)
 			}
@@ -1841,7 +2037,7 @@ func (a *app) monthView(c *ui.Context, items []taskItem) {
 						day := d
 						a.later(func() { a.tasks.day, a.tasks.view = day, tasksDay })
 					}
-					list := byDay[d.Format("2006-01-02")]
+					list := byTime(byDay[d.Format("2006-01-02")], d)
 					cell.Children(func() {
 						ui.Row(c).Padding(2, 4).Children(func() {
 							num := ui.Text(c, fmt.Sprint(d.Day())).FontSize(textSmall)
@@ -1862,7 +2058,7 @@ func (a *app) monthView(c *ui.Context, items []taskItem) {
 								}
 								break
 							}
-							a.taskChip(c, it)
+							a.taskChip(c, it, false)
 						}
 						if len(list) < 3 {
 							for j, it := range again[d.Format("2006-01-02")] {
@@ -1882,7 +2078,7 @@ func (a *app) monthView(c *ui.Context, items []taskItem) {
 // from to to, after its day due.
 func (a *app) comesAgain(it taskItem, from, to time.Time) bool {
 	task := it.node.Task
-	return task.Repeat != nil && task.Due != nil && !it.done() && len(task.Repeat.Coming(*task.Due, from, to)) > 0
+	return task.Repeat != nil && task.Due != nil && !it.done() && len(task.Repeat.Coming(*task.Due, task.Times, from, to)) > 0
 }
 
 // taskGhost is a task that repeats on a day it comes again, in the week
@@ -1905,9 +2101,33 @@ func (a *app) taskGhost(c *ui.Context, it taskItem, d time.Time) {
 	})
 }
 
+// byTime are the tasks of the day d, as a calendar's: those of the whole
+// day first, as they come, then those with a time, by it.
+func byTime(items []taskItem, d time.Time) []taskItem {
+	var out []taskItem
+	for _, it := range items {
+		if dd := it.date(); dd != nil && sameDay(*dd, d) {
+			out = append(out, it)
+		}
+	}
+	slices.SortStableFunc(out, func(x, y taskItem) int {
+		tx, ty := x.node.Task.Time, y.node.Task.Time
+		if x.node.Task.Due == nil {
+			tx = ""
+		}
+		if y.node.Task.Due == nil {
+			ty = ""
+		}
+		return strings.Compare(tx, ty)
+	})
+	return out
+}
+
 // taskChip is a task in the calendar: a small circle and its title, on a
-// faint fill; dragged to another day, it goes there.
-func (a *app) taskChip(c *ui.Context, it taskItem) {
+// faint fill; dragged to another day, it goes there. One with a time of
+// its day says it: over its title in the week (span), before it in the
+// month's small cells.
+func (a *app) taskChip(c *ui.Context, it taskItem, span bool) {
 	t := c.Theme()
 	// A white card, as the lists' are: its circle says its priority, a dot
 	// its map.
@@ -1927,11 +2147,28 @@ func (a *app) taskChip(c *ui.Context, it taskItem) {
 		a.later(func() { a.showTask(it) })
 	}
 	chip.ContextMenu(func(m *ui.Menu) { a.taskMenu(m, it) })
+	when := ""
+	if it.node.Task.Due != nil {
+		when = it.node.Task.Span()
+	}
 	chip.Children(func() {
 		a.taskCircle(c, it, 13)
-		title := ui.Text(c, it.node.Title).FontSize(textSmall).SingleLine().Grow(1).Shrink(1).MinWidth(0).PassThrough()
-		if it.done() {
-			title.TextColor(t.TextMuted).Strikethrough()
+		words := func() {
+			if when != "" && !span {
+				ui.Text(c, strings.SplitN(when, "–", 2)[0]).FontSize(textCaption).TextColor(t.TextMuted).FontFeatures("tnum").NoWrap().Shrink(0).PassThrough()
+			}
+			title := ui.Text(c, it.node.Title).FontSize(textSmall).SingleLine().Grow(1).Shrink(1).MinWidth(0).PassThrough()
+			if it.done() {
+				title.TextColor(t.TextMuted).Strikethrough()
+			}
+		}
+		if when != "" && span {
+			ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(1).PassThrough().Children(func() {
+				ui.Text(c, when).FontSize(textCaption).TextColor(t.Accent.MixOklab(t.Text, 0.25)).FontFeatures("tnum").SingleLine().PassThrough()
+				words()
+			})
+		} else {
+			words()
 		}
 		mapDot(c, a.mapColor(it.path), 6)
 	})
@@ -1991,10 +2228,11 @@ func (a *app) taskListCounts(items []taskItem) map[int]string {
 var (
 	repeatWeekly  = regexp.MustCompile(`^每(?:周|星期|礼拜)([一二三四五六日天])\s*`)
 	repeatMonthly = regexp.MustCompile(`^每月\s*(\d{1,2})\s*[日号]\s*`)
+	repeatEvery   = regexp.MustCompile(`^每(?:隔)?\s*(\d{1,2}|两|二|三|四)\s*(天|周|个月|月|年)\s*`)
 )
 
 // parseRepeat reads how a task repeats where its line begins with it:
-// 每天, 工作日, 每周五, 每月15号. It gives the rest of the line, the
+// 每天, 工作日, 每周五, 每月15号, 每月最后一天, 每年, 每2周, 每三天. It gives the rest of the line, the
 // repeat, and the first day it falls on; rep is nil where the line says
 // none.
 func parseRepeat(line string, now time.Time) (rest string, rep *model.Repeat, first *time.Time) {
@@ -2021,19 +2259,38 @@ func parseRepeat(line string, now time.Time) (rest string, rep *model.Repeat, fi
 	}
 	if m := repeatMonthly.FindStringSubmatch(s); m != nil {
 		if d, _ := strconv.Atoi(m[1]); d >= 1 && d <= 31 {
-			t := time.Date(day.Year(), day.Month(), d, 0, 0, 0, 0, day.Location())
-			if t.Before(day) {
-				t = t.AddDate(0, 1, 0)
-			}
-			return strings.TrimSpace(s[len(m[0]):]), &model.Repeat{Unit: model.RepeatMonth}, &t
+			r := &model.Repeat{Unit: model.RepeatMonth, MonthDays: []int{d}}
+			t := r.Next(nil, day.AddDate(0, 0, -1)) // its first: today, or after
+			return strings.TrimSpace(s[len(m[0]):]), r, &t
+		}
+	}
+	if rest, ok := strings.CutPrefix(s, "每月最后一天"); ok {
+		r := &model.Repeat{Unit: model.RepeatMonth, MonthDays: []int{-1}}
+		t := r.Next(nil, day.AddDate(0, 0, -1))
+		return strings.TrimSpace(rest), r, &t
+	}
+	if rest, ok := strings.CutPrefix(s, "每年"); ok {
+		return strings.TrimSpace(rest), &model.Repeat{Unit: model.RepeatYear}, nil // its day is the line's, or today
+	}
+	if m := repeatEvery.FindStringSubmatch(s); m != nil {
+		n, err := strconv.Atoi(m[1])
+		if err != nil {
+			n = map[string]int{"两": 2, "二": 2, "三": 3, "四": 4}[m[1]]
+		}
+		unit := map[string]string{"天": model.RepeatDay, "周": model.RepeatWeek, "个月": model.RepeatMonth, "月": model.RepeatMonth, "年": model.RepeatYear}[m[2]]
+		if n >= 1 {
+			return strings.TrimSpace(s[len(m[0]):]), &model.Repeat{Every: n, Unit: unit}, nil
 		}
 	}
 	return line, nil, nil
 }
 
-// repeatProp is how a task repeats, in its details: not, by the day, the
-// working days, the week or the month, or as made up below: every so many
-// days, weeks or months, and, by the week, on which days.
+// repeatProp is how a task repeats, in its details, as TickTick's: not,
+// by the day, the week, the working days, the month or the year, or as
+// made up below: every so many days, weeks, months or years; by the week
+// on which days; by the month on which dates (the last too) or on the
+// first to the last of a weekday. Whatever it is, it may end on a day or
+// after so many times, and be counted from the day it was done.
 func (a *app) repeatProp(c *ui.Context, it taskItem) {
 	t := c.Theme()
 	task := it.node.Task
@@ -2049,28 +2306,48 @@ func (a *app) repeatProp(c *ui.Context, it taskItem) {
 			})
 		})
 	}
-	wd := 0
-	if task.Due != nil {
-		if wd = int(task.Due.Weekday()); wd == 0 {
-			wd = 7
-		}
+	// change sets a copy of the repeat, changed by fn.
+	change := func(fn func(r *model.Repeat)) {
+		r := rep.Clone()
+		fn(r)
+		set(r)
 	}
-	workdays := rep != nil && rep.Label() == "工作日"
-	kind := 0 // 不重复, 每天, 工作日, 每周, 每月, 自定义
+	due := today(a.now())
+	if task.Due != nil {
+		due = *task.Due
+	}
+	wd := int(due.Weekday())
+	if wd == 0 {
+		wd = 7
+	}
+	const (
+		kindNone = iota
+		kindDay
+		kindWeek
+		kindWorkdays
+		kindMonth
+		kindYear
+		kindOwn
+	)
+	kinds := []string{"不重复", "每天", "每周", "工作日", "每月", "每年", "自定义"}
+	kind := kindNone
 	switch {
 	case rep == nil:
 	case a.tasks.repeatOwn == it.key():
-		kind = 5
-	case workdays:
-		kind = 2
-	case rep.Every > 1 || rep.Unit == model.RepeatWeek && len(rep.Days) > 1:
-		kind = 5
+		kind = kindOwn
+	case rep.Workdays():
+		kind = kindWorkdays
+	case rep.Every > 1 || rep.Unit == model.RepeatWeek && len(rep.Days) > 1 ||
+		rep.Unit == model.RepeatMonth && (len(rep.MonthDays) > 0 || rep.Nth != 0):
+		kind = kindOwn
 	case rep.Unit == model.RepeatDay:
-		kind = 1
+		kind = kindDay
 	case rep.Unit == model.RepeatWeek:
-		kind = 3
+		kind = kindWeek
 	case rep.Unit == model.RepeatMonth:
-		kind = 4
+		kind = kindMonth
+	case rep.Unit == model.RepeatYear:
+		kind = kindYear
 	}
 	chip := func(key, text, label string, on bool) ui.Element {
 		b := ui.Box(c.Key(key)).Height(28).Padding(0, 12).Radius(radiusPill).Center().Cursor(ui.CursorPointer).Label(label).Shrink(0).
@@ -2083,120 +2360,233 @@ func (a *app) repeatProp(c *ui.Context, it taskItem) {
 		}
 		press(b, 0.96)
 		b.Children(func() {
-			txt := ui.Text(c, text).FontSize(textSmall).NoWrap().PassThrough()
+			txt := ui.Text(c, text).FontSize(textSmall).NoWrap().PassThrough().FontFeatures("tnum")
 			if on {
 				txt.FontWeight(700).TextColor(t.Accent.MixOklab(t.Text, 0.3))
 			}
 		})
 		return b
 	}
-	kinds := []string{"不重复", "每天", "工作日", "每周", "每月", "自定义"}
+	// day is a date's small square key, of a grid of the month's dates.
+	day := func(key, text, label string, on bool) ui.Element {
+		return chip(key, text, label, on).Padding(0).Width(30)
+	}
 	chosen := -1
 	// The three most used are a key each, one click; the others are under
 	// one key that opens them: six chips in two rows were too heavy, and
 	// all six in a menu a click more for the common ones.
 	propRow(c, "重复", func() {
-		for _, i := range []int{0, 1, 3} {
+		for _, i := range []int{kindNone, kindDay, kindWeek} {
 			if chip("repeat:"+kinds[i], kinds[i], "重复 "+kinds[i], i == kind).Clicked() {
 				chosen = i
 			}
 		}
 		more := "更多"
-		if kind == 2 || kind == 4 || kind == 5 {
+		if kind >= kindWorkdays {
 			more = kinds[kind]
 		}
-		dropButton(c, "repeat", more, "重复方式", "工作日、每月，或自己定").Menu(func(m *ui.Menu) {
-			for _, i := range []int{2, 4, 5} {
-				if m.Item(kinds[i]).Checked(i == kind).Chosen() {
+		dropButton(c, "repeat", more, "重复方式", "工作日、每月、每年，或自己定").Menu(func(m *ui.Menu) {
+			for _, i := range []int{kindWorkdays, kindMonth, kindYear, kindOwn} {
+				name := kinds[i]
+				switch i {
+				case kindMonth:
+					name = fmt.Sprintf("每月（%d 日）", due.Day())
+				case kindYear:
+					name = fmt.Sprintf("每年（%d月%d日）", due.Month(), due.Day())
+				}
+				if m.Item(name).Checked(i == kind).Chosen() {
 					chosen = i
 				}
 			}
 		})
-		for i := range kinds {
-			if i != chosen {
-				continue
+		if chosen < 0 {
+			return
+		}
+		a.tasks.repeatOwn = ""
+		// What it ends by and counts from stays as the kind changes.
+		keep := func(r *model.Repeat) *model.Repeat {
+			if rep != nil {
+				r.Until, r.Count, r.FromDone = rep.Clone().Until, rep.Count, rep.FromDone
 			}
-			a.tasks.repeatOwn = ""
-			switch i {
-			case 0:
-				set(nil)
-			case 1:
-				set(&model.Repeat{Unit: model.RepeatDay})
-			case 2:
-				set(&model.Repeat{Unit: model.RepeatWeek, Days: []int{1, 2, 3, 4, 5}})
-			case 3:
-				set(&model.Repeat{Unit: model.RepeatWeek})
-			case 4:
-				set(&model.Repeat{Unit: model.RepeatMonth})
-			case 5:
-				a.tasks.repeatOwn = it.key()
-				if rep == nil {
-					days := []int{1, 3, 5}
-					if wd != 0 {
-						days = []int{wd}
-					}
-					set(&model.Repeat{Every: 2, Unit: model.RepeatWeek, Days: days})
-				}
+			return r
+		}
+		switch chosen {
+		case kindNone:
+			set(nil)
+		case kindDay:
+			set(keep(&model.Repeat{Unit: model.RepeatDay}))
+		case kindWorkdays:
+			set(keep(&model.Repeat{Unit: model.RepeatWeek, Days: []int{1, 2, 3, 4, 5}}))
+		case kindWeek:
+			set(keep(&model.Repeat{Unit: model.RepeatWeek}))
+		case kindMonth:
+			set(keep(&model.Repeat{Unit: model.RepeatMonth}))
+		case kindYear:
+			set(keep(&model.Repeat{Unit: model.RepeatYear}))
+		case kindOwn:
+			a.tasks.repeatOwn = it.key()
+			if rep == nil {
+				set(&model.Repeat{Unit: model.RepeatWeek, Days: []int{wd}})
 			}
 		}
 	})
+	if rep == nil {
+		return
+	}
 	// What is under the row of its kinds, in line with them.
 	sub := func(key string, fn func()) {
 		ui.Row(c.Key(key)).Padding(0, 0, 0, 52).Gap(6).Wrap().GapY(6).AlignItems(ui.Center).FillWidth().Children(fn)
 	}
-	if kind != 5 || rep == nil {
-		if rep != nil && task.Due != nil {
-			sub("repeat-next", func() {
-				ui.Text(c, "做完一次，下一次是 "+dayLabel(rep.Next(task.Due, a.now()), a.now())).FontSize(textSmall).TextColor(t.TextMuted)
-			})
+	word := func(s string) { ui.Text(c, s).FontSize(textSmall).TextColor(t.TextMuted) }
+	stepper := func(key, label string, n, least int, fn func(int)) {
+		if iconButton(c.Key(key+":less"), iconMinus, label+" 减一", "少一", 24, true).Clicked() && n > least {
+			fn(n - 1)
 		}
-		return
+		ui.Text(c, fmt.Sprint(n)).FontSize(textSmall).FontWeight(700).FontFeatures("tnum").MinWidth(16).TextAlign(ui.Center)
+		if iconButton(c.Key(key+":more"), iconPlus, label+" 加一", "多一", 24, true).Clicked() && n < 99 {
+			fn(n + 1)
+		}
 	}
-	every := max(rep.Every, 1)
-	sub("repeat-every", func() {
-		ui.Text(c, "每").FontSize(textSmall).TextColor(t.TextMuted)
-		for _, n := range []int{1, 2, 3, 4} {
-			if chip(fmt.Sprint("every:", n), fmt.Sprint(n), fmt.Sprint("每 ", n), n == every).Clicked() {
-				r := *rep
-				r.Every = n
-				set(&r)
-			}
-		}
-		for _, u := range []struct{ unit, name string }{{model.RepeatDay, "天"}, {model.RepeatWeek, "周"}, {model.RepeatMonth, "月"}} {
-			if chip("unit:"+u.unit, u.name, "按"+u.name+"重复", rep.Unit == u.unit).Clicked() {
-				r := *rep
-				r.Unit = u.unit
-				if u.unit != model.RepeatWeek {
-					r.Days = nil
-				}
-				set(&r)
-			}
-		}
-	})
-	if rep.Unit == model.RepeatWeek {
-		sub("repeat-days", func() {
-			for d, name := range []string{"一", "二", "三", "四", "五", "六", "日"} {
-				d++
-				on := slices.Contains(rep.Days, d)
-				if chip("on:"+name, name, "周"+name, on).Clicked() {
-					r := *rep
-					r.Days = slices.Clone(rep.Days)
-					if on {
-						r.Days = slices.DeleteFunc(r.Days, func(x int) bool { return x == d })
-					} else {
-						r.Days = append(r.Days, d)
-						slices.Sort(r.Days)
-					}
-					set(&r)
+	if kind == kindOwn {
+		sub("repeat-every", func() {
+			word("每")
+			stepper("every", "间隔", max(rep.Every, 1), 1, func(n int) { change(func(r *model.Repeat) { r.Every = n }) })
+			for _, u := range []struct{ unit, name string }{{model.RepeatDay, "天"}, {model.RepeatWeek, "周"}, {model.RepeatMonth, "月"}, {model.RepeatYear, "年"}} {
+				if chip("unit:"+u.unit, u.name, "按"+u.name+"重复", rep.Unit == u.unit).Clicked() {
+					change(func(r *model.Repeat) {
+						r.Unit, r.Days, r.MonthDays, r.Nth = u.unit, nil, nil, 0
+						if u.unit == model.RepeatWeek {
+							r.Days = []int{wd}
+						}
+					})
 				}
 			}
 		})
+		switch rep.Unit {
+		case model.RepeatWeek:
+			sub("repeat-days", func() {
+				for d, name := range []string{"一", "二", "三", "四", "五", "六", "日"} {
+					d++
+					on := slices.Contains(rep.Days, d)
+					if chip("on:"+name, name, "周"+name, on).Clicked() {
+						change(func(r *model.Repeat) {
+							if on {
+								r.Days = slices.DeleteFunc(r.Days, func(x int) bool { return x == d })
+							} else {
+								r.Days = append(r.Days, d)
+								slices.Sort(r.Days)
+							}
+						})
+					}
+				}
+			})
+		case model.RepeatMonth:
+			byWeekday := rep.Nth != 0
+			sub("repeat-month-by", func() {
+				if chip("month:dates", "按日期", "每月按日期", !byWeekday).Clicked() && byWeekday {
+					change(func(r *model.Repeat) { r.Nth, r.Days, r.MonthDays = 0, nil, []int{due.Day()} })
+				}
+				if chip("month:weekday", "按星期", "每月按星期", byWeekday).Clicked() && !byWeekday {
+					nth := (due.Day()-1)/7 + 1
+					if nth > 4 {
+						nth = -1
+					}
+					change(func(r *model.Repeat) { r.Nth, r.Days, r.MonthDays = nth, []int{wd}, nil })
+				}
+			})
+			if byWeekday {
+				sub("repeat-nth", func() {
+					for i, name := range []string{"第一个", "第二个", "第三个", "第四个", "最后一个"} {
+						n := i + 1
+						if n == 5 {
+							n = -1
+						}
+						if chip("nth:"+name, name, "每月"+name, rep.Nth == n).Clicked() {
+							change(func(r *model.Repeat) { r.Nth = n })
+						}
+					}
+				})
+				sub("repeat-nth-day", func() {
+					for d, name := range []string{"一", "二", "三", "四", "五", "六", "日"} {
+						d++
+						if chip("nthday:"+name, "周"+name, "每月的周"+name, len(rep.Days) > 0 && rep.Days[0] == d).Clicked() {
+							change(func(r *model.Repeat) { r.Days = []int{d} })
+						}
+					}
+				})
+				break
+			}
+			sub("repeat-dates", func() {
+				days := rep.MonthDays
+				if len(days) == 0 {
+					days = []int{due.Day()}
+				}
+				for d := 1; d <= 31; d++ {
+					on := slices.Contains(days, d)
+					if day(fmt.Sprint("date:", d), fmt.Sprint(d), fmt.Sprintf("每月 %d 日", d), on).Clicked() {
+						change(func(r *model.Repeat) { r.MonthDays = toggleDay(days, d) })
+					}
+				}
+				if chip("date:last", "最后一天", "每月最后一天", slices.Contains(days, -1)).Clicked() {
+					change(func(r *model.Repeat) { r.MonthDays = toggleDay(days, -1) })
+				}
+			})
+		case model.RepeatYear:
+			sub("repeat-year", func() { word(fmt.Sprintf("每年的 %d月%d日，跟着任务的日期", due.Month(), due.Day())) })
+		}
 	}
+	// How it ends, and from which day it counts, whatever its kind.
+	sub("repeat-end", func() {
+		word("结束")
+		if chip("end:never", "永不", "重复 永不结束", rep.Until == nil && rep.Count == 0).Clicked() {
+			change(func(r *model.Repeat) { r.Until, r.Count = nil, 0 })
+		}
+		if chip("end:day", "到某天", "重复到某天结束", rep.Until != nil).Clicked() && rep.Until == nil {
+			end := due.AddDate(0, 1, 0)
+			change(func(r *model.Repeat) { r.Until, r.Count = &end, 0 })
+		}
+		if chip("end:count", "按次数", "重复几次后结束", rep.Count > 0).Clicked() && rep.Count == 0 {
+			change(func(r *model.Repeat) { r.Until, r.Count = nil, max(task.Times+1, 10) })
+		}
+		switch {
+		case rep.Until != nil:
+			end := *rep.Until
+			if ui.DateInput(c.Key("repeat-until"), &end).Label("重复结束日期").FontSize(textSmall).Background(blockFill(t)).BorderColor(ui.RGBA(0, 0, 0, 0)).Changed() {
+				end = today(end)
+				change(func(r *model.Repeat) { r.Until = &end })
+			}
+		case rep.Count > 0:
+			word("共")
+			stepper("count", "重复次数", rep.Count, max(task.Times+1, 1), func(n int) { change(func(r *model.Repeat) { r.Count = n }) })
+			word(fmt.Sprintf("次，已做 %d 次", task.Times))
+		}
+	})
+	sub("repeat-from", func() {
+		if chip("from-done", "从做完那天算", "重复从做完那天算", rep.FromDone).Tooltip("下一次从做完的那天往后数，而不是从原定的日期").Clicked() {
+			change(func(r *model.Repeat) { r.FromDone = !r.FromDone })
+		}
+	})
 	sub("repeat-says", func() {
 		says := rep.Label()
 		if task.Due != nil {
-			says += "；做完一次，下一次是 " + dayLabel(rep.Next(task.Due, a.now()), a.now())
+			if next := rep.Next(task.Due, a.now()); rep.Ended(next, task.Times+1) {
+				says += "；这是最后一次"
+			} else {
+				says += "；做完一次，下一次是 " + dayLabel(next, a.now())
+			}
 		}
 		ui.Text(c, says).FontSize(textSmall).TextColor(t.TextMuted).Wrap()
 	})
+}
+
+// toggleDay is days with d put in, or taken out; never none: the last
+// taken out leaves the one there was.
+func toggleDay(days []int, d int) []int {
+	if slices.Contains(days, d) {
+		if len(days) == 1 {
+			return slices.Clone(days)
+		}
+		return slices.DeleteFunc(slices.Clone(days), func(x int) bool { return x == d })
+	}
+	return append(slices.Clone(days), d)
 }

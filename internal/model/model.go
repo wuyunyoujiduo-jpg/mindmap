@@ -111,13 +111,35 @@ type Task struct {
 	// Remind, if set, is the time of its day to be reminded of it at, as
 	// 15:04.
 	Remind string `json:"remind,omitempty"`
+	// Time and EndTime, if set, are when in its day it is done, as 15:04:
+	// from Time, to EndTime when that is set too. A task with neither is
+	// of the whole day.
+	Time    string `json:"time,omitempty"`
+	EndTime string `json:"endTime,omitempty"`
+}
+
+// Span says when in its day the task is: 9:00–10:30, 9:00, or nothing.
+func (t *Task) Span() string {
+	if t == nil || t.Time == "" {
+		return ""
+	}
+	s := strings.TrimPrefix(t.Time, "0")
+	if t.EndTime != "" {
+		s += "–" + strings.TrimPrefix(t.EndTime, "0")
+	}
+	return s
 }
 
 // SetStatus changes the status, noting when the task was done. A task
 // that repeats, done, is to do again on its next day.
 func (t *Task) SetStatus(s Status, now time.Time) {
-	if s == StatusDone && t.Repeat != nil {
+	if s == StatusDone && t.Repeat != nil && t.Status != StatusDone {
 		next := t.Repeat.Next(t.Due, now)
+		if t.Repeat.Ended(next, t.Times+1) { // its last time: done
+			t.Times++
+			t.DoneAt, t.Status = &now, StatusDone
+			return
+		}
 		t.Due, t.Start, t.DoneAt = &next, nil, &now
 		t.Times++
 		if t.Status == StatusDone || t.Status == StatusDoing {
@@ -562,6 +584,7 @@ func (n *Node) clone() *Node {
 			t.DoneAt = &at
 		}
 		t.After = slices.Clone(n.Task.After)
+		t.Repeat = n.Task.Repeat.Clone()
 		c.Task = &t
 	}
 	c.Children = make([]*Node, len(n.Children))
