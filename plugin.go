@@ -190,6 +190,7 @@ func (a *app) downloadPlugin() {
 			return
 		}
 		reloadLocalModel()
+		a.collect.plugin = pluginHere{}
 		a.embedErr, a.qvecs = "", map[string][]float32{}
 		a.pluginResult = "语义检索插件已装好" // the card of its download turns into this
 		a.embedLibrary()
@@ -201,6 +202,7 @@ func (a *app) removePlugin() {
 	_ = os.Remove(pluginPath())
 	_ = os.Remove(pluginPath() + ".json")
 	reloadLocalModel()
+	a.collect.plugin = pluginHere{}
 	a.qvecs = map[string][]float32{}
 }
 
@@ -210,17 +212,45 @@ func pluginInstalled() bool {
 	return err == nil
 }
 
+// pluginHere is the plugin as it was last looked at: whether it is
+// installed, and its manifest.
+type pluginHere struct {
+	looked    bool
+	at        time.Time
+	installed bool
+	manifest  *pluginManifest
+}
+
+// pluginLook is how long what was seen of the plugin's files is taken as
+// they are: put there or removed by the app, they are looked at at once.
+const pluginLook = 3 * time.Second
+
+// pluginState tells whether the plugin is installed, and its manifest,
+// as of a look at its files not long ago: the settings' page asked for
+// both at every frame, a file looked for and another read and parsed.
+func (a *app) pluginState() (installed bool, m *pluginManifest) {
+	p := &a.collect.plugin
+	if now := a.now(); !p.looked || now.Sub(p.at) >= pluginLook || now.Before(p.at) {
+		*p = pluginHere{looked: true, at: now, installed: pluginInstalled()}
+		if p.installed {
+			p.manifest = installedManifest()
+		}
+	}
+	return p.installed, p.manifest
+}
+
 // pluginSettings is the plugin's part of the library's settings.
 func (a *app) pluginSettings(c *ui.Context) {
 	t := c.Theme()
+	installed, manifest := a.pluginState()
 	ui.Column(c).Gap(6).Children(func() {
 		switch {
 		case a.pluginBusy:
 			a.pluginProgress(c)
-		case pluginInstalled():
+		case installed:
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				label := "✓ 语义检索插件已安装"
-				if m := installedManifest(); m != nil {
+				if m := manifest; m != nil {
 					label += fmt.Sprintf("（版本 %d）", m.Version)
 				}
 				ui.Text(c, label).FontSize(12).TextColor(t.Success).Grow(1)

@@ -316,12 +316,7 @@ func (a *app) libSide(c *ui.Context) {
 			kind       int
 			name, icon string
 		}{{kindAll, "全部", "layers"}, {kindMemos, "灵感", "lightbulb"}, {kindLinks, "链接", "link"}, {kindDocs, "文档", "file-text"}, {kindImages, "图片", "image"}, {kindVideos, "视频", "video"}} {
-			n := 0
-			for _, cl := range l.Clips {
-				if ofKind(cl, k.kind) {
-					n++
-				}
-			}
+			n := a.kindCounts()[k.kind]
 			if k.kind == kindVideos && n == 0 && a.libKind != kindVideos {
 				continue // a row of its own once there is a video
 			}
@@ -446,17 +441,42 @@ func (a *app) tagClipUndoably(id, tag string) {
 // what looks like a key or a password (app.libCat).
 const secretCat = "\x00secret"
 
-// secretCount is how many clips hold what looks like a secret, counted
-// once for a state of the library.
+// secretCount is how many clips hold what looks like a secret. Each clip
+// keeps whether it does for its words as they are (library.Clip.Secret),
+// so they are counted as they are asked: counted once for a state of the
+// library, every clip was tried by the rules again at each change of it,
+// and a secret typed was not counted till the clip was kept.
 func (a *app) secretCount() int {
-	if a.secretsOf != a.lib || a.secretsAt != a.lib.Version {
-		n := 0
+	n := 0
+	for _, cl := range a.lib.Clips {
+		if cl.Secret() {
+			n++
+		}
+	}
+	return n
+}
+
+// kindCounts are how many clips are of each kind the left column lists,
+// counted once for a state of the library: they were counted at every
+// frame, a pass over all the clips for each kind.
+func (a *app) kindCounts() map[int]int {
+	k := &a.collect.kinds
+	if k.lib != a.lib || k.version != a.lib.Version || k.n == nil {
+		*k = kindsCounted{lib: a.lib, version: a.lib.Version, n: map[int]int{}}
 		for _, cl := range a.lib.Clips {
-			if cl.Secret() {
-				n++
+			for _, kind := range []int{kindAll, kindMemos, kindLinks, kindDocs, kindImages, kindVideos} {
+				if ofKind(cl, kind) {
+					k.n[kind]++
+				}
 			}
 		}
-		a.secretsOf, a.secretsAt, a.secrets = a.lib, a.lib.Version, n
 	}
-	return a.secrets
+	return k.n
+}
+
+// kindsCounted is kindCounts' count, with the library it is of.
+type kindsCounted struct {
+	lib     *library.Library
+	version int
+	n       map[int]int
 }

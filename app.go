@@ -468,16 +468,13 @@ type app struct {
 	renaming    string // the map or folder renamed in the sidebar
 	renameText  string
 	tagQuery    string
-	notice      string           // a passing message in the toolbar, as "已复制"
-	noticeAt    time.Time        // since when it shows
-	libReveal   string           // the clip the keyboard went to, to scroll to once
-	secretsOf   *library.Library // what secretCount counted, and when
-	secretsAt   int
-	secrets     int
-	treeReveal  string // the map just opened, whose row of the directory is scrolled to once
-	treeQuick   bool   // the directory's rows being drawn are 快捷访问's
-	escLeave    bool   // Escape was pressed in a field of a pane: the focus leaves it (escRest)
-	secretShown string // the clip whose secrets its details show, asked for
+	notice      string    // a passing message in the toolbar, as "已复制"
+	noticeAt    time.Time // since when it shows
+	libReveal   string    // the clip the keyboard went to, to scroll to once
+	treeReveal  string    // the map just opened, whose row of the directory is scrolled to once
+	treeQuick   bool      // the directory's rows being drawn are 快捷访问's
+	escLeave    bool      // Escape was pressed in a field of a pane: the focus leaves it (escRest)
+	secretShown string    // the clip whose secrets its details show, asked for
 	// The secrets sealed (vault.go): the keys of the library, until when
 	// they stay unlocked, the window that asks, what is being typed of a
 	// clip, and a secret copied, to clear the clipboard of.
@@ -911,6 +908,7 @@ func (a *app) mergeOutside() bool {
 
 // flush saves unsaved changes, and how the map is left.
 func (a *app) flush() {
+	a.keepTyped() // and what was typed in a clip's details (collecttyped.go)
 	if a.dirty && !a.conflict {
 		a.save() // which merges what changed outside, or finds that it cannot
 	}

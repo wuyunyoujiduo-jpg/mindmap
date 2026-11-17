@@ -16,6 +16,22 @@ import (
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/versions"
 )
 
+// mapMaterial is the open map's material as mapMaterialSection tells it:
+// how many clips and maps it links, the links to what is no more, the
+// maps and the thoughts that link to it; for the maps and the library as
+// they were.
+type mapMaterial struct {
+	index       int // refs.built
+	held        int // how many clips there were: one deleted is another count
+	lib         *library.Library
+	version     int
+	path        string
+	file        *model.File
+	clips, maps int
+	gone, from  []string
+	thoughts    []backlink
+}
+
 // Material and maps are related one way only: a node's links, to a clip
 // ("clip:id"), a node of any map ("mindmap:map#id"), a whole map (its
 // first canvas's root), or a skill of the AI agents ("skill:name"). Where
@@ -28,6 +44,11 @@ type refs struct {
 	// or not: what else is worked out from the maps is worked out again
 	// then (the places a clip may go to).
 	sig string
+	// thoughts is the count of the thoughts' links it was made of
+	// (thoughtLinks); built counts the times the links were made again,
+	// for what is worked out from them.
+	thoughts int
+	built    int
 	// to lists the nodes linking to a target: "clip:id", "skill:name",
 	// "node:path#id", and "map:path" for any node of a map, from other maps.
 	to map[string][]backlink
@@ -42,7 +63,6 @@ type refs struct {
 	dir     string
 	path    string // the open map, which a link with no map named is to
 	lib     *library.Library
-	libVer  int
 	version int
 }
 
@@ -124,8 +144,12 @@ func (a *app) refIndex() *refs {
 			changed = true
 		}
 	}
-	if r.lib != a.lib || r.libVer != a.lib.Version || r.path != a.path { // the thoughts link too
-		r.lib, r.libVer, r.path, changed = a.lib, a.lib.Version, a.path, true
+	// The thoughts link too: by their links, not by the library's every
+	// change. A letter typed in a clip's details had the links of every
+	// map gone through again.
+	thoughts := a.thoughtLinks()
+	if r.lib != a.lib || r.thoughts != thoughts.n || r.path != a.path {
+		r.lib, r.thoughts, r.path, changed = a.lib, thoughts.n, a.path, true
 	}
 	if changed || read || r.sig == "" {
 		r.version++
@@ -135,6 +159,7 @@ func (a *app) refIndex() *refs {
 		return r
 	}
 	r.to = map[string][]backlink{}
+	r.built++
 	for _, fi := range a.files {
 		m := r.maps[fi.Path]
 		if m == nil {
@@ -147,20 +172,17 @@ func (a *app) refIndex() *refs {
 	// A thought's links to topics and maps: what it links to says so. Its
 	// links to other thoughts are told by clipMentions, and are no use of
 	// a clip on a map (clipBacklinks).
-	for _, cl := range a.lib.Clips {
-		if !strings.Contains(cl.Text, "<"+nodeScheme) && !strings.Contains(cl.Text, "<"+skillScheme) {
-			continue
-		}
-		for _, link := range tokenLinks(cl.Text) {
+	for _, th := range thoughts.list {
+		for _, link := range th.links {
 			if strings.HasPrefix(link, skillScheme) {
-				r.to[link] = append(r.to[link], backlink{title: cl.Label(), clip: cl.ID})
+				r.to[link] = append(r.to[link], backlink{title: th.label, clip: th.id})
 				continue
 			}
 			path, id, ok := a.nodeOfLink(link)
 			if !ok {
 				continue
 			}
-			b := backlink{title: cl.Label(), clip: cl.ID}
+			b := backlink{title: th.label, clip: th.id}
 			r.to["node:"+path+"#"+id] = append(r.to["node:"+path+"#"+id], b)
 			r.to["map:"+path] = append(r.to["map:"+path], b)
 		}
@@ -202,6 +224,58 @@ func (a *app) mapRefsOf(path string) *mapRefs {
 		}
 	}
 	return m
+}
+
+// A thoughtLink is a thought that links to topics, maps or skills: its
+// links, and the name it is said by where it is linked from.
+type thoughtLink struct {
+	id, label string
+	links     []string
+}
+
+// thoughtsLinks are the thoughts' links as of a state of the library; n
+// counts the times they changed, for what is worked out from them.
+type thoughtsLinks struct {
+	lib     *library.Library
+	version int
+	list    []thoughtLink
+	n       int
+}
+
+// linksIn is what a clip's links are kept under (Clip.Once).
+type linksIn struct{}
+
+// thoughtLinks are the links the thoughts hold to topics, maps and
+// skills, looked at again when the library changed, and counted as
+// changed only when they are others: a clip's words changed is nothing
+// to the maps' links unless its links did, or the name it is said by.
+func (a *app) thoughtLinks() *thoughtsLinks {
+	t := &a.collect.thoughts
+	if t.lib == a.lib && t.version == a.lib.Version && t.n > 0 {
+		return t
+	}
+	var list []thoughtLink
+	for _, cl := range a.lib.Clips {
+		links, _ := cl.Once(linksIn{}, func() any {
+			if !strings.Contains(cl.Text, "<"+nodeScheme) && !strings.Contains(cl.Text, "<"+skillScheme) {
+				return []string(nil)
+			}
+			return slices.DeleteFunc(tokenLinks(cl.Text), func(l string) bool {
+				return !strings.HasPrefix(l, nodeScheme) && !strings.HasPrefix(l, skillScheme)
+			})
+		}).([]string)
+		if len(links) > 0 {
+			list = append(list, thoughtLink{cl.ID, cl.Label(), links})
+		}
+	}
+	same := t.n > 0 && t.lib == a.lib && slices.EqualFunc(list, t.list, func(x, y thoughtLink) bool {
+		return x.id == y.id && x.label == y.label && slices.Equal(x.links, y.links)
+	})
+	if !same {
+		t.n++
+	}
+	t.lib, t.version, t.list = a.lib, a.lib.Version, list
+	return t
 }
 
 func (a *app) addRef(r *refs, b backlink, link string) {
@@ -401,50 +475,59 @@ func (a *app) mapMaterialSection(c *ui.Context) {
 		return
 	}
 	t := c.Theme()
-	clips, maps := map[string]bool{}, map[string]bool{}
-	var gone []string
-	a.file.Walk(func(n *model.Node) {
-		for _, l := range n.Links {
-			kind, target, _ := a.parseLink(l)
-			switch kind {
-			case linkClip:
-				if a.lib.Find(target) == nil {
-					gone = append(gone, l)
-				} else {
-					clips[target] = true
-				}
-			case linkNode:
-				path, id, _ := strings.Cut(target, "#")
-				if f := a.mapFile(path); f == nil || id != "" && f.SheetOf(id) == nil {
-					gone = append(gone, l)
-				} else if path != a.path {
-					maps[path] = true
+	// Worked out once for the maps and the clips as they are: every topic
+	// of the map was gone through at each frame its panel showed, each
+	// link to a map looked up by a look at that map's file.
+	m := &a.collect.material
+	if index := a.refIndex().built; m.index != index || m.lib != a.lib || m.version != a.lib.Version || m.held != len(a.lib.Clips) || m.path != a.path || m.file != a.file {
+		*m = mapMaterial{index: index, lib: a.lib, version: a.lib.Version, held: len(a.lib.Clips), path: a.path, file: a.file}
+		clips, maps, from := map[string]bool{}, map[string]bool{}, map[string]bool{}
+		a.file.Walk(func(n *model.Node) {
+			for _, l := range n.Links {
+				kind, target, _ := a.parseLink(l)
+				switch kind {
+				case linkClip:
+					if a.lib.Find(target) == nil {
+						m.gone = append(m.gone, l)
+					} else {
+						clips[target] = true
+					}
+				case linkNode:
+					path, id, _ := strings.Cut(target, "#")
+					if f := a.mapFile(path); f == nil || id != "" && f.SheetOf(id) == nil {
+						m.gone = append(m.gone, l)
+					} else if path != a.path {
+						maps[path] = true
+					}
 				}
 			}
-		}
-	})
-	from := map[string]bool{}
-	var thoughts []backlink // the thoughts and clips that link to it or to a topic of it
-	for _, b := range a.refIndex().to["map:"+a.path] {
-		if b.clip != "" {
-			if !slices.ContainsFunc(thoughts, func(x backlink) bool { return x.clip == b.clip }) {
-				thoughts = append(thoughts, b)
+		})
+		for _, b := range a.refIndex().to["map:"+a.path] {
+			if b.clip != "" {
+				if !slices.ContainsFunc(m.thoughts, func(x backlink) bool { return x.clip == b.clip }) {
+					m.thoughts = append(m.thoughts, b)
+				}
+				continue
 			}
-			continue
+			if !from[b.path] {
+				from[b.path] = true
+				m.from = append(m.from, b.path)
+			}
 		}
-		from[b.path] = true
+		m.clips, m.maps = len(clips), len(maps)
 	}
-	if len(clips)+len(maps)+len(from)+len(gone)+len(thoughts) == 0 {
+	clips, maps, from, gone, thoughts := m.clips, m.maps, m.from, m.gone, m.thoughts
+	if clips+maps+len(from)+len(gone)+len(thoughts) == 0 {
 		return
 	}
 	section(c, iconLibrary, "本图资料", nil, func() {
 		ui.Column(c).Gap(6).Children(func() {
 			line := func(text string) { ui.Text(c, text).FontSize(12).Wrap() }
-			if len(clips) > 0 {
-				line(fmt.Sprintf("挂着 %d 条资料", len(clips)))
+			if clips > 0 {
+				line(fmt.Sprintf("挂着 %d 条资料", clips))
 			}
-			if len(maps) > 0 {
-				line(fmt.Sprintf("链接了 %d 张别的导图", len(maps)))
+			if maps > 0 {
+				line(fmt.Sprintf("链接了 %d 张别的导图", maps))
 			}
 			if len(thoughts) > 0 {
 				line(fmt.Sprintf("被 %d 条灵感或资料提到", len(thoughts)))
@@ -459,7 +542,7 @@ func (a *app) mapMaterialSection(c *ui.Context) {
 					})
 				}
 			}
-			for path := range from {
+			for _, path := range from {
 				path := path
 				row := ui.Row(c.Key("from:" + path)).Gap(6).Cursor(ui.CursorPointer).Label("打开 " + mapName(path))
 				if row.Clicked() {

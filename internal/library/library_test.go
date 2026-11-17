@@ -145,11 +145,11 @@ func TestTakeGivesBack(t *testing.T) {
 		id string
 		at int
 	}{{id, at}, {pic.ID, 0}} {
-		back, err := l.Take(take.id)
+		taken, err := l.Trash(take.id, now)
 		if err != nil || len(l.Clips) != 3 {
 			t.Fatalf("take: %v, %d left", err, len(l.Clips))
 		}
-		if err := back(); err != nil || len(l.Clips) != 4 || l.Clips[take.at].ID != take.id {
+		if err := l.PutBack(taken); err != nil || len(l.Clips) != 4 || l.Clips[take.at].ID != take.id {
 			t.Fatalf("back: %v, %d clips", err, len(l.Clips))
 		}
 	}

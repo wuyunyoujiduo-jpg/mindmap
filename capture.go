@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
 
@@ -181,12 +182,20 @@ func (a *app) captureView(c *ui.Context) {
 		})
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 			if ghostButton(c, "收藏剪贴板", "把剪贴板里的文字、链接、图片或文件存到收集（"+keyLabel(a.clipKey())+"）").Clicked() {
-				if _, err := a.clipClipboard("剪贴板"); err != nil {
-					a.captureErr = err.Error()
-				} else {
-					a.captureErr = ""
-					a.plat.HideCapture()
-				}
+				// Files are copied away from the window: what came of them
+				// is said when they are, here while this shows.
+				a.captureErr = ""
+				a.clipClipboard("剪贴板", func(_ []*library.Clip, missed string, err error) {
+					switch {
+					case err != nil:
+						a.captureErr = err.Error()
+					case missed != "":
+						a.tell(missed)
+						a.plat.HideCapture()
+					default:
+						a.plat.HideCapture()
+					}
+				})
 			}
 			if here {
 				on := a.captureWhere == captureHere

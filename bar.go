@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
 )
 
 // The one bar, in the top row of every page, between the places and the
@@ -64,12 +65,17 @@ func (a *app) barCard(c *ui.Context, text string) {
 					if text != "" {
 						return false
 					}
-					clips, err := a.clipClipboard("剪贴板")
-					if err != nil {
-						return false
-					}
-					a.libSel = clips[0].ID
-					return true
+					// Shown once kept: files are copied away from the window.
+					return a.clipClipboard("剪贴板", func(clips []*library.Clip, missed string, err error) {
+						switch {
+						case err != nil:
+							a.tell(err.Error())
+						case len(clips) > 0:
+							if a.libSel = clips[0].ID; missed != "" {
+								a.tell(missed)
+							}
+						}
+					})
 				},
 				reads: func() { // what it is kept as: a click makes a task of a thought, or a thought of a task
 					now := a.now()

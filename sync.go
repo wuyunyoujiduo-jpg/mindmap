@@ -319,6 +319,7 @@ func (a *app) syncNow() {
 	if a.dirty && !a.conflict && (a.editing == "" || modTime(a.path).Equal(a.modTime)) {
 		a.save()
 	}
+	a.keepTyped() // and what was typed in a clip's details
 	a.syncBusy, a.syncTried, a.syncMsg = true, a.now(), "正在同步…"
 	dir, cfg, run, post := a.dir, a.syncConfig(), a.syncRun, a.post
 	kept, now := a.versions, a.now()

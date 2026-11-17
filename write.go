@@ -317,7 +317,7 @@ func (a *app) noteText(c *ui.Context, text string, size float32, lines int) {
 	body := strings.TrimSpace(refToken.ReplaceAllString(text, ""))
 	switch {
 	case body == "":
-	case noteMarked.MatchString(body):
+	case noteHasMarks(body): // as noteMarked tells, read off the text (memos.go)
 		markdownView(c.Key("marked"), body, size)
 	default:
 		ui.Text(c, body).FontSize(size).LineHeight(1.65).Wrap().MaxLines(lines).FillWidth()

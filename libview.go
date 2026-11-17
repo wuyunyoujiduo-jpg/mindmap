@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
@@ -146,6 +147,12 @@ func (a *app) clipWall(c *ui.Context, hits []library.Hit) {
 		room -= min(420, w*0.4)
 	}
 	cols := min(max(int(room/300), 1), 6)
+	// More of them shown is of the wall as it was narrowed then: narrowed
+	// anew, it begins at its first cards again (it never did, and a wall
+	// once read to its end built every card of each one after it).
+	if of := (wallOf{a.lib, a.libQuery, a.libKind, a.libCat, a.libTag, a.libDay, a.libReview, a.libWalk}); a.collect.wallOf != of {
+		a.collect.wallOf, a.wallShown = of, 0
+	}
 	shown := min(len(hits), max(a.wallShown, wallStep))
 	tall := make([]float32, cols)
 	in := make([][]*library.Clip, cols)
@@ -246,10 +253,18 @@ func clipTall(clip *library.Clip, cols int) float32 {
 	if cols == 1 {
 		per = 44
 	}
+	// Up to most lines, and no more of the text read than fills them: the
+	// whole of every text was cut into lines and made runes at each
+	// frame, to count seven of them.
 	lines := func(s string, most int) float32 {
 		n := 0
-		for _, l := range strings.Split(strings.TrimSpace(s), "\n") {
-			n += 1 + len([]rune(l))/per
+		for s = strings.TrimSpace(s); n < most; {
+			line, rest, more := strings.Cut(s, "\n")
+			n += 1 + utf8.RuneCountInString(firstRunes(line, (most-n)*per))/per
+			if !more {
+				break
+			}
+			s = rest
 		}
 		return float32(min(n, most))
 	}
@@ -338,6 +353,125 @@ type collectState struct {
 	catFor, catText string
 	// The pictures read (thumbs.go).
 	pics pictures
+	// What the wall was narrowed to when more of it was asked for.
+	wallOf wallOf
+	// What was worked out of a text the details show, by what it is of,
+	// kept while the text is the same (same).
+	sames map[string]sameAs
+	// What was typed in a clip's details and is not kept yet (typed.go).
+	typed typed
+	// The maps as they were when what is worked out of them was
+	// (mapsState), the thoughts' links (refs.go) and the material of the
+	// open map.
+	maps     mapsSeen
+	thoughts thoughtsLinks
+	material mapMaterial
+	// The thoughts that name the clip shown, and those it names.
+	mentions mentions
+	// How many clips are of each kind (side.go).
+	kinds kindsCounted
+	// The files being copied into the library (clips.go).
+	adding adding
+	// What [[ offers, for a part typed (wikilinks.go).
+	offers offersMade
+	// The run of making the clips' vectors (libmore.go).
+	embed embedRun
+	// The plugin as it is installed, looked at once in a while (plugin.go).
+	plugin pluginHere
+}
+
+// wallOf is what the wall is narrowed to.
+type wallOf struct {
+	lib          *library.Library
+	query        string
+	kind         int
+	cat, tag     string
+	day          time.Time
+	review, walk int
+}
+
+// A sameAs is what was worked out of a text, with the text.
+type sameAs struct {
+	of  string
+	out any
+}
+
+// same is what work makes of a text, worked out once while the text is
+// the same: for what the details of a clip show of a text at every frame
+// that is not the clip's own words (what was typed, a part opened). The
+// text is compared each time, which costs nothing while it is the same
+// string and the length of it when it is another alike; so what is kept
+// is never of other words than those shown.
+func (a *app) same(key, of string, work func() any) any {
+	if s, ok := a.collect.sames[key]; ok && s.of == of {
+		return s.out
+	}
+	if a.collect.sames == nil {
+		a.collect.sames = map[string]sameAs{}
+	}
+	out := work()
+	a.collect.sames[key] = sameAs{of, out}
+	return out
+}
+
+// firstRunes is the first n characters of s.
+func firstRunes(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	i := 0
+	for at := range s {
+		if i == n {
+			return s[:at]
+		}
+		i++
+	}
+	return s
+}
+
+// A cardLook is what a clip's card shows of its words: its name, and its
+// text, or the line under its name, cut to what a card holds, its secrets
+// in dots, about what is searched for. Worked out once for the clip's
+// words and what is searched (Clip.Once): drawn at every frame, the cards
+// of a wall had the rules of a secret tried on the whole of every text
+// each time, most of a frame of 收集.
+type cardLook struct{ label, body string }
+
+// cardFor is what a card is worked out for beside the clip's words.
+type cardFor struct{ query string }
+
+func cardOf(clip *library.Clip, query string) *cardLook {
+	return clip.Once(cardFor{query}, func() any {
+		look := &cardLook{label: clip.Label()}
+		if isMemo(clip) {
+			text := clip.Masked(library.PartText)
+			if cut := firstRunes(text, 600); len(cut) < len(text) {
+				text = cut + "…"
+			}
+			look.body = library.Excerpt(text, query, 400)
+			return look
+		}
+		var sub string
+		switch {
+		case clip.Desc != "":
+			sub = clip.Masked(library.PartDesc)
+		case summaryShown(clip): // as the details show it
+			sub = clip.Masked(library.PartSummary)
+		case clip.Note != "":
+			sub = clip.Masked(library.PartNote)
+		case clip.Text != "":
+			sub = clip.Masked(library.PartText)
+		default:
+			sub = library.Mask(clip.URL)
+		}
+		if clip.Title == "" && !strings.HasSuffix(look.label, "…") && strings.TrimSpace(sub) == look.label {
+			sub = "" // the label says it all
+		}
+		if sub != "" {
+			look.body = library.Excerpt(firstRunes(sub, 3000), query, 140)
+		}
+		return look
+	}).(*cardLook)
 }
 
 // collectShown tells whether 收集's page shows.
@@ -433,13 +567,14 @@ func (a *app) searchClips() []library.Hit {
 // cannot be kept not stopping those after it, and how many could not is
 // said.
 func (a *app) dropClips(files []string) {
-	clips, failed, err := a.addClipFiles(files, "拖入")
-	if n := len(clips); n > 0 {
-		a.libSel = clips[n-1].ID
-	}
-	if failed > 0 {
-		a.libFail(filesFailed(failed, len(clips), err))
-	}
+	a.keepFiles(files, "拖入", func(clips []*library.Clip, failed int, err error) {
+		if n := len(clips); n > 0 {
+			a.libSel = clips[n-1].ID
+		}
+		if failed > 0 {
+			a.libFail(filesFailed(failed, len(clips), err))
+		}
+	})
 }
 
 // clipFilters are what the wall is narrowed by: the kinds, with the ways
@@ -501,8 +636,9 @@ func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 	t := c.Theme()
 	memo := isMemo(clip)
 	kcol := clipColor(clip.Kind)
+	look := cardOf(clip, a.libQuery)
 	row := ui.Column(c).FillWidth().Padding(16, 18).Gap(12).Radius(radiusCard).Cursor(ui.CursorPointer).
-		Label("资料 " + clip.Label()).Drag(clipDrag{clip.ID})
+		Label("资料 " + look.label).Drag(clipDrag{clip.ID})
 	// A white card, as all are: a note is its text, the others have their
 	// kind's icon by their title.
 	wallCard(row, t)
@@ -523,17 +659,13 @@ func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 	row.ContextMenu(func(m *ui.Menu) { a.clipMenu(m, clip) })
 	row.Children(func() {
 		if memo {
-			text := library.Mask(clip.Text)
-			if r := []rune(text); len(r) > 600 {
-				text = string(r[:600]) + "…"
-			}
 			ui.Column(c).Gap(6).FillWidth().PassThrough().Children(func() {
-				a.noteText(c, library.Excerpt(text, a.libQuery, 400), 15, 7)
+				a.noteText(c, look.body, 15, 7)
 			})
 		} else {
 			ui.Row(c).Gap(10).AlignItems(ui.Center).PassThrough().Children(func() {
 				glyph(c, kindTile(clip.Kind), 16, t.TextMuted)
-				ui.Text(c, clip.Label()).FontSize(14).FontWeight(700).Grow(1).Shrink(1).MinWidth(0).MaxLines(2)
+				ui.Text(c, look.label).FontSize(14).FontWeight(700).Grow(1).Shrink(1).MinWidth(0).MaxLines(2)
 				if clip.Starred {
 					glyph(c, iconStarFilled, 12, t.Warning)
 				}
@@ -550,25 +682,8 @@ func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 					ui.Box(c.Key("picture-loading")).Height(110).FillWidth().Radius(8).Background(blockFill(t)).PassThrough()
 				}
 			}
-			sub := clip.Desc
-			if sub == "" && summaryShown(clip) { // as the details show it
-				sub = clip.Summary
-			}
-			if sub == "" {
-				sub = cmpOr(clip.Note, clip.Text)
-			}
-			if sub == "" {
-				sub = clip.URL
-			}
-			sub = library.Mask(sub)
-			if label := clip.Label(); clip.Title == "" && !strings.HasSuffix(label, "…") && strings.TrimSpace(sub) == label {
-				sub = "" // the label says it all
-			}
-			if sub != "" {
-				if r := []rune(sub); len(r) > 3000 { // the cards are drawn every frame
-					sub = string(r[:3000])
-				}
-				ui.Text(c, library.Excerpt(sub, a.libQuery, 140)).FontSize(textBody).LineHeight(1.55).TextColor(t.TextMuted).Wrap().MaxLines(3).PassThrough()
+			if look.body != "" {
+				ui.Text(c, look.body).FontSize(textBody).LineHeight(1.55).TextColor(t.TextMuted).Wrap().MaxLines(3).PassThrough()
 			}
 		}
 		a.clipPlaceLine(c, clip)
@@ -718,6 +833,7 @@ func clipCopyText(c *library.Clip) string {
 }
 
 func (a *app) saveClip(c *library.Clip) {
+	delete(a.collect.typed.ids, c.ID) // what was typed in it is kept with the rest
 	if err := a.lib.Save(c, a.now()); err != nil {
 		a.libFail("没有存下：" + err.Error())
 	}
@@ -780,20 +896,20 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 	ui.Column(c).Gap(2).Margin(4, -6, 0).Children(func() {
 		// A part with a secret in it is in dots, and not written in, till
 		// the secrets are asked for (fieldText).
-		title, write := a.fieldText(clip, "title", clip.Title)
-		if in := inlineInput(c.Key("clip-title"), &title, textHeadline, true, clip.Label(), "资料标题"); in.Changed() && write {
+		a.lineField(t, clip, "title", clip.Title, func(title *string) ui.Element {
+			return inlineInput(c.Key("clip-title"), title, textHeadline, true, clip.Label(), "资料标题")
+		}, func(title string) {
 			clip.Title = title
-			a.saveClip(clip)
+			a.clipTyped(clip, "title") // kept when the typing pauses (collecttyped.go)
 			a.fieldTyped(clip, "title", title, clip.Title)
-		}
-		desc, write := a.fieldText(clip, "desc", clip.Desc)
-		in := inlineArea(c.Key("clip-desc"), &desc, textBody, 1, 4, "加一句说明，说清这是什么（AI 整理时自动生成）", "资料说明")
-		in.TextColor(t.TextMuted)
-		if in.Changed() && write {
+		})
+		a.lineField(t, clip, "desc", clip.Desc, func(desc *string) ui.Element {
+			return inlineArea(c.Key("clip-desc"), desc, textBody, 1, 4, "加一句说明，说清这是什么（AI 整理时自动生成）", "资料说明").TextColor(t.TextMuted)
+		}, func(desc string) {
 			clip.Desc = desc
-			a.saveClip(clip)
+			a.clipTyped(clip, "desc")
 			a.fieldTyped(clip, "desc", desc, clip.Desc)
-		}
+		})
 	})
 
 	if clip.Kind == library.KindImage {
@@ -881,7 +997,7 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 			// A short note has no summary: one written before this was so is
 			// kept, and not shown.
 			if summaryShown(clip) {
-				ui.Text(c, library.Mask(clip.Summary)).FontSize(textBody).LineHeight(1.55).Wrap().Selectable()
+				ui.Text(c, clip.Masked(library.PartSummary)).FontSize(textBody).LineHeight(1.55).Wrap().Selectable()
 			}
 			// What is long and seldom read is folded: the points of a long
 			// text, and the words it is found by. Laid out, they made the
@@ -889,6 +1005,7 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 			if analysisShown(clip) {
 				if a.foldKey(c, "analysis:"+clip.ID, "分析要点", "") {
 					analysis, _ := a.fieldText(clip, "analysis", clip.Analysis) // a secret in it in dots, till shown
+					analysis, _ = library.Marks(analysis)                       // the marks are the file's
 					markdownView(c.Key("clip-analysis"), analysis, textBody)
 				}
 			}
@@ -925,7 +1042,9 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 	// until asked for, and with a second password set is sealed: the
 	// password is asked then (secretKeys, fieldText).
 	keys := false // the keys of its secrets were drawn
-	content := func(key, hint, label string, size float32, maxLines int, changed func(text string)) ui.Element {
+	// set takes the text as written; it is kept when the typing pauses, and
+	// at once when a part of it is said to be a secret, or no more.
+	content := func(key, hint, label string, size float32, maxLines int, set func(text string)) ui.Element {
 		text, write := a.fieldText(clip, "text", clip.Text)
 		if !write {
 			keys = true
@@ -941,13 +1060,18 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 		if in.Changed() {
 			_, caret := in.TextSelection()
 			full := f.typed(text, caret)
-			changed(full)
+			set(full)
+			a.clipTyped(clip, "text")
 			a.fieldTyped(clip, "text", full, clip.Text)
 			f = a.secretField(full)
 		}
-		f.style(in, t)
-		a.markKey(c, clip, "text", in, f, changed)
-		if library.HasSecret(clip.Text) {
+		a.typedLeft(clip, "text", in)
+		a.styleSecrets(in, "text", f, t)
+		a.markKey(c, clip, "text", in, f, func(full string) {
+			set(full)
+			a.saveClip(clip)
+		})
+		if clip.Holds(library.PartText) {
 			keys = true
 			a.secretKeys(c, clip)
 		}
@@ -956,13 +1080,12 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 	switch {
 	case clip.Kind == library.KindText:
 		section(c, iconText, "内容", nil, func() {
-			content("clip-text", "", "资料内容", textBody+1, 30, func(text string) { a.setMemoText(clip, text) })
+			content("clip-text", "", "资料内容", textBody+1, 30, func(text string) { memoText(clip, text) })
 		})
 	case clip.Kind == library.KindLink:
 		section(c, iconLink, "网页正文", nil, func() {
 			in := content("clip-page", "没读到网页正文时（需要登录的页面、公众号文章等），可以把正文复制粘贴到这里", "网页正文", textBody, 16, func(text string) {
 				clip.Text = text
-				a.saveClip(clip)
 			})
 			if in.PressedOutside() && clip.Text != "" && clip.Organized == nil && providerKey(a.cfg) != "" && !a.cfg.LibraryManual {
 				a.enqueueClip(clip.ID, true)
@@ -975,9 +1098,14 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 		}
 		section(c, kindTile(clip.Kind), label, nil, func() {
 			text, _ := a.fieldText(clip, "text", clip.Text)
-			text, _ = library.Marks(text)
-			ui.Text(c, library.Excerpt(text, "", 3000)).FontSize(textSmall).LineHeight(1.5).TextColor(t.TextMuted).Wrap().Selectable()
-			if library.HasSecret(clip.Text) {
+			// Its beginning, cut once for the text as it is: a file's text
+			// was made one line, whole, at every frame.
+			shown, _ := a.same("file-text", text, func() any {
+				text, _ := library.Marks(text)
+				return library.Excerpt(text, "", 3000)
+			}).(string)
+			ui.Text(c, shown).FontSize(textSmall).LineHeight(1.5).TextColor(t.TextMuted).Wrap().Selectable()
+			if clip.Holds(library.PartText) {
 				keys = true
 				a.secretKeys(c, clip)
 			}
@@ -993,19 +1121,20 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 			f := a.secretField(note)
 			note = f.shown
 			in := inlineArea(c.Key("clip-note"), &note, textBody, 1, 10, "为什么收藏它、想怎么用…", "资料备注").Margin(0, -8)
-			set := func(note string) {
-				clip.Note = note
-				a.saveClip(clip)
-			}
 			if in.Changed() {
 				_, caret := in.TextSelection()
 				full := f.typed(note, caret)
-				set(full)
+				clip.Note = full
+				a.clipTyped(clip, "note")
 				a.fieldTyped(clip, "note", full, clip.Note)
 				f = a.secretField(full)
 			}
-			f.style(in, t)
-			a.markKey(c, clip, "note", in, f, set)
+			a.typedLeft(clip, "note", in)
+			a.styleSecrets(in, "note", f, t)
+			a.markKey(c, clip, "note", in, f, func(note string) {
+				clip.Note = note
+				a.saveClip(clip)
+			})
 		}
 		if !keys { // the secret is here, or in the title
 			a.secretKeys(c, clip)
@@ -1031,10 +1160,11 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 			in := inlineInput(c.Key("clip-cat"), &st.catText, textBody, false, "未分类", "资料分类")
 			if in.Changed() {
 				clip.Category = strings.TrimSpace(st.catText)
-				a.saveClip(clip)
+				a.clipTyped(clip, "cat")
 			} else if !in.Focused() {
 				st.catText = clip.Category
 			}
+			a.typedLeft(clip, "cat", in)
 		})
 		propRow(c, "标签", func() {
 			for _, tag := range clip.Tags {
@@ -1093,6 +1223,10 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 		aiPart()
 	}
 	a.relatedSection(c, clip)
+	// What was typed is kept as the field it was typed in is left.
+	if a.waitsTyped(clip.ID) && !c.FocusTakesText() {
+		a.later(a.keepTyped)
+	}
 }
 
 // clipTagChip is a tag of a clip in its details: the tag, which narrows

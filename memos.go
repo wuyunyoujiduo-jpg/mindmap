@@ -55,6 +55,48 @@ func colorWord(s string) bool {
 	return strings.ContainsAny(s, "0123456789") || strings.Count(strings.ToLower(s), strings.ToLower(s[:1])) == len(s)
 }
 
+// noteHasMarks tells whether a note has marks to show by, bold or a list:
+// what noteMarked tells, read off the text itself. Every card of a wall
+// asks at every frame, and the pattern, tried from each letter in turn,
+// was two thirds of a frame of 收集 once the rest of it was light.
+func noteHasMarks(s string) bool {
+	// A list: a line that begins with "- ", or with figures and ". ".
+	for at := 0; at < len(s); {
+		line := s[at:]
+		if strings.HasPrefix(line, "- ") {
+			return true
+		}
+		d := 0
+		for d < len(line) && line[d] >= '0' && line[d] <= '9' {
+			d++
+		}
+		if d > 0 && strings.HasPrefix(line[d:], ". ") {
+			return true
+		}
+		i := strings.IndexByte(line, '\n')
+		if i < 0 {
+			break
+		}
+		at += i + 1
+	}
+	// Bold: ** and, with no * nor end of line between, ** again.
+	for at := 0; ; {
+		i := strings.Index(s[at:], "**")
+		if i < 0 {
+			return false
+		}
+		from := at + i + 2
+		to := from
+		for to < len(s) && s[to] != '*' && s[to] != '\n' {
+			to++
+		}
+		if to > from && strings.HasPrefix(s[to:], "**") {
+			return true
+		}
+		at += i + 1
+	}
+}
+
 // isMemo tells whether a clip is one of 灵感: a text of the library.
 func isMemo(c *library.Clip) bool { return c.Kind == library.KindText }
 
@@ -71,18 +113,24 @@ func (a *app) addMemo(text, source string) (*library.Clip, error) {
 // setMemoText changes a note's text: the tags written in it follow, the
 // others (the AI's, the user's) stay.
 func (a *app) setMemoText(m *library.Clip, text string) {
+	memoText(m, text)
+	a.saveClip(m)
+}
+
+// memoText gives a note its text, and the tags written in it; the note is
+// not kept (setMemoText keeps it; its details, when the typing pauses).
+func memoText(m *library.Clip, text string) {
 	// The tags of the text with its secrets in dots: a # in a password
 	// made the rest of it a tag, kept and shown in the open.
-	old := memoTags(library.Mask(m.Text))
+	old := memoTags(m.Masked(library.PartText))
 	m.Text = text
 	tags := slices.DeleteFunc(slices.Clone(m.Tags), func(s string) bool { return slices.Contains(old, s) })
-	for _, tag := range memoTags(library.Mask(text)) {
+	for _, tag := range memoTags(m.Masked(library.PartText)) {
 		if !slices.Contains(tags, tag) {
 			tags = append(tags, tag)
 		}
 	}
 	m.Tags = tags
-	a.saveClip(m)
 }
 
 // The ways 收集 looks back (app.libReview): 每日回顾, a few of the old

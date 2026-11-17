@@ -48,8 +48,9 @@ const smallMost = 3000
 const picturesAtOnce = 3
 
 // wholeRoom is how much the whole pictures kept may take, in bytes, and
-// wholeLeast how many are kept whatever they take: those of the frame
-// shown, a clip's in its details and one shown large.
+// wholeLeast how many are kept whatever they take: a clip's in its
+// details and one shown large. Those the frame shown asks for are kept
+// too, however many they are (keepPicture).
 var wholeRoom = 128 << 20
 
 const wholeLeast = 3
@@ -65,6 +66,7 @@ const pictureRetry = 5 * time.Second
 type pictures struct {
 	tick   int
 	shown  map[string]int       // a whole picture's key → the tick it was last asked for at
+	frame  map[string]int       // and the frame (app.vidFrame) it was last asked for in
 	failed map[string]time.Time // a key → when its file could not be read
 }
 
@@ -113,6 +115,12 @@ func (a *app) picture(path string, kind int) (b *ui.Bitmap, loading bool) {
 	}
 	key := pictureKey(path, kind)
 	p := &a.collect.pics
+	if kind == pictureWhole { // asked for in this frame: not to make room for another of it
+		if p.frame == nil {
+			p.frame = map[string]int{}
+		}
+		p.frame[key] = a.vidFrame
+	}
 	if b, ok := a.bitmaps[key]; ok {
 		if kind == pictureWhole && b != nil {
 			p.touch(key)
@@ -185,7 +193,12 @@ func (p *pictures) touch(key string) {
 
 // keepPicture keeps a picture read under its key. A whole one takes the
 // room of those shown longest ago, once the whole ones take more than
-// wholeRoom; the few shown last stay whatever they take.
+// wholeRoom; the few shown last stay whatever they take, and so does
+// every one the frame shown asked for: the room is at least what one
+// frame shows. Four photos of twelve megapixels on a slide took more than
+// it, and one of them, whichever was read last, put out another that the
+// same frame showed, which was read again and put out the next, at every
+// frame for as long as the slide showed.
 func (a *app) keepPicture(key string, b *ui.Bitmap) {
 	a.bitmaps[key] = b
 	if b == nil || !wholeKey(key) {
@@ -198,19 +211,24 @@ func (a *app) keepPicture(key string, b *ui.Bitmap) {
 		shown, size int
 	}
 	var all []whole
-	total := 0
+	total, inFrame := 0, 0
 	for k, b := range a.bitmaps {
 		if b == nil || !wholeKey(k) {
 			continue
 		}
 		w, h := b.Size()
-		all = append(all, whole{k, p.shown[k], 4 * w * h})
 		total += 4 * w * h
+		if at, asked := p.frame[k]; asked && at == a.vidFrame {
+			inFrame++ // of the frame shown
+			continue
+		}
+		all = append(all, whole{k, p.shown[k], 4 * w * h})
 	}
 	slices.SortFunc(all, func(x, y whole) int { return x.shown - y.shown })
-	for i := 0; i < len(all)-wholeLeast && total > wholeRoom; i++ {
+	for i := 0; i < len(all)-max(0, wholeLeast-inFrame) && total > wholeRoom; i++ {
 		delete(a.bitmaps, all[i].key)
 		delete(p.shown, all[i].key)
+		delete(p.frame, all[i].key)
 		total -= all[i].size
 	}
 }
