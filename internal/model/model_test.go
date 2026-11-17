@@ -118,7 +118,7 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	m["a1"].Tags = []string{"核心", "bug"}
 	m["a1"].Task = &Task{Status: StatusDoing, Priority: PriorityHigh, Due: &due}
 	path := filepath.Join(t.TempDir(), FileName("我的/项目"))
-	if filepath.Base(path) != "我的-项目"+Ext {
+	if filepath.Base(path) != "我的 项目"+Ext {
 		t.Fatalf("file name %q", filepath.Base(path))
 	}
 	f := &File{Sheets: []*Document{d, New("second")}, Project: "/code/p", GitHub: "me/p", Measures: []string{"工时"},
@@ -144,7 +144,7 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 		t.Fatalf("loaded %+v", n)
 	}
 	files, err := ListFiles(filepath.Dir(path))
-	if err != nil || len(files) != 1 || files[0].Name != "我的-项目" {
+	if err != nil || len(files) != 1 || files[0].Name != "我的 项目" {
 		t.Fatalf("files %+v err %v", files, err)
 	}
 }
@@ -302,5 +302,59 @@ func TestScanFolder(t *testing.T) {
 	mk("a" + Ext)
 	if _, err := MoveFile(filepath.Join(dir, "a"+Ext), filepath.Join(dir, "工作")); err == nil {
 		t.Fatal("replaced a file of the same name")
+	}
+}
+
+// A file of version 1, one map with no canvas, reads as one canvas whose
+// ID is the same each time: two computers that each read it merge it as
+// one canvas, not two.
+func TestVersion1CanvasIsOne(t *testing.T) {
+	v1 := []byte(`{"version":1,"root":{"id":"r1","title":"旧图","children":[{"id":"a","title":"甲"}]}}`)
+	a, err := Parse(v1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := Parse(v1)
+	if a.Sheets[0].ID == "" || a.Sheets[0].ID != b.Sheets[0].ID {
+		t.Fatalf("canvas IDs %q and %q", a.Sheets[0].ID, b.Sheets[0].ID)
+	}
+	a.Node("a").Title = "甲改"
+	b.Sheets[0].AddChild("r1", "乙")
+	m, _ := Merge(nil, a, b)
+	if len(m.Sheets) != 1 || m.Node("a").Title != "甲改" || len(m.Sheets[0].Root.Children) != 2 {
+		t.Fatalf("%d canvases, root's children %d", len(m.Sheets), len(m.Sheets[0].Root.Children))
+	}
+	// Two canvases with no ID and the same root's are still two.
+	two, err := Parse([]byte(`{"sheets":[{"title":"一","root":{"id":"r","title":"x"}},{"title":"二","root":{"id":"r","title":"y"}}]}`))
+	if err != nil || two.Sheets[0].ID == two.Sheets[1].ID {
+		t.Fatalf("two canvases: %v %v", two, err)
+	}
+}
+
+// One rule names the files: a map renamed by hand and one named after
+// its central topic have the same name of the same words.
+func TestCleanName(t *testing.T) {
+	for in, want := range map[string]string{
+		"计划 / 第二版":         "计划 第二版",
+		"a:b*c?\n第二行":      "a b c",
+		"  .隐藏. ":          "隐藏",
+		"":                 "",
+		"说明.":              "说明",
+		"我的/项目":            "我的 项目",
+		"tab\there  twice": "tab here twice",
+	} {
+		if got := CleanName(in); got != want {
+			t.Errorf("CleanName(%q) = %q, want %q", in, got, want)
+		}
+		name := want
+		if name == "" {
+			name = "未命名"
+		}
+		if got := FileName(in); got != name+Ext {
+			t.Errorf("FileName(%q) = %q", in, got)
+		}
+	}
+	if got := []rune(CleanName(strings.Repeat("长", 80))); len(got) != 60 {
+		t.Errorf("a long name is %d runes", len(got))
 	}
 }

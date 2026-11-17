@@ -195,3 +195,129 @@ func TestMergeLog(t *testing.T) {
 		t.Errorf("log = %v", got)
 	}
 }
+
+// A picture, a place and a rule of repeating are each one value: both
+// sides changing one is one thing to choose, and the choice is whole.
+func TestMergeAtoms(t *testing.T) {
+	base := mergeBase()
+	base.Node("a1").Image = &Image{File: "old.png", W: 100, H: 80}
+	base.Node("a2").Task = &Task{Status: StatusTodo, Repeat: &Repeat{Unit: "day"}}
+	base.Baseline = &Baseline{Commit: "aaa", Branch: "main"}
+	ours, theirs := base.Clone(), base.Clone()
+	ours.Node("a1").Image = &Image{File: "ours.png", W: 640, H: 480}
+	theirs.Node("a1").Image = &Image{File: "theirs.png", W: 300, H: 200}
+	ours.Node("a2").Task.Repeat = &Repeat{Unit: "week", Days: []int{1}}
+	theirs.Node("a2").Task.Repeat = &Repeat{Unit: "month", MonthDays: []int{15}, Every: 2}
+	ours.Baseline = &Baseline{Commit: "bbb", Branch: "main", Subject: "ours"}
+	theirs.Baseline = &Baseline{Commit: "ccc", Branch: "dev"}
+
+	m, clashes := Merge(base, ours, theirs)
+	var fields []string
+	for _, c := range clashes {
+		fields = append(fields, strings.Join(c.Field, "."))
+	}
+	slices.Sort(fields)
+	if !slices.Equal(fields, []string{"baseline", "image", "task.repeat"}) {
+		t.Fatalf("clashes of %v: want one of each thing", fields)
+	}
+	if got := *m.Node("a1").Image; got != (Image{File: "ours.png", W: 640, H: 480}) {
+		t.Errorf("image %+v, want ours whole", got)
+	}
+	for _, c := range clashes {
+		if !m.TakeTheirs(c) {
+			t.Fatalf("could not take %+v", c)
+		}
+	}
+	if got := *m.Node("a1").Image; got != (Image{File: "theirs.png", W: 300, H: 200}) {
+		t.Errorf("image %+v, want theirs whole", got)
+	}
+	if r := m.Node("a2").Task.Repeat; r.Unit != "month" || r.Every != 2 || len(r.Days) != 0 || !slices.Equal(r.MonthDays, []int{15}) {
+		t.Errorf("repeat %+v, want theirs whole", r)
+	}
+	if b := m.Baseline; b.Commit != "ccc" || b.Branch != "dev" || b.Subject != "" {
+		t.Errorf("baseline %+v, want theirs whole", b)
+	}
+}
+
+// The markers are one of a group: each side's change of a group is
+// taken, and a group both changed is ours, to choose, never two of it.
+func TestMergeMarkers(t *testing.T) {
+	base := mergeBase()
+	base.Node("a1").Markers = []string{"flag:green", "priority:1"}
+	ours, theirs := base.Clone(), base.Clone()
+	ours.Node("a1").Markers = []string{"flag:red", "priority:1", "star:blue"}
+	theirs.Node("a1").Markers = []string{"flag:blue", "priority:2"}
+	// Apart: no clash.
+	ours.Node("a2").Markers = []string{"flag:red"}
+	theirs.Node("a2").Markers = []string{"star:yellow"}
+
+	m, clashes := Merge(base, ours, theirs)
+	if got := m.Node("a1").Markers; !slices.Equal(got, []string{"flag:red", "priority:2", "star:blue"}) {
+		t.Errorf("markers %v", got)
+	}
+	if got := m.Node("a2").Markers; !slices.Equal(got, []string{"flag:red", "star:yellow"}) {
+		t.Errorf("markers added apart %v", got)
+	}
+	if len(clashes) != 1 || !slices.Equal(clashes[0].Field, []string{"markers"}) {
+		t.Fatalf("clashes %+v, want the flag's alone", clashes)
+	}
+	m.TakeTheirs(clashes[0])
+	if got := m.Node("a1").Markers; !slices.Equal(got, []string{"flag:blue", "priority:2", "star:blue"}) {
+		t.Errorf("with theirs: %v", got)
+	}
+}
+
+// A summary's topic is a topic as any other: one moved under it on one
+// side and renamed on the other is in the map once, there, renamed.
+func TestMergeSummaryTopics(t *testing.T) {
+	base := mergeBase()
+	sum := base.Node("a").AddSummary("小结")
+	sum.ID = "s"
+	ours, theirs := base.Clone(), base.Clone()
+	if err := ours.Sheets[0].Move("a1", "s", 0); err != nil {
+		t.Fatal(err)
+	}
+	theirs.Node("a1").Title = "Opus 5"
+	theirs.Node("s").Note = "两个模型"
+
+	m, clashes := Merge(base, ours, theirs)
+	if len(clashes) != 0 {
+		t.Errorf("clashes %+v", clashes)
+	}
+	count := 0
+	m.Walk(func(n *Node) {
+		if n.ID == "a1" {
+			count++
+		}
+	})
+	if _, p := m.Sheets[0].Find("a1"); count != 1 || p == nil || p.ID != "s" || m.Node("a1").Title != "Opus 5" {
+		t.Fatalf("a1 is in the map %d times, under %v, titled %q", count, p, m.Node("a1").Title)
+	}
+	if s := m.Node("a").SummaryTopic(); s == nil || s.ID != "s" || s.Note != "两个模型" || len(m.Node("a").Children) != 1 {
+		t.Errorf("the summary: %+v, a's children %v", s, titles(m.Node("a").Children))
+	}
+	data, _ := m.Marshal()
+	back, err := Parse(data)
+	if err != nil || back.Node("s") == nil || back.Node("a1") == nil {
+		t.Fatalf("does not read back: %v", err)
+	}
+
+	// A summary taken off on one side, its topic changed on the other, is
+	// kept; left alone on the other, it goes.
+	ours, theirs = base.Clone(), base.Clone()
+	ours.Node("a").Summary = nil
+	if m, _ := Merge(base, ours, theirs); m.Node("s") != nil || m.Node("a").Summary != nil {
+		t.Error("a summary taken off came back")
+	}
+	theirs.Node("s").Title = "总结"
+	if m, _ := Merge(base, ours, theirs); m.Node("a").SummaryTopic() == nil || m.Node("s").Title != "总结" {
+		t.Error("a summary changed on one side, taken off on the other, is lost")
+	}
+	// A choice of theirs for a field of the topic summed up keeps its summary.
+	ours, theirs = base.Clone(), base.Clone()
+	ours.Node("a").Title, theirs.Node("a").Title = "甲", "乙"
+	m, clashes = Merge(base, ours, theirs)
+	if len(clashes) != 1 || !m.TakeTheirs(clashes[0]) || m.Node("a").Title != "乙" || m.Node("s") == nil {
+		t.Errorf("after taking theirs: %q, summary %v", m.Node("a").Title, m.Node("a").SummaryTopic())
+	}
+}
