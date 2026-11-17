@@ -2288,13 +2288,19 @@ func TestHistoryAndConflict(t *testing.T) {
 	a.undo()
 	find(t, a, "AI 加的模块")
 
-	// A change outside while the map has unsaved changes: nothing is saved
-	// over it until a version is chosen.
+	// A change outside while the map has unsaved changes, with nothing to
+	// merge the two against: nothing is saved over it until a version is
+	// chosen. (With what both came from, they are merged:
+	// TestOutsideChangeMerged.)
 	a.mutate("", func() { find(t, a, "前端").Title = "界面层" })
+	a.base = nil
 	changeOnDisk(t, a, func(f *model.File) { f.Sheets[0].Root.Title = "外部改名" }, 2*time.Minute)
 	tt.Frame()
 	if !a.conflict {
 		t.Fatal("no conflict")
+	}
+	if !tt.HasText("你编辑这张导图的时候，它在别处也被改了：可能是另一台电脑同步过来的，也可能是 AI 等其他程序改的。这次没法自动合并，选择保留哪一份，另一份会存进历史版本。") {
+		t.Fatalf("the bar: %q", tt.Texts())
 	}
 	a.now = func() time.Time { return testNow.Add(3 * time.Minute) }
 	tt.Frame()

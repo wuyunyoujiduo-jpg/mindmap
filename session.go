@@ -63,7 +63,7 @@ func (a *app) saveViews() {
 		return
 	}
 	b, _ := json.MarshalIndent(a.views, "", "  ")
-	_ = os.WriteFile(p, b, 0o644)
+	_ = writeFile(p, b) // whole or not at all: half a file read as no view of any map
 }
 
 // rememberView keeps how the open map is left, and its history.

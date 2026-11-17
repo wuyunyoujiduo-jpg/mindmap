@@ -1,7 +1,9 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -15,23 +17,71 @@ import (
 // so that the map carries it. A file dropped on a node attaches; a
 // picture becomes the node's picture, unless it has one.
 
-// attachFile copies a file into the assets folder and attaches it.
+// attachFile copies a file into the assets folder and attaches it. The
+// copy is made away from the window's work, the file's bytes going from
+// one file to the other: read whole into memory on the window's thread,
+// a large file held the window still and took its size of memory. The
+// topic, found again by its ID in its map, has it when the copy is done;
+// what is wrong with the file to copy is told at once.
 func (a *app) attachFile(n *model.Node, path string) error {
-	data, err := os.ReadFile(path)
+	if info, err := os.Stat(path); err != nil {
+		return err
+	} else if !info.Mode().IsRegular() {
+		return errors.New("只能附加文件：" + filepath.Base(path))
+	}
+	dir := model.AssetsDir(a.path)
+	name := filepath.Base(path)
+	file := model.NewID() + strings.ToLower(filepath.Ext(name))
+	id, of := n.ID, a.path
+	a.async(func() (any, error) {
+		return nil, copyFile(path, filepath.Join(dir, file))
+	}, func(_ any, err error) {
+		if err == nil {
+			err = a.editMapAt(of, "加上附件 "+name, func(f *model.File) error {
+				n := f.Node(id)
+				if n == nil {
+					return errors.New("要加附件的主题已经不在了")
+				}
+				n.Files = append(slices.Clone(n.Files), model.Attachment{File: file, Name: name})
+				return nil
+			})
+			if err != nil {
+				_ = os.Remove(filepath.Join(dir, file))
+			}
+		}
+		if err != nil {
+			a.saveErr = "没能加上附件「" + name + "」：" + err.Error()
+		}
+	})
+	return nil
+}
+
+// copyFile copies a file to another, whole or not at all.
+func copyFile(from, to string) error {
+	in, err := os.Open(from)
 	if err != nil {
 		return err
 	}
-	dir := model.AssetsDir(a.path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	defer in.Close()
+	if err := os.MkdirAll(filepath.Dir(to), 0o755); err != nil {
 		return err
 	}
-	name := filepath.Base(path)
-	file := model.NewID() + strings.ToLower(filepath.Ext(name))
-	if err := os.WriteFile(filepath.Join(dir, file), data, 0o644); err != nil {
+	tmp := to + ".tmp"
+	out, err := os.Create(tmp)
+	if err != nil {
 		return err
 	}
-	a.mutate("", func() { n.Files = append(slices.Clone(n.Files), model.Attachment{File: file, Name: name}) })
-	return nil
+	_, err = io.Copy(out, in)
+	if cerr := out.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Rename(tmp, to)
+	}
+	if err != nil {
+		os.Remove(tmp)
+	}
+	return err
 }
 
 // dropFiles attaches files dropped on a node.

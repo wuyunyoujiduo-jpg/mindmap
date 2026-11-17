@@ -51,15 +51,17 @@ func (a *app) keepVersionIfDue() {
 	}
 }
 
-// conflictBar asks which version to keep when another program changed the
-// file while the map had changes not yet saved.
+// conflictBar asks which version to keep when the file changed outside
+// while the map had changes not yet saved, and the two could not be
+// merged (mergeOutside): with nothing to merge against, or a file that
+// does not read.
 func (a *app) conflictBar(c *ui.Context) {
 	if !a.conflict {
 		return
 	}
 	t := c.Theme()
 	ui.Row(c.Key("conflict")).Padding(8, 12).Gap(10).AlignItems(ui.Center).Background(t.Warning.Alpha(0.15)).Children(func() {
-		ui.Text(c, "这个导图同时被其他程序（比如 AI）修改了，你也有未保存的修改。选择保留哪一份，另一份会存进历史版本。").
+		ui.Text(c, "你编辑这张导图的时候，它在别处也被改了：可能是另一台电脑同步过来的，也可能是 AI 等其他程序改的。这次没法自动合并，选择保留哪一份，另一份会存进历史版本。").
 			FontSize(12).Wrap().Grow(1)
 		if button(c, "载入外部版本").Clicked() {
 			a.resolveConflict(false)

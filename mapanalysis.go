@@ -102,7 +102,6 @@ func (a *app) writeMapMeta(key string, an *model.Analysis) error {
 	a.loadMapMetas()
 	a.mapMetas[key] = an
 	a.mapMetaVersion++
-	a.syncChange()
 	return nil
 }
 
@@ -113,7 +112,6 @@ func (a *app) removeMapMeta(path string) {
 		a.loadMapMetas()
 		delete(a.mapMetas, key)
 		a.mapMetaVersion++
-		a.syncChange()
 	}
 }
 

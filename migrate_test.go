@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,14 +11,16 @@ import (
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/versions"
 )
 
-// The maps folder of before, ~/Documents/MindMap, becomes ~/Documents/MyMind,
-// its maps' versions and the map open last with it.
-func TestMoveOldDir(t *testing.T) {
+// What the app keeps by the maps' paths follows the maps folder where it
+// moved: the versions, how the maps were left, the map open last, the
+// favorites, the recent ones, the folders shown open, the folders of the
+// maps' code, and what the sync remembers of the folder.
+func TestFollowPaths(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
-	old := filepath.Join(home, "Documents", "MindMap")
-	m := filepath.Join(old, "项目", "计划"+model.Ext)
+	from, to := filepath.Join(home, "Documents", "旧"), filepath.Join(home, "Documents", "新")
+	m := filepath.Join(from, "项目", "计划"+model.Ext)
 	os.MkdirAll(filepath.Dir(m), 0o755)
 	f := model.NewFile("计划")
 	if err := f.Save(m); err != nil {
@@ -27,21 +30,23 @@ func TestMoveOldDir(t *testing.T) {
 	if _, err := store.Save(m, f, versions.Auto, "", time.Now()); err != nil {
 		t.Fatal(err)
 	}
+	os.MkdirAll(filepath.Dir(syncStatePath(from)), 0o755)
+	os.WriteFile(syncStatePath(from), []byte(`{"repo":"me/notes"}`), 0o644)
+	views, _ := json.Marshal(map[string]*fileView{m: {Sheet: "s1"}})
+	os.WriteFile(viewsPath(), views, 0o644)
 
-	c := loadConfig()
-	if c.Dir != old {
-		t.Fatalf("the folder of before is not used: %s", c.Dir)
-	}
-	c.File, c.Favorites = m, []string{m}
-	if !moveOldDir(&c) {
-		t.Fatal("not moved")
-	}
-	now := filepath.Join(home, "Documents", "MyMind", "项目", "计划"+model.Ext)
-	if _, err := os.Stat(now); err != nil {
+	c := config{Dir: from, File: m, Favorites: []string{m}, Recent: []string{m},
+		OpenFolders: []string{filepath.Dir(m)}, Projects: map[string]string{m: "/code/x"}}
+	if err := os.Rename(from, to); err != nil {
 		t.Fatal(err)
 	}
-	if c.Dir != filepath.Join(home, "Documents", "MyMind") || c.File != now || c.Favorites[0] != now {
+	followPaths(&c, from, to)
+	now := filepath.Join(to, "项目", "计划"+model.Ext)
+	if c.Dir != to || c.File != now || c.Favorites[0] != now || c.Recent[0] != now {
 		t.Fatalf("config %+v", c)
+	}
+	if c.OpenFolders[0] != filepath.Dir(now) || c.Projects[now] != "/code/x" || len(c.Projects) != 1 {
+		t.Fatalf("the open folders and the code's folders stayed behind: %v %v", c.OpenFolders, c.Projects)
 	}
 	if len(store.List(now)) != 1 {
 		t.Fatal("the versions stayed behind")
@@ -49,9 +54,14 @@ func TestMoveOldDir(t *testing.T) {
 	if got := loadConfig(); got.Dir != c.Dir {
 		t.Fatalf("not saved: %s", got.Dir)
 	}
-	// Once only.
-	if moveOldDir(&c) {
-		t.Fatal("moved twice")
+	if data, _ := os.ReadFile(syncStatePath(to)); string(data) != `{"repo":"me/notes"}` {
+		t.Fatalf("what the sync remembers stayed behind: %q", data)
+	}
+	if v := loadViews()[now]; v == nil || v.Sheet != "s1" {
+		t.Fatalf("the views stayed behind: %v", loadViews())
+	}
+	if _, err := os.Stat(viewsPath() + ".merge.tmp"); err == nil {
+		t.Fatal("the views' file was not written through another")
 	}
 }
 

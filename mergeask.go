@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -28,22 +30,106 @@ type mergeAsk struct {
 	under   []string // where its topic is: "收件箱 › 待整理"
 	theirs  []bool   // the other computer's chosen
 	when    ghsync.MergeInfo
+	// outside is set of the open map merged with what changed its file
+	// while it was edited (mergeOutside): the other side is another
+	// computer's sync or a program, an AI agent, not known which.
+	outside bool
 }
 
 // askMerge queues the clashes of a map merged, for mergeView to ask.
 func (a *app) askMerge(path string, clashes []model.Clash, when ghsync.MergeInfo) {
-	if len(clashes) == 0 {
+	a.queueMerge(&mergeAsk{path: path, clashes: clashes, when: when})
+}
+
+// queueMerge queues a map's clashes, said of the map as it is, and keeps
+// what waits (saveMerges).
+func (a *app) queueMerge(m *mergeAsk) {
+	if len(m.clashes) == 0 {
 		return
 	}
-	f, _ := model.Load(path)
-	m := &mergeAsk{path: path, clashes: clashes, theirs: make([]bool, len(clashes)), when: when}
-	for _, c := range clashes {
+	f := a.file
+	if m.path != a.path || f == nil { // the open map is asked of as it is here, saved or not
+		f, _ = model.Load(m.path)
+	}
+	m.where, m.under = nil, nil
+	for _, c := range m.clashes {
 		m.where = append(m.where, clashWhere(f, c))
 		m.under = append(m.under, clashUnder(f, c))
 	}
-	a.merges = slices.DeleteFunc(a.merges, func(x *mergeAsk) bool { return x.path == path })
+	if len(m.theirs) != len(m.clashes) {
+		m.theirs = make([]bool, len(m.clashes))
+	}
+	a.merges = slices.DeleteFunc(a.merges, func(x *mergeAsk) bool { return x.path == m.path })
 	a.merges = append(a.merges, m)
 	a.mergeOpen = true
+	a.saveMerges()
+}
+
+// What waits to be asked is kept beside the sync's state, and asked
+// again when the app opens: in memory alone, a restart (an update's
+// among them) dropped the questions, this computer's values stayed, and
+// nothing said so.
+
+// mergeKept is a mergeAsk as kept.
+type mergeKept struct {
+	Path    string           `json:"path"`
+	Clashes []model.Clash    `json:"clashes"`
+	Theirs  []bool           `json:"theirs"`
+	When    ghsync.MergeInfo `json:"when"`
+	Outside bool             `json:"outside,omitempty"`
+}
+
+func mergesPath(dir string) string {
+	p := syncStatePath(dir)
+	if p == "" {
+		return ""
+	}
+	return strings.TrimSuffix(p, ".json") + ".merges.json"
+}
+
+// saveMerges keeps the questions that wait, or nothing when none does.
+func (a *app) saveMerges() {
+	p := mergesPath(a.dir)
+	if p == "" {
+		return
+	}
+	if len(a.merges) == 0 {
+		_ = os.Remove(p)
+		return
+	}
+	var kept []mergeKept
+	for _, m := range a.merges {
+		kept = append(kept, mergeKept{m.path, m.clashes, m.theirs, m.when, m.outside})
+	}
+	data, err := json.Marshal(kept)
+	if err != nil || os.MkdirAll(filepath.Dir(p), 0o755) != nil {
+		return
+	}
+	_ = writeFile(p, data)
+}
+
+// loadMerges asks again what waited when the app closed, of the maps
+// that are there still.
+func (a *app) loadMerges() {
+	p := mergesPath(a.dir)
+	if p == "" {
+		return
+	}
+	data, err := os.ReadFile(p)
+	if err != nil {
+		return
+	}
+	var kept []mergeKept
+	if json.Unmarshal(data, &kept) != nil {
+		return
+	}
+	for _, k := range kept {
+		if _, err := os.Stat(k.Path); err != nil || !inside(k.Path, a.dir) {
+			continue
+		}
+		a.queueMerge(&mergeAsk{path: k.Path, clashes: k.Clashes, theirs: k.Theirs, when: k.When, outside: k.Outside})
+	}
+	a.saveMerges()
 }
 
 // mergeDone applies the choices of the first map asked, and asks the next.
@@ -54,20 +140,25 @@ func (a *app) mergeDone(apply bool) {
 	m := a.merges[0]
 	a.merges = a.merges[1:]
 	a.mergeOpen = len(a.merges) > 0
+	a.saveMerges()
 	n := 0
 	for _, t := range m.theirs {
 		if t {
 			n++
 		}
 	}
+	ours, theirs := "这台电脑的", "另一台电脑的"
+	if m.outside {
+		ours, theirs = "你改的", "别处改的"
+	}
 	if !apply || n == 0 {
-		a.tell(fmt.Sprintf("「%s」两边都改的 %d 处，留了这台电脑的", mapName(m.path), len(m.clashes)))
+		a.tell(fmt.Sprintf("「%s」两边都改的 %d 处，留了%s", mapName(m.path), len(m.clashes), ours))
 		return
 	}
 	if m.path == a.path && !a.dirty && !modTime(a.path).Equal(a.modTime) {
 		a.reload() // the merge, not yet read by tick
 	}
-	err := a.editMapAt(m.path, "合并时选了另一台电脑的", func(f *model.File) error {
+	err := a.editMapAt(m.path, "合并时选了"+theirs, func(f *model.File) error {
 		for i, c := range m.clashes {
 			if m.theirs[i] {
 				f.TakeTheirs(c)
@@ -79,7 +170,7 @@ func (a *app) mergeDone(apply bool) {
 		a.tell("没能改好「" + mapName(m.path) + "」：" + err.Error())
 		return
 	}
-	a.tell(fmt.Sprintf("「%s」已合并：%d 处用了另一台电脑的", mapName(m.path), n))
+	a.tell(fmt.Sprintf("「%s」已合并：%d 处用了%s", mapName(m.path), n, theirs))
 }
 
 // mergeView is the window that asks.
@@ -94,7 +185,11 @@ func (a *app) mergeView(c *ui.Context) {
 		w, h := c.Size()
 		ui.Column(c).Gap(12).Width(min(600, w-80)).Children(func() {
 			ui.Text(c, "合并「"+mapName(m.path)+"」").FontSize(17).Bold()
-			ui.Text(c, fmt.Sprintf("两台电脑都改了这张导图，各自改的已合在一起。下面 %d 处两边改成了不一样的：对照原来是什么、哪边较新，每处选一个留下。", len(m.clashes))).
+			said := "两台电脑都改了这张导图，各自改的已合在一起。"
+			if m.outside {
+				said = "你编辑这张导图的时候，它在别处也被改了（另一台电脑同步过来的，或 AI 等其他程序）。各自改的已合在一起。"
+			}
+			ui.Text(c, said+fmt.Sprintf("下面 %d 处两边改成了不一样的：对照原来是什么、哪边较新，每处选一个留下。", len(m.clashes))).
 				FontSize(12).TextColor(t.TextMuted).Wrap()
 			ui.Scroll(c.Key("clashes")).FillWidth().MaxHeight(max(160, h-280)).Gap(10).Children(func() {
 				for i := range m.clashes {
@@ -102,10 +197,14 @@ func (a *app) mergeView(c *ui.Context) {
 				}
 			})
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				if textKey(c, "全用这台的", "merge-all-ours", "").Clicked() {
+				allOurs, allTheirs := "全用这台的", "全用另一台的"
+				if m.outside {
+					allOurs, allTheirs = "全用我改的", "全用别处改的"
+				}
+				if textKey(c, allOurs, "merge-all-ours", "").Clicked() {
 					clear(m.theirs)
 				}
-				if textKey(c, "全用另一台的", "merge-all-theirs", "").Clicked() {
+				if textKey(c, allTheirs, "merge-all-theirs", "").Clicked() {
 					for i := range m.theirs {
 						m.theirs[i] = true
 					}
@@ -150,7 +249,7 @@ func (a *app) clashRow(c *ui.Context, m *mergeAsk, i int) {
 		was := "原来：" + clashValue(cl.Field, cl.Base)
 		switch {
 		case cl.NoBase:
-			was = "这是旧版本同步留下的冲突副本，不知道两边原来一致时是什么"
+			was = "不知道两边原来一致时是什么（旧版本同步留下的冲突副本，或仓库里已经没有那个版本）"
 		case !m.when.BaseAt.IsZero():
 			was += "（上次两边一致，" + whenLabel(m.when.BaseAt.Local(), now) + " 同步时）"
 		}
@@ -186,11 +285,14 @@ func (a *app) clashRow(c *ui.Context, m *mergeAsk, i int) {
 					ui.Text(c, clashValue(cl.Field, v)).FontSize(textSmall).Wrap().MaxLines(6).Margin(3, 0, 0).PassThrough()
 				})
 			}
-			other := "另一台电脑"
+			mine, other := "这台电脑", "另一台电脑"
+			if m.outside {
+				mine, other = "你正在改的", "别处改的"
+			}
 			if m.when.RemoteFrom != "" {
 				other += " · " + m.when.RemoteFrom
 			}
-			side("ours", "这台电脑", ours, later == 1, cl.Ours, false)
+			side("ours", mine, ours, later == 1, cl.Ours, false)
 			side("theirs", other, theirs, later == 2, cl.Theirs, true)
 		})
 	})
@@ -305,7 +407,40 @@ func clashValue(path []string, v json.RawMessage) string {
 	}
 	var list []string
 	if json.Unmarshal(v, &list) == nil {
+		if len(path) == 1 && path[0] == "markers" {
+			for i, m := range list {
+				list[i] = markerName(m)
+			}
+		}
 		return strings.Join(list, "、")
+	}
+	// What is one value though written as several fields (model.Merge's
+	// atoms), in words.
+	last := ""
+	if len(path) > 0 {
+		last = path[len(path)-1]
+	}
+	switch {
+	case last == "image":
+		var im model.Image
+		if json.Unmarshal(v, &im) == nil && im.File != "" {
+			return fmt.Sprintf("图片（%d×%d）", im.W, im.H)
+		}
+	case last == "pos":
+		var p model.Point
+		if json.Unmarshal(v, &p) == nil {
+			return fmt.Sprintf("画布上的位置（%.0f，%.0f）", p.X, p.Y)
+		}
+	case last == "repeat":
+		var r model.Repeat
+		if json.Unmarshal(v, &r) == nil {
+			return r.Label()
+		}
+	case last == "baseline":
+		var b model.Baseline
+		if json.Unmarshal(v, &b) == nil && b.Commit != "" {
+			return baselineLabel(&b)
+		}
 	}
 	if len(path) == 1 && path[0] == "task" {
 		var task model.Task

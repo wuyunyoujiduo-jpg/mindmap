@@ -33,7 +33,7 @@ const (
 	AI             = "ai"             // after it did
 	BeforeRestore  = "before-restore" // before a version was restored
 	Conflict       = "conflict"       // the version given up in a conflict
-	BeforeMerge    = "before-merge"   // before a sync's copy was merged in
+	BeforeMerge    = "before-merge"   // before another version was merged in: a sync's, a conflict copy's, the file's as changed outside
 )
 
 // Label is how the UI names a reason.
@@ -56,7 +56,7 @@ func Label(reason string) string {
 	case Conflict:
 		return "冲突时放弃的版本"
 	case BeforeMerge:
-		return "合并冲突副本前"
+		return "合并前"
 	}
 	return reason
 }
@@ -182,16 +182,43 @@ func (s Store) Load(v Version) (*model.File, error) {
 	return m.File, nil
 }
 
-// WithNotes fills in the notes of versions, as an agent gave them.
+// WithNotes fills in the notes of versions: what an agent said of its
+// change, and what the app said of one it made to a map not open
+// ("挂上资料", "合并时选了另一台电脑的"). Those were kept and never
+// shown, the notes being read of an agent's versions alone.
 func (s Store) WithNotes(vs []Version) []Version {
 	for i := range vs {
-		if vs[i].Reason == AI {
-			if m, err := s.read(vs[i]); err == nil {
-				vs[i].Note = m.Note
-			}
-		}
+		vs[i].Note = noteOf(vs[i].path)
 	}
 	return vs
+}
+
+// noteOf reads a version's note without reading its map: the note is
+// written before the map, and the file is read only as far as it.
+func noteOf(path string) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	dec := json.NewDecoder(f)
+	if t, err := dec.Token(); err != nil || t != json.Delim('{') {
+		return ""
+	}
+	for dec.More() {
+		key, err := dec.Token()
+		if err != nil || key == "file" {
+			return ""
+		}
+		var v string
+		if err := dec.Decode(&v); err != nil {
+			return ""
+		}
+		if key == "note" {
+			return v
+		}
+	}
+	return ""
 }
 
 func (s Store) read(v Version) (*meta, error) {
@@ -235,6 +262,27 @@ func (s Store) Prune(mapPath string, now time.Time) {
 		kept[bucket] = true
 		n++
 	}
+}
+
+// Join puts the versions of the map at from with those of the map at to,
+// which stay: a map the sync merged into another name has versions under
+// both.
+func (s Store) Join(from, to string) {
+	if s.Dir == "" {
+		return
+	}
+	src, dst := s.dirFor(from), s.dirFor(to)
+	entries, err := os.ReadDir(src)
+	if err != nil || src == dst {
+		return
+	}
+	if os.MkdirAll(dst, 0o755) != nil {
+		return
+	}
+	for _, e := range entries {
+		_ = os.Rename(filepath.Join(src, e.Name()), filepath.Join(dst, e.Name()))
+	}
+	_ = os.Remove(src)
 }
 
 // Rename follows a map to its new path.

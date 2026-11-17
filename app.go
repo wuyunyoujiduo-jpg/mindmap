@@ -118,10 +118,16 @@ type app struct {
 	files []model.FileInfo // every map of the tree
 
 	// The open map: a file of canvases, one of them shown.
-	path      string
-	file      *model.File
-	doc       *model.Document // the canvas shown, one of file.Sheets
-	modTime   time.Time       // of the file as last read or written
+	path    string
+	file    *model.File
+	doc     *model.Document // the canvas shown, one of file.Sheets
+	modTime time.Time       // of the file as last read or written
+	// base is the open map as its file was when last read or written:
+	// what a change of the file made outside is merged against
+	// (mergeOutside). dirSeen is when each folder of the maps was written
+	// in, as save last saw (foldersTouched).
+	base      *model.File
+	dirSeen   map[string]time.Time
 	dirty     bool
 	changed   time.Time // of the last unsaved change
 	checked   time.Time // when the file was last checked for outside changes
@@ -375,16 +381,17 @@ type app struct {
 	keyErr                       map[string]string     // why a shortcut recorded is not used
 	iconBitmaps                  map[string]*ui.Bitmap // the app's icons, in the settings
 	// The sync with GitHub (sync.go).
-	syncBusy                       bool
-	syncMsg, syncErr, syncCheck    string
-	syncAt, syncTried, syncChanged time.Time
-	syncHold                       time.Time // not synced before: GitHub's calls are used up till then
-	syncLast                       ghsync.Result
-	syncDrafts                     [2]string
-	syncRun                        func(context.Context, string, ghsync.Config, func(string)) (ghsync.Result, error)
-	merges                         []*mergeAsk // maps merged by the sync, whose clashes are asked
-	mergeOpen                      bool
-	syncCheckRepo                  func(context.Context, ghsync.Config) (*ghsync.Repo, error)
+	syncBusy                    bool
+	syncMsg, syncErr, syncCheck string
+	syncAt, syncTried           time.Time
+	syncHold                    time.Time // not synced before: GitHub's calls are used up till then
+	syncLast                    ghsync.Result
+	syncDrafts                  [2]string
+	syncRun                     func(context.Context, string, ghsync.Config, func(string)) (ghsync.Result, error)
+	merges                      []*mergeAsk // maps merged by the sync, whose clashes are asked
+	mergeOpen                   bool
+	mergesOf                    string // the folder whose questions kept were read (loadMerges)
+	syncCheckRepo               func(context.Context, ghsync.Config) (*ghsync.Repo, error)
 
 	// The presentation.
 	presenting bool
@@ -610,7 +617,7 @@ func (a *app) open(path string) error {
 	if a.broken == path {
 		a.broken = ""
 	}
-	a.path, a.file = path, f
+	a.path, a.file, a.base = path, f, f.Clone()
 	a.edits++                                        // what was worked out of the map before is of another content
 	if a.dia = (diaState{}); a.mode == viewDiagram { // a diagram is of the map left
 		a.mode = viewMap
@@ -735,36 +742,143 @@ func (a *app) save() {
 	if a.doc == nil || a.path == "" {
 		return
 	}
-	// Another program changed the file since it was read: saving would
-	// lose that, so the user chooses first (conflictBar).
+	// The file changed since it was read, by another computer's sync or
+	// another program: saving would lose that. What changed there is
+	// merged into the map first (mergeOutside); where it cannot be, the
+	// user chooses which to keep (conflictBar).
 	if mt := modTime(a.path); !mt.IsZero() && !a.modTime.IsZero() && !mt.Equal(a.modTime) {
-		a.conflict = true
-		return
+		if !a.mergeOutside() {
+			a.conflict = true
+			return
+		}
 	}
+	touched := a.foldersTouched() // before the write, which is one
 	if err := a.file.Save(a.path); err != nil {
 		a.saveErr = "保存失败: " + err.Error()
 		return
 	}
 	a.dirty, a.saveErr = false, ""
 	a.savedAt = a.now()
-	a.syncChange()
 	a.modTime = modTime(a.path)
+	a.base = a.file.Clone()
+	was := a.path
 	a.followTitle()
-	a.refreshFiles()
+	// The maps' list is read again only when a folder was written in by
+	// something else since the last save (a map made, renamed or written
+	// by an agent or a sync), or the map was renamed: read at each save,
+	// some eight tenths of a second after each pause in typing, it was
+	// every folder listed and every map looked at on the window's thread.
+	switch {
+	case a.path != was: // renamed after its topic: read then (moved)
+	case touched:
+		a.refreshFiles()
+	default:
+		a.noteSaved()
+	}
+	a.foldersTouched() // as they are now, this write among it
 	a.keepVersionIfDue()
+}
+
+// foldersTouched tells whether a folder of the maps was written in since
+// it was last asked: a file made, removed, renamed, or written through
+// another renamed over it, as the app, the agents and the sync write.
+func (a *app) foldersTouched() bool {
+	seen := map[string]time.Time{}
+	for _, dir := range a.tree.FolderPaths() {
+		seen[dir] = modTime(dir)
+	}
+	same := len(seen) == len(a.dirSeen)
+	for dir, at := range seen {
+		if was, ok := a.dirSeen[dir]; !ok || !was.Equal(at) {
+			same = false
+		}
+	}
+	a.dirSeen = seen
+	return !same
+}
+
+// noteSaved has the maps' list say the open map was written just now,
+// first of its folder, without the folders being read again.
+func (a *app) noteSaved() {
+	var touch func(f *model.Folder) bool
+	touch = func(f *model.Folder) bool {
+		for i := range f.Files {
+			if f.Files[i].Path == a.path {
+				f.Files[i].Modified = a.modTime
+				slices.SortStableFunc(f.Files, func(x, y model.FileInfo) int { return y.Modified.Compare(x.Modified) })
+				return true
+			}
+		}
+		for i := range f.Folders {
+			if touch(&f.Folders[i]) {
+				return true
+			}
+		}
+		return false
+	}
+	if !touch(&a.tree) { // not among them: a new one
+		a.refreshFiles()
+		return
+	}
+	a.files = a.tree.AllFiles()
+}
+
+// mergeOutside merges into the open map, which has changes not saved,
+// what changed its file meanwhile: another computer's edits, brought by
+// the sync, or a program's, as an AI agent's. Topic by topic
+// (model.Merge), against the map as its file was when last read or
+// written; what both changed, each its own way, stays as it is here and
+// is asked (mergeView). It is one step, which undo takes back, and both
+// versions are kept: the file's, and the map as it was here. It reports
+// whether it could: not with nothing to merge against, nor a file that
+// does not read.
+//
+// Before, the user was asked which of the two to keep whole, and
+// 保留我的版本 threw away the other computer's work.
+func (a *app) mergeOutside() bool {
+	if a.base == nil || a.file == nil || a.doc == nil {
+		return false
+	}
+	a.commitEditIfAny() // a title being typed is of the map as it is here
+	at := modTime(a.path)
+	theirs, err := model.Load(a.path)
+	if err != nil {
+		return false
+	}
+	if model.SameContent(theirs, a.base) { // written, and the same: nothing to merge
+		a.modTime, a.conflict = at, false
+		return true
+	}
+	merged, clashes := model.Merge(a.base, a.file, theirs)
+	if data, err := merged.Marshal(); err != nil {
+		return false
+	} else if _, err := model.Parse(data); err != nil {
+		return false
+	}
+	now := a.now()
+	_, _ = a.versions.Save(a.path, theirs, versions.External, "", now)
+	_, _ = a.versions.Save(a.path, a.file, versions.BeforeMerge, "", now.Add(1))
+	when := ghsync.MergeInfo{BaseAt: a.savedAt, LocalAt: a.changed, RemoteAt: at}
+	a.hist.Record(a.state())
+	a.restore(model.State{File: merged, Sheet: a.doc.ID, Selected: a.selected})
+	a.base, a.modTime, a.conflict = theirs, at, false
+	a.dirty, a.changed = true, now
+	a.tell("这张导图在别处也改了（另一台电脑或 AI），已和你改的合在一起，可以撤销")
+	a.queueMerge(&mergeAsk{path: a.path, clashes: clashes, when: when, outside: true})
+	return true
 }
 
 // flush saves unsaved changes, and how the map is left.
 func (a *app) flush() {
+	if a.dirty && !a.conflict {
+		a.save() // which merges what changed outside, or finds that it cannot
+	}
 	if a.conflict {
 		// Leaving a map in conflict: the file's version stays, and the
 		// changes made here are kept as a version to restore.
 		a.keepVersion(versions.Conflict)
 		a.conflict, a.dirty = false, false
 		a.hist = model.NewHistory(200) // its steps are of the changes left, not of the file's version
-	}
-	if a.dirty {
-		a.save()
 	}
 	a.rememberView()
 	a.saveViews()
@@ -777,7 +891,9 @@ func (a *app) tick(c *ui.Context) {
 	if a.dirty && !a.conflict { // a conflict waits for a choice
 		if wait := autosaveDelay - now.Sub(a.changed); wait > 0 {
 			c.After(wait)
-		} else {
+		} else if a.editing == "" || modTime(a.path).Equal(a.modTime) {
+			// Not while a title is typed and the file changed outside: the
+			// merge of the two would close the field (below).
 			a.save()
 		}
 	}
@@ -797,7 +913,11 @@ func (a *app) tick(c *ui.Context) {
 		a.autoAnalyzeMaps()
 		a.keysBack()
 	}
-	if a.path != "" && a.checked == now {
+	// A file changed outside is read when the title being typed on the
+	// canvas is done, not under it: read at once, the field closed, what
+	// was typed was gone, and a topic just made was left with no title
+	// (an agent's hook writing the map as the user typed).
+	if a.path != "" && a.checked == now && a.editing == "" {
 		if mt := modTime(a.path); !mt.IsZero() && !mt.Equal(a.modTime) {
 			a.reloadFromDisk(c)
 		}
@@ -808,11 +928,16 @@ func (a *app) tick(c *ui.Context) {
 // reloadFromDisk takes the file as changed outside the app.
 // Both versions are kept: the app's before, and the file's after.
 func (a *app) reloadFromDisk(c *ui.Context) {
-	a.modTime = modTime(a.path) // ask once
 	if a.dirty {
-		a.conflict = true // conflictBar asks which to keep
+		// Changed here too: the two are merged, and where they cannot be,
+		// conflictBar asks which to keep.
+		if !a.mergeOutside() {
+			a.modTime = modTime(a.path) // ask once
+			a.conflict = true
+		}
 		return
 	}
+	a.modTime = modTime(a.path) // ask once
 	before := a.file.Clone()
 	a.reload()
 	// An AI changing it through MCP kept the versions before and after
@@ -834,7 +959,7 @@ func (a *app) reload() {
 	}
 	a.hist.Record(a.state())
 	a.restore(model.State{File: f, Sheet: a.doc.ID, Selected: a.selected})
-	a.modTime = modTime(a.path)
+	a.modTime, a.base = modTime(a.path), f.Clone()
 }
 
 func modTime(path string) time.Time {

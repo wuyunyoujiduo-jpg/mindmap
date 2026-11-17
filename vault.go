@@ -134,9 +134,6 @@ func (a *app) vaultSweep() int {
 	if err != nil {
 		a.libErr = err.Error()
 	}
-	if n > 0 {
-		a.syncChange()
-	}
 	return n
 }
 
@@ -476,7 +473,6 @@ func (a *app) vaultSubmit() {
 			return v.Change(pass, now)
 		}, func(code string) {
 			a.vaultUsed()
-			a.syncChange()
 			k.mode, k.code, k.fresh = askCode, code, false
 			k.old, k.pass, k.again = "", "", ""
 		})

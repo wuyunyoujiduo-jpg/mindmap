@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -38,7 +40,106 @@ func (a *app) syncConfig() ghsync.Config {
 	if home, err := os.UserHomeDir(); err == nil && home != "" {
 		cfg.Mounts = map[string]string{".skills": skillsStore(home)}
 	}
+	cfg.State = syncStatePath(a.dir)
+	cfg.Same = sameMap
 	return cfg
+}
+
+// syncStatePath is where the sync keeps what it remembers of the maps
+// folder dir: in the app's own folder, by a hash of the folder's path,
+// as the maps' versions are. It was in the folder itself
+// (.sync/github.json), and went wherever the folder went: a backup put
+// back, or a folder a cloud keeps on two computers, brought one
+// computer's memory of its last sync to another state of the files, and
+// the next sync pulled over them. "" when the app has no folder of its
+// own, and the state stays where it was.
+func syncStatePath(dir string) string {
+	p := configPath()
+	if p == "" || dir == "" {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(p), "sync", folderKey(dir)+".json")
+}
+
+// folderKey names a folder by a hash of its path.
+func folderKey(dir string) string {
+	if abs, err := filepath.Abs(dir); err == nil {
+		dir = abs
+	}
+	h := sha1.Sum([]byte(filepath.Clean(dir)))
+	return hex.EncodeToString(h[:8])
+}
+
+// syncAdoptState moves the state a sync before 0.105.2 kept in the maps
+// folder to where it is kept now, the once: the first time this version
+// runs, with a sync set up, for the folder it has then. So no one syncs
+// anew from nothing; and a state found in a folder later is not this
+// computer's memory of it, and is not taken.
+func (a *app) syncAdoptState() {
+	if a.cfg.SyncStateOut || a.dir == "" {
+		return
+	}
+	state := syncStatePath(a.dir)
+	if state == "" {
+		return
+	}
+	if a.syncReady() {
+		ghsync.Adopt(a.dir, state)
+	}
+	a.cfg.SyncStateOut = true
+	a.cfg.save()
+}
+
+// sameMap tells whether two files of two names are one map, renamed: by
+// the IDs of its first canvas and central topic (ghsync.Config.Same).
+func sameMap(from, to string, old, renamed []byte) bool {
+	if !strings.HasSuffix(from, model.Ext) || !strings.HasSuffix(to, model.Ext) {
+		return false
+	}
+	a, err := model.Parse(old)
+	if err != nil {
+		return false
+	}
+	b, err := model.Parse(renamed)
+	if err != nil {
+		return false
+	}
+	return a.Sheets[0].ID == b.Sheets[0].ID && a.Sheets[0].Root.ID == b.Sheets[0].Root.ID
+}
+
+// followSynced follows the maps the sync merged into another name (a map
+// renamed on one computer and changed on the other): what this computer
+// keeps by their paths, the open map among it, and the pictures either
+// side added under the old name meanwhile, which go to the new one's
+// folder. The files themselves the sync has moved.
+func (a *app) followSynced(dir string, renamed map[string]string) {
+	for from, to := range renamed {
+		from, to := filepath.Join(dir, filepath.FromSlash(from)), filepath.Join(dir, filepath.FromSlash(to))
+		a.versions.Join(from, to)
+		if entries, err := os.ReadDir(model.AssetsDir(from)); err == nil {
+			_ = os.MkdirAll(model.AssetsDir(to), 0o755)
+			for _, e := range entries {
+				dst := filepath.Join(model.AssetsDir(to), e.Name())
+				if _, err := os.Stat(dst); err != nil {
+					_ = os.Rename(filepath.Join(model.AssetsDir(from), e.Name()), dst)
+				}
+			}
+			_ = os.Remove(model.AssetsDir(from)) // when nothing is left in it
+		}
+		was := a.modTime
+		a.followed(func(p string) string {
+			if p == from {
+				return to
+			}
+			return p
+		})
+		if a.path == to {
+			// The open map is of the file as it was before the merge: read
+			// again, or merged with what was changed here since, as a file
+			// changed outside is (tick).
+			a.modTime = was
+		}
+	}
 }
 
 // mergeMapVersions merges a map changed on two computers, topic by topic
@@ -130,7 +231,6 @@ func (a *app) mergeConflictCopies() {
 		return
 	}
 	a.refreshFiles()
-	a.syncChange()
 	opened := slices.ContainsFunc(done, func(u undo) bool { return u.path == a.path })
 	if opened {
 		a.reload()
@@ -145,13 +245,13 @@ func (a *app) mergeConflictCopies() {
 			_ = writeFile(u.copy, u.copied)
 		}
 		a.refreshFiles()
-		a.syncChange()
 		if opened {
 			a.reload()
 		}
 		a.merges = slices.DeleteFunc(a.merges, func(m *mergeAsk) bool {
 			return slices.ContainsFunc(done, func(u undo) bool { return u.path == m.path })
 		})
+		a.saveMerges()
 	})
 }
 
@@ -185,11 +285,13 @@ func writeFile(path string, data []byte) error {
 // syncReady tells whether a repository and a token are set.
 func (a *app) syncReady() bool { return a.cfg.SyncRepo != "" && a.cfg.SyncToken != "" && a.dir != "" }
 
-// syncChange notes a change here, for the next sync to take up.
-func (a *app) syncChange() { a.syncChanged = a.now() }
-
 // syncDue starts a sync when one is due; tick calls it.
 func (a *app) syncDue() {
+	a.syncAdoptState()
+	if a.mergesOf != a.dir { // what waited to be asked when the app closed
+		a.mergesOf = a.dir
+		a.loadMerges()
+	}
 	if !a.syncReady() || a.cfg.SyncOff || a.syncBusy {
 		return
 	}
@@ -211,11 +313,13 @@ func (a *app) syncNow() {
 	if !a.syncReady() || a.syncBusy {
 		return
 	}
+	a.syncAdoptState()
 	if a.dirty && !a.conflict {
 		a.save() // what is being edited goes too
 	}
 	a.syncBusy, a.syncTried, a.syncMsg = true, a.now(), "正在同步…"
 	dir, cfg, run, post := a.dir, a.syncConfig(), a.syncRun, a.post
+	kept, now := a.versions, a.now()
 	var mu sync.Mutex
 	type found struct {
 		clashes []model.Clash
@@ -224,12 +328,22 @@ func (a *app) syncNow() {
 	clashes := map[string]found{}
 	cfg.Merge = func(p string, base, local, remote []byte, when ghsync.MergeInfo) ([]byte, bool) {
 		data, cl, ok := mergeMapVersions(p, base, local, remote)
-		if ok && len(cl) > 0 {
+		if !ok {
+			return nil, false
+		}
+		full := filepath.Join(dir, filepath.FromSlash(p))
+		// The map as it was here is kept, to go back to: a map not open,
+		// merged, had no version of before, and a topic the other computer
+		// deleted, left alone here, was gone with nothing to find it by.
+		if f, err := model.Parse(local); err == nil {
+			_, _ = kept.Save(full, f, versions.BeforeMerge, "", now)
+		}
+		if len(cl) > 0 {
 			mu.Lock()
-			clashes[filepath.Join(dir, filepath.FromSlash(p))] = found{cl, when}
+			clashes[full] = found{cl, when}
 			mu.Unlock()
 		}
-		return data, ok
+		return data, true
 	}
 	a.async(func() (any, error) {
 		return run(context.Background(), dir, cfg, func(msg string) { post(func() { a.syncMsg = msg }) })
@@ -243,16 +357,20 @@ func (a *app) syncNow() {
 			// GitHub's calls used up: not tried again till they are
 			// counted anew, each try a call refused.
 			a.syncHold = ghsync.RetryAfter(err)
-			return
-		}
-		a.syncErr, a.syncAt, a.syncLast, a.syncHold = "", a.now(), res, time.Time{}
-		if byHand && len(res.Conflicts) == 0 {
-			if res.Synced() {
-				a.tell(fmt.Sprintf("已同步：下载 %d 个、上传 %d 个文件", res.Pulled, res.Pushed))
-			} else {
-				a.tell("已同步，已经是最新的")
+		} else {
+			a.syncErr, a.syncAt, a.syncLast, a.syncHold = "", a.now(), res, time.Time{}
+			if byHand && len(res.Conflicts) == 0 {
+				if res.Synced() {
+					a.tell(fmt.Sprintf("已同步：下载 %d 个、上传 %d 个文件", res.Pulled, res.Pushed))
+				} else {
+					a.tell("已同步，已经是最新的")
+				}
 			}
 		}
+		// What follows is of what the sync did, whether or not it ended
+		// well: a sync that failed after files came left them unread by
+		// the app, the maps' list and the library as they were before.
+		a.followSynced(dir, res.Renamed)
 		if len(res.Written) > 0 {
 			// The maps and the library read what came, as they do
 			// any change made outside the app.
@@ -442,6 +560,10 @@ func (a *app) syncSettings(c *ui.Context) {
 				}
 				if n := len(a.syncLast.Skipped); n > 0 {
 					ui.Text(c, fmt.Sprintf("%d 个文件超过 50MB，没有同步：%s", n, strings.Join(a.syncLast.Skipped, "、"))).
+						FontSize(12).TextColor(t.Warning).Wrap()
+				}
+				if n := len(a.syncLast.Unwritten); n > 0 {
+					ui.Text(c, fmt.Sprintf("%d 个文件在这台电脑上写不了（文件名这个系统不接受，或文件夹不让写），先留在 GitHub 上，其余的照常同步：%s", n, strings.Join(a.syncLast.Unwritten, "、"))).
 						FontSize(12).TextColor(t.Warning).Wrap()
 				}
 			})

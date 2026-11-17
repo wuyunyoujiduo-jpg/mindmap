@@ -476,7 +476,7 @@ func (a *app) backupSettings(c *ui.Context) {
 			}
 		})
 	}
-	rowsField(c, "自动", "建议把导图文件夹放在 iCloud 云盘里同步，再定期备份到另一个地方。", func() {
+	rowsField(c, "自动", "两台电脑之间同步，用「同步」页的 GitHub，或把导图文件夹放进 iCloud 云盘，两种选一种：共用一个云盘文件夹的两台电脑，最多一台再开 GitHub 同步，否则两边会互相覆盖。另外定期备份到别的地方。", func() {
 		on := a.cfg.BackupDir != ""
 		was := on
 		switchRow(c, &on, "每天自动备份", "每天第一次打开时备份一份，保留最近 14 份", func() {

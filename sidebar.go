@@ -235,17 +235,49 @@ func (a *app) moved(from, to string) {
 	}
 	a.moveMapMetas(follow) // and their analyses
 	a.moveDias(follow)     // and what was drawn of their topics
+	a.followed(follow)
+	a.refreshFiles()
+}
+
+// pathFollowers are told, with the way from a path of before to where it
+// is now, when a map or a folder was renamed or moved: what keeps a
+// map's path follows it there (the tasks' page: the project and the task
+// chosen, which stayed at the old path, the page empty after a rename).
+var pathFollowers []func(a *app, follow func(string) string)
+
+// followed follows what this computer keeps by the maps' and folders'
+// paths to where they are now: the open map, how the maps were left, the
+// favorites, the maps opened last, the folders shown open, the folders
+// of the maps' code, and what else keeps a path (pathFollowers).
+func (a *app) followed(follow func(string) string) {
 	a.path = follow(a.path)
 	a.renameViews(follow)
 	if a.path != "" {
 		a.modTime = modTime(a.path)
 	}
-	for i, p := range a.cfg.Favorites {
-		a.cfg.Favorites[i] = follow(p)
+	for _, list := range [][]string{a.cfg.Favorites, a.cfg.Recent, a.cfg.OpenFolders} {
+		for i, p := range list {
+			list[i] = follow(p)
+		}
+	}
+	if len(a.cfg.Projects) > 0 {
+		projects := map[string]string{}
+		for p, dir := range a.cfg.Projects {
+			projects[follow(p)] = dir
+		}
+		a.cfg.Projects = projects
+	}
+	for _, m := range a.merges {
+		m.path = follow(m.path)
+	}
+	if len(a.merges) > 0 {
+		a.saveMerges()
+	}
+	for _, fn := range pathFollowers {
+		fn(a, follow)
 	}
 	a.cfg.File = a.path
 	a.cfg.save()
-	a.refreshFiles()
 }
 
 // newFolder creates a folder in dir and starts renaming it.

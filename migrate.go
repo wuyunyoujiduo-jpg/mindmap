@@ -10,43 +10,14 @@ import (
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/versions"
 )
 
-// The app was MindMap before 0.25.13, and its maps folder, unless the user
-// chose another, ~/Documents/MindMap. It becomes ~/Documents/MyMind, with
-// what the app keeps by the maps' paths: their versions, their views, the
-// map open last, the favorites and the recent ones.
-
-// oldDefaultDir is the maps folder of before.
-func oldDefaultDir() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(home, "Documents", "MindMap")
-}
-
-// moveOldDir moves the maps folder of before to the default one, when the
-// app uses it and nothing is in the way, and reports whether it did.
-func moveOldDir(c *config) bool {
-	from, to := oldDefaultDir(), defaultDir()
-	if from == "" || filepath.Clean(c.Dir) != from {
-		return false
-	}
-	if info, err := os.Stat(from); err != nil || !info.IsDir() {
-		return false
-	}
-	if _, err := os.Stat(to); err == nil {
-		return false // a folder of the new name is there already
-	}
-	if err := os.Rename(from, to); err != nil {
-		return false
-	}
-	followPaths(c, from, to)
-	return true
-}
+// The maps folder renamed, as in Finder, is found again and gone on in
+// (followDir), with what the app keeps by the maps' paths.
 
 // followPaths takes along what the app keeps by the maps' paths when the
 // maps folder moved from from to to: their versions, their views, the map
-// open last, the favorites and the recent ones. The config is saved.
+// open last, the favorites, the recent ones, the folders shown open, the
+// folders of their code, and what the sync remembers of the folder. The
+// config is saved.
 func followPaths(c *config, from, to string) {
 	moved := func(p string) string {
 		if rel, err := filepath.Rel(from, p); err == nil && rel != "." && !strings.HasPrefix(rel, "..") {
@@ -73,6 +44,24 @@ func followPaths(c *config, from, to string) {
 	for i := range c.Recent {
 		c.Recent[i] = moved(c.Recent[i])
 	}
+	for i := range c.OpenFolders {
+		c.OpenFolders[i] = moved(c.OpenFolders[i])
+	}
+	if len(c.Projects) > 0 {
+		projects := map[string]string{}
+		for p, dir := range c.Projects {
+			projects[moved(p)] = dir
+		}
+		c.Projects = projects
+	}
+	// The sync's memory of the folder, and the questions of its merges
+	// that wait, are by the folder's path too.
+	if old, now := syncStatePath(from), syncStatePath(to); old != "" {
+		if _, err := os.Stat(now); err != nil {
+			_ = os.Rename(old, now)
+			_ = os.Rename(mergesPath(from), mergesPath(to))
+		}
+	}
 	c.save()
 	if p := viewsPath(); p != "" {
 		if b, err := os.ReadFile(p); err == nil {
@@ -83,7 +72,7 @@ func followPaths(c *config, from, to string) {
 					out[moved(k)] = v
 				}
 				if b, err := json.Marshal(out); err == nil {
-					_ = os.WriteFile(p, b, 0o644)
+					_ = writeFile(p, b) // whole or not at all
 				}
 			}
 		}
