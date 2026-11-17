@@ -145,11 +145,14 @@ func (a *app) projectsView(c *ui.Context) {
 	// What each map has to do, and how much of it is done.
 	type count struct{ done, total int }
 	counts := map[string]count{}
-	for _, it := range a.taskItems() {
+	for _, it := range a.taskItems() { // as 今天's left column counts a project (countsAsTask)
 		n := counts[it.path]
-		n.total++
-		if it.done() {
+		switch {
+		case it.done():
 			n.done++
+			n.total++
+		case countsAsTask(it):
+			n.total++
 		}
 		counts[it.path] = n
 	}
@@ -554,21 +557,23 @@ func (a *app) projectsRail(c *ui.Context) {
 	counts := map[string]count{}
 	open, done, late := 0, 0, 0
 	var next []taskItem
+	// What is to do and what is late are 今天's own counts (countsAsTask,
+	// late): the figures here said more than its lists held.
 	for _, it := range a.taskItems() { // by when, those with a day first
 		n := counts[it.path]
-		n.total++
-		if it.done() {
+		switch {
+		case it.done():
 			n.done++
+			n.total++
 			done++
-		} else {
+		case countsAsTask(it):
+			n.total++
 			open++
-			if d := it.date(); d != nil {
-				if d.Before(day) {
-					late++
-				}
-				if len(next) < 8 {
-					next = append(next, it)
-				}
+			if it.late(day) {
+				late++
+			}
+			if it.date() != nil && len(next) < 8 {
+				next = append(next, it)
 			}
 		}
 		counts[it.path] = n

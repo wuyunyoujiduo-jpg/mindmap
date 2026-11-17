@@ -2,12 +2,9 @@ package main
 
 import (
 	"fmt"
-	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
@@ -44,10 +41,13 @@ var taskLists = []struct {
 
 // tasksState is the tasks' page.
 type tasksState struct {
-	open     bool
-	view     int
-	day      time.Time // the day the calendar shows, or is in
-	add      string    // the task being written
+	open bool
+	view int
+	day  time.Time // the day the calendar shows, or is in
+	// todayWas is the day it was when the page was last drawn: the day
+	// shown follows it over midnight where it was today.
+	todayWas time.Time
+	add      string // the task being written
 	showDone bool
 	// repeatOwn is the task whose repeat is being made up in its details.
 	repeatOwn string
@@ -118,14 +118,82 @@ type taskItem struct {
 	where                string
 }
 
+// date is the task's day: the day it is due, or else the one it begins
+// on. It is the calendar's day here (calendarDay): what the lists, the
+// counts and the calendars all compare.
 func (it taskItem) date() *time.Time {
 	if t := it.node.Task; t.Due != nil {
-		return t.Due
+		return calendarDay(t.Due)
 	}
-	return it.node.Task.Start
+	return calendarDay(it.node.Task.Start)
+}
+
+// due is the day the task is due, the calendar's day here, or nil.
+func (it taskItem) due() *time.Time { return calendarDay(it.node.Task.Due) }
+
+// calendarDay is a day kept with a task as the calendar's day here: one
+// written where the clocks say otherwise is that day still, not the hour
+// of the day before or after that its midnight is here (model.DayIn).
+func calendarDay(d *time.Time) *time.Time {
+	if d == nil || d.Location() == time.Local {
+		return d
+	}
+	day := model.DayIn(*d, time.Local)
+	return &day
 }
 
 func (it taskItem) done() bool { return it.node.Task.Status == model.StatusDone }
+
+// late reports whether the task is to do and its day is before day: the
+// one rule of what is late, for the left column's count, the lists, the
+// projects' figures, the week's review and the day's notification. They
+// had each their own, by the day due alone or by either day, and the
+// figure of one was not the list of the other.
+func (it taskItem) late(day time.Time) bool {
+	d := it.date()
+	return countsAsTask(it) && d != nil && d.Before(day)
+}
+
+// doneAt is when the task was done, for what counts the done: one ticked
+// off, or one that repeats and was done a time, which is to do again on
+// its next day and was done all the same (it never counted among 做完,
+// 已完成 nor the week's review).
+func (it taskItem) doneAt() *time.Time {
+	if t := it.node.Task; it.done() || t.Repeat != nil {
+		return t.DoneAt
+	}
+	return nil
+}
+
+// doneOn reports whether the task was done on the day.
+func (it taskItem) doneOn(day time.Time) bool {
+	at := it.doneAt()
+	return at != nil && sameDay(at.In(day.Location()), day)
+}
+
+// taskWhen is when a task is: its days, its time of day and when it
+// reminds, kept before they are changed to be given back (撤销).
+type taskWhen struct {
+	due, start      *time.Time
+	at, end, remind string
+}
+
+func whenOf(t *model.Task) taskWhen {
+	day := func(d *time.Time) *time.Time {
+		if d == nil {
+			return nil
+		}
+		c := *d
+		return &c
+	}
+	return taskWhen{day(t.Due), day(t.Start), t.Time, t.EndTime, t.Remind}
+}
+
+func (w taskWhen) put(t *model.Task) {
+	if t != nil {
+		t.Due, t.Start, t.Time, t.EndTime, t.Remind = w.due, w.start, w.at, w.end, w.remind
+	}
+}
 
 // taskDrag is a task dragged to a day.
 type taskDrag struct{ path, id string }
@@ -179,8 +247,9 @@ func (a *app) taskItems() []taskItem {
 	return items
 }
 
-// editTask changes a task in its map, saved as an edit of it.
-func (a *app) editTask(it taskItem, note string, fn func(n *model.Node)) {
+// editTask changes a task in its map, saved as an edit of it, and tells
+// whether it did: what says the change is not to say it of one not made.
+func (a *app) editTask(it taskItem, note string, fn func(n *model.Node)) bool {
 	err := a.editMapAt(it.path, note, func(f *model.File) error {
 		n := f.Node(it.node.ID)
 		if n == nil {
@@ -193,33 +262,54 @@ func (a *app) editTask(it taskItem, note string, fn func(n *model.Node)) {
 		a.tell("没有改成：" + err.Error())
 	}
 	a.tasks.read = time.Time{}
+	return err == nil
 }
 
+// setTaskDone ticks a task off, or back on. Ticked off, it says so with
+// the way back, whether it is done or, repeating, to do again on its next
+// day: all that the tick changed is as it was, its days, its state, when
+// and how many times it was done.
 func (a *app) setTaskDone(it taskItem, done bool) {
 	st := model.StatusTodo
 	if done {
 		st = model.StatusDone
 	}
-	was := it.node.Task.Status // before the edit: the node may be the map's own
-	rep := it.node.Task.Repeat
-	if rep != nil && rep.Ended(rep.Next(it.node.Task.Due, a.now()), it.node.Task.Times+1) {
-		rep = nil // its last time: done as any task
+	// As it is before the edit, and the day it comes again counted from
+	// that: a task of the open map is the map's own node, which the edit
+	// changes, and its day read after was the next one's already, the day
+	// said the one after next.
+	task := it.node.Task
+	was, status, times, doneAt := whenOf(task), task.Status, task.Times, task.DoneAt
+	now := a.now()
+	rep, next := task.Repeat, time.Time{}
+	if rep != nil {
+		next = rep.Next(it.due(), now)
+		if rep.Ended(next, times+1) {
+			rep = nil // its last time: done as any task
+		}
 	}
-	a.editTask(it, "完成任务", func(n *model.Node) { n.SetStatus(st, a.now()) })
-	switch {
-	case done && rep != nil:
-		a.tell("做完一次，下一次：" + dayLabel(rep.Next(it.node.Task.Due, a.now()), a.now()))
-	case done:
-		// Ticked off, it leaves the list: the way back is said at once.
-		a.tellUndo("已完成「"+it.node.Title+"」", func() {
-			a.editTask(it, "撤回完成", func(n *model.Node) { n.SetStatus(was, a.now()) })
+	if !a.editTask(it, "完成任务", func(n *model.Node) { n.SetStatus(st, now) }) || !done || status == model.StatusDone {
+		return
+	}
+	said := "已完成「" + it.node.Title + "」"
+	if rep != nil {
+		said = "做完一次，下一次：" + dayLabel(next, now)
+	}
+	a.tellUndo(said, func() {
+		a.editTask(it, "撤销完成", func(n *model.Node) {
+			if n.Task == nil {
+				return
+			}
+			n.SetStatus(status, a.now()) // its marker with it
+			was.put(n.Task)
+			n.Task.Status, n.Task.Times, n.Task.DoneAt = status, times, doneAt
 		})
-	}
+	})
 }
 
 // setTaskDay dates a task: its due day, or none; a start after it goes.
-func (a *app) setTaskDay(it taskItem, day *time.Time) {
-	a.editTask(it, "改任务日期", func(n *model.Node) {
+func (a *app) setTaskDay(it taskItem, day *time.Time) bool {
+	return a.editTask(it, "改任务日期", func(n *model.Node) {
 		if n.Task == nil {
 			n.SetStatus(model.StatusTodo, a.now())
 		}
@@ -227,6 +317,28 @@ func (a *app) setTaskDay(it taskItem, day *time.Time) {
 		if day != nil && n.Task.Start != nil && n.Task.Start.After(*day) {
 			n.Task.Start = nil
 		}
+	})
+}
+
+// moveTaskDay dates a task from where it is shown, dropped on a day or by
+// its menu or the search's key, and says so with the way back: its days,
+// its time and when it reminds as they were. (The hours' moves said so;
+// these changed a day and said nothing, or said it with no way back.)
+func (a *app) moveTaskDay(it taskItem, day *time.Time) {
+	due := it.due()
+	if day == nil && due == nil || day != nil && due != nil && sameDay(*due, *day) {
+		return // its day already
+	}
+	was := whenOf(it.node.Task)
+	if !a.setTaskDay(it, day) {
+		return
+	}
+	said := "已清除日期"
+	if day != nil {
+		said = "已改到" + dayLabel(*day, a.now())
+	}
+	a.tellUndo(said+"：「"+it.node.Title+"」", func() {
+		a.editTask(it, "撤销改日期", func(n *model.Node) { was.put(n.Task) })
 	})
 }
 
@@ -270,244 +382,6 @@ func (a *app) postponeToToday(items []taskItem) {
 			})
 		}
 	})
-}
-
-// addTask adds a task written in a line, with its day in words, to the
-// inbox; day, when not nil, is the day it goes on when the line says none.
-func (a *app) addTask(line string, day *time.Time) { a.addTaskAt(line, day, "", "") }
-
-// addTaskAt is addTask with the time of the day the task is at, from and
-// until as 15:04 (until may be ""), unless its line says another.
-func (a *app) addTaskAt(line string, day *time.Time, at, till string) {
-	// What the line links to ([[: a skill to do it with, a clip, a topic)
-	// is the task's links, not words of its title.
-	links := tokenLinks(line)
-	line = strings.TrimSpace(refToken.ReplaceAllString(line, ""))
-	line, from, until := parseClock(line)
-	if from == "" {
-		from, until = at, till
-	}
-	remind := from // a time written is when it is, and when it reminds
-	line, rep, first := parseRepeat(line, a.now())
-	title, due, prio := parseTaskLine(line, a.now())
-	if title == "" {
-		return
-	}
-	if remind != "" && due == nil && first == nil && day == nil {
-		d := today(a.now()) // a time with no day is today's
-		due = &d
-	}
-	if due == nil {
-		due = first // the first day what repeats falls on
-	}
-	if due == nil {
-		due = day
-	}
-	n := model.NewNode(title)
-	n.SetStatus(model.StatusTodo, a.now())
-	n.Task.Due, n.Task.Priority, n.Task.Repeat, n.Task.Remind = due, prio, rep, remind
-	n.Task.Time, n.Task.EndTime = from, until
-	n.Links = links
-	path := a.inboxPath()
-	if err := a.ensureInbox(); err != nil {
-		a.tell("没有加上：" + err.Error())
-		return
-	}
-	if err := a.editMapAt(path, "加任务", func(f *model.File) error {
-		f.Sheets[0].Root.Children = append(f.Sheets[0].Root.Children, n)
-		return nil
-	}); err != nil {
-		a.tell("没有加上：" + err.Error())
-		return
-	}
-	when := "无日期"
-	if due != nil {
-		when = dayLabel(*due, a.now())
-	}
-	if rep != nil {
-		when += "，" + rep.Label()
-	}
-	if span := n.Task.Span(); span != "" {
-		when += " " + span
-	}
-	a.tell("已加到收件箱：" + title + "（" + when + "）")
-	a.tasks.read = time.Time{}
-}
-
-// remindWord is a time of day written in a task's line: 9点, 9点半, 下午3点,
-// 晚上8点15, 15:30.
-var remindWord = regexp.MustCompile(`(上午|早上|中午|下午|晚上)?\s*(\d{1,2})(?:[:：](\d{2})|[点时](半|\d{1,2})?分?)`)
-
-// spanTo is what joins the two ends of a time of day: 9点到10点, 9:00-10:30.
-var spanTo = regexp.MustCompile(`^\s*(?:到|至|-|~|～|–|—)\s*`)
-
-// parseRemind takes the time to be reminded at out of a task's line: the
-// line without it, and the time as 15:04, or none.
-func parseRemind(line string) (rest, remind string) {
-	rest, remind, _ = parseClock(line)
-	return rest, remind
-}
-
-// parseClock takes the time of day out of a task's line: the line without
-// it, and when it begins and, of a span (9点到10点半, 14:00-15:30), ends,
-// as 15:04, or none. A time is one that stands by itself or after a day's
-// word (明天9点), not a number of things (写3点总结).
-func parseClock(line string) (rest, from, until string) {
-	for _, m := range remindWord.FindAllStringSubmatchIndex(line, -1) {
-		part := func(i int) string {
-			if m[2*i] < 0 {
-				return ""
-			}
-			return line[m[2*i]:m[2*i+1]]
-		}
-		before, after := []rune(line[:m[0]]), []rune(line[m[1]:])
-		period := part(1)
-		// Of a span, its end: written after it, joined by 到 or a dash.
-		end, endAt := "", m[1]
-		if j := spanTo.FindStringIndex(line[m[1]:]); j != nil {
-			tail := line[m[1]+j[1]:]
-			if e := remindWord.FindStringSubmatchIndex(tail); e != nil && e[0] == 0 {
-				eh, _ := strconv.Atoi(tail[e[4]:e[5]])
-				emin := 0
-				switch {
-				case e[6] >= 0:
-					emin, _ = strconv.Atoi(tail[e[6]:e[7]])
-				case e[8] >= 0 && tail[e[8]:e[9]] == "半":
-					emin = 30
-				case e[8] >= 0:
-					emin, _ = strconv.Atoi(tail[e[8]:e[9]])
-				}
-				if e[2] >= 0 {
-					if p := tail[e[2]:e[3]]; (p == "下午" || p == "晚上" || p == "中午" && eh < 11) && eh < 12 {
-						eh += 12
-					}
-				}
-				end, endAt = fmt.Sprintf("%d:%d", eh, emin), m[1]+j[1]+e[1]
-			}
-		}
-		if end != "" {
-			after = []rune(line[endAt:])
-		}
-		spaced := unicode.IsSpace([]rune(line[m[0]:])[0]) // the space before it is in what was found
-		if n := len(before); n > 0 && period == "" && !spaced && !unicode.IsSpace(before[n-1]) && !strings.ContainsRune("天晚早午上", before[n-1]) {
-			continue
-		}
-		clock := part(3) != "" // 15:30
-		if end == "" && !clock && period == "" && part(4) == "" && len(after) > 0 && !unicode.IsSpace(after[0]) {
-			continue // 3点建议: three things, not three o'clock
-		}
-		h, _ := strconv.Atoi(part(2))
-		min := 0
-		switch {
-		case clock:
-			min, _ = strconv.Atoi(part(3))
-		case part(4) == "半":
-			min = 30
-		case part(4) != "":
-			min, _ = strconv.Atoi(part(4))
-		}
-		if (period == "下午" || period == "晚上" || period == "" && strings.Contains(line[:m[0]], "今晚")) && h < 12 {
-			h += 12
-		}
-		if period == "中午" && h < 11 {
-			h += 12
-		}
-		if h > 23 || min > 59 {
-			continue
-		}
-		from = fmt.Sprintf("%02d:%02d", h, min)
-		if end != "" {
-			var eh, emin int
-			fmt.Sscanf(end, "%d:%d", &eh, &emin)
-			if eh*60+emin <= h*60+min && eh < 12 { // 下午3点到5点: five in the afternoon too
-				eh += 12
-			}
-			if eh <= 24 && emin <= 59 && eh*60+emin > h*60+min {
-				until = fmt.Sprintf("%02d:%02d", eh, emin)
-				if eh == 24 {
-					until = "23:59"
-				}
-			}
-		}
-		return strings.TrimSpace(line[:m[0]] + " " + line[endAt:]), from, until
-	}
-	return line, "", ""
-}
-
-var (
-	taskMonthDay = regexp.MustCompile(`(\d{1,2})\s*[月/.-]\s*(\d{1,2})\s*[日号]?`)
-	taskDayOnly  = regexp.MustCompile(`(^|\s)(\d{1,2})\s*[日号](\s|$)`)
-	taskWeekday  = regexp.MustCompile(`(下)?(?:周|星期|礼拜)([一二三四五六日天])`)
-	taskPrio     = regexp.MustCompile(`[!！](高|中|低|1|2|3)`)
-)
-
-// parseTaskLine reads a task written in a line: its title, and the day
-// and priority it says, in words: 今天, 明天, 后天, 大后天, 周五, 下周一,
-// 11月20日, 11/20, 20号; !高 !中 !低.
-func parseTaskLine(line string, now time.Time) (string, *time.Time, model.Priority) {
-	s := " " + strings.TrimSpace(line) + " "
-	day := today(now)
-	var due *time.Time
-	set := func(t time.Time) { due = &t }
-	for _, w := range []struct {
-		word string
-		add  int
-	}{{"大后天", 3}, {"后天", 2}, {"明天", 1}, {"今天", 0}, {"今晚", 0}} {
-		if strings.Contains(s, w.word) {
-			s = strings.Replace(s, w.word, " ", 1)
-			set(day.AddDate(0, 0, w.add))
-			break
-		}
-	}
-	if due == nil {
-		if m := taskWeekday.FindStringSubmatchIndex(s); m != nil {
-			want := map[string]int{"一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "日": 7, "天": 7}[s[m[4]:m[5]]]
-			wd := int(day.Weekday())
-			if wd == 0 {
-				wd = 7
-			}
-			ahead := (want - wd + 7) % 7
-			if m[2] >= 0 { // 下周: in the week after this one
-				ahead = want - wd + 7
-			}
-			set(day.AddDate(0, 0, ahead))
-			s = s[:m[0]] + " " + s[m[1]:]
-		}
-	}
-	if due == nil {
-		if m := taskMonthDay.FindStringSubmatchIndex(s); m != nil {
-			mo, _ := strconv.Atoi(s[m[2]:m[3]])
-			d, _ := strconv.Atoi(s[m[4]:m[5]])
-			if mo >= 1 && mo <= 12 && d >= 1 && d <= 31 {
-				t := time.Date(day.Year(), time.Month(mo), d, 0, 0, 0, 0, day.Location())
-				if t.Before(day.AddDate(0, -1, 0)) { // long past: next year's
-					t = t.AddDate(1, 0, 0)
-				}
-				set(t)
-				s = s[:m[0]] + " " + s[m[1]:]
-			}
-		}
-	}
-	if due == nil {
-		if m := taskDayOnly.FindStringSubmatchIndex(s); m != nil {
-			d, _ := strconv.Atoi(s[m[4]:m[5]])
-			if d >= 1 && d <= 31 {
-				t := time.Date(day.Year(), day.Month(), d, 0, 0, 0, 0, day.Location())
-				if t.Before(day) {
-					t = t.AddDate(0, 1, 0)
-				}
-				set(t)
-				s = s[:m[0]] + " " + s[m[1]:]
-			}
-		}
-	}
-	prio := model.PriorityNone
-	if m := taskPrio.FindStringSubmatchIndex(s); m != nil {
-		prio = map[string]model.Priority{"高": model.PriorityHigh, "1": model.PriorityHigh, "中": model.PriorityMedium,
-			"2": model.PriorityMedium, "低": model.PriorityLow, "3": model.PriorityLow}[s[m[2]:m[3]]]
-		s = s[:m[0]] + " " + s[m[1]:]
-	}
-	return strings.Join(strings.Fields(s), " "), due, prio
 }
 
 // dayLabel names a day near now: 今天, 明天, 周三, 11月20日.
@@ -559,8 +433,19 @@ const todayWidth = 760
 
 // tasksView is 今天, the tasks' page.
 func (a *app) tasksView(c *ui.Context) {
-	if a.tasks.day.IsZero() {
-		a.tasks.day = today(a.now())
+	// The day shown follows midnight where it was today: the app left open
+	// over a night, the calendars showed yesterday as their day, and a
+	// line with no day was kept on it, late as it was written.
+	if d := today(a.now()); !a.tasks.todayWas.Equal(d) {
+		if a.tasks.day.IsZero() || a.tasks.day.Equal(a.tasks.todayWas) {
+			a.tasks.day = d
+		}
+		a.tasks.todayWas = d
+	}
+	// Off the hours, nothing is being chosen or drawn there: a press held
+	// as the page was left wrote a task where it began, on coming back.
+	if a.tasks.view != tasksWeek && a.tasks.view != tasksDay {
+		a.tasks.pick, a.tasks.stretch = nil, nil
 	}
 	all := a.taskItems()
 	items := all
@@ -725,13 +610,13 @@ func (a *app) tasksHead(c *ui.Context, all []taskItem) {
 			})
 			if path := a.tasks.onMap; path != "" {
 				open, done := 0, 0
-				for _, it := range all {
-					if it.path == path {
-						if it.done() {
-							done++
-						} else {
-							open++
-						}
+				for _, it := range all { // as the left column counts them (countsAsTask)
+					switch {
+					case it.path != path:
+					case it.done():
+						done++
+					case countsAsTask(it):
+						open++
 					}
 				}
 				if a.tasks.view != tasksAgents { // the record's figures head its own page
@@ -775,48 +660,70 @@ func (a *app) tasksAdd(c *ui.Context, now time.Time) {
 	box := captureBox(c, "tasks-add")
 	box.Children(func() {
 		glyph(c, iconPlus, 15, t.Accent)
+		// The day a line with none goes on, said where it is not today's
+		// list's own: the calendars each have one, and the week's was
+		// nowhere to be read.
+		day := a.addDay(now)
 		ph := "添加任务，如「明天 写周报 !高」"
 		switch a.tasks.view {
 		case tasksDay, tasksWeek:
-			ph = "添加任务，或点下面空白的时间格直接新建"
+			ph = "添加任务，不写日期就记在" + dayLabel(*day, now) + "；也可以在下面空白的时间格直接新建"
 		case tasksMonth:
-			ph = "添加任务，不写日期就记在" + dayLabel(a.tasks.day, now)
+			ph = "添加任务，不写日期就记在" + dayLabel(*day, now)
 		}
 		in := ui.TextInputBase(c.Key("task-add"), &a.tasks.add).Placeholder(ph).FontSize(textBody + 1).Grow(1).Label("添加任务")
 		captureFocus(c, box, in)
-		// What the line says, as it is written: its day and priority.
+		// What the line says, as it is written: its day and time, how it
+		// repeats, its priority, each as it will be kept (readTaskLine).
 		if strings.TrimSpace(a.tasks.add) != "" {
-			_, due, prio := parseTaskLine(a.tasks.add, now)
-			if due != nil {
-				pill(c, dayLabel(*due, now), t.Background, t.Text)
+			tl := readTaskLine(a.tasks.add, now, day, "", "")
+			if when := tl.day(now); when != "" {
+				pill(c, when, t.Background, t.Text)
 			}
-			if prio != model.PriorityNone {
-				pill(c, prio.Label(), t.Background, taskPriorityColor(t, prio))
+			if tl.repeat != nil {
+				pill(c, tl.repeat.Label(), t.Background, t.Text)
+			}
+			if tl.prio != model.PriorityNone {
+				pill(c, tl.prio.Label(), t.Background, taskPriorityColor(t, tl.prio))
 			}
 			ui.Text(c, "↩").FontSize(textCaption).TextColor(t.TextMuted)
 		}
 		if in.Submitted() && strings.TrimSpace(a.tasks.add) != "" {
 			line := a.tasks.add
 			a.tasks.add = ""
-			var day *time.Time
-			switch a.tasks.view {
-			case tasksDay, tasksWeek, tasksMonth:
-				d := a.tasks.day
-				day = &d
-			case tasksToday:
-				d := today(now)
-				day = &d
-			}
 			a.later(func() { a.addTask(line, day) })
 		}
 	})
+}
+
+// addDay is the day a task written in the line to add one goes on where
+// its line says none: on today's list, today; in the day shown, that day;
+// in the week, today when it is in the week shown, else the week's first
+// day (it was the day last looked at, which the week does not show); in
+// the month, the day chosen, said on the line; on the other lists, none.
+func (a *app) addDay(now time.Time) *time.Time {
+	var d time.Time
+	switch a.tasks.view {
+	case tasksToday:
+		d = today(now)
+	case tasksDay, tasksMonth:
+		d = a.tasks.day
+	case tasksWeek:
+		d = a.weekOf(a.tasks.day)
+		if t := today(now); !t.Before(d) && t.Before(d.AddDate(0, 0, 7)) {
+			d = t
+		}
+	default:
+		return nil
+	}
+	return &d
 }
 
 // taskMapMenu chooses the map whose tasks show alone, as TickTick's lists.
 func (a *app) taskMapMenu(c *ui.Context, items []taskItem) {
 	open := map[string]int{}
 	for _, it := range items {
-		if !it.done() {
+		if countsAsTask(it) {
 			open[it.path]++
 		}
 	}
@@ -1095,7 +1002,8 @@ func (a *app) calendarNav(c *ui.Context) {
 }
 
 // taskList is the lists: today (with what is overdue), the next 7 days a
-// day each, all by when, or the day of the calendar.
+// day each, all by when, a project's, the inbox, what is late, what is
+// done.
 func (a *app) taskList(c *ui.Context, items []taskItem) {
 	t := c.Theme()
 	now := a.now()
@@ -1118,16 +1026,21 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 	if a.tasks.onMap != "" && (view == tasksToday || view == tasksWeekAhead || view == tasksAll) {
 		view = tasksOfMap // a project's: all that is not done, by when
 	}
+	// What is listed is what is counted: a task to do (countsAsTask: an
+	// idea with no day is none yet), late by the one rule (late), and done
+	// today whether it has a day or not, one that repeats and was done a
+	// time among them (doneOn), as the page's head and the left column
+	// count them.
 	switch view {
 	case tasksOfMap:
 		over, todayG, later, undated := add("已逾期", true, at(day)), add("今天", false, at(day)), add("之后", false, nil), add("没定日期", false, nil)
 		for _, it := range items {
+			if it.doneOn(now) {
+				done = append(done, it)
+			}
 			d := it.date()
 			switch {
-			case it.done():
-				if it.node.Task.DoneAt != nil && sameDay(*it.node.Task.DoneAt, now) {
-					done = append(done, it)
-				}
+			case !countsAsTask(it):
 			case d == nil:
 				undated.items = append(undated.items, it)
 			case d.Before(day):
@@ -1142,18 +1055,17 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 		over, todayG := add("已逾期", true, at(day)), add("今天", false, at(day))
 		var next []taskItem
 		for _, it := range items {
+			if it.doneOn(now) {
+				done = append(done, it)
+			}
 			d := it.date()
 			switch {
-			case d == nil:
-			case it.done():
-				if it.node.Task.DoneAt != nil && sameDay(*it.node.Task.DoneAt, now) {
-					done = append(done, it)
-				}
+			case d == nil || !countsAsTask(it):
 			case d.Before(day):
 				over.items = append(over.items, it)
 			case sameDay(*d, day):
 				todayG.items = append(todayG.items, it)
-			case d.Before(day.AddDate(0, 0, 7)):
+			case d.Before(day.AddDate(0, 0, 8)): // tomorrow and the six days after it: seven
 				next = append(next, it)
 			}
 		}
@@ -1186,36 +1098,14 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 			}
 			if d.Before(day) {
 				over.items = append(over.items, it)
-			} else if i := int(today(*d).Sub(day).Hours() / 24); i < 7 {
+			} else if i := daysBetween(day, *d); i < 7 {
 				days[i].items = append(days[i].items, it)
-			}
-		}
-	case tasksDay:
-		d := a.tasks.day
-		g := add(dayLabel(d, now), false, at(d))
-		var over *group
-		if sameDay(d, day) {
-			over = add("已逾期", true, at(day))
-			groups[0], groups[1] = over, g
-		}
-		for _, it := range items {
-			date := it.date()
-			if date == nil {
-				continue
-			}
-			switch {
-			case sameDay(*date, d) && it.done():
-				done = append(done, it)
-			case sameDay(*date, d):
-				g.items = append(g.items, it)
-			case over != nil && !it.done() && date.Before(day):
-				over.items = append(over.items, it)
 			}
 		}
 	case tasksLate:
 		g := add("已逾期", true, at(day))
 		for _, it := range items {
-			if d := it.date(); d != nil && !it.done() && d.Before(day) {
+			if it.late(day) {
 				g.items = append(g.items, it)
 			}
 		}
@@ -1234,7 +1124,7 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 	case tasksDone:
 		g := add("已完成", false, nil)
 		for _, it := range items {
-			if it.done() {
+			if it.done() || it.doneAt() != nil { // one that repeats, by when it was last done
 				g.items = append(g.items, it)
 			}
 		}
@@ -1252,15 +1142,16 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 		})
 	default: // all, by when
 		over, todayG := add("已逾期", true, at(day)), add("今天", false, at(day))
-		tomorrow, week := add("明天", false, at(day.AddDate(0, 0, 1))), add("未来 7 天", false, nil)
-		later, none := add("以后", false, nil), add("无日期", false, nil)
+		// After tomorrow, the rest of the seven days from today on, by
+		// their name: it said 未来 7 天 and held six.
+		tomorrow, week := add("明天", false, at(day.AddDate(0, 0, 1))), add("7 天内", false, nil)
+		later, none := add("之后", false, nil), add("没定日期", false, nil)
 		for _, it := range items {
-			if it.done() {
+			if it.done() || it.doneAt() != nil {
 				done = append(done, it)
-				continue
 			}
-			if it.node.Task.Status == model.StatusIdea && it.date() == nil {
-				continue // an idea, not yet a task to do
+			if !countsAsTask(it) {
+				continue // done, or an idea, not yet a task to do
 			}
 			d := it.date()
 			switch {
@@ -1347,7 +1238,11 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 					if len(g.items) > 0 {
 						listCard(c, "rows").Children(func() {
 							for _, it := range g.items {
-								a.taskRow(c, it, g.danger)
+								if view == tasksDone {
+									a.doneRow(c, it)
+								} else {
+									a.taskRow(c, it, g.danger)
+								}
 							}
 						})
 					}
@@ -1372,7 +1267,7 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 					if a.tasks.showDone {
 						listCard(c, "done-rows").Children(func() {
 							for _, it := range done {
-								a.taskRow(c, it, false)
+								a.doneRow(c, it)
 							}
 						})
 					}
@@ -1381,6 +1276,9 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 			a.taskKeys(c, func(yield func(taskItem) bool) {
 				for _, g := range groups {
 					for _, it := range g.items {
+						if view == tasksDone && !it.done() {
+							continue // done a time: not a task of this list to tick
+						}
 						if !yield(it) {
 							return
 						}
@@ -1388,19 +1286,25 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 				}
 				if a.tasks.showDone {
 					for _, it := range done {
-						if !yield(it) {
+						if it.done() && !yield(it) {
 							return
 						}
 					}
 				}
 			})
 			// The list's foot says how much it holds, as a table's does.
-			open := 0
+			// One that repeats, done a time and listed again to do, is one.
+			listed := map[string]bool{}
 			for _, g := range groups {
-				open += len(g.items)
+				for _, it := range g.items {
+					listed[it.key()] = true
+				}
 			}
-			if open+len(done) > 0 {
-				foot := fmt.Sprintf("共 %d 件", open+len(done))
+			for _, it := range done {
+				listed[it.key()] = true
+			}
+			if len(listed) > 0 {
+				foot := fmt.Sprintf("共 %d 件", len(listed))
 				if len(done) > 0 {
 					foot += fmt.Sprintf(" · 做完 %d 件", len(done))
 				}
@@ -1492,6 +1396,21 @@ func (a *app) remindProp(c *ui.Context, it taskItem) {
 	}
 }
 
+// setTaskTime gives a task its time of day, from and until as 15:04, or
+// none (from ""): of the whole day. When it reminds follows where it was
+// the time it had, or nothing: to the new time, or, of the whole day, off.
+// A time to remind at chosen apart from it stays.
+func setTaskTime(task *model.Task, from, until string) {
+	was := task.Time
+	task.Time, task.EndTime = from, until
+	switch {
+	case from == "" && was != "" && task.Remind == was:
+		task.Remind = ""
+	case from != "" && (task.Remind == "" || task.Remind == was):
+		task.Remind = from
+	}
+}
+
 // clockMinutes is a time of day written 15:04 as minutes from midnight,
 // and clockText the other way.
 func clockMinutes(s string) int {
@@ -1519,19 +1438,15 @@ func spanLengthName(m int) string {
 // time, to another or not, as TickTick's: the beginning chosen by the half
 // hour, morning, afternoon and evening each a submenu, the end by how long
 // it takes; or written, 9:00-10:30, 下午3点到5点. A time newly given is
-// when it reminds too, where it reminded of nothing or of the time before.
+// when it reminds too, where it reminded of nothing or of the time before;
+// and made of the whole day, it reminds no more at the time it had (it
+// went on saying 今天 9:00 on its row, and reminding then).
 func (a *app) timeProp(c *ui.Context, it taskItem) {
 	t := c.Theme()
 	task := it.node.Task
 	set := func(from, until string) {
 		a.later(func() {
-			a.editTask(it, "改时间", func(n *model.Node) {
-				was := n.Task.Time
-				n.Task.Time, n.Task.EndTime = from, until
-				if from != "" && (n.Task.Remind == "" || n.Task.Remind == was) {
-					n.Task.Remind = from
-				}
-			})
+			a.editTask(it, "改时间", func(n *model.Node) { setTaskTime(n.Task, from, until) })
 		})
 	}
 	propRow(c, "时间", func() {
@@ -1687,12 +1602,28 @@ func (a *app) taskKeys(c *ui.Context, shown func(yield func(taskItem) bool)) {
 // taskRow is a task in a list: its circle, in its priority's color, which
 // ticks it off; its title, which opens it in its map; its map and day.
 // It is a row of its group's card.
-func (a *app) taskRow(c *ui.Context, it taskItem, overdue bool) {
+func (a *app) taskRow(c *ui.Context, it taskItem, overdue bool) { a.taskRowAs(c, it, overdue, false) }
+
+// doneRow is a task among those done: one ticked off as any row; one
+// that repeats, done a time and to do again, as done that time: ticked,
+// its words struck, and after them when it comes next, with its ↻. The
+// task itself is in its list, on that day, to tick.
+func (a *app) doneRow(c *ui.Context, it taskItem) { a.taskRowAs(c, it, false, !it.done()) }
+
+// taskRowAs is taskRow; once shows a task that repeats as done a time.
+func (a *app) taskRowAs(c *ui.Context, it taskItem, overdue, once bool) {
 	t := c.Theme()
 	task := it.node.Task
-	row := ui.Row(c.Key("task:"+it.path+"#"+it.node.ID)).MinHeight(54).Padding(8, 6).Gap(12).AlignItems(ui.Center).
-		FillWidth().Cursor(ui.CursorPointer).Label("任务 "+it.node.Title).Drag(taskDrag{it.path, it.node.ID}).
+	key, label := "task:", "任务 "
+	if once {
+		key, label = "once:", "做完一次 "
+	}
+	row := ui.Row(c.Key(key+it.path+"#"+it.node.ID)).MinHeight(54).Padding(8, 6).Gap(12).AlignItems(ui.Center).
+		FillWidth().Cursor(ui.CursorPointer).Label(label+it.node.Title).
 		BorderWidth(0, 0, 1, 0).BorderColor(t.Border.Alpha(0.55)).Background(t.Text.Alpha(0)).Transition(rowMotion)
+	if !once {
+		row.Drag(taskDrag{it.path, it.node.ID})
+	}
 	if row.Hovered() {
 		row.Background(t.Text.Alpha(0.035))
 	}
@@ -1702,7 +1633,7 @@ func (a *app) taskRow(c *ui.Context, it taskItem, overdue bool) {
 	case row.Clicked():
 		a.later(func() { a.showTask(it) })
 	}
-	if a.tasks.sel == it.key() {
+	if a.tasks.sel == it.key() && !once {
 		// Chosen, it is a round block; its line goes, keeping its room.
 		row.Background(chosen(t)).Radius(radiusRow).BorderColor(t.Text.Alpha(0))
 		if a.tasks.reveal == it.key() { // gone to by the keyboard, it is brought into view
@@ -1713,16 +1644,26 @@ func (a *app) taskRow(c *ui.Context, it taskItem, overdue bool) {
 	row.ContextMenu(func(m *ui.Menu) { a.taskMenu(m, it) })
 	table := a.tasks.table
 	row.Children(func() {
-		a.taskCircle(c, it, 18)
+		if once { // done that time: a mark, not a key (the task to tick is in its list)
+			ui.Box(c.Key("ticked")).Size(18, 18).Shrink(0).PassThrough().Draw(func(p *ui.Painter, r ui.Rect) {
+				rr := ui.Rect{X: r.X + 1, Y: r.Y + 1, W: r.W - 2, H: r.H - 2}
+				p.Fill(rr, t.TextMuted.Alpha(0.5), rr.W/2)
+				drawIcon(p, r, 18*0.62, iconCheck, t.Background)
+			})
+		} else {
+			a.taskCircle(c, it, 18)
+		}
 		ui.Column(c).Grow(1).Shrink(1).Basis(0).MinWidth(0).Gap(2).PassThrough().Children(func() {
 			// Its words, and after them what it is marked with: how
 			// pressing, and its state when that is not the plain one.
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				title := ui.Text(c, it.node.Title).FontSize(textBody).SingleLine().Shrink(1).MinWidth(0)
-				if it.done() {
+				if it.done() || once {
 					title.TextColor(t.TextMuted).Strikethrough()
 				}
-				taskPills(c, it)
+				if !once {
+					taskPills(c, it)
+				}
 			})
 			sub := it.mapName
 			if it.where != "" && it.where != it.mapName {
@@ -1751,7 +1692,7 @@ func (a *app) taskRow(c *ui.Context, it taskItem, overdue bool) {
 				ui.Text(c, it.mapName).FontSize(textSmall).TextColor(ink2(t)).SingleLine().Shrink(1).MinWidth(0)
 			})
 		}
-		if p, ok := a.tasks.places[it.node.ID]; ok { // where the AI would put it
+		if p, ok := a.tasks.places[it.node.ID]; ok && !once { // where the AI would put it
 			ui.Text(c, "→ "+p.label).FontSize(textSmall).TextColor(t.Accent).SingleLine().Shrink(2).MinWidth(60).PassThrough()
 			if ghostButton(c.Key("take:"+it.node.ID), "放过去", "移到「"+p.label+"」下").Label("放过去 " + it.node.Title).Clicked() {
 				a.later(func() { a.takePlace(it) })
@@ -1762,16 +1703,19 @@ func (a *app) taskRow(c *ui.Context, it taskItem, overdue bool) {
 		}
 		if d := it.date(); d != nil {
 			col := t.TextMuted
-			if overdue || !it.done() && d.Before(today(a.now())) {
+			if !once && (overdue || !it.done() && d.Before(today(a.now()))) {
 				col = t.Danger
 			}
 			label := dayLabel(*d, a.now())
-			if task.Due == nil {
+			switch {
+			case once: // done this time: the day it comes next
+				label = "下次 " + label
+			case task.Due == nil:
 				label = "开始 " + label
 			}
-			if span := task.Span(); span != "" && task.Due != nil {
+			if span := task.Span(); span != "" && task.Due != nil && !once {
 				label += " " + span // when in its day
-			} else if task.Remind != "" && task.Due != nil && !it.done() {
+			} else if task.Remind != "" && task.Due != nil && !it.done() && !once {
 				label += " " + strings.TrimPrefix(task.Remind, "0") // when it reminds
 			}
 			if task.Repeat != nil {
@@ -1796,6 +1740,10 @@ func (a *app) taskRow(c *ui.Context, it taskItem, overdue bool) {
 			} else {
 				ui.Text(c, label).FontSize(textSmall).TextColor(col).FontFeatures("tnum").Shrink(0).PassThrough()
 			}
+		} else if table {
+			// With no day, its column keeps its room: the project's stood
+			// in it, out of line with the rows above.
+			ui.Box(c).Width(taskColDay).Shrink(0).PassThrough()
 		}
 	})
 }
@@ -1923,7 +1871,7 @@ func taskPriorityColor(t *ui.Theme, p model.Priority) ui.Color {
 // taskMenu dates a task, sets its priority, or opens it.
 func (a *app) taskMenu(m *ui.Menu, it taskItem) {
 	day := today(a.now())
-	set := func(d *time.Time) { a.later(func() { a.setTaskDay(it, d) }) }
+	set := func(d *time.Time) { a.later(func() { a.moveTaskDay(it, d) }) } // said, with the way back
 	at := func(d time.Time) *time.Time { return &d }
 	if m.Item("今天").Chosen() {
 		set(at(day))
@@ -1976,7 +1924,8 @@ func (a *app) moveTaskTo(it taskItem) {
 	a.openPalette(paletteMove)
 }
 
-// dropTaskOn makes el take tasks dropped on it, which go to the day.
+// dropTaskOn makes el take tasks dropped on it, which go to the day, and
+// say so with the way back (moveTaskDay).
 func (a *app) dropTaskOn(el ui.Element, day time.Time) {
 	t := a.theme()
 	if _, over := ui.DragOver[taskDrag](el); over {
@@ -1985,7 +1934,7 @@ func (a *app) dropTaskOn(el ui.Element, day time.Time) {
 	if d, ok := ui.Drop[taskDrag](el); ok {
 		for _, it := range a.tasks.items {
 			if it.path == d.path && it.node.ID == d.id {
-				a.later(func() { a.setTaskDay(it, &day) })
+				a.later(func() { a.moveTaskDay(it, &day) })
 				return
 			}
 		}
@@ -2014,7 +1963,7 @@ func (a *app) monthView(c *ui.Context, items []taskItem) {
 			byDay[k] = append(byDay[k], it)
 		}
 		if rp := it.node.Task.Repeat; rp != nil && it.node.Task.Due != nil && !it.done() {
-			for _, d := range rp.Coming(*it.node.Task.Due, it.node.Task.Times, start, start.AddDate(0, 0, 41)) {
+			for _, d := range rp.Coming(*it.node.Task.Due, it.node.Task.Times, a.now(), start, start.AddDate(0, 0, 41)) {
 				k := d.Format("2006-01-02")
 				again[k] = append(again[k], it)
 			}
@@ -2084,10 +2033,10 @@ func (a *app) monthView(c *ui.Context, items []taskItem) {
 }
 
 // comesAgain tells whether a task that repeats comes again on a day from
-// from to to, after its day due.
+// from to to, after its day due and after today (Repeat.Coming).
 func (a *app) comesAgain(it taskItem, from, to time.Time) bool {
 	task := it.node.Task
-	return task.Repeat != nil && task.Due != nil && !it.done() && len(task.Repeat.Coming(*task.Due, task.Times, from, to)) > 0
+	return task.Repeat != nil && task.Due != nil && !it.done() && len(task.Repeat.Coming(*task.Due, task.Times, a.now(), from, to)) > 0
 }
 
 // taskGhost is a task that repeats on a day it comes again, in the week
@@ -2214,7 +2163,7 @@ func (a *app) taskListCounts(items []taskItem) map[int]string {
 		}
 		n[tasksAll]++
 		if d := it.date(); d != nil {
-			if d.Before(day) {
+			if it.late(day) {
 				n[tasksLate]++
 			}
 			if d.Before(day.AddDate(0, 0, 1)) {
@@ -2232,71 +2181,6 @@ func (a *app) taskListCounts(items []taskItem) map[int]string {
 		}
 	}
 	return out
-}
-
-var (
-	repeatWeekly  = regexp.MustCompile(`^每(?:周|星期|礼拜)([一二三四五六日天])\s*`)
-	repeatMonthly = regexp.MustCompile(`^每月\s*(\d{1,2})\s*[日号]\s*`)
-	repeatEvery   = regexp.MustCompile(`^每(?:隔)?\s*(\d{1,2}|两|二|三|四)\s*(天|周|个月|月|年)\s*`)
-)
-
-// parseRepeat reads how a task repeats where its line begins with it:
-// 每天, 工作日, 每周五, 每月15号, 每月最后一天, 每年, 每2周, 每三天. It gives the rest of the line, the
-// repeat, and the first day it falls on; rep is nil where the line says
-// none.
-func parseRepeat(line string, now time.Time) (rest string, rep *model.Repeat, first *time.Time) {
-	s := strings.TrimSpace(line)
-	day := today(now)
-	wd := int(day.Weekday())
-	if wd == 0 {
-		wd = 7
-	}
-	switch {
-	case strings.HasPrefix(s, "每天"):
-		return strings.TrimSpace(strings.TrimPrefix(s, "每天")), &model.Repeat{Unit: model.RepeatDay}, &day
-	case strings.HasPrefix(s, "每个法定工作日"), strings.HasPrefix(s, "法定工作日"):
-		s = strings.TrimPrefix(strings.TrimPrefix(s, "每个"), "法定工作日")
-		r := &model.Repeat{Unit: model.RepeatWorkday}
-		first := r.Next(nil, day.AddDate(0, 0, -1)) // today, if worked
-		return strings.TrimSpace(s), r, &first
-	case strings.HasPrefix(s, "每个工作日"), strings.HasPrefix(s, "工作日"):
-		s = strings.TrimPrefix(strings.TrimPrefix(s, "每个"), "工作日")
-		if wd > 5 { // on a weekend: from Monday
-			day = day.AddDate(0, 0, 8-wd)
-		}
-		return strings.TrimSpace(s), &model.Repeat{Unit: model.RepeatWeek, Days: []int{1, 2, 3, 4, 5}}, &day
-	}
-	if m := repeatWeekly.FindStringSubmatch(s); m != nil {
-		want := map[string]int{"一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "日": 7, "天": 7}[m[1]]
-		day = day.AddDate(0, 0, (want-wd+7)%7)
-		return strings.TrimSpace(s[len(m[0]):]), &model.Repeat{Unit: model.RepeatWeek, Days: []int{want}}, &day
-	}
-	if m := repeatMonthly.FindStringSubmatch(s); m != nil {
-		if d, _ := strconv.Atoi(m[1]); d >= 1 && d <= 31 {
-			r := &model.Repeat{Unit: model.RepeatMonth, MonthDays: []int{d}}
-			t := r.Next(nil, day.AddDate(0, 0, -1)) // its first: today, or after
-			return strings.TrimSpace(s[len(m[0]):]), r, &t
-		}
-	}
-	if rest, ok := strings.CutPrefix(s, "每月最后一天"); ok {
-		r := &model.Repeat{Unit: model.RepeatMonth, MonthDays: []int{-1}}
-		t := r.Next(nil, day.AddDate(0, 0, -1))
-		return strings.TrimSpace(rest), r, &t
-	}
-	if rest, ok := strings.CutPrefix(s, "每年"); ok {
-		return strings.TrimSpace(rest), &model.Repeat{Unit: model.RepeatYear}, nil // its day is the line's, or today
-	}
-	if m := repeatEvery.FindStringSubmatch(s); m != nil {
-		n, err := strconv.Atoi(m[1])
-		if err != nil {
-			n = map[string]int{"两": 2, "二": 2, "三": 3, "四": 4}[m[1]]
-		}
-		unit := map[string]string{"天": model.RepeatDay, "周": model.RepeatWeek, "个月": model.RepeatMonth, "月": model.RepeatMonth, "年": model.RepeatYear}[m[2]]
-		if n >= 1 {
-			return strings.TrimSpace(s[len(m[0]):]), &model.Repeat{Every: n, Unit: unit}, nil
-		}
-	}
-	return line, nil, nil
 }
 
 // repeatProp is how a task repeats, in its details, as TickTick's: not,

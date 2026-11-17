@@ -23,13 +23,14 @@ func (a *app) weekReview(c *ui.Context, all []taskItem) {
 	to := from.AddDate(0, 0, 7)
 	var done, late []taskItem
 	for _, it := range all {
-		task := it.node.Task
-		switch {
-		case it.done():
-			if at := task.DoneAt; at != nil && !at.Before(from) && at.Before(to) {
-				done = append(done, it)
-			}
-		case back == 0 && task.Due != nil && task.Due.Before(day): // what is late is late now, of no past week
+		// Done in the week: one that repeats and was done a time in it
+		// too, though it is to do again (doneAt). Late by the lists' rule
+		// (late: by the day it is due, or else begins on), so that what
+		// drags here is what 已逾期 lists.
+		if at := it.doneAt(); at != nil && !at.Before(from) && at.Before(to) {
+			done = append(done, it)
+		}
+		if back == 0 && it.late(day) { // what is late is late now, of no past week
 			late = append(late, it)
 		}
 	}
@@ -87,7 +88,7 @@ func (a *app) weekReview(c *ui.Context, all []taskItem) {
 	part("review-done", "这周做完的", len(done), nil, func() {
 		listCard(c, "rows").Children(func() {
 			for _, it := range done {
-				a.taskRow(c, it, false)
+				a.doneRow(c, it)
 			}
 		})
 	})
@@ -169,7 +170,8 @@ func weekReport(which string, from, last time.Time, done, late []taskItem, kept 
 	if len(late) > 0 {
 		fmt.Fprintf(&b, "\n## 拖着的（%d）\n\n", len(late))
 		for _, it := range late {
-			fmt.Fprintf(&b, "- %s（%s，原定 %d月%d日）\n", it.node.Title, it.mapName, it.node.Task.Due.Month(), it.node.Task.Due.Day())
+			d := it.date() // the day it is late by: due, or else begun
+			fmt.Fprintf(&b, "- %s（%s，原定 %d月%d日）\n", it.node.Title, it.mapName, d.Month(), d.Day())
 		}
 	}
 	if len(kept) > 0 {

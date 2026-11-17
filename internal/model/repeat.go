@@ -2,6 +2,7 @@ package model
 
 import (
 	"fmt"
+	"math"
 	"slices"
 	"strings"
 	"time"
@@ -146,12 +147,15 @@ func dayOf(t time.Time) time.Time {
 }
 
 // Next is the day the task comes again once done at now, its day being
-// due (today's when nil): the first of its days after both.
+// due (today's when nil): the first of its days after both. The days are
+// the calendar's where now is (DayIn). A task long late costs no more
+// than one on its day: it is asked of every task in every frame of the
+// week and the month.
 func (r *Repeat) Next(due *time.Time, now time.Time) time.Time {
 	today := dayOf(now)
 	from := today
 	if due != nil && !r.FromDone {
-		from = dayOf(*due)
+		from = DayIn(*due, now.Location())
 	}
 	after := from // the next is after its day, and after today
 	if today.After(after) {
@@ -185,7 +189,9 @@ func (r *Repeat) Next(due *time.Time, now time.Time) time.Time {
 			}
 		}
 	case RepeatMonth:
-		for i := 0; i < 1200; i++ {
+		// From the turn of its months that today is in, not from its own.
+		skip := max(((after.Year()-from.Year())*12+int(after.Month()-from.Month()))/n, 0)
+		for i := skip; i < skip+1200; i++ {
 			// The same day of the month, or its last day where it has none.
 			first := time.Date(from.Year(), from.Month()+time.Month(i*n), 1, 0, 0, 0, 0, from.Location())
 			for _, d := range r.monthDays(first.Year(), first.Month(), from) {
@@ -205,7 +211,7 @@ func (r *Repeat) Next(due *time.Time, now time.Time) time.Time {
 		}
 		return d
 	case RepeatYear:
-		for i := 0; ; i++ {
+		for i := max((after.Year()-from.Year())/n, 0); ; i++ {
 			// The same day of its month, or the month's last (29 February).
 			first := time.Date(from.Year()+i*n, from.Month(), 1, 0, 0, 0, 0, from.Location())
 			d := first.AddDate(0, 0, from.Day()-1)
@@ -217,11 +223,13 @@ func (r *Repeat) Next(due *time.Time, now time.Time) time.Time {
 			}
 		}
 	}
-	d := from
-	for !d.After(after) {
-		d = d.AddDate(0, 0, n)
+	if from.After(after) {
+		return from
 	}
-	return d
+	// The first of its days after: so many turns of n days on, counted and
+	// not walked.
+	turns := int(math.Round(after.Sub(from).Hours()/24))/n + 1
+	return from.AddDate(0, 0, turns*n)
 }
 
 var weekdayNames = []string{"", "一", "二", "三", "四", "五", "六", "日"}
@@ -313,21 +321,21 @@ func (r *Repeat) label() string {
 	return every("天")
 }
 
-// Coming are the days a task that repeats comes again after its day due,
-// from the day from to the day to, both counted: those it will be to do
-// on, once done each time on its day, it having been done times times.
-func (r *Repeat) Coming(due time.Time, times int, from, to time.Time) []time.Time {
+// Coming are the days a task that repeats comes again, from the day from
+// to the day to, both counted: those it will be to do on, once done each
+// time on its day, it having been done times times. The first is the day
+// it would go to done now (Next): a task that is late comes again after
+// today, not on the days it missed, which showed one a week late on each
+// day of that week and on today, where it is to do itself.
+func (r *Repeat) Coming(due time.Time, times int, now, from, to time.Time) []time.Time {
 	var days []time.Time
-	d := dayOf(due)
 	from, to = dayOf(from), dayOf(to)
-	for i := range 400 { // a day's repeat, a year on
-		d = r.Next(&d, d)
-		if d.After(to) || r.Ended(d, times+i+1) {
-			break
-		}
+	d := r.Next(&due, now)
+	for i := 0; i < 400 && !d.After(to) && !r.Ended(d, times+i+1); i++ { // a day's repeat, a year on
 		if !d.Before(from) {
 			days = append(days, d)
 		}
+		d = r.Next(&d, d)
 	}
 	return days
 }

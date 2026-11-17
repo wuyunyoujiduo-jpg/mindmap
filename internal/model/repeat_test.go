@@ -52,11 +52,11 @@ func TestRepeatNext(t *testing.T) {
 
 func TestRepeatComing(t *testing.T) {
 	day := func(d int) time.Time { return time.Date(2026, 11, d, 0, 0, 0, 0, time.UTC) }
-	got := (&Repeat{Unit: RepeatWeek, Days: []int{5}}).Coming(day(13), 0, day(1), day(30))
+	got := (&Repeat{Unit: RepeatWeek, Days: []int{5}}).Coming(day(13), 0, day(13), day(1), day(30))
 	if len(got) != 2 || !got[0].Equal(day(20)) || !got[1].Equal(day(27)) {
 		t.Fatalf("every Friday after the 13th, in November: %v", got)
 	}
-	if got := (&Repeat{Unit: RepeatDay}).Coming(day(13), 0, day(16), day(18)); len(got) != 3 {
+	if got := (&Repeat{Unit: RepeatDay}).Coming(day(13), 0, day(13), day(16), day(18)); len(got) != 3 {
 		t.Fatalf("every day, three days: %v", got)
 	}
 }
@@ -78,10 +78,10 @@ func TestRepeatEnds(t *testing.T) {
 	// To a day: nothing comes after it.
 	until := day(14)
 	r := &Repeat{Unit: RepeatDay, Until: &until}
-	if got := r.Coming(day(10), 0, day(1), day(30)); len(got) != 4 {
+	if got := r.Coming(day(10), 0, day(10), day(1), day(30)); len(got) != 4 {
 		t.Fatalf("to the 14th: %v", got)
 	}
-	if got := (&Repeat{Unit: RepeatDay, Count: 3}).Coming(day(10), 1, day(1), day(30)); len(got) != 1 {
+	if got := (&Repeat{Unit: RepeatDay, Count: 3}).Coming(day(10), 1, day(10), day(1), day(30)); len(got) != 1 {
 		t.Fatalf("three times, once done: %v", got)
 	}
 	for _, c := range []struct {

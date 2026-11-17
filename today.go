@@ -10,7 +10,6 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
-	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
 
 // The desk is the page the app opens on, laid out as the work goes: write
@@ -72,12 +71,14 @@ func (a *app) saveHomeLine() {
 		a.later(a.aiSend)
 		return
 	case task:
-		var day *time.Time
-		if a.place() == placeToday { // written on 今天, for today unless it says a day
-			d := today(a.now())
-			day = &d
+		day := a.barDay() // written on 今天, for today unless it says a day
+		if lines := checklist(text); len(lines) > 0 {
+			// A checklist is a task a line, as the quick capture has it: it
+			// was kept as one task named by all its lines.
+			a.addTasks(lines, day)
+		} else {
+			a.addTask(text, day)
 		}
-		a.addTask(text, day)
 	case a.place() == placeCollect || linkInTitle.MatchString(text):
 		// In 收集, and a link anywhere: kept as what it is, and shown there.
 		clip, err := a.addClipText(text, "手动")
@@ -103,23 +104,26 @@ func (a *app) saveHomeLine() {
 	}
 }
 
-// dueToday are the tasks of today and those overdue, not done.
+// dueToday are the tasks of today and those overdue, to do: as the left
+// column counts 今天 and as its list shows them (countsAsTask: an idea
+// with a day among them; the head left those out, and said one less).
 func (a *app) dueToday(now time.Time) []taskItem {
 	day := today(now)
 	var due []taskItem
 	for _, it := range a.taskItems() {
-		if d := it.date(); d != nil && !it.done() && d.Before(day.AddDate(0, 0, 1)) && it.node.Task.Status != model.StatusIdea {
+		if d := it.date(); d != nil && countsAsTask(it) && d.Before(day.AddDate(0, 0, 1)) {
 			due = append(due, it)
 		}
 	}
 	return due
 }
 
-// doneToday are the tasks ticked off today.
+// doneToday are the tasks ticked off today, one that repeats and was done
+// a time among them (doneOn).
 func (a *app) doneToday(now time.Time) []taskItem {
 	var done []taskItem
 	for _, it := range a.taskItems() {
-		if it.done() && it.node.Task.DoneAt != nil && sameDay(*it.node.Task.DoneAt, now) {
+		if it.doneOn(now) {
 			done = append(done, it)
 		}
 	}
@@ -278,7 +282,7 @@ func (a *app) keptLastRow(c *ui.Context) {
 		Background(blockFill(t)).Transition(rowMotion).Children(func() {
 		ui.Text(c, "不用归位了，它还在收集里：").FontSize(textSmall).TextColor(t.TextMuted).Shrink(0)
 		ui.Text(c, refName(cl)).FontSize(textSmall).SingleLine().Grow(1).Shrink(1).MinWidth(0)
-		if ghostButton(c, "撤回", "放回「等着归位」").Clicked() {
+		if ghostButton(c, "撤销", "放回「等着归位」").Clicked() {
 			a.later(func() { a.unkeep(cl) })
 		}
 	})
@@ -293,7 +297,7 @@ func (a *app) waitingOnToday(shown []taskItem) []waitingItem {
 	now := a.now()
 	listed := map[string]bool{}
 	for _, it := range shown {
-		if d := it.date(); d != nil && !it.done() && !d.After(today(now)) {
+		if d := it.date(); d != nil && countsAsTask(it) && !d.After(today(now)) {
 			listed[it.key()] = true // today's and the late are above already
 		}
 	}
@@ -325,16 +329,15 @@ func (a *app) waitingHead(c *ui.Context, n int) {
 	trayHead(c, "head:等着归位", "等着归位", fmt.Sprintf("%d 条", n), func() {
 		// The AI's key is here too: it asks, and shows the list, where
 		// each of its places is agreed to on its card.
-		switch {
-		case a.tasks.placing || a.clipPlacing:
-			ui.Spinner(c)
-		default:
-			if sparkKey(c, "AI 归位", "让 AI 建议每条该放到哪张导图的哪个主题下；到「等着归位」里逐条确认后才放").Clicked() {
-				a.later(func() {
-					a.askAllPlaces()
-					all()
-				})
-			}
+		// While the AI is asked the wait is on the key, as every key's
+		// (busyKey): its words and its width stay, a spinner over them, a
+		// second press does nothing. A bare spinner stood in its place.
+		busy := a.tasks.placing || a.clipPlacing
+		if sparkKeyBusy(c, "AI 归位", "让 AI 建议每条该放到哪张导图的哪个主题下；到「等着归位」里逐条确认后才放", busy).Clicked() && !busy {
+			a.later(func() {
+				a.askAllPlaces()
+				all()
+			})
 		}
 		if textLink(c, "去整理 ›", "去整理").Tooltip("每条该放到哪张导图：在「等着归位」里一条条放").Clicked() {
 			a.later(all)
@@ -722,17 +725,39 @@ func textKey(c *ui.Context, text, label, tip string) ui.Element {
 // sparkKey is a key of the AI's that stands by a heading: the spark and
 // its words in the accent, on no block until pointed at.
 func sparkKey(c *ui.Context, text, tip string) ui.Element {
+	return sparkKeyBusy(c, text, tip, false)
+}
+
+// sparkKeyBusy is sparkKey while what it started may be going on (busy):
+// its wait shows on it as on a busyKey, by waitShown, the spark and the
+// words fainter under a spinner, the key's width as it was. The caller
+// does nothing with a press while it is busy.
+func sparkKeyBusy(c *ui.Context, text, tip string, busy bool) ui.Element {
 	t := c.Theme()
-	b := ui.Row(c.Key("spark:"+text)).Height(28).Padding(0, 8).Gap(5).Radius(radiusPill).AlignItems(ui.Center).Cursor(ui.CursorPointer).
+	shown := waitShown(c, "key:"+text, busy)
+	b := ui.Row(c.Key("spark:"+text)).Height(28).Padding(0, 8).Gap(5).Radius(radiusPill).AlignItems(ui.Center).
 		Label(text).Tooltip(tip).Shrink(0).Background(t.Accent.Alpha(0)).Transition(easeLook)
-	if b.Hovered() {
-		b.Background(t.Accent.Alpha(0.09))
+	if !busy {
+		b.Cursor(ui.CursorPointer)
+		if b.Hovered() {
+			b.Background(t.Accent.Alpha(0.09))
+		}
+		press(b, 0.96)
+	}
+	ink := t.Accent
+	if shown {
+		ink = t.Accent.Alpha(0.25)
 	}
 	b.Children(func() {
-		glyph(c, iconSparkle, 13, t.Accent)
-		ui.Text(c, text).FontSize(textSmall).FontWeight(700).TextColor(t.Accent).NoWrap().PassThrough()
+		glyph(c, iconSparkle, 13, ink)
+		ui.Text(c, text).FontSize(textSmall).FontWeight(700).TextColor(ink).NoWrap().PassThrough()
+		if shown {
+			ui.Box(c.Key("spin")).Absolute().Top(0).Right(0).Bottom(0).Left(0).Center().PassThrough().Children(func() {
+				ui.Spinner(c).Size(13, 13)
+			})
+		}
 	})
-	return press(b, 0.96)
+	return b
 }
 
 // nearPlace is where something written down would go by its words alone,

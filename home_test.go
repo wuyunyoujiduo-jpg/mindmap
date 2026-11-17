@@ -97,16 +97,16 @@ func TestHome(t *testing.T) {
 	}
 	tt.Frame()
 	tt.Frame()
-	if n := len(a.waiting()); n != 5 || !tt.HasText("撤回") {
+	if n := len(a.waiting()); n != 5 || !tt.HasText("撤销") {
 		t.Fatalf("left in 收集 %d: %q", n, tt.Texts())
 	}
 	snapshot(t, tt, "home-kept")
-	if err := tt.Click("撤回"); err != nil {
+	if err := tt.Click("撤销"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
 	tt.Frame()
-	if tt.HasText("撤回") {
+	if tt.HasText("撤销") {
 		t.Fatal("still said left")
 	}
 	if n := len(a.waiting()); n != 6 || tt.HasText("待归位") {

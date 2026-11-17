@@ -51,17 +51,10 @@ func taskLike(text string, now time.Time) bool {
 	if text == "" {
 		return false
 	}
-	lines := strings.Split(text, "\n")
-	boxes := 0
-	for _, l := range lines {
-		if strings.HasPrefix(strings.TrimSpace(l), "- [ ]") {
-			boxes++
-		}
-	}
-	if boxes == len(lines) {
+	if checklist(text) != nil {
 		return true
 	}
-	if len(lines) > 1 {
+	if strings.Contains(text, "\n") {
 		return false
 	}
 	if rest, rep, _ := parseRepeat(text, now); rep != nil && rest != "" {
@@ -96,12 +89,14 @@ func (a *app) capture(text string, where int) error {
 		return nil
 	}
 	if where == captureInbox { // tasks, a line each, to the inbox
+		var lines []string
 		for _, line := range strings.Split(text, "\n") {
 			line = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "- [ ]"))
 			if line != "" {
-				a.addTask(line, nil)
+				lines = append(lines, line)
 			}
 		}
+		a.addTasks(lines, nil) // said once: a toast a task, only the last was read
 		return nil
 	}
 	nodes := model.ParseOutline(text)
