@@ -1,6 +1,7 @@
 // Package diagram holds what the AI draws of a topic's branch, to be
 // understood by: a flow in lanes, the states of a thing, a table of what
-// is decided when, the nouns of the matter, and cases to walk them with.
+// is decided when, the nouns of the matter, options side by side, and
+// cases to walk them with.
 // It lays the flow and the states out on a grid. It knows nothing about
 // the UI, and the map stays the one source: a set is drawn again, never
 // edited.
@@ -48,6 +49,89 @@ type Set struct {
 	Cases   []Case   `json:"cases,omitempty"`
 	Gaps    []Gap    `json:"gaps,omitempty"`
 	Quiz    *Quiz    `json:"quiz,omitempty"`
+	// Compare sets options side by side. A version before it reads a set
+	// without it: the other kinds show, and a set of it alone not at all.
+	Compare *Compare `json:"compare,omitempty"`
+	// Lean is the option of the comparison the user leans to, by its name:
+	// the one thing of a set written by hand, and so beside what is drawn,
+	// kept when the set is drawn again while the option is still there.
+	Lean string `json:"lean,omitempty"`
+	// CompareQuiz is how a column of the comparison was last recalled.
+	CompareQuiz *Quiz `json:"compare_quiz,omitempty"`
+}
+
+// Compare sets options side by side: a column an option, a row what they
+// are compared by. It says what the map says of each and no more: which
+// is the better is the user's to say (Set.Lean).
+type Compare struct {
+	Options []string   `json:"options"`
+	Rows    []Compared `json:"rows"`
+}
+
+// Compared is a row of a comparison: what the options are compared by,
+// and a cell an option. Same tells that every option says the same there.
+type Compared struct {
+	Dim   string `json:"dim"`
+	Cells []Cell `json:"cells"`
+	Same  bool   `json:"same,omitempty"`
+}
+
+// Cell is what the map says of an option in a row, and the topics it says
+// so in. Gap marks one the map does not speak of, which has no text: it is
+// left so, and not filled in.
+type Cell struct {
+	Text string   `json:"text,omitempty"`
+	Src  []string `json:"src,omitempty"`
+	Gap  bool     `json:"gap,omitempty"`
+}
+
+// UnmarshalJSON reads a cell, taken too as models write one for short: a
+// text alone, or nothing for one unsaid.
+func (c *Cell) UnmarshalJSON(data []byte) error {
+	var text string
+	if json.Unmarshal(data, &text) == nil {
+		*c = Cell{Text: text}
+		return nil
+	}
+	type plain Cell
+	var p plain
+	if err := json.Unmarshal(data, &p); err != nil {
+		return err
+	}
+	*c = Cell(p)
+	return nil
+}
+
+// Gaps counts the cells the map does not speak of.
+func (t *Compare) Gaps() int {
+	n := 0
+	for _, r := range t.Rows {
+		for _, c := range r.Cells {
+			if c.Gap {
+				n++
+			}
+		}
+	}
+	return n
+}
+
+// Sames counts the rows in which every option says the same.
+func (t *Compare) Sames() int {
+	n := 0
+	for _, r := range t.Rows {
+		if r.Same {
+			n++
+		}
+	}
+	return n
+}
+
+// Option is the column of the option named, from 0, or -1.
+func (t *Compare) Option(name string) int {
+	if t == nil || name == "" {
+		return -1
+	}
+	return slices.Index(t.Options, name)
 }
 
 // Graph is a flow (with lanes, and how it is told step by step) or the
@@ -139,8 +223,10 @@ type Gap struct {
 }
 
 // Quiz is how the table was last recalled: the rows missed (from 1), when,
-// and when to ask again.
+// and when to ask again. Of a comparison, Col is the column that was
+// covered (from 1).
 type Quiz struct {
+	Col    int       `json:"col,omitempty"`
 	Missed []int     `json:"missed,omitempty"`
 	At     time.Time `json:"at"`
 	Next   time.Time `json:"next"`
@@ -167,6 +253,10 @@ const (
 	maxSubRunes   = 24
 	maxCellRunes  = 20
 	maxSayRunes   = 120
+	maxOptions    = 6
+	maxDims       = 12
+	maxOptRunes   = 14
+	maxCmpRunes   = 30
 )
 
 // Kinds are the kinds of diagram a set has, in the order shown.
@@ -183,6 +273,9 @@ func (s *Set) Kinds() []string {
 	}
 	if len(s.Objects) > 0 {
 		k = append(k, "objects")
+	}
+	if s.Compare != nil {
+		k = append(k, "compare")
 	}
 	return k
 }
@@ -206,6 +299,13 @@ func (s *Set) Clean(src func(string) (string, bool)) {
 	s.Flow = cleanGraph(s.Flow, false, srcs)
 	s.State = cleanGraph(s.State, true, srcs)
 	s.Table = cleanTable(s.Table, srcs)
+	s.Compare = cleanCompare(s.Compare, srcs)
+	if s.Compare.Option(s.Lean) < 0 { // the option leant to is gone
+		s.Lean = ""
+	}
+	if q := s.CompareQuiz; q != nil && (s.Compare == nil || q.Col < 1 || q.Col > len(s.Compare.Options)) {
+		s.CompareQuiz = nil
+	}
 
 	var objs []Object
 	for _, o := range s.Objects {
@@ -398,6 +498,78 @@ func cleanTable(t *Table, srcs func([]string) []string) *Table {
 	return t
 }
 
+// verdicts are the words of a row that judges between the options: the
+// better, a rank, a score, what to choose. A comparison says what the map
+// says of each; a row of these is the AI's own and is not kept.
+var verdicts = []string{"结论", "推荐", "建议选", "选哪", "哪个好", "哪个更", "谁更", "更好", "最好", "最佳", "首选", "优选", "胜出", "优胜",
+	"排名", "名次", "评分", "打分", "得分", "总分", "总评", "综合评", "综合来看", "总结", "优劣", "倾向", "赢家"}
+
+// Verdict tells whether a row's name is one that judges between the
+// options.
+func Verdict(dim string) bool {
+	return slices.ContainsFunc(verdicts, func(w string) bool { return strings.Contains(dim, w) })
+}
+
+// unsaid are the words models write in a cell for nothing said.
+var unsaid = []string{"", "-", "—", "–", "?", "？", "/", "未提及", "未说明", "未提到", "没说", "没有说", "没提", "不详", "未知",
+	"导图里没说", "导图没说", "n/a", "N/A", "null"}
+
+func cleanCompare(t *Compare, srcs func([]string) []string) *Compare {
+	if t == nil {
+		return nil
+	}
+	// The options kept, and where each was among those given: a cell is of
+	// its option by its place.
+	var opts []string
+	var at []int
+	for i, o := range t.Options {
+		if o = cut(o, maxOptRunes); o != "" && !slices.Contains(opts, o) && len(opts) < maxOptions {
+			opts, at = append(opts, o), append(at, i)
+		}
+	}
+	if len(opts) < 2 {
+		return nil
+	}
+	var rows []Compared
+	for _, r := range t.Rows {
+		if r.Dim = cut(r.Dim, maxOptRunes); r.Dim == "" || Verdict(r.Dim) ||
+			slices.ContainsFunc(rows, func(p Compared) bool { return p.Dim == r.Dim }) {
+			continue
+		}
+		cells := make([]Cell, len(opts))
+		said, alike := 0, true
+		for i, from := range at {
+			var c Cell
+			if from < len(r.Cells) {
+				c = r.Cells[from]
+			}
+			c.Text = cut(c.Text, maxCmpRunes)
+			if c.Gap || slices.Contains(unsaid, c.Text) {
+				c = Cell{Gap: true} // unsaid: no words, and nothing it came from
+			} else {
+				c.Src = srcs(c.Src)
+				said++
+			}
+			cells[i] = c
+			alike = alike && c.Text == cells[0].Text
+		}
+		if said == 0 { // a row of nothing said compares nothing
+			continue
+		}
+		// The same in every option: by their words, or as the answer says
+		// of words that differ; never with one unsaid.
+		r.Cells, r.Same = cells, said == len(opts) && (alike || r.Same)
+		if rows = append(rows, r); len(rows) == maxDims {
+			break
+		}
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+	t.Options, t.Rows = opts, rows
+	return t
+}
+
 // known keeps the IDs that name a node of the graph.
 func known(g *Graph, ids []string) []string {
 	if g == nil {
@@ -476,7 +648,7 @@ func Parse(text string) (*Set, error) {
 	// where a thing was asked) is not drawn, and the others are.
 	var s Set
 	for key, into := range map[string]any{"flow": &s.Flow, "state": &s.State, "table": &s.Table,
-		"objects": &s.Objects, "cases": &s.Cases, "gaps": &s.Gaps} {
+		"objects": &s.Objects, "cases": &s.Cases, "gaps": &s.Gaps, "compare": &s.Compare} {
 		v, ok := raw[key]
 		if !ok || v == nil {
 			continue
@@ -487,7 +659,7 @@ func Parse(text string) (*Set, error) {
 				continue
 			}
 		case []any:
-			if key == "flow" || key == "state" || key == "table" {
+			if key == "flow" || key == "state" || key == "table" || key == "compare" {
 				continue
 			}
 		default:
@@ -502,10 +674,10 @@ func Parse(text string) (*Set, error) {
 
 // The keys of an answer by what they hold.
 var (
-	textKeys  = []string{"id", "from", "to", "kind", "title", "sub", "label", "say", "name", "what", "text", "why", "result"}
-	textsKeys = []string{"src", "lanes", "conds", "results", "when", "then", "facts", "flow", "states", "aliases", "nodes"}
+	textKeys  = []string{"id", "from", "to", "kind", "title", "sub", "label", "say", "name", "what", "text", "why", "result", "dim"}
+	textsKeys = []string{"src", "lanes", "conds", "results", "when", "then", "facts", "flow", "states", "aliases", "nodes", "options"}
 	intKeys   = []string{"lane", "row"}
-	boolKeys  = []string{"gap"}
+	boolKeys  = []string{"gap", "same"}
 )
 
 // tidy gives each value of an answer the type its key is read as.
@@ -610,6 +782,19 @@ func (s Set) Renamed(ids map[string]string) Set {
 			t.Notes[i].Src = re(t.Notes[i].Src)
 		}
 		s.Table = &t
+	}
+	if s.Compare != nil {
+		t := *s.Compare
+		t.Rows = slices.Clone(t.Rows)
+		for i := range t.Rows {
+			t.Rows[i].Cells = slices.Clone(t.Rows[i].Cells)
+			for k := range t.Rows[i].Cells {
+				if c := &t.Rows[i].Cells[k]; len(c.Src) > 0 {
+					c.Src = re(c.Src)
+				}
+			}
+		}
+		s.Compare = &t
 	}
 	s.Gaps = slices.Clone(s.Gaps)
 	for i := range s.Gaps {
@@ -727,6 +912,28 @@ func (s *Set) Markdown() string {
 				b.WriteString("：" + o.What)
 			}
 			b.WriteString("\n")
+		}
+		b.WriteString("\n")
+	}
+	if t := s.Compare; t != nil {
+		b.WriteString("## 对比\n\n| |")
+		for _, o := range t.Options {
+			b.WriteString(" " + esc(o) + " |")
+		}
+		b.WriteString("\n|---|" + strings.Repeat("---|", len(t.Options)) + "\n")
+		for _, r := range t.Rows {
+			b.WriteString("| " + esc(r.Dim) + " |")
+			for _, c := range r.Cells {
+				if c.Gap {
+					b.WriteString(" 导图里没说 |")
+				} else {
+					b.WriteString(" " + esc(c.Text) + " |")
+				}
+			}
+			b.WriteString("\n")
+		}
+		if s.Lean != "" {
+			b.WriteString("\n我的倾向：" + esc(s.Lean) + "\n")
 		}
 		b.WriteString("\n")
 	}

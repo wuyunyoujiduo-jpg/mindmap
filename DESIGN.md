@@ -246,6 +246,21 @@ figures (`nodeFigures`); the field for a new tag is a pale block as every
 field; a column of the board says its count faint. The board's columns
 stay pale grounds under white cards (things of a kind, the user's rule).
 
+图解's comparison (对比, `diacompare.go`) is a table of type and hairlines,
+no card: the options a head at 14/700 over a line of `faint`, what they are
+compared by a first column 150 wide in muted type, a cell 13.5 with 11 by
+14 round it, a hairline under each row. A cell under the pointer is a pale
+block; the one chosen has the accent's line inside its edge (1.5, corner
+7), no fill. What the map does not say is a dashed outline of `faint`
+round 导图里没说, the one dashed thing on the page, for what is open and
+not the AI's to fill. A row in which every option says the same is muted.
+Covered, asked back, a cell is a pale block of its line's height. 我的倾向,
+the user's own row, is cut off by a line of `faint`, its name heavy: the
+option leant to has the accent's dot and 倾向这个 at 700, the others a
+faint 点一下标出 until one is marked. More than four options are cards down
+the page, white with a hairline (things of a kind), an option's name and
+its one key, 标为倾向, at the head.
+
 ## AI 技能's page
 
 Built to the draft https://claude.ai/artifact/SUEZAk4SLoJ76BxsM9LXDE,

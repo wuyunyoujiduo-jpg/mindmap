@@ -22,7 +22,7 @@ import (
 // the topics of the map it was drawn from.
 
 // diaKinds names the kinds of a set as its tabs do.
-var diaKinds = map[string]string{"flow": "流程", "state": "状态", "table": "判定表", "objects": "名词"}
+var diaKinds = map[string]string{"flow": "流程", "state": "状态", "table": "判定表", "objects": "名词", "compare": "对比"}
 
 // diaLit is what of a diagram is lit while it is told or walked: nil
 // lights all.
@@ -33,6 +33,8 @@ type diaLit struct {
 	hot   map[int]bool // the edges just taken
 	miss  string       // the node a case cannot go on from
 	rows  map[int]bool // of the table, from 1
+	// cells are those of the comparison, each by its pick ("cell:2:1").
+	cells map[string]bool
 }
 
 // diaLight works out what is lit of the kind shown.
@@ -54,6 +56,10 @@ func (a *app) diaLight(f *diaFile) *diaLit {
 	switch {
 	case a.dia.way == diaRead && a.dia.noun >= 1 && a.dia.noun <= len(f.Objects) && a.dia.kind != "objects":
 		return a.nounLight(f, f.Objects[a.dia.noun-1], a.dia.kind)
+	case a.dia.way == diaTell && a.dia.kind == "compare" && f.Compare != nil:
+		if shown := a.compareShown(f); len(shown) > 0 { // the row told
+			return &diaLit{rows: map[int]bool{shown[min(a.dia.step, len(shown)-1)] + 1: true}}
+		}
 	case a.dia.way == diaTell && a.dia.kind == "flow" && f.Flow != nil && len(f.Flow.Tell) > 0:
 		step := min(a.dia.step, len(f.Flow.Tell)-1)
 		l := &diaLit{nodes: map[string]bool{}, cur: set(f.Flow.Tell[step].Nodes), edges: map[int]bool{}, hot: map[int]bool{}}
@@ -146,6 +152,8 @@ func (a *app) diagramView(c *ui.Context) {
 			a.diaGraph(c, f, f.State, false)
 		case a.dia.kind == "table":
 			a.diaTable(c, f)
+		case a.dia.kind == "compare":
+			a.diaCompare(c, f)
 		default:
 			a.diaObjects(c, f)
 		}
@@ -231,6 +239,9 @@ func (a *app) diaMove(f *diaFile, key ui.Key) {
 	case a.dia.kind == "objects":
 		step("obj:", len(f.Objects))
 		return
+	case a.dia.kind == "compare" && f.Compare != nil:
+		a.compareMove(f, key)
+		return
 	case g == nil:
 		return
 	case a.flowSteps(f):
@@ -294,6 +305,16 @@ func (a *app) diaMove(f *diaFile, key ui.Key) {
 // tellStep goes a step on or back in the telling; past its end, it is
 // over.
 func (a *app) tellStep(f *diaFile, by int) {
+	if a.dia.kind == "compare" && f.Compare != nil { // a row a step
+		switch n := a.dia.step + by; {
+		case n >= len(a.compareShown(f)):
+			a.dia.way = diaRead
+		case n >= 0:
+			a.dia.step = n
+			a.diaReveal = "row:" + strconv.Itoa(a.compareShown(f)[n]+1)
+		}
+		return
+	}
 	if f.Flow == nil {
 		return
 	}
@@ -359,8 +380,8 @@ func (a *app) diaHead(c *ui.Context, f *diaFile) {
 			}
 			if tab.Clicked() && !on {
 				a.dia.kind, a.dia.pick = k, ""
-				if a.dia.way == diaTell || a.dia.way == diaQuiz || k == "objects" {
-					a.dia.way = diaRead // told on the flow, asked on the table
+				if a.dia.way == diaTell || a.dia.way == diaQuiz || k == "objects" || k == "compare" {
+					a.dia.way = diaRead // told and asked on the kind it was begun on
 				}
 			}
 			tab.Children(func() {
@@ -412,7 +433,7 @@ func (a *app) diaHome(c *ui.Context) {
 		ui.Column(c.Key("home")).MaxWidth(580).FillWidth().Padding(26, 20, 40).Gap(20).AlignSelf(ui.Center).Children(func() {
 			ui.Column(c.Key("what")).Gap(8).FillWidth().Children(func() {
 				ui.Text(c, "图解").FontSize(22).FontWeight(700).LetterSpacing(-0.5)
-				ui.Text(c, "导图说得清谁在谁下面，说不清先后、状态怎么变、什么情况下怎么办。选一个主题，AI 把它这一支画成流程、状态、判定表和名词，每一处都能回到导图里的出处。").
+				ui.Text(c, "导图说得清谁在谁下面，说不清先后、状态怎么变、什么情况下怎么办。选一个主题，AI 把它这一支画成流程、状态、判定表、名词和几个方案的对比，每一处都能回到导图里的出处。").
 					FontSize(textBody).TextColor(ink2(t)).Wrap().LineHeight(1.6)
 			})
 			switch {
@@ -425,7 +446,7 @@ func (a *app) diaHome(c *ui.Context) {
 						ui.Text(c, fmt.Sprintf("导图上现在选中的主题，下面有 %d 个主题", countTopics(n)-1)).FontSize(textCaption).TextColor(t.TextMuted).SingleLine()
 					})
 					busy := a.diaBusy != ""
-					draw := busyKey(c, "画成图解", "让 AI 读这一支，画成流程、状态、判定表和名词", busy, true, true)
+					draw := busyKey(c, "画成图解", "让 AI 读这一支，画成流程、状态、判定表、名词和对比", busy, true, true)
 					if busyClicked(draw, busy, true) {
 						a.later(func() { a.drawDia(n.ID, "") })
 					}
@@ -685,7 +706,7 @@ func (a *app) nounChip(c *ui.Context, f *diaFile, lit *diaLit) {
 	}
 	t := c.Theme()
 	text := "只亮提到「" + f.Objects[a.dia.noun-1].Name + "」的"
-	if lit != nil && len(lit.nodes) == 0 && len(lit.rows) == 0 {
+	if lit != nil && len(lit.nodes) == 0 && len(lit.rows) == 0 && len(lit.cells) == 0 {
 		text = "这张图上没有提到「" + f.Objects[a.dia.noun-1].Name + "」"
 	}
 	chip := ui.Row(c.Key("noun-chip")).Margin(0, 16, 6).Height(28).Padding(0, 8, 0, 10).Gap(6).Radius(radiusPill).AlignItems(ui.Center).
@@ -1020,6 +1041,10 @@ func (a *app) diaObjects(c *ui.Context, f *diaFile) {
 // diaWays is the row under a diagram: the three ways to read it, and,
 // taken one, what steps through it.
 func (a *app) diaWays(c *ui.Context, f *diaFile) {
+	if a.dia.kind == "compare" && f.Compare != nil { // its own: a row told, a column covered
+		a.compareWays(c, f)
+		return
+	}
 	t := c.Theme()
 	canTell := f.Flow != nil && len(f.Flow.Tell) > 0
 	canCase := len(f.Cases) > 0
@@ -1202,6 +1227,48 @@ func (a *app) diaPanel(c *ui.Context) {
 		case a.diaBusy == f.Node:
 			head("", cmpOr(f.Title, "图解"))
 			say("正在重画…")
+		case a.dia.kind == "compare" && f.Compare != nil && a.dia.way == diaTell && len(a.compareShown(f)) > 0:
+			shown := a.compareShown(f)
+			step := min(a.dia.step, len(shown)-1)
+			r := f.Compare.Rows[shown[step]]
+			var ids []string
+			for _, cell := range r.Cells {
+				for _, s := range cell.Src {
+					if !slices.Contains(ids, s) {
+						ids = append(ids, s)
+					}
+				}
+			}
+			head(fmt.Sprintf("讲一遍 · 第 %d 行", step+1), r.Dim)
+			say(compareSay(f.Compare, shown[step]))
+			sources("出自导图", ids)
+		case a.dia.kind == "compare" && f.Compare != nil && a.dia.way == diaQuiz && a.dia.cover >= 1 && a.dia.cover <= len(f.Compare.Options):
+			head("考我", f.Compare.Options[a.dia.cover-1])
+			say("这一列盖住了。先自己说，再点开一格，看导图里是怎么写的。")
+			ui.Text(c, fmt.Sprintf("每个方案都一样的行不考：旁边就是答案。有没想起来的，%d 天后「今天」会提醒你再考。", quizAgainMissed)).
+				FontSize(textCaption).TextColor(t.TextMuted).Wrap().LineHeight(1.5)
+		case a.dia.kind == "compare" && f.Compare != nil && strings.HasPrefix(a.dia.pick, "cell:"):
+			row, col, ok := compareCell(f.Compare, a.dia.pick)
+			if !ok {
+				a.diaSetPanel(c, f, head)
+				break
+			}
+			cell := f.Compare.Rows[row].Cells[col]
+			head(f.Compare.Options[col], f.Compare.Rows[row].Dim)
+			if cell.Gap {
+				ui.Box(c.Key("unsaid")).FillWidth().Padding(8, 10).Radius(radiusSmall).Border(1, faint(t)).BorderStyle(ui.BorderDashed).Children(func() {
+					ui.Text(c, "导图里没有说到这一格。AI 不替你填：去导图里补上，再重画。").FontSize(textSmall).TextColor(ink2(t)).Wrap().LineHeight(1.5)
+				})
+				mend(nil)
+			} else {
+				say(cell.Text)
+				if len(cell.Src) > 0 {
+					sources("来自这些主题", cell.Src)
+					ui.Text(c, "点一个主题，回到导图里看它。").FontSize(textCaption).TextColor(t.TextMuted)
+				} else {
+					ui.Text(c, "AI 没说它出自哪个主题：对一对导图。").FontSize(textCaption).TextColor(t.TextMuted).Wrap().LineHeight(1.5)
+				}
+			}
 		case a.dia.way == diaTell && f.Flow != nil && len(f.Flow.Tell) > 0:
 			step := min(a.dia.step, len(f.Flow.Tell)-1)
 			st := f.Flow.Tell[step]
@@ -1361,6 +1428,10 @@ func (a *app) diaSetPanel(c *ui.Context, f *diaFile, head func(over, title strin
 			ui.Text(c, "这一支太长，AI 只读了前面一部分。选它下面小一些的分支来画，会更全、更准。").FontSize(textSmall).TextColor(ink2(t)).Wrap().LineHeight(1.5).Grow(1).Shrink(1).MinWidth(0)
 		})
 	}
+	compare := a.dia.kind == "compare" && f.Compare != nil
+	if compare {
+		a.compareNext(c, f)
+	}
 	if len(f.Gaps) > 0 {
 		ui.Column(c.Key("gaps")).FillWidth().Children(func() {
 			trayHead(c, "gaps-head", "AI 看出来的", fmt.Sprintf("%d 处没说清", len(f.Gaps)), nil)
@@ -1384,7 +1455,7 @@ func (a *app) diaSetPanel(c *ui.Context, f *diaFile, head func(over, title strin
 			}
 		})
 	}
-	if len(f.Cases) > 0 {
+	if len(f.Cases) > 0 && !compare { // a case walks the flow, the states and the table
 		ui.Column(c.Key("cases")).FillWidth().Children(func() {
 			trayHead(c, "cases-head", "拿例子走一遍", "", nil)
 			for i, cs := range f.Cases {
@@ -1400,7 +1471,17 @@ func (a *app) diaSetPanel(c *ui.Context, f *diaFile, head func(over, title strin
 			}
 		})
 	}
-	if q := f.Quiz; q != nil && f.Table != nil {
+	if q := f.CompareQuiz; q != nil && compare {
+		cells := len(compareQuizRows(f.Compare, q.Col))
+		text := fmt.Sprintf("上次考「%s」：%d 格里想起 %d 格", f.Compare.Options[q.Col-1], cells, max(cells-len(q.Missed), 0))
+		if a.dueKind(f) == "compare" {
+			text += " · 该再考了"
+		} else {
+			text += " · " + dayLabel(q.Next, a.now()) + "再考"
+		}
+		ui.Text(c, text).FontSize(textCaption).TextColor(t.TextMuted).Wrap()
+	}
+	if q := f.Quiz; q != nil && f.Table != nil && !compare {
 		rows := len(quizRows(f.Table))
 		text := fmt.Sprintf("上次考：%d 条里想起 %d 条", rows, rows-len(q.Missed))
 		if a.quizDue(f) {
@@ -1515,8 +1596,8 @@ func (a *app) diaObjectPanel(c *ui.Context, o diagram.Object, head func(over, ti
 		}
 		var places []place
 		for _, k := range f.Kinds() {
-			if l := a.nounLight(f, o, k); k != "objects" && len(l.nodes)+len(l.rows) > 0 {
-				places = append(places, place{k, len(l.nodes) + len(l.rows)})
+			if l := a.nounLight(f, o, k); k != "objects" && len(l.nodes)+len(l.rows)+len(l.cells) > 0 {
+				places = append(places, place{k, len(l.nodes) + len(l.rows) + len(l.cells)})
 			}
 		}
 		if len(places) > 0 && idx > 0 {
@@ -1524,8 +1605,11 @@ func (a *app) diaObjectPanel(c *ui.Context, o diagram.Object, head func(over, ti
 				trayHead(c, "on-diagrams-head", "在图上", "", nil)
 				for _, p := range places {
 					unit := "处"
-					if p.kind == "table" {
+					switch p.kind {
+					case "table":
 						unit = "行"
+					case "compare":
+						unit = "格"
 					}
 					if diaRow(c, "on:"+p.kind, "在"+diaKinds[p.kind]+"里看", fmt.Sprintf("%d %s", p.n, unit), false).Clicked() {
 						a.dia.kind, a.dia.pick, a.dia.noun = p.kind, "", idx
@@ -1616,8 +1700,8 @@ func (a *app) diaSection(c *ui.Context, n *model.Node) {
 		if a.diaChanges(f).n > 0 {
 			note("dia-stale-note", "导图改过，图可能旧了", "重画", func() { a.drawDia(n.ID, f.Told) })
 		}
-		if a.quizDue(f) {
-			note("dia-due-note", "判定表该再考了", "考我", func() { a.askBack(f) })
+		if due := a.dueKind(f); due != "" {
+			note("dia-due-note", diaKinds[due]+"该再考了", "考我", func() { a.askBack(f) })
 		}
 	})
 }
@@ -1653,17 +1737,22 @@ func (a *app) diaLine(c *ui.Context) {
 		return
 	}
 	t := c.Theme()
+	// What is to be asked: a table, a comparison, or of both.
+	what := diaKinds[a.dueKind(due[0])]
+	if slices.ContainsFunc(due, func(f *diaFile) bool { return diaKinds[a.dueKind(f)] != what }) {
+		what = "图解"
+	}
 	row := ui.Row(c.Key("dia-line")).MinHeight(36).Padding(6, 10).Gap(8).Radius(radiusRow).AlignItems(ui.Center).FillWidth().
-		Cursor(ui.CursorPointer).Label("该再考的判定表").Background(t.Accent.Alpha(0.07)).Transition(rowMotion)
+		Cursor(ui.CursorPointer).Label("该再考的" + what).Background(t.Accent.Alpha(0.07)).Transition(rowMotion)
 	if row.Hovered() {
 		row.Background(t.Accent.Alpha(0.11))
 	}
 	if row.Clicked() {
 		a.later(func() { a.askBack(due[0]) })
 	}
-	text := fmt.Sprintf("「%s」的判定表该再考了", cmpOr(due[0].Title, "图解"))
+	text := fmt.Sprintf("「%s」的%s该再考了", cmpOr(due[0].Title, "图解"), what)
 	if len(due) > 1 {
-		text = fmt.Sprintf("有 %d 张判定表该再考了，先考「%s」", len(due), cmpOr(due[0].Title, "图解"))
+		text = fmt.Sprintf("有 %d 张%s该再考了，先考「%s」", len(due), what, cmpOr(due[0].Title, "图解"))
 	}
 	row.Children(func() {
 		glyph(c, iconSparkle, 14, t.Accent).PassThrough()
@@ -1678,8 +1767,8 @@ func (a *app) diaLine(c *ui.Context) {
 func (a *app) diaMark(c *ui.Context, f *diaFile, z float32) {
 	t := c.Theme()
 	col, tip := t.Accent, "有图解：点开看"
-	if a.quizDue(f) {
-		col, tip = t.Warning, "有图解，判定表该再考了：点开看"
+	if due := a.dueKind(f); due != "" {
+		col, tip = t.Warning, "有图解，"+diaKinds[due]+"该再考了：点开看"
 	}
 	s := 15 * z
 	mark := ui.Box(c.Key("dia-mark")).Absolute().Right(-s*0.4).Top(-s*0.4).Size(s, s).Radius(s/2).Background(col).Border(1.5, t.Background).
@@ -1743,6 +1832,17 @@ func (a *app) nounLight(f *diaFile, o diagram.Object, kind string) *diaLit {
 				l.rows[i+1] = true
 			}
 		}
+	case kind == "compare" && f.Compare != nil:
+		// By cell: what is compared by and the option are of all its row and
+		// all its column, and light them.
+		l.rows, l.cells = nil, map[string]bool{}
+		for i, r := range f.Compare.Rows {
+			for k, cell := range r.Cells {
+				if !cell.Gap && speaks(cell.Src, cell.Text, r.Dim, f.Compare.Options[k]) {
+					l.cells[comparePick(i, k)] = true
+				}
+			}
+		}
 	}
 	return l
 }
@@ -1764,6 +1864,10 @@ func (a *app) diaSourceStrip(c *ui.Context, f *diaFile) {
 	case strings.HasPrefix(a.dia.pick, "row:") && f.Table != nil:
 		if n, _ := strconv.Atoi(strings.TrimPrefix(a.dia.pick, "row:")); n >= 1 && n <= len(f.Table.Rows) {
 			src = f.Table.Rows[n-1].Src
+		}
+	case strings.HasPrefix(a.dia.pick, "cell:") && f.Compare != nil:
+		if row, col, ok := compareCell(f.Compare, a.dia.pick); ok {
+			src = f.Compare.Rows[row].Cells[col].Src
 		}
 	}
 	var first *model.Node
@@ -2118,7 +2222,7 @@ func (a *app) diaFigure(c *ui.Context, f *diaFile, kind string, as int, maxW, ma
 	a.dia, a.diaBare = diaState{node: f.Node, kind: kind, as: as}, true
 	defer func() { a.dia, a.diaBare = was, bare }()
 	natW := a.figWidth(f, kind, as)
-	key := fmt.Sprint(f.Node, kind, as, f.Updated.UnixNano())
+	key := fmt.Sprint(f.Node, kind, as, f.Updated.UnixNano(), f.Lean)
 	if a.figNat == nil || len(a.figNat) > 64 {
 		a.figNat = map[string]float32{}
 	}
@@ -2151,6 +2255,8 @@ func (a *app) diaFigure(c *ui.Context, f *diaFile, kind string, as int, maxW, ma
 				a.diaGraph(c, f, f.State, false)
 			case kind == "table" && f.Table != nil:
 				a.diaTable(c, f)
+			case kind == "compare" && f.Compare != nil:
+				a.diaCompare(c, f)
 			case kind == "objects":
 				a.diaObjects(c, f)
 			}
@@ -2227,7 +2333,7 @@ func (a *app) diaImage(f *diaFile, kind string, as int) (data []byte, err error)
 	}, int(w)+2*margin, 600)
 	tt.Frame() // drawn unseen, to be measured
 	tt.Frame() // measured
-	key := fmt.Sprint(f.Node, kind, as, f.Updated.UnixNano())
+	key := fmt.Sprint(f.Node, kind, as, f.Updated.UnixNano(), f.Lean)
 	h := a.figNat[key]
 	if h <= 0 {
 		return nil, fmt.Errorf("没有可导出的图")

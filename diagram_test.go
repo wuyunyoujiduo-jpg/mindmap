@@ -431,7 +431,7 @@ func TestDiagramFails(t *testing.T) {
 	a.aiOpen = false // where the key is set, which the telling opened
 	a.drawDia(root.ID, "")
 	tt.Frame()
-	if a.diaOf(root.ID) != nil || !tt.HasText("没画成：这一支里没找到可以画的先后、状态或规则") {
+	if a.diaOf(root.ID) != nil || !tt.HasText("没画成：这一支里没找到可以画的先后、状态、规则或并排的方案") {
 		t.Fatalf("empty answer: %q, %q", a.diaErr, tt.Texts())
 	}
 	snapshot(t, tt, "diagram-failed")

@@ -24,9 +24,10 @@ import (
 
 // 图解: a topic's branch drawn by the AI to be understood by (a flow, the
 // states of a thing, a table of what is decided when, the nouns of the
-// matter), read three ways: told step by step, walked with a case, asked
-// back. A tree holds what is under what, and not what comes after what,
-// what turns into what, or what is decided when: those are drawn from it.
+// matter, options side by side: diacompare.go), read three ways: told
+// step by step, walked with a case, asked back. A tree holds what is under
+// what, and not what comes after what, what turns into what, what is
+// decided when, or what stands beside what: those are drawn from it.
 //
 // A set is a view of the map, never a thing of its own: it is drawn from
 // a topic, says for each box the topics it came from, tells when they
@@ -134,9 +135,10 @@ const (
 // diaState is what of a set shows.
 type diaState struct {
 	node string // the topic whose set shows
-	kind string // "flow", "state", "table" or "objects"
+	kind string // "flow", "state", "table", "objects" or "compare"
 	// pick is what is chosen in it: a node of the flow or of the states by
-	// its ID, or "row:2", "note:1", "obj:3", "gap:1" (from 1).
+	// its ID, or "row:2", "note:1", "obj:3", "gap:1" (from 1), or a cell of
+	// the comparison, "cell:2:1" (its row, then its column).
 	pick string
 	way  int
 	step int          // of the telling
@@ -151,6 +153,10 @@ type diaState struct {
 	// as is how the flow shows: as a drawing of boxes and arrows, or as
 	// steps (flowAsSteps); 0 is as suits it (stepsSuit).
 	as int
+	// Of the comparison: diff puts away the rows in which every option
+	// says the same; cover is the column asked back (from 1).
+	diff  bool
+	cover int
 }
 
 // How a flow shows.
@@ -507,7 +513,7 @@ const diaOutlineMax = 45000
 const diaSystem = `你把思维导图里的一支内容画成帮人理解的图解。只根据给你的内容画，原文没说的不要补；发现没说清、或互相矛盾的地方，写进 gaps，不要替用户决定。
 只回答一个 JSON 对象，不要任何别的文字。`
 
-const diaAsk = `回答是一个对象，键是 flow、state、table、objects、cases、gaps 这六个里有内容的那些：哪样内容里没有，就省略那个键，不要硬凑，也不要给空值。
+const diaAsk = `回答是一个对象，键是 flow、state、table、objects、cases、gaps、compare 这七个里有内容的那些：哪样内容里没有，就省略那个键，不要硬凑，也不要给空值。
 
 1. flow：流程。内容里有先后步骤时才画。
 {"lanes":["角色或部门"],"nodes":[{"id":"n1","kind":"start","title":"…","sub":"…","lane":0,"src":[1]}],"edges":[{"from":"n1","to":"n2","label":"…"}],"tell":[{"nodes":["n1"],"say":"…"}]}
@@ -533,7 +539,12 @@ row 是命中 table 的第几行，从 1 数，没有就写 0；没画 state 时
 [{"say":"一句话","src":[5],"row":0}]
 没说清的和互相矛盾的都写在这里，矛盾的在句子里说明是哪两处矛盾。row 是对应 table 里 gap 为 true 的那一行，没有就写 0。备注末尾写着“（后面还有，没给你）”是内容太长被截掉了，不算没说清。
 
-src 是这个节点、这一行依据的主题的编号（上面方括号里的数字），只能用出现过的编号。`
+7. compare：对比表。内容里把两个以上的方案（做法、产品、选项）放在一起说时才画：列是方案，行是比什么。
+{"options":["方案名"],"rows":[{"dim":"比什么","same":false,"cells":[{"text":"导图里这个方案在这一点上怎么说","src":[6]},{"gap":true}]}]}
+options 是 2 到 6 个方案，每个不超过 8 个字；rows 最多 10 行，dim 不超过 8 个字；每行的 cells 和 options 一一对应、个数相同，每格不超过 20 个字。只写导图里说到的：导图没说某个方案在这一点上怎样，这一格就写 {"gap":true}，不要推测，也不要拿常识补上。几个方案在这一行说的是一回事时，same 写 true。
+这张表只摆出导图里各个方案怎么说，不下判断：不说哪个方案更好，不排名，不打分，不写“结论”“推荐”“总结”“综合评价”“优劣”这样的行，格子里也不加“更好”“最佳”“首选”这类你自己的评语，gaps 里同样不写。选哪个由用户自己定。
+
+src 是这个节点、这一行、这一格依据的主题的编号（上面方括号里的数字），只能用出现过的编号。`
 
 // diaPrompt is what the AI is given to draw a branch from.
 func (a *app) diaPrompt(n *model.Node, told string) (string, map[string]string, bool) {
@@ -635,7 +646,7 @@ func (a *app) drawDia(node, told string) {
 		}
 		set.Clean(func(v string) (string, bool) { id, ok := alias[v]; return id, ok })
 		if set.Empty() {
-			return nil, plainError("这一支里没找到可以画的先后、状态或规则")
+			return nil, plainError("这一支里没找到可以画的先后、状态、规则或并排的方案")
 		}
 		return set, nil
 	}, func(v any, err error) {
@@ -654,6 +665,11 @@ func (a *app) drawDia(node, told string) {
 		}
 		set.Node, set.Title, set.Drawn, set.Seen, set.Told = node, title, a.now(), seen, strings.TrimSpace(told)
 		set.Partial = partial
+		// What the user leans to is their own, and no drawing's: kept while
+		// its option is still there.
+		if prev != nil && set.Compare.Option(prev.Lean) >= 0 {
+			set.Lean = prev.Lean
+		}
 		// The map is where it is now, not where it was when the AI was
 		// asked: renamed meanwhile, as a new title of its middle does, the
 		// set was kept under the old path and not seen until the map was
@@ -673,7 +689,11 @@ func (a *app) drawDia(node, told string) {
 			(a.mode == viewMap || a.mode == viewDiagram && a.dia.node == "") && a.selected == node && a.editing == "")
 		switch {
 		case here && prev != nil:
-			a.openDia(node, "")
+			kind := ""
+			if a.dia.node == node { // on the kind looked at, where it was drawn again
+				kind = a.dia.kind
+			}
+			a.openDia(node, kind)
 			was := *prev
 			a.tellUndo("照现在的导图重画了", func() {
 				if a.writeDia(&was) == nil && a.dia.node == node {
@@ -764,6 +784,7 @@ func (a *app) diaSource(id string) {
 			}
 			a.openDia(was.node, was.kind)
 			a.dia.pick, a.dia.way, a.dia.step, a.dia.cas, a.dia.noun, a.dia.as = was.pick, was.way, was.step, was.cas, was.noun, was.as
+			a.dia.diff = was.diff
 			if was.way == diaQuiz {
 				a.dia.way = diaRead
 			}
@@ -811,16 +832,25 @@ func (a *app) setDiaWay(way int) {
 		return
 	}
 	a.dia.way, a.dia.pick, a.dia.step, a.dia.noun = way, "", 0, 0
+	compare := a.dia.kind == "compare" && f.Compare != nil // read where it is
 	switch way {
 	case diaTell:
-		a.dia.kind = "flow"
+		if !compare {
+			a.dia.kind = "flow"
+		}
 	case diaCase:
-		if a.dia.kind == "objects" {
+		if a.dia.kind == "objects" || a.dia.kind == "compare" {
 			a.dia.kind = f.Kinds()[0]
 		}
 		a.dia.cas = min(a.dia.cas, max(len(f.Cases)-1, 0))
 	case diaQuiz:
-		a.dia.kind, a.dia.open, a.dia.got, a.dia.cur = "table", map[int]bool{}, map[int]bool{}, 0
+		a.dia.open, a.dia.got, a.dia.cur = map[int]bool{}, map[int]bool{}, 0
+		if a.dia.cover = 0; compare {
+			a.dia.cover = compareCover(f)
+		}
+		if a.dia.cover == 0 {
+			a.dia.kind = "table"
+		}
 	}
 }
 
@@ -853,6 +883,10 @@ func (a *app) answerQuiz(right bool) {
 	}
 	a.dia.got[a.dia.cur] = right
 	rows := quizRows(f.Table)
+	compare := a.dia.kind == "compare" && a.dia.cover > 0
+	if compare {
+		rows = compareQuizRows(f.Compare, a.dia.cover)
+	}
 	if len(a.dia.got) < len(rows) {
 		return
 	}
@@ -867,13 +901,38 @@ func (a *app) answerQuiz(right bool) {
 		days = quizAgainMissed
 	}
 	q.Next = today(a.now()).AddDate(0, 0, days)
-	f.Quiz = q
+	if compare {
+		q.Col = a.dia.cover
+		f.CompareQuiz = q
+	} else {
+		f.Quiz = q
+	}
 	_ = a.writeDia(f)
 }
 
-// quizDue tells whether a set's table is to be asked back again.
-func (a *app) quizDue(f *diaFile) bool {
-	return f != nil && f.Table != nil && f.Quiz != nil && !f.Quiz.Next.After(a.now())
+// quizDue tells whether a set's table, or its comparison, is to be asked
+// back again.
+func (a *app) quizDue(f *diaFile) bool { return a.dueKind(f) != "" }
+
+// dueKind is the kind of a set that is to be asked back again, its table
+// first, or none.
+func (a *app) dueKind(f *diaFile) string {
+	switch {
+	case f == nil:
+	case f.Table != nil && f.Quiz != nil && !f.Quiz.Next.After(a.now()):
+		return "table"
+	case f.Compare != nil && f.CompareQuiz != nil && !f.CompareQuiz.Next.After(a.now()):
+		return "compare"
+	}
+	return ""
+}
+
+// dueNext is when a set is asked back next, by the kind that is due.
+func (a *app) dueNext(f *diaFile) time.Time {
+	if a.dueKind(f) == "compare" {
+		return f.CompareQuiz.Next
+	}
+	return f.Quiz.Next
 }
 
 // diasDue are the sets of every map whose table is to be asked back, the
@@ -901,8 +960,8 @@ func (a *app) diasDue() []*diaFile {
 		}
 	}
 	sort.Slice(out, func(i, j int) bool {
-		if !out[i].Quiz.Next.Equal(out[j].Quiz.Next) {
-			return out[i].Quiz.Next.Before(out[j].Quiz.Next)
+		if x, y := a.dueNext(out[i]), a.dueNext(out[j]); !x.Equal(y) {
+			return x.Before(y)
 		}
 		return out[i].Node < out[j].Node
 	})
@@ -933,7 +992,8 @@ func (a *app) moveDiasTo(nodes []*model.Node, path string) {
 	}
 }
 
-// askBack opens a set of any map on its table, asked back.
+// askBack opens a set of any map on its table, or its comparison when
+// that is what is due, asked back.
 func (a *app) askBack(f *diaFile) {
 	path := filepath.Join(a.dir, filepath.FromSlash(f.Path))
 	if path != a.path {
@@ -945,7 +1005,7 @@ func (a *app) askBack(f *diaFile) {
 		a.tell("这组图解的主题已经不在导图里了")
 		return
 	}
-	a.openDia(f.Node, "table")
+	a.openDia(f.Node, cmpOr(a.dueKind(f), "table"))
 	a.setDiaWay(diaQuiz)
 }
 
