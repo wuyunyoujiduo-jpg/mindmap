@@ -31,7 +31,15 @@ func Load(path string) (*File, error) {
 	if err != nil {
 		return nil, err
 	}
-	return Parse(b)
+	f, err := Parse(b)
+	if err == nil && f.Dated.IsZero() {
+		// Its topics kept no time of their own yet: they are of the file's,
+		// as it is now, and stay so once it is written (File.Dated).
+		if fi, err := os.Stat(path); err == nil {
+			f.Dated = fi.ModTime().Truncate(time.Second)
+		}
+	}
+	return f, err
 }
 
 // Parse decodes a mind map file's contents. A file of version 1, a single

@@ -188,8 +188,12 @@ type Node struct {
 	// as written, and shown nowhere.
 	Values map[string]float64 `json:"values,omitempty"`
 	// Pos is where a floating topic is (Document.Floating).
-	Pos      *Point  `json:"pos,omitempty"`
-	Children []*Node `json:"children,omitempty"`
+	Pos *Point `json:"pos,omitempty"`
+	// Changed is when what the topic says last changed: its title, note,
+	// task, tags or links (Prints). A topic that says none, of before the
+	// app kept it, takes its file's (File.Dated, File.ChangedAt).
+	Changed  time.Time `json:"changed,omitzero"`
+	Children []*Node   `json:"children,omitempty"`
 }
 
 // Image is a picture shown in a node. Its file is in the map's assets

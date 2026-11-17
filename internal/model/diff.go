@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 )
 
 // ChangeKind is what happened to a node between two versions of a map.
@@ -280,6 +281,8 @@ func SameContent(a, b *File) bool {
 		}
 		c.Version = 0
 		c.Log = nil // what agents reported is not what the map says
+		c.Dated = time.Time{}
+		c.Walk(func(n *Node) { n.Changed = time.Time{} }) // nor when a topic changed
 		j, _ := json.Marshal(c)
 		return j
 	}
