@@ -1,5 +1,6 @@
 #!/bin/bash
-# Installs or updates MyMind on macOS from the repository's releases.
+# Installs MyMind on macOS from the repository's releases: the first time,
+# or a version of your choice. Once installed, the app updates itself.
 #
 #   ./update.sh            # the latest release
 #   ./update.sh 0.6.0      # a version of your choice
@@ -23,7 +24,7 @@ for arg in "$@"; do
 	case "$arg" in
 	-f | --force) force=1 ;;
 	-h | --help)
-		sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+		sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
 		exit 0
 		;;
 	*) version="${arg#v}" ;;
