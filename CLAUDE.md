@@ -153,8 +153,15 @@ by AI, and an AI assistant.
     as hours (`weektime.go`, the user's, 0.103, after TickTick's and
     Feishu's: the hours down the left, a band of the whole day's tasks
     over them, timed tasks blocks on their hours side by side where they
-    meet, `lanes`, now a line across today; a task dropped on a half hour
-    goes to it, `dropTaskAt`), a day's tasks of the whole day first and
+    meet, `lanes`, now a line across today, the Chinese calendar's day by
+    each date, `lunar.go`; and the day alone as hours, 日 among the tabs,
+    `hoursView`). What is done there is done there, the user asked, all
+    at once (0.104: a version a part was one too many): a press on a
+    blank hour writes a task there, drawn down of the hours drawn over
+    (`hourPick`, `hourDraft`); the band's blank a task of the day; a
+    block's foot drawn is when it ends (`hourStretch`); a task dragged
+    shows where it would go and dropped goes to it (`moveTaskWhen`, with
+    its 撤回); ← and → turn the days, a day's tasks of the whole day first and
     then by their time (`byTime`), and which is when it reminds, set newly. How it
     repeats is TickTick's, which the user named (0.102): by the year
     too, by dates of the month or its Nth weekday, ending on a day or

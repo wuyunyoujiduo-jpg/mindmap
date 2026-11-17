@@ -2,32 +2,43 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
 
-// The week as hours, as a calendar's (the user's reference was TickTick's
-// and Feishu's): a column a day under its weekday and date, the tasks of
-// the whole day in a band over the hours, and those with a time of their
-// day (model.Task.Time) as blocks on the hours they take, side by side
-// where they meet; the hours down the left, now a line across today's
-// column. A task dropped on an hour goes to that day and time, keeping
-// how long it takes; dropped on the band, it is of the whole day.
+// The week and the day as hours, as a calendar's (the user's reference
+// was TickTick's and Feishu's): a column a day under its weekday, date and
+// day of the Chinese calendar (lunar.go), the tasks of the whole day in a
+// band over the hours, and those with a time of their day
+// (model.Task.Time) as blocks on the hours they take, side by side where
+// they meet; the hours down the left, now a line across today's column.
+//
+// What is done there is done there, the user asked, all of it:
+//   - a press on a blank hour writes a task there, of an hour; pressed
+//     and drawn down, of the hours drawn over (pick, draft); a click on
+//     the band's blank, a task of the whole day;
+//   - a task dropped on an hour goes to that day and time, keeping how
+//     long it takes, a block showing where as it is dragged; dropped on
+//     the band, it is of the whole day (dropTaskAt);
+//   - a block's foot drawn down or up is when it ends (stretch).
 
 const (
-	hourHeight  = 48 // an hour's height on the week
+	hourHeight  = 48 // an hour's height
 	hourGutter  = 60 // the room of the hours' names at the left
 	weekOpensAt = 7  // the hour a week shows first, earlier tasks aside
-	slotMinutes = 30 // what a drop or a block's least height is counted in
+	slotMinutes = 30 // what a press or a drop is counted in
+	stretchStep = 15 // what a block's end is counted in
 	allDayShown = 3  // the tasks of the whole day a day shows, before 还有
 )
 
-// weekTask is a task with a time on a day of the week, or one that comes
-// again on it: from and to are its minutes in the day, lane its place
-// among those it meets, of lanes.
+// weekTask is a task with a time on a day, or one that comes again on it:
+// from and to are its minutes in the day, lane its place among those it
+// meets, of lanes.
 type weekTask struct {
 	it          taskItem
 	ghost       bool
@@ -35,17 +46,45 @@ type weekTask struct {
 	lane, lanes int
 }
 
+// hourPick is a span of a day being chosen by pressing on its hours: the
+// minutes pressed at and now under the pointer; onBlock when the press
+// began on a task, which is then its own.
+type hourPick struct {
+	day      time.Time
+	from, to int
+	onBlock  bool
+}
+
+// hourDraft is a task being written where it was chosen: its day, and its
+// minutes, from -1 for one of the whole day.
+type hourDraft struct {
+	day      time.Time
+	from, to int
+	text     string
+	focused  bool // it has been written in, and leaving it keeps it
+}
+
+// hourStretch is a block's end being dragged, in minutes.
+type hourStretch struct {
+	key string
+	to  float32
+}
+
 // weekView is the week of the day shown, as hours.
 func (a *app) weekView(c *ui.Context, items []taskItem) {
 	start := weekStart(a.tasks.day)
-	now := a.now()
 	var days []time.Time
 	for i := range 7 {
 		days = append(days, start.AddDate(0, 0, i))
 	}
-	// What each day holds: of the whole day, and timed.
-	allDay := make([][]weekTask, 7)
-	timed := make([][]weekTask, 7)
+	a.hoursView(c, items, days)
+}
+
+// hoursView is days as hours: the week's seven, or the day's one.
+func (a *app) hoursView(c *ui.Context, items []taskItem, days []time.Time) {
+	now := a.now()
+	allDay := make([][]weekTask, len(days))
+	timed := make([][]weekTask, len(days))
 	earliest := 24 * 60
 	for i, d := range days {
 		add := func(it taskItem, ghost bool) {
@@ -57,7 +96,7 @@ func (a *app) weekView(c *ui.Context, items []taskItem) {
 			from := clockMinutes(task.Time)
 			to := from + slotMinutes
 			if task.EndTime != "" && clockMinutes(task.EndTime) > from {
-				to = max(clockMinutes(task.EndTime), from+slotMinutes/2)
+				to = max(clockMinutes(task.EndTime), from+stretchStep)
 			}
 			timed[i] = append(timed[i], weekTask{it: it, ghost: ghost, from: from, to: min(to, 24*60)})
 			earliest = min(earliest, from)
@@ -72,20 +111,25 @@ func (a *app) weekView(c *ui.Context, items []taskItem) {
 		}
 		timed[i] = lanes(timed[i])
 	}
-	// A week newly shown opens at its first hours: seven, or earlier for
-	// what is earlier, or now, an hour before it.
-	if !a.tasks.weekAt.Equal(start) {
-		a.tasks.weekAt = start
-		first := weekOpensAt * 60
-		if earliest < first {
-			first = earliest
-		}
-		if !now.Before(start) && now.Before(start.AddDate(0, 0, 7)) {
+	// Days newly shown open at their first hours: seven, or earlier for
+	// what is earlier, or with now in sight.
+	start, end := days[0], days[len(days)-1].AddDate(0, 0, 1)
+	if !a.tasks.weekAt.Equal(start) || a.tasks.weekDays != len(days) {
+		a.tasks.weekAt, a.tasks.weekDays = start, len(days)
+		first := min(weekOpensAt*60, earliest)
+		if !now.Before(start) && now.Before(end) {
 			if m := now.Hour()*60 + now.Minute(); m < first+60 || m > first+9*60 {
 				first = max(m-60, 0)
 			}
 		}
 		a.tasks.weekScroll.X, a.tasks.weekScroll.Y = 0, max(float32(first/60*hourHeight)-12, 0) // its name in sight
+	}
+	if !now.Before(start) && now.Before(end) { // now's line goes on with the minutes
+		c.After(time.Minute - time.Duration(now.Second())*time.Second)
+	}
+	// Leaving the hours, what was being written is let go.
+	if d := a.tasks.draft; d != nil && (d.day.Before(start) || !d.day.Before(end)) {
+		a.tasks.draft = nil
 	}
 	ui.Column(c.Key("week")).Grow(1).MinHeight(0).Margin(10, 28, 0).Children(func() {
 		a.weekHead(c, days, now)
@@ -101,8 +145,9 @@ func (a *app) weekView(c *ui.Context, items []taskItem) {
 	})
 }
 
-// weekHead names the days: the weekday, small, over the date; today's in
-// the accent. A double click shows the day.
+// weekHead names the days: the weekday, small, over the date and its day
+// of the Chinese calendar; today's in the accent. A double click on a day
+// of the week shows it alone.
 func (a *app) weekHead(c *ui.Context, days []time.Time, now time.Time) {
 	t := c.Theme()
 	_, offset := now.Zone()
@@ -118,10 +163,13 @@ func (a *app) weekHead(c *ui.Context, days []time.Time, now time.Time) {
 			isToday := sameDay(d, now)
 			rest := d.Weekday() == time.Saturday || d.Weekday() == time.Sunday
 			col := ui.Column(c.Key(fmt.Sprint("week-day:", i))).Grow(1).Basis(0).MinWidth(0).Padding(6, 10, 10).Gap(4).
-				BorderWidth(0, 0, 0, 1).BorderColor(t.Border.Alpha(0.55)).Cursor(ui.CursorPointer).Tooltip("双击看这一天")
-			if col.DoubleClicked() {
-				day := d
-				a.later(func() { a.tasks.day, a.tasks.view = day, tasksDay })
+				BorderWidth(0, 0, 0, 1).BorderColor(t.Border.Alpha(0.55))
+			if len(days) > 1 {
+				col.Cursor(ui.CursorPointer).Tooltip("双击只看这一天")
+				if col.DoubleClicked() {
+					day := d
+					a.later(func() { a.tasks.day, a.tasks.view = day, tasksDay })
+				}
 			}
 			ink, word := t.Text, t.TextMuted
 			switch {
@@ -131,24 +179,45 @@ func (a *app) weekHead(c *ui.Context, days []time.Time, now time.Time) {
 				ink, word = faint(t), faint(t)
 			}
 			col.Children(func() {
-				ui.Text(c, "周"+weekdayName(d)[len("周"):]).FontSize(textCaption).TextColor(word).NoWrap()
-				ui.Text(c, fmt.Sprint(d.Day())).FontSize(textTitle).FontWeight(700).FontFeatures("tnum").TextColor(ink).NoWrap()
+				ui.Text(c, weekdays[d.Weekday()]).FontSize(textCaption).TextColor(word).NoWrap()
+				ui.Row(c).Gap(6).AlignItems(ui.Baseline).Children(func() {
+					ui.Text(c, fmt.Sprint(d.Day())).FontSize(textTitle).FontWeight(700).FontFeatures("tnum").TextColor(ink).NoWrap()
+					lunarText(c, d, rest && !isToday)
+				})
 			})
 		}
 	})
 }
 
+// lunarText is the day's word of the Chinese calendar, small: a feast or a
+// holiday in the accent.
+func lunarText(c *ui.Context, d time.Time, faded bool) {
+	t := c.Theme()
+	word, feast := lunarLabel(d)
+	if word == "" {
+		return
+	}
+	col := t.TextMuted
+	switch {
+	case feast:
+		col = t.Accent.MixOklab(t.Text, 0.2)
+	case faded:
+		col = faint(t)
+	}
+	ui.Text(c, word).FontSize(textCaption).TextColor(col).NoWrap().Shrink(1).MinWidth(0).SingleLine()
+}
+
 // weekAllDay is the band of the tasks of the whole day, over the hours:
-// a few a day and how many more; there only while the week has any, but
-// as a place to drop on.
+// a few a day and how many more, and under them a blank to click to write
+// one there.
 func (a *app) weekAllDay(c *ui.Context, days []time.Time, allDay [][]weekTask) {
 	t := c.Theme()
-	ui.Row(c.Key("week-allday")).FillWidth().Shrink(0).MinHeight(34).BorderWidth(0, 0, 1, 0).BorderColor(hairline(t)).Children(func() {
+	ui.Row(c.Key("week-allday")).FillWidth().Shrink(0).BorderWidth(0, 0, 1, 0).BorderColor(hairline(t)).Children(func() {
 		ui.Row(c).Width(hourGutter).Shrink(0).Padding(9, 8, 0, 0).Justify(ui.End).AlignItems(ui.Start).Children(func() {
 			ui.Text(c, "全天").FontSize(textCaption).TextColor(t.TextMuted).NoWrap()
 		})
 		for i, d := range days {
-			col := ui.Column(c.Key(fmt.Sprint("allday:", i))).Grow(1).Basis(0).MinWidth(0).Padding(4).Gap(3).
+			col := ui.Column(c.Key(fmt.Sprint("allday:", i))).Grow(1).Basis(0).MinWidth(0).MinHeight(34).Padding(4).Gap(3).
 				BorderWidth(0, 0, 0, 1).BorderColor(t.Border.Alpha(0.55)).Background(t.Text.Alpha(0)).Transition(easeLook)
 			if sameDay(d, a.now()) {
 				col.Background(t.Text.Alpha(0.025))
@@ -172,6 +241,21 @@ func (a *app) weekAllDay(c *ui.Context, days []time.Time, allDay [][]weekTask) {
 						a.taskChip(c, w.it, false)
 					}
 				}
+				if dr := a.tasks.draft; dr != nil && dr.from < 0 && sameDay(dr.day, d) {
+					a.hourDraftInput(c, dr)
+					return
+				}
+				// The blank under them: a click writes a task of the day.
+				blank := ui.Box(c.Key("allday-blank")).FillWidth().Grow(1).MinHeight(22).Radius(radiusSmall).
+					Cursor(ui.CursorPointer).Label(fmt.Sprintf("新建全天任务 %d月%d日", d.Month(), d.Day())).
+					Tooltip("点一下，新建这天的全天任务").Background(t.Text.Alpha(0)).Transition(easeLook)
+				if blank.Hovered() {
+					blank.Background(t.Text.Alpha(0.04))
+				}
+				if blank.Clicked() {
+					day := d
+					a.later(func() { a.tasks.draft = &hourDraft{day: day, from: -1, to: -1} })
+				}
 			})
 		}
 	})
@@ -182,7 +266,7 @@ func (a *app) weekAllDay(c *ui.Context, days []time.Time, allDay [][]weekTask) {
 func (a *app) weekHours(c *ui.Context, days []time.Time, now time.Time) {
 	t := c.Theme()
 	nowAt := -1
-	if !now.Before(days[0]) && now.Before(days[6].AddDate(0, 0, 1)) {
+	if !now.Before(days[0]) && now.Before(days[len(days)-1].AddDate(0, 0, 1)) {
 		nowAt = now.Hour()*60 + now.Minute()
 	}
 	ui.Box(c.Key("week-gutter")).Width(hourGutter).Shrink(0).FillHeight().Children(func() {
@@ -200,8 +284,26 @@ func (a *app) weekHours(c *ui.Context, days []time.Time, now time.Time) {
 	})
 }
 
-// weekDay is a day's column of hours: a line an hour, a place to drop on
-// every half hour, its timed tasks as blocks, and now across it if today.
+// minuteAt is the minute of the day at y down a day's hours.
+func minuteAt(y float32) int {
+	return min(max(int(y*60/hourHeight), 0), 24*60-1)
+}
+
+// pickSpan is the span a press chose: the half hours it was drawn over,
+// or, clicked, the hour from the half hour clicked.
+func pickSpan(p hourPick) (from, to int) {
+	lo, hi := min(p.from, p.to), max(p.from, p.to)
+	from = lo / slotMinutes * slotMinutes
+	to = (hi/slotMinutes + 1) * slotMinutes
+	if hi-lo < slotMinutes/3 {
+		to = from + 60
+	}
+	return from, min(to, 24*60)
+}
+
+// weekDay is a day's column of hours: a line an hour, its timed tasks as
+// blocks, now across it if today, and under them the blank pressed on to
+// write a task there.
 func (a *app) weekDay(c *ui.Context, i int, d time.Time, timed []weekTask, now time.Time) {
 	t := c.Theme()
 	col := ui.Box(c.Key(fmt.Sprint("hours:", i))).Grow(1).Basis(0).MinWidth(0).FillHeight().
@@ -210,48 +312,165 @@ func (a *app) weekDay(c *ui.Context, i int, d time.Time, timed []weekTask, now t
 	if isToday {
 		col.Background(t.Text.Alpha(0.025))
 	}
+	_, py, _ := col.PointerPosition()
+	at := minuteAt(py)
+	dragOver := false
+	if _, over := ui.DragOver[taskDrag](col); over {
+		dragOver = true
+	}
+	if dd, ok := ui.Drop[taskDrag](col); ok {
+		a.moveTaskWhen(dd, d, at/slotMinutes*slotMinutes)
+	}
+	onBlock := false
+	var blank ui.Element
 	col.Children(func() {
-		ui.Column(c).FillWidth().FillHeight().Children(func() {
-			for m := 0; m < 24*60; m += slotMinutes {
-				slot := ui.Box(c.Key(fmt.Sprint("slot:", m))).FillWidth().Height(hourHeight * slotMinutes / 60).Shrink(0).
-					Background(t.Text.Alpha(0)).Transition(easeLook)
-				if (m+slotMinutes)%60 == 0 && m+slotMinutes < 24*60 {
-					slot.BorderWidth(0, 0, 1, 0).BorderColor(hairline(t).Alpha(0.6))
-				}
-				a.dropTaskAt(slot, d, m)
-			}
-		})
+		// The blank, under all: pressed, it chooses where to write a task.
+		blank = ui.Box(c.Key("blank")).Absolute().Top(0).Left(0).Right(0).Bottom(0).
+			Label(fmt.Sprintf("时间格 %d月%d日", d.Month(), d.Day())).Tooltip("点空白时间格新建任务，按住往下拖选时长")
+		for h := 1; h < 24; h++ {
+			ui.Box(c.Key(fmt.Sprint("line:", h))).Absolute().Top(float32(h * hourHeight)).Left(0).Right(0).Height(1).
+				Background(hairline(t).Alpha(0.6)).PassThrough()
+		}
 		for _, w := range timed {
-			a.weekBlock(c, w, d)
+			if a.weekBlock(c, w, d) {
+				onBlock = true
+			}
+		}
+		// Where a press is choosing, or a task dragged would go.
+		if p := a.tasks.pick; p != nil && !p.onBlock && sameDay(p.day, d) {
+			from, to := pickSpan(*p)
+			a.hourShade(c, from, to, clockText(from)+"–"+clockText(to))
+		}
+		if dragOver {
+			from := at / slotMinutes * slotMinutes
+			long := slotMinutes
+			for _, it := range a.tasks.items {
+				if dd, ok := ui.DragOver[taskDrag](col); ok && it.path == dd.path && it.node.ID == dd.id {
+					if task := it.node.Task; task.Time != "" && task.EndTime != "" {
+						long = max(clockMinutes(task.EndTime)-clockMinutes(task.Time), stretchStep)
+					}
+				}
+			}
+			a.hourShade(c, from, min(from+long, 24*60), "移到 "+strings.TrimPrefix(clockText(from), "0"))
+		}
+		if dr := a.tasks.draft; dr != nil && dr.from >= 0 && sameDay(dr.day, d) {
+			ui.Box(c.Key("draft")).Absolute().Top(float32(dr.from*hourHeight)/60+1).Height(max(float32((dr.to-dr.from)*hourHeight)/60-2, 30)).
+				Left(2).Right(2).Padding(3, 4).Radius(radiusSmall).Background(t.Background).Border(1, t.Accent.Alpha(0.6)).ZIndex(5).Children(func() {
+				ui.Text(c, strings.TrimPrefix(clockText(dr.from), "0")+"–"+strings.TrimPrefix(clockText(dr.to), "0")).
+					FontSize(textCaption).TextColor(t.Accent).FontFeatures("tnum").Padding(0, 4)
+				a.hourDraftInput(c, dr)
+			})
 		}
 		if isToday {
-			at := float32((now.Hour()*60+now.Minute())*hourHeight) / 60
-			ui.Box(c.Key("now-line")).Absolute().Top(at).Left(0).Right(0).Height(1.5).Background(t.Danger).PassThrough()
-			ui.Box(c.Key("now-dot")).Absolute().Top(at-3.25).Left(-4).Size(8, 8).Radius(4).Background(t.Danger).PassThrough()
+			y := float32((now.Hour()*60+now.Minute())*hourHeight) / 60
+			ui.Box(c.Key("now-line")).Absolute().Top(y).Left(0).Right(0).Height(1.5).Background(t.Danger).PassThrough().ZIndex(4)
+			ui.Box(c.Key("now-dot")).Absolute().Top(y-3.25).Left(-4).Size(8, 8).Radius(4).Background(t.Danger).PassThrough().ZIndex(4)
 		}
 	})
+	// A press on the blank chooses a span; let go, a task is written there.
+	_, by, _ := blank.PointerPosition()
+	m := minuteAt(by)
+	p := a.tasks.pick
+	switch pressed := blank.Pressed(); {
+	case pressed && p == nil:
+		a.tasks.pick = &hourPick{day: d, from: m, to: m, onBlock: onBlock || a.tasks.stretch != nil}
+	case pressed && sameDay(p.day, d):
+		p.to = m
+	case !pressed && p != nil && sameDay(p.day, d):
+		a.tasks.pick = nil
+		if !p.onBlock {
+			a.hourDraftAt(d, *p)
+		}
+	case p == nil && blank.Clicked() && !onBlock: // a click, pressed and let go at once
+		a.hourDraftAt(d, hourPick{day: d, from: m, to: m})
+	}
+}
+
+// hourDraftAt opens the line to write a task in where p chose.
+func (a *app) hourDraftAt(d time.Time, p hourPick) {
+	from, to := pickSpan(p)
+	a.later(func() { a.tasks.draft, a.tasks.sel = &hourDraft{day: d, from: from, to: to}, "" })
+}
+
+// hourShade is a span of a day's hours shown as chosen: where a task will
+// be written, or go.
+func (a *app) hourShade(c *ui.Context, from, to int, label string) {
+	t := c.Theme()
+	ui.Box(c.Key("shade")).Absolute().Top(float32(from*hourHeight)/60+1).Height(float32((to-from)*hourHeight)/60-2).
+		Left(2).Right(2).Padding(3, 6).Radius(radiusSmall).Background(t.Accent.Alpha(0.14)).PassThrough().ZIndex(3).Children(func() {
+		ui.Text(c, label).FontSize(textCaption).FontWeight(600).TextColor(t.Accent.MixOklab(t.Text, 0.25)).FontFeatures("tnum").NoWrap()
+	})
+}
+
+// hourDraftInput is the line a task is written in where it was chosen:
+// kept as it is written (记下) or when it is left with words in it; let go
+// by Escape or left blank.
+func (a *app) hourDraftInput(c *ui.Context, dr *hourDraft) {
+	t := c.Theme()
+	in := ui.TextInputBase(c.Key("draft-text"), &dr.text).Placeholder("写下要做的事").Label("新任务").AutoFocus().
+		FontSize(textSmall).FillWidth().Padding(3, 4).Radius(radiusSmall).Background(t.Background)
+	keep := func() {
+		text := strings.TrimSpace(dr.text)
+		a.tasks.draft = nil
+		if text == "" {
+			return
+		}
+		day := dr.day
+		at, till := "", ""
+		if dr.from >= 0 {
+			at, till = clockText(dr.from), clockText(dr.to)
+			if dr.to >= 24*60 {
+				till = "23:59"
+			}
+		}
+		a.later(func() { a.addTaskAt(text, &day, at, till) })
+	}
+	switch {
+	case in.Focused() && c.Shortcut(0, ui.KeyEscape):
+		a.tasks.draft = nil
+	case in.Submitted():
+		keep()
+	case in.Focused():
+		dr.focused = true
+	case dr.focused: // left
+		keep()
+	}
 }
 
 // weekBlock is a timed task on its hours: on its map's pastel, its title
 // and, with room, its time; a click shows it, dragged it goes to another
-// hour. One that comes again is faint, its title after ↻.
-func (a *app) weekBlock(c *ui.Context, w weekTask, d time.Time) {
+// hour, and its foot drawn is when it ends. One that comes again is faint,
+// its title after ↻. It tells whether the pointer is on it.
+func (a *app) weekBlock(c *ui.Context, w weekTask, d time.Time) bool {
 	t := c.Theme()
 	it := w.it
+	to := float32(w.to)
+	if s := a.tasks.stretch; s != nil && s.key == it.key() && !w.ghost {
+		to = s.to
+	}
 	top := float32(w.from*hourHeight) / 60
-	height := float32((w.to-w.from)*hourHeight)/60 - 2
-	// Its place among those it meets, by the fraction of the column.
+	height := (to-float32(w.from))*hourHeight/60 - 2
 	key := "block:" + it.key()
 	if w.ghost {
 		key = "again:" + it.key() + d.Format("0102")
 	}
+	left, width := 100*float32(w.lane)/float32(w.lanes), 100/float32(w.lanes)
 	bg, ink := tinted(t, a.mapColor(it.path))
-	b := ui.Column(c.Key(key)).Absolute().Top(top+1).Height(height).
-		LeftPercent(100*float32(w.lane)/float32(w.lanes)).WidthPercent(100/float32(w.lanes)).
-		Padding(3, 6).Radius(radiusSmall).Clip().Cursor(ui.CursorPointer).Background(bg).
-		BorderWidth(0, 0, 0, 3).BorderColor(a.mapColor(it.path)).Transition(easeLook).
-		Tooltip(it.mapName + " · " + it.node.Title + "  " + it.node.Task.Span())
+	// Its pastel laid on the page's white, whole: the hours' lines are not
+	// to be seen through it.
+	strength := float32(0.14) // tinted's
+	if t.Dark {
+		strength = 0.22
+	}
+	bg = t.Background.MixOklab(a.mapColor(it.path), strength)
+	b := ui.Column(c.Key(key)).Absolute().Top(top+1).Height(height).LeftPercent(left).WidthPercent(width).
+		Padding(3, 6).Radius(radiusSmall).Clip().Cursor(ui.CursorPointer).Background(bg).ZIndex(1).
+		BorderWidth(0, 0, 0, 3).BorderColor(a.mapColor(it.path)).Transition(easeLook)
 	span := it.node.Task.Span()
+	if s := a.tasks.stretch; s != nil && s.key == it.key() && !w.ghost {
+		span = strings.TrimPrefix(it.node.Task.Time, "0") + "–" + strings.TrimPrefix(clockText(stretchTo(s.to, w.from)), "0")
+	}
+	b.Tooltip(it.mapName + " · " + it.node.Title + "  " + span)
 	if w.ghost {
 		b.Background(bg.Alpha(0.35)).BorderColor(a.mapColor(it.path).Alpha(0.4)).Label("到时再做 " + it.node.Title)
 	} else {
@@ -291,6 +510,41 @@ func (a *app) weekBlock(c *ui.Context, w weekTask, d time.Time) {
 			ui.Text(c, span).FontSize(textCaption).TextColor(ink.Alpha(0.7)).FontFeatures("tnum").SingleLine().PassThrough()
 		}
 	})
+	on := b.Hovered() || b.Pressed()
+	if w.ghost || it.node.Task.Time == "" {
+		return on
+	}
+	// Its foot, drawn: when it ends, by the quarter hour.
+	foot := ui.Box(c.Key("foot:" + it.key())).Absolute().Top(top + height - 4).Height(8).LeftPercent(left).WidthPercent(width).
+		Cursor(ui.CursorResizeNS).ZIndex(2).Label("调整结束时间 " + it.node.Title).Tooltip("往下拖，做得更久")
+	if _, dy, ok := foot.Dragged(); ok {
+		if a.tasks.stretch == nil || a.tasks.stretch.key != it.key() {
+			a.tasks.stretch = &hourStretch{key: it.key(), to: float32(w.to)}
+		}
+		a.tasks.stretch.to += dy * 60 / hourHeight
+	}
+	if s := a.tasks.stretch; s != nil && s.key == it.key() && !foot.Pressed() {
+		a.tasks.stretch = nil
+		end := stretchTo(s.to, w.from)
+		if end != clockMinutes(it.node.Task.EndTime) {
+			a.later(func() {
+				a.editTask(it, "改结束时间", func(n *model.Node) {
+					n.Task.EndTime = clockText(end)
+					if end >= 24*60 {
+						n.Task.EndTime = "23:59"
+					}
+				})
+			})
+		}
+	}
+	return on || foot.Hovered() || foot.Pressed()
+}
+
+// stretchTo is where a block's end drawn to to rests: on the quarter
+// hour, a quarter after its beginning at least, and in its day.
+func stretchTo(to float32, from int) int {
+	end := int(math.Round(float64(to)/stretchStep)) * stretchStep
+	return min(max(end, from+stretchStep), 24*60)
 }
 
 // lanes places the timed tasks of a day side by side where they meet:
@@ -329,21 +583,32 @@ func lanes(ws []weekTask) []weekTask {
 	return ws
 }
 
-// dropTaskAt takes a task dropped on a day: at the minute at of it,
-// keeping how long it takes, or, at -1, of the whole day.
+// dropTaskAt makes el take tasks dropped on it, which go to the day, of
+// the whole day (at -1) or at the minute at.
 func (a *app) dropTaskAt(el ui.Element, day time.Time, at int) {
 	t := a.theme()
 	if _, over := ui.DragOver[taskDrag](el); over {
 		el.Background(t.Accent.Alpha(0.12))
 	}
-	d, ok := ui.Drop[taskDrag](el)
-	if !ok {
-		return
+	if d, ok := ui.Drop[taskDrag](el); ok {
+		a.moveTaskWhen(d, day, at)
 	}
+}
+
+// moveTaskWhen puts the task dragged on the day: of the whole day (at -1),
+// or at the minute at, keeping how long it takes; with the way back.
+func (a *app) moveTaskWhen(d taskDrag, day time.Time, at int) {
 	for _, it := range a.tasks.items {
 		if it.path != d.path || it.node.ID != d.id {
 			continue
 		}
+		task := it.node.Task
+		var was *time.Time
+		if task.Due != nil {
+			w := *task.Due
+			was = &w
+		}
+		wasAt, wasEnd, wasRemind := task.Time, task.EndTime, task.Remind
 		a.later(func() {
 			a.editTask(it, "改任务时间", func(n *model.Node) {
 				if n.Task == nil {
@@ -354,7 +619,7 @@ func (a *app) dropTaskAt(el ui.Element, day time.Time, at int) {
 				if n.Task.Start != nil && n.Task.Start.After(day) {
 					n.Task.Start = nil
 				}
-				was := n.Task.Time
+				prev := n.Task.Time
 				if at < 0 {
 					n.Task.Time, n.Task.EndTime = "", ""
 					return
@@ -367,9 +632,20 @@ func (a *app) dropTaskAt(el ui.Element, day time.Time, at int) {
 				if long > 0 && at+long < 24*60 {
 					n.Task.EndTime = clockText(at + long)
 				}
-				if n.Task.Remind == "" || n.Task.Remind == was {
+				if n.Task.Remind == "" || n.Task.Remind == prev {
 					n.Task.Remind = n.Task.Time
 				}
+			})
+			when := fmt.Sprintf("%d月%d日", day.Month(), day.Day())
+			if at >= 0 {
+				when += " " + strings.TrimPrefix(clockText(at), "0")
+			} else {
+				when += " 全天"
+			}
+			a.tellUndo("已移到 "+when+"：「"+it.node.Title+"」", func() {
+				a.editTask(it, "撤回移动", func(n *model.Node) {
+					n.Task.Due, n.Task.Time, n.Task.EndTime, n.Task.Remind = was, wasAt, wasEnd, wasRemind
+				})
 			})
 		})
 		return

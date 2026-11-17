@@ -577,3 +577,115 @@ func TestWeekLanes(t *testing.T) {
 		t.Fatalf("lanes %q", got)
 	}
 }
+
+// On the hours, what is done is done there: a click on a blank hour
+// writes a task of an hour there, a press drawn down one of the hours
+// drawn over; a block's foot drawn is when it ends; a click on the band's
+// blank, a task of the whole day. The day is hours too.
+func TestHoursMakeTasks(t *testing.T) {
+	a, tt := newTestApp(t)
+	a.openTasks()
+	a.tasks.view = tasksWeek
+	tt.Frame()
+	tt.Frame()
+	day := today(a.now())
+	label := fmt.Sprintf("时间格 %d月%d日", day.Month(), day.Day())
+	r, ok := tt.Find(label)
+	if !ok {
+		t.Fatalf("no %q", label)
+	}
+	// Find gives the blank where it is laid out, before it is scrolled.
+	at := func(min int) float32 { return r.Y - a.tasks.weekScroll.Y + float32(min)*hourHeight/60 + 4 }
+	x := r.X + r.W/2
+	find := func(title string) *model.Task {
+		for _, it := range a.taskItems() {
+			if it.node.Title == title {
+				return it.node.Task
+			}
+		}
+		return nil
+	}
+	// A click at 10:00: a task from 10 to 11.
+	tt.ClickAt(x, at(600))
+	tt.Frame()
+	tt.Frame()
+	if a.tasks.draft == nil || a.tasks.draft.from != 600 || a.tasks.draft.to != 660 {
+		t.Fatalf("draft %+v", a.tasks.draft)
+	}
+	snapshot(t, tt, "hours-draft")
+	tt.Type("写方案")
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	tt.Frame()
+	if task := find("写方案"); task == nil || task.Span() != "10:00–11:00" || !sameDay(*task.Due, day) {
+		t.Fatalf("写方案: %+v", task)
+	}
+	// Pressed at 13:00 and drawn to 15:20: from 13 to 15:30.
+	tt.Press(x, at(780))
+	tt.Frame()
+	tt.Move(x, at(870))
+	tt.Frame()
+	tt.Move(x, at(920))
+	tt.Frame()
+	snapshot(t, tt, "hours-pick")
+	tt.Release(x, at(920))
+	tt.Frame()
+	tt.Frame()
+	if a.tasks.draft == nil || a.tasks.draft.from != 780 || a.tasks.draft.to != 930 {
+		t.Fatalf("drawn: %+v", a.tasks.draft)
+	}
+	tt.Type("评审")
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	tt.Frame()
+	if task := find("评审"); task == nil || task.Span() != "13:00–15:30" {
+		t.Fatalf("评审: %+v", task)
+	}
+	// 写方案's foot drawn down an hour: it ends at 12.
+	foot, ok := tt.Find("调整结束时间 写方案")
+	if !ok {
+		t.Fatal("no foot")
+	}
+	fx, fy := foot.X+foot.W/2, foot.Y+foot.H/2
+	tt.Press(fx, fy)
+	tt.Frame()
+	for i := 1; i <= 4; i++ {
+		tt.Move(fx, fy+float32(i)*hourHeight/4)
+		tt.Frame()
+	}
+	tt.Release(fx, fy+hourHeight)
+	tt.Frame()
+	tt.Frame()
+	if task := find("写方案"); task.Span() != "10:00–12:00" || a.tasks.draft != nil {
+		t.Fatalf("stretched: %q, draft %+v", task.Span(), a.tasks.draft)
+	}
+	// The band's blank: a task of the whole day.
+	if err := tt.Click(fmt.Sprintf("新建全天任务 %d月%d日", day.Month(), day.Day())); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Frame()
+	tt.Type("交报销")
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	tt.Frame()
+	if task := find("交报销"); task == nil || task.Time != "" || !sameDay(*task.Due, day) {
+		t.Fatalf("交报销: %+v", task)
+	}
+	snapshot(t, tt, "hours-week")
+	// The day alone, as hours, with its day of the Chinese calendar.
+	if err := tt.Click("tasks-mode 日"); err != nil {
+		if err := tt.Click("日"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tt.Frame()
+	tt.Frame()
+	if a.tasks.view != tasksDay || !tt.HasText("写方案") {
+		t.Fatalf("day: view %d, %q", a.tasks.view, tt.Texts())
+	}
+	if w, _ := lunarLabel(day); !tt.HasText(w) {
+		t.Fatalf("no %q", w)
+	}
+	snapshot(t, tt, "hours-day")
+}

@@ -65,6 +65,13 @@ type tasksState struct {
 	// it was set for, a week newly shown opening at its first hours.
 	weekScroll ui.ScrollState
 	weekAt     time.Time
+	weekDays   int
+	// On the hours: the span being chosen by pressing (pick), the task
+	// being written where it was chosen (draft), and a block's end being
+	// dragged (stretch).
+	pick    *hourPick
+	draft   *hourDraft
+	stretch *hourStretch
 	// What the agents reported, as last gathered; how far back the list
 	// looks (agentRanges); and when it was looked at before this time,
 	// what came since being marked as new.
@@ -275,12 +282,19 @@ func (a *app) postponeToToday(items []taskItem) {
 
 // addTask adds a task written in a line, with its day in words, to the
 // inbox; day, when not nil, is the day it goes on when the line says none.
-func (a *app) addTask(line string, day *time.Time) {
+func (a *app) addTask(line string, day *time.Time) { a.addTaskAt(line, day, "", "") }
+
+// addTaskAt is addTask with the time of the day the task is at, from and
+// until as 15:04 (until may be ""), unless its line says another.
+func (a *app) addTaskAt(line string, day *time.Time, at, till string) {
 	// What the line links to ([[: a skill to do it with, a clip, a topic)
 	// is the task's links, not words of its title.
 	links := tokenLinks(line)
 	line = strings.TrimSpace(refToken.ReplaceAllString(line, ""))
 	line, from, until := parseClock(line)
+	if from == "" {
+		from, until = at, till
+	}
 	remind := from // a time written is when it is, and when it reminds
 	line, rep, first := parseRepeat(line, a.now())
 	title, due, prio := parseTaskLine(line, a.now())
@@ -555,7 +569,7 @@ func (a *app) tasksView(c *ui.Context) {
 	// task, then the lists with the week beside them. The week and the
 	// month take the page's width under the heading. The details of the
 	// task chosen stand on the right, the page's height.
-	calendar := a.tasks.view == tasksWeek || a.tasks.view == tasksMonth
+	calendar := a.tasks.view == tasksWeek || a.tasks.view == tasksMonth || a.tasks.view == tasksDay
 	// What waits for a place stands with today's tasks, of no one project:
 	// under them, cut from them by a band; in a wide window beside them, in
 	// a column of its own, the tasks' column wider for the room there is.
@@ -595,9 +609,12 @@ func (a *app) tasksView(c *ui.Context) {
 			})
 			if calendar {
 				ui.Column(c).Grow(1).Basis(0).MinHeight(0).FillWidth().Margin(10, 0, 0).Children(func() {
-					if a.tasks.view == tasksWeek {
+					switch a.tasks.view {
+					case tasksWeek:
 						a.weekView(c, items)
-					} else {
+					case tasksDay:
+						a.hoursView(c, items, []time.Time{today(a.tasks.day)})
+					default:
 						a.monthView(c, items)
 					}
 				})
@@ -734,13 +751,15 @@ func (a *app) tasksHead(c *ui.Context, all []taskItem) {
 		}
 		mode := 0
 		switch a.tasks.view {
-		case tasksWeek:
+		case tasksDay:
 			mode = 1
-		case tasksMonth:
+		case tasksWeek:
 			mode = 2
+		case tasksMonth:
+			mode = 3
 		}
-		if m := tabGroup(c, "tasks-mode", []string{"列表", "周", "月"}, mode); m != mode {
-			a.tasks.view = []int{tasksToday, tasksWeek, tasksMonth}[m]
+		if m := tabGroup(c, "tasks-mode", []string{"列表", "日", "周", "月"}, mode); m != mode {
+			a.tasks.view = []int{tasksToday, tasksDay, tasksWeek, tasksMonth}[m]
 		}
 
 	})
@@ -754,7 +773,10 @@ func (a *app) tasksAdd(c *ui.Context, now time.Time) {
 	box.Children(func() {
 		glyph(c, iconPlus, 15, t.Accent)
 		ph := "添加任务，如「明天 写周报 !高」"
-		if a.tasks.view == tasksDay || a.tasks.view == tasksWeek || a.tasks.view == tasksMonth {
+		switch a.tasks.view {
+		case tasksDay, tasksWeek:
+			ph = "添加任务，或点下面空白的时间格直接新建"
+		case tasksMonth:
 			ph = "添加任务，不写日期就记在" + dayLabel(a.tasks.day, now)
 		}
 		in := ui.TextInputBase(c.Key("task-add"), &a.tasks.add).Placeholder(ph).FontSize(textBody + 1).Grow(1).Label("添加任务")
@@ -1032,6 +1054,15 @@ func (a *app) calendarNav(c *ui.Context) {
 			a.tasks.day = today(a.now())
 		}
 	})
+	// ← and → go back and forth, while nothing is written in.
+	if !c.FocusTakesText() && a.tasks.draft == nil {
+		if c.Shortcut(0, ui.KeyLeft) {
+			step(-1)
+		}
+		if c.Shortcut(0, ui.KeyRight) {
+			step(1)
+		}
+	}
 	_ = t
 }
 
@@ -1987,7 +2018,7 @@ func (a *app) monthView(c *ui.Context, items []taskItem) {
 					}
 					list := byTime(byDay[d.Format("2006-01-02")], d)
 					cell.Children(func() {
-						ui.Row(c).Padding(2, 4).Children(func() {
+						ui.Row(c).Padding(2, 4).Gap(6).AlignItems(ui.Baseline).Children(func() {
 							num := ui.Text(c, fmt.Sprint(d.Day())).FontSize(textSmall)
 							switch {
 							case sameDay(d, a.now()):
@@ -1995,6 +2026,7 @@ func (a *app) monthView(c *ui.Context, items []taskItem) {
 							case !in:
 								num.TextColor(t.TextMuted.Alpha(0.6))
 							}
+							lunarText(c, d, !in)
 						})
 						for j, it := range list {
 							if j == 3 && len(list) > 4 {
