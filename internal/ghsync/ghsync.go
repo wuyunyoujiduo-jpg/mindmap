@@ -211,8 +211,10 @@ type Result struct {
 	// removed here (a name this system refuses, a folder that may not be
 	// written in): left as they are on both sides, and tried again.
 	Unwritten []string
-	// Renamed are the files merged into another name, by the name they
-	// had: a map renamed on one computer and changed on the other.
+	// Renamed are the files that went under another name, by the name
+	// they had: a map renamed on one computer and changed on the other,
+	// merged into the new name (and among Merged), or renamed on the
+	// other computer alone.
 	Renamed map[string]string
 	Commit  string
 }
@@ -978,11 +980,46 @@ func syncOnce(ctx context.Context, dir string, cfg Config, progress func(string)
 		return fail(err)
 	}
 	res.Pulled = len(pulled)
+	// A map only renamed on the other computer comes as a file deleted
+	// and a new one: said in Renamed too, so that what this computer
+	// keeps by the old name (the map open, its versions) follows it. Both
+	// files are as the repository has them; nothing is merged.
+	var came []string // new there, pulled
+	if cfg.Same != nil {
+		for q := range pulled {
+			if s.Base[q] == "" && local[q] == "" {
+				came = append(came, q)
+			}
+		}
+		slices.Sort(came)
+	}
+	const mostCame = 40 // a first sync is no rename: not every new file is read for one
+	cameData := map[string][]byte{}
+	sameAs := func(p string, old []byte) string {
+		for _, q := range came {
+			if path.Ext(q) != path.Ext(p) {
+				continue
+			}
+			data, ok := cameData[q]
+			if !ok {
+				data, _ = os.ReadFile(cfg.local(dir, q))
+				cameData[q] = data
+			}
+			if data != nil && cfg.Same(p, q, old, data) {
+				return q
+			}
+		}
+		return ""
+	}
 	for _, p := range unlink {
 		full := cfg.local(dir, p)
 		if !unchanged(full, local[p]) {
 			leave(p)
 			continue
+		}
+		var old []byte
+		if len(came) > 0 && len(came) <= mostCame && slices.ContainsFunc(came, func(q string) bool { return path.Ext(q) == path.Ext(p) }) {
+			old, _ = os.ReadFile(full)
 		}
 		if err := os.Remove(full); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			// Not removed, it is as it was: forgotten, the next sync read
@@ -993,6 +1030,15 @@ func syncOnce(ctx context.Context, dir string, cfg Config, progress func(string)
 		emptied(filepath.Dir(full), cfg.root(dir, p))
 		wrote(p)
 		res.Deleted++
+		if old != nil {
+			if q := sameAs(p, old); q != "" {
+				if res.Renamed == nil {
+					res.Renamed = map[string]string{}
+				}
+				res.Renamed[p] = q
+				came = slices.DeleteFunc(came, func(x string) bool { return x == q })
+			}
+		}
 	}
 	// A file the repository says may be run, here too: one that came
 	// before its mode did, or whose mode alone changed.

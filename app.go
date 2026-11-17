@@ -942,6 +942,10 @@ func (a *app) tick(c *ui.Context) {
 	if a.dirty && !a.conflict { // a conflict waits for a choice
 		if wait := autosaveDelay - now.Sub(a.changed); wait > 0 {
 			c.After(wait)
+		} else if a.syncBusy && modTime(a.path).IsZero() {
+			// The file removed by a sync under way: the map renamed or
+			// deleted on the other computer. Saved now, it came back under
+			// its old name; the sync's end says where it went (openMapGone).
 		} else if a.editing == "" || modTime(a.path).Equal(a.modTime) {
 			// Not while a title is typed and the file changed outside: the
 			// merge of the two would close the field (below).
