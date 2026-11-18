@@ -235,6 +235,7 @@ type app struct {
 	noteEditing    string              // the node whose note the popover over the canvas edits
 	noteDocs       map[string]*noteDoc // the notes edited as rich text, by place
 	settingsTab    int
+	settingsHome   bool // a phone's settings show the list of their parts (phonesettings.go)
 	tourStep       int  // the step of the tour shown, 0 for none
 	templatesOpen  bool // the window of templates
 	fromTextOpen   bool // the window to paste text to make nodes of

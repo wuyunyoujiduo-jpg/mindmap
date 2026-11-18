@@ -234,6 +234,15 @@ https://claude.ai/artifact/5ySnmjspG48dmg8MpwcwLt.
   ran past the edge (`tourKeysPhone`). A phone's words name no key of a
   keyboard and nothing a computer alone has (`phoneTourCards`, the
   palette's commands, the settings' parts).
+- **The settings are a list** (`phoneSettings`, `settingsList`,
+  `navRow`): the parts as rows in pale blocks, each its Kubai icon on the
+  accent's tint, its name, how it stands in gray (自动, 未设置, a sync's
+  time, the AI's model) and a chevron, the line under it from its name;
+  a row opens the part as a page of its own under ‹ 设置, its name large
+  at its head, the whole page scrolling. The version is at the list's
+  foot. A phone's 连接 is the AI alone, so its row is 助手 and opens it.
+  Six pills over the page with its name said again under them, and a
+  block cut at its side, were the user's screenshot (0.108.6).
 - **A sheet's focus is on itself**, not on its first field: MyGo moves
   the focus into a sheet as it rises, and a title taking it brought the
   keyboard up over what was to be read.

@@ -458,6 +458,7 @@ func (a *app) syncLabel() string {
 func (a *app) openSyncSettings() {
 	a.openSettings()
 	a.settingsTab = 3
+	a.settingsHome = false
 }
 
 // syncFoot is the sidebar's line on the sync, which opens its settings.

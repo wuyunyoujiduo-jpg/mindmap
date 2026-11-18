@@ -760,51 +760,36 @@ func (a *app) trayTitle() string {
 
 // openSettings opens the settings, with the fields as saved.
 func (a *app) openSettings() {
-	a.settingsOpen = true
+	a.settingsOpen, a.settingsHome = true, true
 	a.embedDrafts = [3]string{a.cfg.EmbedURL, a.cfg.EmbedKey, a.cfg.EmbedModel}
 	a.syncDrafts = [2]string{a.cfg.SyncRepo, a.cfg.SyncToken}
 }
 
 // settingsView is the window of preferences: the capture shortcut, the
-// menu bar icon, reminders and the editor of code links.
+// menu bar icon, reminders and the editor of code links. A phone's is a
+// list of its parts, each a page (phonesettings.go).
 func (a *app) settingsView(c *ui.Context) {
 	t := c.Theme()
-	// On the ground, as a page: its parts are white cards.
-	frame := modal
-	if narrowLayout { // a page of its own on a phone (phonePage)
-		frame = phonePage
+	tabs := slices.Clone(settingsTabs)
+	if a.file != nil && !onPhone { // a map's code folder and baseline: a computer's
+		tabs = append(tabs, "当前导图")
 	}
-	frame(c, "settings", &a.settingsOpen, func() {
+	a.settingsTab = max(min(a.settingsTab, len(tabs)-1), 0)
+	if narrowLayout {
+		a.phoneSettings(c, tabs)
+		return
+	}
+	// On the ground, as a page: its parts are white cards.
+	modal(c, "settings", &a.settingsOpen, func() {
 		w, h := c.Size()
-		tabs := slices.Clone(settingsTabs)
-		if a.file != nil && !onPhone { // a map's code folder and baseline: a computer's
-			tabs = append(tabs, "当前导图")
-		}
-		a.settingsTab = min(a.settingsTab, len(tabs)-1)
-		// The parts on the left, as a list; the one chosen on the right. On
-		// a phone the parts are over it, a few to a line (phone.go).
-		outer, room := ui.Row, min(820, w-80)
-		if narrowLayout {
-			outer, room = ui.Column, w-2*pagePad()
-		}
-		outer(c).Gap(22).Width(room).AlignItems(ui.Start).Children(func() {
-			var list ui.Element
-			if narrowLayout {
-				list = ui.Row(c.Key("settings-tabs")).Wrap().FillWidth().Gap(2)
-			} else {
-				list = ui.Column(c.Key("settings-tabs")).Width(160).Shrink(0).Gap(2)
-			}
-			list.Children(func() {
-				if !narrowLayout {
-					ui.Text(c, "设置").FontSize(26).FontWeight(700).LetterSpacing(-0.7).Margin(0, 12, 14)
-				}
+		// The parts on the left, as a list; the one chosen on the right.
+		ui.Row(c).Gap(22).Width(min(820, w-80)).AlignItems(ui.Start).Children(func() {
+			ui.Column(c.Key("settings-tabs")).Width(160).Shrink(0).Gap(2).Children(func() {
+				ui.Text(c, "设置").FontSize(26).FontWeight(700).LetterSpacing(-0.7).Margin(0, 12, 14)
 				for i, name := range tabs {
 					on := i == a.settingsTab
 					row := ui.Row(c.Key("settings-tab:"+name)).Height(36).Padding(0, 10).Gap(10).Radius(radiusRow).AlignItems(ui.Center).
-						Cursor(ui.CursorPointer).Label(name).Background(t.Text.Alpha(0)).Transition(easeLook)
-					if !narrowLayout {
-						row.FillWidth()
-					}
+						Cursor(ui.CursorPointer).Label(name).Background(t.Text.Alpha(0)).Transition(easeLook).FillWidth()
 					hot := on || row.Hovered()
 					if !on && hot {
 						row.Background(t.Text.Alpha(0.05))
@@ -819,7 +804,7 @@ func (a *app) settingsView(c *ui.Context) {
 							row.ZIndex(-1) // under the others, which the pill slides behind
 						}
 						// Its icon, as a row of the left column has.
-						kubaiIcon(c, map[string]string{"通用": "sliders", "资料整理": "sparkles", "备份": "save", "同步": "sync", "加密": "key-round", "连接": "plug", "当前导图": "sitemap"}[name], sideIconSize, hot)
+						kubaiIcon(c, settingsIcons[name], sideIconSize, hot)
 						txt := ui.Text(c, name).FontSize(textBody + 0.5).PassThrough()
 						if on {
 							txt.FontWeight(700)
@@ -829,69 +814,64 @@ func (a *app) settingsView(c *ui.Context) {
 					})
 				}
 			})
-			page := ui.Column(c).Gap(10)
-			if narrowLayout {
-				page.FillWidth()
-			} else {
-				page.Grow(1).Basis(0).MinWidth(0)
-			}
-			page.Children(func() {
+			ui.Column(c).Gap(10).Grow(1).Basis(0).MinWidth(0).Children(func() {
 				ui.Row(c).AlignItems(ui.Center).Children(func() {
 					ui.Text(c, tabs[a.settingsTab]).FontSize(textTitle).FontWeight(700).Grow(1)
-					if !narrowLayout && iconButton(c, iconClose, "关闭", "关闭", 28, true).Clicked() {
+					if iconButton(c, iconClose, "关闭", "关闭", 28, true).Clicked() {
 						a.settingsOpen = false
 					}
 				})
 				// The same height for every tab, so that the window does not
 				// jump when switching; a long tab scrolls.
-				tall := max(min(580, h-190), 200)
-				if narrowLayout { // the page's, under its parts
-					tall = max(h-250, 200)
-				}
-				ui.Scroll(c.Key(fmt.Sprint("settings", a.settingsTab))).Gap(20).Height(tall).Padding(2, 12, 24, 2).Margin(0, -2).Label("设置内容").Children(func() {
-					switch tabs[a.settingsTab] {
-					case "通用":
-						a.generalSettings(c)
-					case "资料整理":
-						rowsField(c, "AI 整理", "用的是 AI 助手的 API Key，按用量计费。", func() {
-							auto := !a.cfg.LibraryManual
-							switchRow(c, &auto, "自动整理资料", "新收藏的资料由 AI 起标题、写摘要、分类、打标签，并生成同义词", func() {
-								a.cfg.LibraryManual = !auto
-								a.cfg.save()
-							})
-						})
-						a.embedSettings(c)
-					case "备份":
-						a.backupSettings(c)
-					case "同步":
-						a.syncSettings(c)
-					case "加密":
-						a.vaultSettings(c)
-					case "连接":
-						rowsField(c, "AI", "", func() {
-							setRow(c, "AI 助手", "服务商、API Key 和模型。当前："+providerModelName(a.cfg), func() {
-								if button(c, "打开 AI 设置").Clicked() {
-									a.settingsOpen, a.aiOpen, a.ai.settings = false, true, true
-									a.loadKeyDrafts()
-								}
-							})
-							if onPhone { // the agents are the computers' (phone.go)
-								return
-							}
-							setLine(c)
-							setRow(c, "AI 编程工具（MCP）", "让 Claude Code、Cursor 等读写导图、检索收集的资料", func() {
-								if button(c, "连接说明…").Clicked() {
-									a.settingsOpen, a.mcpOpen = false, true
-								}
-							})
-						})
-					default:
-						a.projectSection(c)
-					}
+				ui.Scroll(c.Key(fmt.Sprint("settings", a.settingsTab))).Gap(20).Height(max(min(580, h-190), 200)).Padding(2, 12, 24, 2).Margin(0, -2).Label("设置内容").Children(func() {
+					a.settingsPart(c, tabs[a.settingsTab])
 				})
 			})
 		})
 	})
+}
+
+// settingsPart is what a part of the settings holds.
+func (a *app) settingsPart(c *ui.Context, name string) {
+	switch name {
+	case "通用":
+		a.generalSettings(c)
+	case "资料整理":
+		rowsField(c, "AI 整理", "用的是 AI 助手的 API Key，按用量计费。", func() {
+			auto := !a.cfg.LibraryManual
+			switchRow(c, &auto, "自动整理资料", "新收藏的资料由 AI 起标题、写摘要、分类、打标签，并生成同义词", func() {
+				a.cfg.LibraryManual = !auto
+				a.cfg.save()
+			})
+		})
+		a.embedSettings(c)
+	case "备份":
+		a.backupSettings(c)
+	case "同步":
+		a.syncSettings(c)
+	case "加密":
+		a.vaultSettings(c)
+	case "连接":
+		rowsField(c, "AI", "", func() {
+			setRow(c, "AI 助手", "服务商、API Key 和模型。当前："+providerModelName(a.cfg), func() {
+				if button(c, "打开 AI 设置").Clicked() {
+					a.settingsOpen, a.aiOpen, a.ai.settings = false, true, true
+					a.loadKeyDrafts()
+				}
+			})
+			if onPhone { // the agents are the computers' (phone.go)
+				return
+			}
+			setLine(c)
+			setRow(c, "AI 编程工具（MCP）", "让 Claude Code、Cursor 等读写导图、检索收集的资料", func() {
+				if button(c, "连接说明…").Clicked() {
+					a.settingsOpen, a.mcpOpen = false, true
+				}
+			})
+		})
+	default:
+		a.projectSection(c)
+	}
 }
 
 // switchRow is a switch with what it does beside it.
@@ -967,7 +947,11 @@ func (a *app) generalSettings(c *ui.Context) {
 		})
 		setLine(c)
 		on := !a.cfg.NoHolidays
-		switchRow(c, &on, "节假日和调休", "日期旁标出放假（休）和调休上班（班）的日子，重复里可选「法定工作日」。按国务院办公厅每年的放假通知，由开源项目 holiday-cn 整理，每天取一次；已有 "+holidayYearsSaid(), func() {
+		says := "日期旁标出放假（休）和调休上班（班）的日子，重复里可选「法定工作日」。按国务院办公厅每年的放假通知，由开源项目 holiday-cn 整理，每天取一次；已有 " + holidayYearsSaid()
+		if narrowLayout {
+			says = "日期旁标出放假（休）和调休上班（班）；已有 " + holidayYearsSaid()
+		}
+		switchRow(c, &on, "节假日和调休", says, func() {
 			a.cfg.NoHolidays = !on
 			a.cfg.save()
 			if on {
@@ -993,11 +977,17 @@ func (a *app) generalSettings(c *ui.Context) {
 			setLine(c)
 		}
 		on := !a.cfg.NoReminders
-		switchRow(c, &on, "到期提醒", "任务今天到期或已逾期时，每天发一次系统通知", func() {
+		switchRow(c, &on, "到期提醒", "今天到期或已逾期的任务，每天通知一次", func() {
 			a.cfg.NoReminders = !on
 			a.cfg.save()
 		})
 		setLine(c)
+		if narrowLayout { // a row that opens it, as a phone's list has
+			if navRow(c, "", "再看一遍新手引导", "", true).Clicked() {
+				a.settingsOpen, a.tourStep = false, 1
+			}
+			return
+		}
 		setRow(c, "新手引导", "再看一遍怎么用", func() {
 			if button(c, "重新查看").Label("重新查看新手引导").Clicked() {
 				a.settingsOpen, a.tourStep = false, 1
@@ -1007,7 +997,9 @@ func (a *app) generalSettings(c *ui.Context) {
 	if !onPhone { // the app's screenshot and the Dock's icon are a computer's
 		a.shotSettings(c)
 	}
-	a.updateSettings(c)
+	if !narrowLayout { // a phone's is at the foot of the list of the parts
+		a.updateSettings(c)
+	}
 	if !onPhone {
 		a.iconSettings(c)
 	}

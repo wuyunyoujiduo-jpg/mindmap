@@ -350,6 +350,21 @@ func TestPhoneSweep(t *testing.T) {
 		snapshot(t, tt, "sweep-"+name)
 	}
 	a.openSettings()
+	shot("settings") // the list of the parts (phonesettings.go)
+	if !tt.HasText("设置") || !tt.HasText("同步") || !tt.HasText("AI 助手") || tt.HasText("连接") {
+		t.Fatalf("a phone's settings are a list of their parts: %q", tt.Texts())
+	}
+	_ = tt.Click("同步")
+	tt.Frame()
+	if a.settingsHome || settingsTabs[a.settingsTab] != "同步" {
+		t.Fatal("a part's row opens its page")
+	}
+	tt.Key(0, ui.KeyEscape)
+	tt.Frame()
+	if !a.settingsOpen || !a.settingsHome {
+		t.Fatal("back from a part goes to the list, not out of the settings")
+	}
+	a.settingsHome = false
 	for i := range len(settingsTabs) + 1 {
 		a.settingsTab = i
 		shot(fmt.Sprint("settings-", i))

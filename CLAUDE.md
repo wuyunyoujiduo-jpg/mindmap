@@ -723,7 +723,9 @@ by AI, and an AI assistant.
   not yet on a phone. 0.108 built the phone's pages to their draft,
   https://claude.ai/artifact/5ySnmjspG48dmg8MpwcwLt (the user's, after
   0.107's pages fitted from the desktop's): `DESIGN.md`'s A phone, token
-  by token.
+  by token; its settings, a list of the parts each
+  a page (`phonesettings.go`), 0.108.6, after the user's screenshot of
+  the desktop's tabs wrapped over a phone's page.
 - The notes of 收集 written as they come are 随记 (0.107.2, the user's:
   灵感 before, on the PC and the phone alike): the word of the UI,
   never 灵感 again; it is no category the AI gives (`clips.go`), the

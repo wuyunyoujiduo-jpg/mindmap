@@ -1033,6 +1033,7 @@ func (a *app) markSecret(f secretField, m mark, set func(full string)) {
 func (a *app) openVaultSettings() {
 	a.openSettings()
 	a.settingsTab = settingsTabOf("加密")
+	a.settingsHome = false
 }
 
 // vaultState says, on 含密钥's page, whether the secrets are unlocked,

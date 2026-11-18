@@ -128,17 +128,28 @@ func (a *app) groundSettings(c *ui.Context) {
 	t := c.Theme()
 	rowsField(c, "外观", "", func() {
 		// Light, dark, or as the system is; said where it is looked for.
-		setRow(c, "深浅", "跟随系统时，随系统的外观一起变", func() {
-			looks := []string{"", "light", "dark"}
-			at := max(slices.Index(looks, a.cfg.Appearance), 0)
-			ui.Row(c).Width(260).Shrink(0).Children(func() {
-				if i := segmented(c, "appearance", "深浅", []string{"跟随系统", "浅色", "深色"}, at); i != at {
-					a.cfg.Appearance = looks[i]
-					a.cfg.save()
-					a.plat.SetAppearance(looks[i])
-				}
+		looks := []string{"", "light", "dark"}
+		at := max(slices.Index(looks, a.cfg.Appearance), 0)
+		pick := func() {
+			if i := segmented(c, "appearance", "深浅", []string{"跟随系统", "浅色", "深色"}, at); i != at {
+				a.cfg.Appearance = looks[i]
+				a.cfg.save()
+				a.plat.SetAppearance(looks[i])
+			}
+		}
+		if narrowLayout { // its name over it, the three across the screen
+			ui.Column(c).Padding(12, 0).Gap(10).FillWidth().Children(func() {
+				ui.Text(c, "深浅").FontSize(textBody)
+				ui.Row(c).FillWidth().Children(pick)
 			})
-		})
+		} else {
+			setRow(c, "深浅", "跟随系统时，随系统的外观一起变", func() {
+				ui.Row(c).Width(260).Shrink(0).Children(pick)
+			})
+		}
+		if onPhone { // a phone's page is white, whatever the ground
+			return
+		}
 		setLine(c)
 		setRow(c, "底色", "页面的底色，卡片始终是白的；只在浅色外观下生效", func() {
 			for _, g := range grounds {
