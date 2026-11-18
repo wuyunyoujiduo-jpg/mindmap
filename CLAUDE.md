@@ -381,6 +381,11 @@ by AI, and an AI assistant.
     one looks for here left out (`nodeMenu`; the user found some thirty
     rows too many). An item that does nothing seen where it is chosen is
     a fault: 管理标签… chose the page of a column that was put away.
+  - What is written in grows where it is: on a phone the bar at the
+    foot opens upward in place, the keyboard under it (`phoneBar`), not
+    as a sheet over a dimmed page, which the user found not good to look
+    at (0.108), as the one bar on a desktop opens over the page from its
+    line.
   - A tag is made where words are written, by #: in a topic's title too,
     offered under it as it is written and made one only when chosen (a
     click or Tab, `titleTagOffer`), else words of the title; on the
@@ -706,13 +711,10 @@ by AI, and an AI assistant.
   come first if ever set. 0.107.0 was signed by a debug key made anew,
   and is uninstalled once. The adaptive icon is `tools/icon/android.py`'s.
   Tried in snapshots at 390×844 (`TestPhoneLayout`, `TestApkUpdate`),
-  not yet on a phone. What is built is the desktop's pages fitted to a
-  phone; their redesign for one is drafted at
-  https://claude.ai/artifact/5ySnmjspG48dmg8MpwcwLt (0.107.2, eleven
-  screens: 今天 as a list and a day of hours, a task and a topic in
-  sheets from the foot, 记一下 at the foot over the places, the drawer,
-  项目, a map's canvas and its outline as where a phone edits, 收集 as
-  two columns), not built yet: built to it once the user has corrected it.
+  not yet on a phone. 0.108 built the phone's pages to their draft,
+  https://claude.ai/artifact/5ySnmjspG48dmg8MpwcwLt (the user's, after
+  0.107's pages fitted from the desktop's): `DESIGN.md`'s A phone, token
+  by token.
 - The notes of 收集 written as they come are 随记 (0.107.2, the user's:
   灵感 before, on the PC and the phone alike): the word of the UI,
   never 灵感 again; it is no category the AI gives (`clips.go`), the

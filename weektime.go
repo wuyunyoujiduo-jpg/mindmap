@@ -187,8 +187,14 @@ func (a *app) hoursView(c *ui.Context, items []taskItem, days []time.Time) {
 	if p := a.tasks.pick; p != nil && (p.day.Before(start) || !p.day.Before(end)) {
 		a.tasks.pick = nil
 	}
-	ui.Column(c.Key("week")).Grow(1).MinHeight(0).Margin(10, 28, 0).Children(func() {
-		a.weekHead(c, days, now)
+	week := ui.Column(c.Key("week")).Grow(1).MinHeight(0).Margin(10, 28, 0)
+	if narrowLayout {
+		week.Margin(0, 8, 0) // a phone's strip over it says the day (phoneWeek)
+	}
+	week.Children(func() {
+		if !narrowLayout {
+			a.weekHead(c, days, now)
+		}
 		a.weekAllDay(c, days, allDay)
 		ui.Scroll(c.Key("week-hours")).Grow(1).MinHeight(0).TrackScroll(&a.tasks.weekScroll).Children(func() {
 			ui.Row(c).FillWidth().Height(24 * hourHeight).Children(func() {

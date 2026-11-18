@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/mobile"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
 
@@ -40,13 +41,27 @@ func (a *app) view(c *ui.Context) {
 	// panels' gray: the system's highlight (a pale orange, say) hardly did.
 	root := ui.Row(c).Fill().AlignItems(ui.Stretch).SelectionColor(t.Accent.Alpha(0.32))
 	root.Background(ground(t))
+	if narrowLayout {
+		root.Background(cardColor(t)) // a phone's page is the screen, white to its edges (phone.go)
+	}
 	root.Children(func() {
 		// The window is a quiet gray: the top row on it, and under it the one
 		// white leaf everything else is on, cut into columns by thin lines:
 		// what of the place shows, the page, what is chosen.
 		ui.Column(c.Key("main")).Grow(1).Basis(0).MinWidth(0).FillHeight().Children(func() {
-			a.topBar(c)
-			leaf(c, "leaf").Grow(1).Basis(0).MinHeight(0).Margin(0, 6, 6).Children(func() {
+			switch {
+			case !narrowLayout:
+				a.topBar(c)
+			case a.libOpen: // a place's page, under its row of keys; a map has its own bar
+				a.phoneTop(c)
+			}
+			page := leaf(c, "leaf")
+			if narrowLayout {
+				page.Radius(0)
+			} else {
+				page.Margin(0, 6, 6)
+			}
+			page.Grow(1).Basis(0).MinHeight(0).Children(func() {
 				ui.Row(c.Key("columns")).Grow(1).Basis(0).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
 					if a.sideShown() {
 						a.sideColumn(c)
@@ -54,8 +69,12 @@ func (a *app) view(c *ui.Context) {
 					a.pageView(c)
 				})
 			})
-			if narrowLayout && !a.presenting {
-				a.phoneTabs(c) // the places, at the foot on a phone
+			if narrowLayout && !a.presenting && a.libOpen {
+				// At the foot on a phone: the bar to write in, and the places.
+				a.phoneBar(c)
+				if !a.barOpen { // the keyboard is under the bar while it is open
+					a.phoneTabs(c)
+				}
 			}
 		})
 		if narrowLayout {
@@ -148,12 +167,13 @@ func (a *app) pageView(c *ui.Context) {
 					a.canvasView(c)
 				}
 			})
-			if narrowLayout && a.panelShown(c) {
-				// Over the canvas, the way back over it (phone.go).
-				ui.Column(c.Key("panel-sheet")).Absolute().Left(0).Top(0).Right(0).Bottom(0).ZIndex(12).Background(cardColor(c.Theme())).Children(func() {
-					sheetBack(c, func() { a.panelSheet = false })
-					a.panel(c)
-				})
+			if narrowLayout {
+				// From the foot, over the canvas, which a finger pulls away (phone.go).
+				if a.panelShown(c) {
+					mobile.Sheet(c, &a.panelSheet, mobile.SheetOptions{Detents: []float32{0.6, 0.92}, Label: "主题面板"}, func() {
+						ui.Column(c.Key("panel-sheet")).Grow(1).Basis(0).MinHeight(0).FillWidth().Children(func() { a.panel(c) })
+					})
+				}
 			} else if a.panelShown(c) {
 				a.panelResizer(c)
 				a.panel(c)
@@ -289,6 +309,11 @@ func (a *app) toolbar(c *ui.Context) {
 			return r.Shrink(1).MinWidth(40)
 		}
 		end("bar-left").Children(func() {
+			// On a phone a map is a page of its own, with no row over it:
+			// the way back to 项目 is at its bar's start (phone.go).
+			if narrowLayout && iconButton(c, iconBack, "返回项目", "回到项目", 34, true).Clicked() {
+				a.later(a.showProjects)
+			}
 			// The name gives way to the tabs and the keys, cut short with
 			// an ellipsis: unshrinking, a long one lay over the tabs in a
 			// narrow bar and pushed the keys out of it.
@@ -391,6 +416,9 @@ func (a *app) toolbar(c *ui.Context) {
 			}
 			if iconButton(c, iconPanel, "主题面板", tip, 30, true).Clicked() {
 				a.togglePanel()
+			}
+			if narrowLayout && kubaiKey(c, "sparkles", "AI 助手", "问 AI：问问这张导图", a.aiOpen, false).Clicked() {
+				a.aiOpen = !a.aiOpen // a phone's map has no top row, whose spark this is
 			}
 		})
 	})

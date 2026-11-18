@@ -203,25 +203,52 @@ Every list and page has all of these, or does not need one:
 
 A window narrower than `compactWidth` (640) is a phone's, and is laid
 out so (`phone.go`, `narrowLayout`); a desktop's window never is, its
-least width being 900.
+least width being 900. Its draft is
+https://claude.ai/artifact/5ySnmjspG48dmg8MpwcwLt.
 
-- **The places at the foot** (`phoneTabs`): on the window's gray, as the
-  top row, four equal parts, each its Kubai icon (26) over its name at
-  the caption's size; the place shown in the accent, its name at 700. The
-  top row keeps the left column's key, the one bar, the spark, the search
-  and the settings; no screenshot's key, no track of the places.
-- **The left column slides in** over the page from its key
-  (`mobile.Drawer`, 288 wide, white, under the system's bars by their
-  insets) and goes when what it narrows to is chosen (`drawerSubject`),
-  by a finger, a tap beside it, or back. A folder opened keeps it.
-- **What is chosen covers the page** (`sheet`, the map's panel): white,
-  under a row with ‹ 返回 in the accent (`sheetBack`), which is what the
-  column beside the page is on a desktop.
-- **A page is 16 in** at each side (`pagePad`), not 28; a head with
-  something at its right has it under it (`pageHead`, 今天's head), and a
-  row of the settings has what sets it under its name where they do not
-  fit side by side (`setRow`). The settings' parts are pills over the
-  part shown, a few to a line.
+- **The page is the screen**: white to its edges, no leaf on a gray
+  ground. Over a place's page, its row of keys (`phoneTop`): the left
+  column's at the left; the search and the AI's spark at the right, and
+  ＋ on 项目. The settings are at the drawer's foot.
+- **The places at the foot** (`phoneTabs`): 今天, 项目, 收集, on the
+  ground's gray under a hairline, each its Kubai icon (26) over its name
+  at the caption's size; the one shown in the accent, at 700.
+- **The bar at the foot** (`phoneBar`), over the places, where the thumb
+  is: a pale block, ＋, what to write, and the tag of what it is kept as
+  (任务 on 今天, else 随记). A tap grows it upward where it is into the
+  card to write in, outlined in the accent, its tools and its 记为 under
+  the words; the places go while it is open, the keyboard under it. Not
+  a sheet over a dimmed page: the user found that not good to look at.
+- **The left column slides in** over the page (`mobile.Drawer`, 288,
+  white, under the system's bars by their insets), with how the sync
+  stands and 设置 at its foot (`drawerFoot`), and goes when what it
+  narrows to is chosen (`drawerSubject`).
+- **What is chosen rises from the foot** (`sheet`, `mobile.Sheet` at
+  92%, a topic's panel at 60% and 92%): a task, a skill, a branch being
+  grown, a topic's details. A clip, which is read at length, covers the
+  page under ‹ 收集 in the accent (`sheetBackTo`).
+- **A page is 16 in** (`pagePad`); a head with something at its right has
+  it under it (`pageHead`, 今天's head); a row of the settings has what
+  sets it under its name where they do not fit side by side (`setRow`).
+- **今天**: 列表 | 日程 for 列表 日 周 月; 日程 is a day's hours under a
+  strip of its week (`phoneWeek`: weekday, date, the Chinese calendar's
+  word; the day shown on the accent's tint, today in the accent, a day of
+  rest on its ground). A task's row is 60 tall, its words at 16, and a
+  finger swipes it (`mobile.SwipeRow`): right, 完成 on the success
+  green; left, 明天 in the accent and 删除 in the danger, each with 撤销.
+- **项目**: one column of the cards; ＋ in the top row with its menu.
+- **收集**: the search the page's width, the kinds as chips under it
+  (`phoneKinds`, the chosen one on the accent's tint), the wall in two
+  columns 10 apart.
+- **A map** has no top row: its bar has ‹ to 项目 at its start and the
+  spark at its end. A mind map is drawn growing to the right from its
+  center at the left (`drawnStructure`), the map itself unchanged. With
+  a topic chosen, its keys float at the canvas's foot in a bar of their
+  own (`phoneCanvasFoot`: 子主题, 同级, 改字, 任务, 详情, a finger's size
+  each, the last in the accent); one round key over it goes back to the
+  middle. The zoom is the fingers'. In the outline, a line written in has
+  its keys over the keyboard (`outlineKeys`: out, in, up, down, a task,
+  完成).
 
 ## 项目's cards
 

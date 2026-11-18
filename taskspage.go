@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/mobile"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
 
@@ -521,7 +522,7 @@ func (a *app) tasksView(c *ui.Context) {
 			}
 			top.Children(func() {
 				a.tasksHead(c, all)
-				if !plain {
+				if !plain && !narrowLayout { // a phone's is the bar at the window's foot (phoneBar)
 					a.tasksAdd(c, now) // onto the day chosen; a list's, onto its own
 				}
 			})
@@ -531,6 +532,9 @@ func (a *app) tasksView(c *ui.Context) {
 					case tasksWeek:
 						a.weekView(c, items)
 					case tasksDay:
+						if narrowLayout {
+							a.phoneWeek(c)
+						}
 						a.hoursView(c, items, []time.Time{today(a.tasks.day)})
 					default:
 						a.monthView(c, items)
@@ -669,6 +673,21 @@ func (a *app) tasksHead(c *ui.Context, all []taskItem) {
 			figures(c, figure{len(a.dueToday(now)), "要做"}, figure{len(a.doneToday(now)), "做完"}, figure{len(a.waiting()), "等着归位"}).Margin(6, 0, 0).
 				Label(fmt.Sprintf("%d 件要做，做完 %d 件，%d 条等着归位", len(a.dueToday(now)), len(a.doneToday(now)), len(a.waiting())))
 		})
+		if narrowLayout {
+			// A phone's: the list, or a day's hours (日程) under a strip of
+			// its week (phoneWeek); no week nor month, too narrow there.
+			if a.tasks.view == tasksWeek || a.tasks.view == tasksMonth {
+				a.tasks.view = tasksDay
+			}
+			mode := 0
+			if a.tasks.view == tasksDay {
+				mode = 1
+			}
+			if m := tabGroup(c, "tasks-mode", []string{"列表", "日程"}, mode); m != mode {
+				a.tasks.view = []int{tasksToday, tasksDay}[m]
+			}
+			return
+		}
 		if a.cfg.HideTree { // with no left column, the map to narrow by is here
 			a.taskMapMenu(c, all)
 		}
@@ -1642,7 +1661,84 @@ func (a *app) taskRow(c *ui.Context, it taskItem, overdue bool) { a.taskRowAs(c,
 func (a *app) doneRow(c *ui.Context, it taskItem) { a.taskRowAs(c, it, false, !it.done()) }
 
 // taskRowAs is taskRow; once shows a task that repeats as done a time.
+// On a phone a finger swipes it aside (phone.go's DESIGN): to the right
+// to tick it off, to the left to put it on tomorrow or delete it, each
+// said with its 撤销.
 func (a *app) taskRowAs(c *ui.Context, it taskItem, overdue, once bool) {
+	if !narrowLayout || once {
+		a.taskRowBody(c, it, overdue, once)
+		return
+	}
+	tomorrow := today(a.now()).AddDate(0, 0, 1)
+	done := it.done()
+	tick := "完成"
+	if done {
+		tick = "未完成"
+	}
+	green := c.Theme().Success
+	mobile.SwipeRow(c.Key("swipe:"+it.key()), nil, mobile.SwipeOptions{
+		Leading: []mobile.SwipeAction{{Label: tick, Color: &green, OnTap: func() { a.later(func() { a.setTaskDone(it, !done) }) }}},
+		Trailing: []mobile.SwipeAction{
+			{Label: "明天", OnTap: func() { a.later(func() { a.moveTaskDay(it, &tomorrow) }) }},
+			{Label: "删除", Destructive: true, OnTap: func() { a.later(func() { a.deleteTask(it) }) }},
+		},
+	}, func() { a.taskRowBody(c, it, overdue, once) })
+}
+
+// deleteTask takes a task off its map, its own topics with it, and says
+// so with the way back: put back under the same topic, in the same place.
+func (a *app) deleteTask(it taskItem) {
+	var parent, sheet string
+	var index int
+	var floating bool
+	var kept *model.Node
+	err := a.editMapAt(it.path, "删除任务", func(f *model.File) error {
+		d := f.SheetOf(it.node.ID)
+		if d == nil {
+			return fmt.Errorf("找不到任务「%s」", it.node.Title)
+		}
+		n, p := d.Find(it.node.ID)
+		kept, sheet = n.Clone(), d.ID
+		if p == nil {
+			floating = true
+		} else {
+			parent, index = p.ID, slices.Index(p.Children, n)
+		}
+		_, err := d.Delete(it.node.ID)
+		return err
+	})
+	if err != nil {
+		a.tell("没有删掉：" + err.Error())
+		return
+	}
+	if a.tasks.sel == it.key() {
+		a.tasks.sel, a.tasks.draftOf = "", ""
+	}
+	a.tasks.read = time.Time{}
+	a.tellUndo("已删除「"+it.node.Title+"」", func() {
+		_ = a.editMapAt(it.path, "撤销删除任务", func(f *model.File) error {
+			d, _ := f.Sheet(sheet)
+			if d == nil {
+				return nil
+			}
+			if n, _ := d.Find(kept.ID); n != nil {
+				return nil // back already
+			}
+			if floating {
+				d.Floating = append(d.Floating, kept)
+				return nil
+			}
+			if p, _ := d.Find(parent); p != nil {
+				p.Children = slices.Insert(p.Children, min(index, len(p.Children)), kept)
+			}
+			return nil
+		})
+		a.tasks.read = time.Time{}
+	})
+}
+
+// taskRowBody is a task's row itself.
+func (a *app) taskRowBody(c *ui.Context, it taskItem, overdue, once bool) {
 	t := c.Theme()
 	task := it.node.Task
 	key, label := "task:", "任务 "
@@ -1654,6 +1750,9 @@ func (a *app) taskRowAs(c *ui.Context, it taskItem, overdue, once bool) {
 		BorderWidth(0, 0, 1, 0).BorderColor(t.Border.Alpha(0.55)).Background(t.Text.Alpha(0)).Transition(rowMotion)
 	if !once {
 		row.Drag(taskDrag{it.path, it.node.ID})
+	}
+	if narrowLayout { // a finger's: taller, and on the page's white, which a swipe slides aside
+		row.MinHeight(60).Background(cardColor(t))
 	}
 	if row.Hovered() {
 		row.Background(t.Text.Alpha(0.035))
@@ -1689,6 +1788,9 @@ func (a *app) taskRowAs(c *ui.Context, it taskItem, overdue, once bool) {
 			// pressing, and its state when that is not the plain one.
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				title := ui.Text(c, it.node.Title).FontSize(textBody).SingleLine().Shrink(1).MinWidth(0)
+				if narrowLayout {
+					title.FontSize(textTitle)
+				}
 				if it.done() || once {
 					title.TextColor(t.TextMuted).Strikethrough()
 				}

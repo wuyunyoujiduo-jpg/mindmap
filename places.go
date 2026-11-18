@@ -346,6 +346,9 @@ func (a *app) projectsView(c *ui.Context) {
 					path := a.projFolder
 					iconButton(c, iconMore, "文件夹菜单", "这个文件夹：重命名、移动、删除…", 32, true).Menu(func(m *ui.Menu) { a.folderMenu(m, path) })
 				}
+				if narrowLayout { // a phone's is the ＋ of its top row (phoneTop)
+					return
+				}
 				accentButton(c, "＋ 新建", "新建导图、文件夹，或导入").Label("新建").Menu(func(m *ui.Menu) {
 					if m.Item("新建导图").Shortcut(ui.Cmd, ui.KeyN).Chosen() {
 						a.later(func() { a.newMapIn(at.Path) })

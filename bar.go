@@ -54,7 +54,7 @@ func (a *app) barCard(c *ui.Context, text string) {
 			a.writeCard(c, writeCard{
 				key: "home-line", label: "记一条随记或任务", draft: &a.homeDraft, enterSaves: true,
 				placeholder: "写随记、加任务，或者问 AI…",
-				sendLabel:   "记下", fileLabel: "加图片", save: a.saveHomeLine, lines: 1, over: true,
+				sendLabel:   "记下", fileLabel: "加图片", save: a.saveHomeLine, lines: 1, over: !narrowLayout, // on a phone, in its sheet (phoneBar)
 				focused: func() { a.barOpen = true },
 				esc: func() {
 					if strings.TrimSpace(a.homeDraft) == "" {

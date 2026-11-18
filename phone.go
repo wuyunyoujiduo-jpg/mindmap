@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"runtime"
+	"strings"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/mobile"
@@ -56,11 +57,12 @@ var phonePlaces = []struct {
 }{{placeToday, "今天", "calendar"}, {placeMaps, "项目", "folder"}, {placeCollect, "收集", "layers"}}
 
 // phoneTabs is the row of the places at the window's foot: on the
-// window's gray, as the top row, the place shown in the accent.
+// window's gray under a hairline, the place shown in the accent.
 func (a *app) phoneTabs(c *ui.Context) {
 	t := c.Theme()
 	now := a.place()
-	ui.Row(c.Key("phone-tabs")).Height(56).Padding(0, 6, 4).Shrink(0).FillWidth().AlignItems(ui.Stretch).Label("位置").Children(func() {
+	ui.Row(c.Key("phone-tabs")).Height(56).Padding(2, 6, 2).Shrink(0).FillWidth().AlignItems(ui.Stretch).Label("位置").
+		Background(ground(t)).BorderWidth(1, 0, 0, 0).BorderColor(hairline(t)).Children(func() {
 		for _, p := range phonePlaces {
 			on := p.place == now
 			b := ui.Column(c.Key("tab:" + p.name)).Grow(1).Basis(0).Gap(2).Center().Cursor(ui.CursorPointer).Label(p.name).Radius(radiusRow)
@@ -112,7 +114,10 @@ func (a *app) phoneDrawer(c *ui.Context) {
 	mobile.Drawer(c, &a.drawer, mobile.DrawerOptions{Width: drawerWidth}, func() {
 		// It is drawn over the system's bars: what it holds is under them.
 		top, _, bottom, _ := c.SafeArea()
-		ui.Column(c.Key("drawer")).Fill().Padding(top, 0, bottom).Background(cardColor(c.Theme())).Children(func() { a.sideColumn(c) })
+		ui.Column(c.Key("drawer")).Fill().Padding(top, 0, bottom).Background(cardColor(c.Theme())).Children(func() {
+			ui.Column(c.Key("side")).Grow(1).Basis(0).MinHeight(0).FillWidth().Children(func() { a.sideColumn(c) })
+			a.drawerFoot(c)
+		})
 	})
 }
 
@@ -153,17 +158,272 @@ func (a *app) drawerSubject() string {
 // sheetBack is the row over what is chosen when it covers the page on a
 // phone: the way back to the page. Escape, and so back, puts it away as
 // each page has it do beside the page.
-func sheetBack(c *ui.Context, close func()) {
+func sheetBack(c *ui.Context, close func()) { sheetBackTo(c, "返回", close) }
+
+// sheetBackTo is sheetBack saying where it goes back to.
+func sheetBackTo(c *ui.Context, to string, close func()) {
 	t := c.Theme()
 	ui.Row(c.Key("sheet-back")).Height(44).Padding(0, 8).Shrink(0).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(hairline(t)).Children(func() {
-		b := ui.Row(c.Key("back")).Height(36).Padding(0, 10, 0, 4).Gap(2).Radius(radiusRow).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label("返回")
+		b := ui.Row(c.Key("back")).Height(36).Padding(0, 10, 0, 4).Gap(2).Radius(radiusRow).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(to)
 		if b.Clicked() {
 			close()
 		}
 		press(b, 0.96)
 		b.Children(func() {
 			glyph(c, iconBack, 18, t.Accent)
-			ui.Text(c, "返回").FontSize(textBody).TextColor(t.Accent).PassThrough()
+			ui.Text(c, to).FontSize(textTitle).TextColor(t.Accent).PassThrough()
 		})
+	})
+}
+
+// drawerFoot is the drawer's foot: how the sync stands, which opens its
+// settings, and the settings, which a phone's top row has no room for.
+func (a *app) drawerFoot(c *ui.Context) {
+	t := c.Theme()
+	ui.Column(c.Key("drawer-foot")).Padding(6, 10, 8).Gap(1).Shrink(0).FillWidth().BorderWidth(1, 0, 0, 0).BorderColor(hairline(t)).Children(func() {
+		if a.syncReady() {
+			ink := t.TextMuted
+			if a.syncErr != "" {
+				ink = t.Danger
+			}
+			row := ui.Row(c.Key("sync")).Height(44).Padding(0, 12).Gap(12).Radius(radiusRow).AlignItems(ui.Center).FillWidth().
+				Cursor(ui.CursorPointer).Label("同步：" + a.syncLabel())
+			if row.Clicked() {
+				a.later(a.openSyncSettings)
+			}
+			row.Children(func() {
+				glyph(c, iconCloud, 18, ink)
+				ui.Text(c, "GitHub "+a.syncLabel()).FontSize(textSmall).TextColor(ink).PassThrough()
+			})
+		}
+		if sideRow(c, "settings", "设置", "", false, sideIcon(c, "settings")).Clicked() {
+			a.later(a.openSettings)
+		}
+	})
+}
+
+// phoneTop is a place's row of keys on a phone, over its page: the left
+// column's, and at the right the search of everything and the AI's spark
+// (the settings are at the drawer's foot, the one bar at the window's,
+// phoneBar).
+func (a *app) phoneTop(c *ui.Context) {
+	ui.Row(c.Key("phone-top")).Height(48).Padding(0, 8).Gap(4).AlignItems(ui.Center).Shrink(0).FillWidth().Children(func() {
+		if kubaiKey(c, "sidebar", "侧栏", "侧栏", a.drawer, true).Clicked() {
+			a.drawer = !a.drawer
+		}
+		ui.Spacer(c)
+		if a.place() == placeMaps {
+			iconButton(c, iconPlus, "新建", "新建导图或文件夹", 34, true).Menu(func(m *ui.Menu) {
+				if m.Item("新建导图").Chosen() {
+					a.later(func() { a.newMapIn(cmpOr(a.projFolder, a.dir)) })
+				}
+				if m.Item("从模板新建…").Chosen() {
+					a.templatesOpen = true
+				}
+				if m.Item("新建文件夹").Chosen() {
+					a.later(func() { a.newFolder(cmpOr(a.projFolder, a.dir)) })
+				}
+			})
+		}
+		if kubaiKey(c, "search", "搜索全部", "搜索导图、主题、随记和资料", false, true).Clicked() {
+			a.later(func() { a.openPalette(paletteAll) })
+		}
+		if kubaiKey(c, "sparkles", "AI 助手", "问 AI：问问导图和资料里的内容", a.aiOpen, false).Clicked() {
+			a.aiOpen = !a.aiOpen
+		}
+	})
+}
+
+// phoneBar is the one bar on a phone: a line at the window's foot, over
+// the places, where the thumb is, saying what a line is kept as there (a
+// task on 今天, else a note of 随记; barTask). A tap grows it upward where
+// it is into the card to write in, its tools and what it is kept as, the
+// keyboard under it and the places put away meanwhile (view): not a
+// sheet over a dimmed page, which the user found not good to look at.
+// A tap beside it with nothing written puts it back.
+func (a *app) phoneBar(c *ui.Context) {
+	t := c.Theme()
+	text := strings.TrimSpace(a.homeDraft)
+	ui.Column(c.Key("phone-bar-room")).Padding(4, 12, 8).Gap(8).Shrink(0).FillWidth().Children(func() {
+		if a.barOpen {
+			card := ui.Column(c.Key("phone-bar-open")).Gap(8).FillWidth().
+				Transition(ui.ElementTransition{Duration: motionFast, Ease: easeDetent, Enter: &ui.Motion{Y: 12}})
+			if card.PressedOutside() && text == "" {
+				a.barOpen = false
+			}
+			card.Children(func() { a.barCard(c, text) })
+			return
+		}
+		hint, kind := "记一条随记、加任务…", "随记"
+		if a.barTask(text) {
+			hint, kind = "加任务，如「明天 9点 写周报」", "任务"
+		}
+		if text != "" {
+			hint = text // what was written and not kept, waiting
+		}
+		line := captureBox(c, "phone-bar").MinHeight(46).Radius(radiusCard).Cursor(ui.CursorText).Label("记一条随记或任务")
+		if line.Clicked() {
+			a.barOpen, a.writeRefocus = true, "home-line"
+		}
+		line.Children(func() {
+			glyph(c, iconPlus, 15, t.Accent)
+			txt := ui.Text(c, hint).FontSize(textTitle).SingleLine().Grow(1).Shrink(1).MinWidth(0).PassThrough()
+			if text == "" {
+				txt.TextColor(t.TextMuted)
+			}
+			pill(c, kind, t.Accent.Alpha(0.1), t.Accent)
+		})
+	})
+}
+
+// phoneWeek is 日程's strip on a phone, over the hours of the day shown:
+// the seven days of its week, each its weekday, its date and its word of
+// the Chinese calendar, the day shown on the accent's tint, today in the
+// accent, a day of rest on the rest's ground (restFill); the weeks before
+// and after at its ends.
+func (a *app) phoneWeek(c *ui.Context) {
+	t := c.Theme()
+	now := today(a.now())
+	start := a.weekOf(a.tasks.day)
+	ui.Row(c.Key("phone-week")).Padding(2, 4, 8).Gap(2).AlignItems(ui.Center).Shrink(0).FillWidth().
+		BorderWidth(0, 0, 1, 0).BorderColor(hairline(t)).Children(func() {
+		if iconButton(c, iconBack, "上一周", "上一周", 28, true).Clicked() {
+			a.tasks.day = a.tasks.day.AddDate(0, 0, -7)
+		}
+		for i := range 7 {
+			d := start.AddDate(0, 0, i)
+			on, isToday := sameDay(d, a.tasks.day), sameDay(d, now)
+			cell := ui.Column(c.Key(i)).Grow(1).Basis(0).MinWidth(0).Padding(6, 0).Gap(1).Radius(10).AlignItems(ui.Center).
+				Cursor(ui.CursorPointer).Label(fmt.Sprintf("%d月%d日", d.Month(), d.Day()))
+			switch {
+			case on:
+				cell.Background(t.Accent.Alpha(0.1))
+			case restDay(d):
+				cell.Background(restFill(t))
+			}
+			if cell.Clicked() {
+				a.tasks.day = d
+			}
+			press(cell, 0.95)
+			cell.Children(func() {
+				ui.Text(c, weekdayName(d)[len("周"):]).FontSize(textCaption - 1).TextColor(t.TextMuted).PassThrough()
+				day := ui.Text(c, fmt.Sprint(d.Day())).FontSize(17).FontFeatures("tnum").PassThrough()
+				if on || isToday {
+					day.FontWeight(700).TextColor(t.Accent)
+				}
+				word, feast := lunarLabel(d)
+				ink := faint(t)
+				if feast {
+					ink = t.Accent.MixOklab(t.Text, 0.2)
+				}
+				ui.Text(c, word).FontSize(10).TextColor(ink).SingleLine().PassThrough()
+			})
+		}
+		if iconButton(c, iconForward, "下一周", "下一周", 28, true).Clicked() {
+			a.tasks.day = a.tasks.day.AddDate(0, 0, 7)
+		}
+	})
+}
+
+// phoneKinds are 收集's kinds as a row of chips under its head on a
+// phone, where the left column is a drawer away: 全部, the kinds, and 星标;
+// the one chosen on the accent's tint. The tags and the rest stay in the
+// drawer.
+func (a *app) phoneKinds(c *ui.Context) {
+	t := c.Theme()
+	counts := a.kindCounts()
+	ui.ScrollHorizontal(c.Key("phone-kinds")).Shrink(0).FillWidth().Children(func() {
+		ui.Row(c.Key("chips")).Gap(8).Padding(2, 0, 10).Children(func() {
+			chip := func(key, name string, on bool, click func()) {
+				b := ui.Box(c.Key(key)).Height(32).Padding(0, 13).Radius(radiusPill).Center().Cursor(ui.CursorPointer).Label(name).
+					Background(t.Text.Alpha(0.045)).Transition(easeLook)
+				if on {
+					b.Background(t.Accent.Alpha(0.1))
+				}
+				if b.Clicked() {
+					a.later(click)
+				}
+				press(b, 0.96)
+				b.Children(func() {
+					txt := ui.Text(c, name).FontSize(textBody).NoWrap().PassThrough()
+					if on {
+						txt.FontWeight(700).TextColor(t.Accent)
+					} else {
+						txt.TextColor(ink2(t))
+					}
+				})
+			}
+			for _, k := range []struct {
+				kind int
+				name string
+			}{{kindAll, "全部"}, {kindMemos, "随记"}, {kindLinks, "链接"}, {kindDocs, "文档"}, {kindImages, "图片"}, {kindVideos, "视频"}} {
+				if k.kind == kindVideos && counts[k.kind] == 0 {
+					continue
+				}
+				chip("kind:"+k.name, k.name, a.libKind == k.kind && a.libReview == reviewOff, func() {
+					a.libKind, a.libReview, a.libSel = k.kind, reviewOff, ""
+				})
+			}
+			chip("star", "★ 星标", a.libCat == "★", func() { a.libCat, a.libReview = toggled(a.libCat, "★"), reviewOff })
+		})
+	})
+}
+
+// phoneCanvasFoot is the foot of a map's canvas on a phone: with a topic
+// chosen, its keys in a bar floating over the canvas, a finger's size
+// each (a topic under it, one beside it, its words, a task, its details
+// in the sheet from the foot); and a round key back to the middle. The
+// zoom is the fingers'; the lenses and the rest are the desktop's.
+func (a *app) phoneCanvasFoot(c *ui.Context) {
+	t := c.Theme()
+	n, _ := a.selectedNode()
+	bar := n != nil && a.editing == "" && len(a.multi) == 0 && !a.lensQuiet
+	foot := float32(16)
+	if bar {
+		foot = 88
+	}
+	home := lifted(ui.Box(c.Key("recenter")).Absolute().Right(14).Bottom(foot).Size(44, 44).Radius(22).Center().
+		Background(cardColor(t)).Cursor(ui.CursorPointer).Label("回到中心"), t)
+	if home.Clicked() {
+		a.recenter()
+	}
+	press(home, 0.94)
+	home.Children(func() { glyph(c, iconTarget, 18, ink2(t)) })
+	if !bar {
+		return
+	}
+	task := "任务"
+	if n.Task != nil {
+		task = "取消任务"
+	}
+	keys := []struct {
+		name string
+		ic   icon
+		do   func()
+	}{
+		{"子主题", iconPlus, a.addChild},
+		{"同级", iconLevels, a.addSibling},
+		{"改字", iconPencil, func() { a.startEdit(n.ID) }},
+		{task, iconCheck, func() { a.toggleTask(n) }},
+		{"详情", iconPanel, func() { a.panelSheet = true }},
+	}
+	lifted(ui.Row(c.Key("phone-node-bar")).Absolute().Left(12).Right(12).Bottom(16).Height(62).Padding(0, 4).Radius(16).
+		AlignItems(ui.Center).Background(cardColor(t)).Label("主题操作"), t).
+		Transition(ui.ElementTransition{Duration: motionFast, Ease: easeDetent, Enter: &ui.Motion{Y: 16}}).Children(func() {
+		for _, k := range keys {
+			b := ui.Column(c.Key(k.name)).Grow(1).Basis(0).Height(54).Gap(3).Radius(12).Center().Cursor(ui.CursorPointer).Label(k.name)
+			if b.Clicked() {
+				a.later(k.do)
+			}
+			press(b, 0.94)
+			b.Children(func() {
+				ink := t.Text
+				if k.name == "详情" {
+					ink = t.Accent
+				}
+				glyph(c, k.ic, 18, ink)
+				ui.Text(c, k.name).FontSize(textCaption - 1).TextColor(ink).PassThrough()
+			})
+		}
 	})
 }

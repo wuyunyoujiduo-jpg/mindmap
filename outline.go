@@ -98,7 +98,11 @@ func (a *app) outlineView(c *ui.Context) {
 		// The lines are a column in the page's middle, as wide as reads
 		// well, each row its part of it.
 		ui.Box(c).FillWidth().Children(func() {
-			ui.Column(c).Padding(0, 40).Gap(4).MaxWidth(860).Margin(0, ui.Auto).FillWidth().Children(func() {
+			side := float32(40)
+			if narrowLayout {
+				side = pagePad()
+			}
+			ui.Column(c).Padding(0, side).Gap(4).MaxWidth(860).Margin(0, ui.Auto).FillWidth().Children(func() {
 				if r.Index == 0 {
 					a.outlineHead(c, len(rows) == 0)
 					return
@@ -108,6 +112,42 @@ func (a *app) outlineView(c *ui.Context) {
 		})
 	})
 	a.outlineDrag(c, rows)
+	if narrowLayout {
+		a.outlineKeys(c)
+	}
+}
+
+// outlineKeys are, on a phone, the outline's keys of a keyboard that has
+// none of them: a row over the keyboard while a line is written in, to
+// put it out or in, up or down among its own, make it a task, and be done
+// (Shift-Tab, Tab, ⌘↑, ⌘↓ beside the page).
+func (a *app) outlineKeys(c *ui.Context) {
+	n, _ := a.doc.Find(a.outlineFocus)
+	if n == nil || n == a.doc.Root {
+		return
+	}
+	t := c.Theme()
+	id := n.ID
+	step := func(fn func()) {
+		a.later(func() { a.mutate("", fn); a.outlineFocus = id })
+	}
+	ui.Row(c.Key("outline-keys")).Height(48).Padding(0, 12, 0, 6).Gap(2).AlignItems(ui.Center).Shrink(0).FillWidth().
+		Background(ground(t)).BorderWidth(1, 0, 0, 0).BorderColor(hairline(t)).Label("大纲的键").Children(func() {
+		key := func(label string, ic icon, do func()) {
+			if iconButton(c, ic, label, label, 44, true).Clicked() {
+				do()
+			}
+		}
+		key("反缩进", iconBack, func() { step(func() { _ = a.doc.Outdent(id) }) })
+		key("缩进", iconForward, func() { step(func() { _ = a.doc.Indent(id) }) })
+		key("上移", iconUp, func() { step(func() { _ = a.doc.Shift(id, -1) }) })
+		key("下移", iconDown, func() { step(func() { _ = a.doc.Shift(id, 1) }) })
+		key("记成任务", iconCheck, func() { a.later(func() { a.toggleTask(n); a.outlineFocus = id }) })
+		ui.Spacer(c)
+		if accentButton(c, "完成", "写完了，收起键盘").Clicked() {
+			a.outlineFocus = ""
+		}
+	})
 }
 
 // outlineList is the list of a canvas's outline: where it is scrolled to,

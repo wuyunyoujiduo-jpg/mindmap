@@ -47,6 +47,8 @@ const (
 	iconFilter  // what shows is narrowed: three lines, each shorter
 	iconDiagram // a topic's 图解: a step and the next, joined
 	iconLens    // the canvas's lenses: a circle, half of it filled
+	iconUp      // up: a chevron pointing up
+	iconDown    // down: a chevron pointing down
 )
 
 // glyph is an icon drawn in a box of the given side, as a piece of text.
@@ -84,6 +86,12 @@ func drawIcon(p *ui.Painter, r ui.Rect, s float32, ic icon, col ui.Color) {
 			k = -1
 		}
 		p.StrokePath(new(ui.Path).MoveTo(cx+k*h*0.25, cy-h*0.55).LineTo(cx-k*h*0.3, cy).LineTo(cx+k*h*0.25, cy+h*0.55), w*1.1, col)
+	case iconUp, iconDown:
+		k := float32(1)
+		if ic == iconDown {
+			k = -1
+		}
+		p.StrokePath(new(ui.Path).MoveTo(cx-h*0.55, cy+k*h*0.25).LineTo(cx, cy-k*h*0.3).LineTo(cx+h*0.55, cy+k*h*0.25), w*1.1, col)
 	case iconSidebar, iconPanel:
 		p.StrokePath(roundedRect(cx-h*0.9, cy-h*0.7, h*1.8, h*1.4, h*0.28), w, col)
 		x := cx - h*0.3

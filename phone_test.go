@@ -2,6 +2,7 @@ package main
 
 import (
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -46,7 +47,7 @@ func TestPhoneLayout(t *testing.T) {
 		}
 		t.Fatalf("no place %s", name)
 	}
-	inside("月")
+	inside("日程")
 	inside("列表加载慢")
 	snapshot(t, tt, "phone-today")
 
@@ -69,7 +70,7 @@ func TestPhoneLayout(t *testing.T) {
 		t.Fatalf("drawer %v, list %d", a.drawer, a.tasks.view)
 	}
 
-	// A task chosen covers the page, and 返回 goes back to the list.
+	// A task chosen rises from the foot, and its ✕ puts it away.
 	a.goToday()
 	tt.Frame()
 	if err := tt.Click("列表加载慢"); err != nil {
@@ -79,14 +80,18 @@ func TestPhoneLayout(t *testing.T) {
 	if a.tasks.sel == "" {
 		t.Fatal("the task not chosen")
 	}
-	inside("返回")
+	for range 5 { // the sheet rises
+		tt.Advance(300 * time.Millisecond)
+		tt.Frame()
+	}
+	inside("关闭详情")
 	snapshot(t, tt, "phone-task")
-	if err := tt.Click("返回"); err != nil {
+	if err := tt.Click("关闭详情"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if a.tasks.sel != "" || tt.HasText("返回") {
-		t.Fatal("返回 did not put the task away")
+	if a.tasks.sel != "" {
+		t.Fatal("✕ did not put the task away")
 	}
 
 	// The other places, from the foot.
@@ -108,19 +113,26 @@ func TestPhoneLayout(t *testing.T) {
 	if a.panelShown(nil) {
 		t.Fatal("the panel over the canvas from the start")
 	}
-	if err := tt.Click("主题面板"); err != nil {
+	// The chosen topic's keys at the canvas's foot; its details from there.
+	if _, ok := tt.Find("主题操作"); !ok {
+		t.Fatal("no keys of the chosen topic")
+	}
+	if err := tt.Click("详情"); err != nil {
 		t.Fatal(err)
 	}
-	tt.Frame()
-	inside("返回")
+	for range 5 { // the sheet rises
+		tt.Advance(300 * time.Millisecond)
+		tt.Frame()
+	}
+	if !a.panelSheet {
+		t.Fatal("详情 did not open the topic's sheet")
+	}
+	if r, ok := tt.Find("主题面板"); !ok || r.Y > h/2 {
+		t.Fatalf("the topic's sheet at %+v", r)
+	}
 	snapshot(t, tt, "phone-panel")
-	if err := tt.Click("返回"); err != nil {
-		t.Fatal(err)
-	}
+	a.panelSheet = false
 	tt.Frame()
-	if a.panelSheet {
-		t.Fatal("返回 did not put the panel away")
-	}
 	snapshot(t, tt, "phone-map")
 
 	// The settings and the AI, over the page.
@@ -152,4 +164,68 @@ func slicesIndexPlace(p int) int {
 		}
 	}
 	return -1
+}
+
+// TestPhoneShot snapshots the phone's pages, for a look beside the draft.
+func TestPhoneShot(t *testing.T) {
+	a, _ := newTestApp(t)
+	tt := ui.NewTester(a.view, 390, 844)
+	tt.SetInsets(47, 0, 34, 0)
+	for _, text := range []string{"导图的工具条只在选中主题时出现", "周会改到周四下午三点", "#方法 先写结论再写过程，读的人先知道要什么"} {
+		if _, err := a.addClipText(text, "手动"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, p := range phonePlaces {
+		a.goPlace(p.place)
+		tt.Frame()
+		tt.Frame()
+		snapshot(t, tt, "shot-"+p.name)
+	}
+	a.goToday()
+	tt.Frame()
+	if err := tt.Click("记一条随记或任务"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Frame()
+	if !a.barOpen || tt.HasText("项目") && func() bool { r, _ := tt.Find("位置"); return r.H > 0 }() {
+		t.Fatal("the bar did not grow in place of the places")
+	}
+	snapshot(t, tt, "shot-bar")
+	a.barOpen = false
+	a.goToday()
+	tt.Frame()
+	if err := tt.Click("列表加载慢"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	for range 5 {
+		tt.Advance(300 * time.Millisecond)
+		tt.Frame()
+	}
+	snapshot(t, tt, "shot-task")
+	a.tasks.sel = ""
+	a.tasks.view = tasksDay
+	tt.Frame()
+	tt.Frame()
+	snapshot(t, tt, "shot-day")
+	a.tasks.view = tasksToday
+	_ = a.open(a.files[0].Path)
+	tt.Frame()
+	tt.Frame()
+	snapshot(t, tt, "shot-map")
+	// The outline, a line written in: its keys over the keyboard.
+	a.showView(viewOutline)
+	tt.Frame()
+	for _, r := range outlineRows(a.doc) {
+		a.outlineFocus = r.node.ID
+		break
+	}
+	tt.Frame()
+	tt.Frame()
+	if _, ok := tt.Find("大纲的键"); !ok {
+		t.Fatal("no outline keys while a line is written in")
+	}
+	snapshot(t, tt, "shot-outline")
 }

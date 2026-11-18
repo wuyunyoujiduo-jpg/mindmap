@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/mobile"
 )
 
 // The app's look, in a few pieces used everywhere; DESIGN.md says it token
@@ -887,16 +888,38 @@ func modal(c *ui.Context, key string, open *bool, fn func()) ui.Element {
 	return m.Shadow(0, 4, 12, 0, ui.RGBA(0, 0, 0, 0.05)).Shadow(0, 30, 80, -10, ui.RGBA(0, 0, 0, 0.22))
 }
 
+// sheetsOpen are the phone's sheets' flags, by the sheet (sheet).
+var sheetsOpen = map[string]*bool{}
+
 // sheet is what is chosen, in a column at the leaf's right, a thin line
 // between it and the page: the page beside it stays as it is, so that
-// another row chosen shows in the same column. On a phone it covers the
-// page, under the way back to it, which close takes (phone.go).
+// another row chosen shows in the same column. On a phone it rises from
+// the window's foot over the page (mobile.Sheet), a finger pulling it
+// down and away, which close takes; a clip, which is read at length,
+// covers the page instead, under the way back to 收集 (phone.go).
 func sheet(c *ui.Context, key string, width float32, close func(), body func()) {
 	t := c.Theme()
+	if narrowLayout && key != "clip-sheet" {
+		// MyGo keeps a sheet's state by its flag's address: one flag a
+		// sheet, open while it is built.
+		open := sheetsOpen[key]
+		if open == nil {
+			open = new(bool)
+			sheetsOpen[key] = open
+		}
+		*open = true
+		mobile.Sheet(c, open, mobile.SheetOptions{Detents: []float32{0.92}, Label: "详情"}, func() {
+			ui.Column(c.Key(key)).Grow(1).Basis(0).MinHeight(0).FillWidth().Children(body)
+		})
+		if !*open {
+			close()
+		}
+		return
+	}
 	if narrowLayout {
 		ui.Column(c.Key(key)).Absolute().Left(0).Top(0).Right(0).Bottom(0).ZIndex(12).Background(cardColor(t)).
 			Transition(ui.ElementTransition{Duration: motionSlow, Ease: easeDetent, Enter: &ui.Motion{X: 24}}).Children(func() {
-			sheetBack(c, close)
+			sheetBackTo(c, "收集", close) // a clip's: the one sheet that covers the page
 			ui.Column(c.Key("body")).Grow(1).Basis(0).MinHeight(0).FillWidth().Children(body)
 		})
 		return

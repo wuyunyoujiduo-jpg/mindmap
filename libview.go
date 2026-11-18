@@ -77,7 +77,12 @@ func (a *app) libraryColumn(c *ui.Context) {
 			if a.embedErr != "" {
 				ui.Text(c, "语义检索不可用").FontSize(12).TextColor(t.Warning).NoWrap().Tooltip(a.embedErr + "（在设置里检查向量模型）")
 			}
-			search := searchBox(c, "lib-search", &a.libQuery, "搜索资料", "搜索收集", "按标题、内容、摘要、标签和关键词查找资料", 200)
+			width := float32(200)
+			if narrowLayout { // the page's width, under the head (pageHead)
+				w, _ := c.Size()
+				width = w - 2*pagePad()
+			}
+			search := searchBox(c, "lib-search", &a.libQuery, "搜索资料", "搜索收集", "按标题、内容、摘要、标签和关键词查找资料", width)
 			if a.libQuery != "" && search.Shortcut(0, ui.KeyEscape) {
 				a.libQuery = ""
 			}
@@ -87,6 +92,9 @@ func (a *app) libraryColumn(c *ui.Context) {
 			a.searchQueryVector(c)
 		})
 		a.pluginBanner(c)
+		if narrowLayout {
+			a.phoneKinds(c)
+		}
 		a.clipFilters(c)
 		if a.libErr != "" {
 			ui.Row(c).Padding(0, 0, 6).Gap(8).AlignItems(ui.Center).Children(func() {
@@ -103,6 +111,9 @@ func (a *app) libraryColumn(c *ui.Context) {
 				ui.Column(c).Grow(1).Basis(0).Padding(8, 0, 16).Children(func() {
 					icon, title := "lightbulb", "还没有资料"
 					msg := "在上面记点什么、粘贴链接，或把图片和文件拖进来。\n在任何应用里复制内容后按 " + keyLabel(a.clipKey()) + "，也能直接存到收集。"
+					if narrowLayout {
+						msg = "在下面记一条随记，或者贴一个链接、一张图片。"
+					}
 					var clear func()
 					if len(l.Clips) > 0 || a.libKind == kindMaps {
 						icon, title, msg = "search", "没有符合条件的资料", "换一个分类或标签，或者清掉搜索的词。"
@@ -155,6 +166,10 @@ func (a *app) clipWall(c *ui.Context, hits []library.Hit) {
 		room -= min(420, w*0.4)
 	}
 	cols := min(max(int(room/300), 1), 6)
+	gap := float32(12)
+	if narrowLayout { // two narrow columns on a phone, as flomo's and the draft's
+		cols, gap = 2, 10
+	}
 	// More of them shown is of the wall as it was narrowed then: narrowed
 	// anew, it begins at its first cards again (it never did, and a wall
 	// once read to its end built every card of each one after it).
@@ -230,9 +245,9 @@ func (a *app) clipWall(c *ui.Context, hits []library.Hit) {
 		// The cards stand apart on the page, each told by a hairline: with
 		// columns of uneven ends one gray ground under them all showed as
 		// holes, and the user asked for them apart.
-		ui.Row(c.Key("ground")).Padding(2, 1).Gap(12).AlignItems(ui.Start).FillWidth().Children(func() {
+		ui.Row(c.Key("ground")).Padding(2, 1).Gap(gap).AlignItems(ui.Start).FillWidth().Children(func() {
 			for k := range cols {
-				ui.Column(c.Key(k)).Grow(1).Basis(0).MinWidth(0).Gap(12).Children(func() {
+				ui.Column(c.Key(k)).Grow(1).Basis(0).MinWidth(0).Gap(gap).Children(func() {
 					for _, clip := range in[k] {
 						if clip.Kind == kindMap {
 							ui.Box(c.Key(clip.ID)).FillWidth().Children(func() { a.mapRow(c, clip) })

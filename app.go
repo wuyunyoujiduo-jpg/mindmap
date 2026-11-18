@@ -1382,9 +1382,12 @@ func (a *app) runPending() {
 // camera is where a canvas is looked at from: the screen position of the
 // map's origin and the zoom, and the node selected on it.
 type camera struct {
-	X, Y     float32
-	Zoom     float32
-	placed   bool // X and Y were set for the canvas's size
+	X, Y   float32
+	Zoom   float32
+	placed bool // X and Y were set for the canvas's size
+	// placedAs is the structure it was placed for: a phone draws a mind
+	// map growing to the right (drawnStructure), placed anew.
+	placedAs model.Structure
 	selected string
 }
 

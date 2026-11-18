@@ -271,7 +271,7 @@ func (a *app) siblingsAcross(n *model.Node) bool {
 			return dx*dx > dy*dy
 		}
 	}
-	return a.doc.Structure == model.StructureOrg
+	return a.drawnStructure() == model.StructureOrg
 }
 
 // styleOf is the node's own style, zero where it follows the canvas.
@@ -387,9 +387,9 @@ func (a *app) canvasArea(c *ui.Context) {
 	a.progress = progressOf(shown.Root)
 	lens := a.lensLooks() // nil by the branches, and in a picture
 	a.lensShown, a.lensQuiet = lens, lens != nil && a.lensOver()
-	r := layout.Compute(shown, a.measure(c), layoutOptions(a.doc.Structure))
+	r := layout.Compute(shown, a.measure(c), layoutOptions(a.drawnStructure()))
 	if shown == a.doc {
-		r = a.layoutFloating(r, a.measure(c), layoutOptions(a.doc.Structure))
+		r = a.layoutFloating(r, a.measure(c), layoutOptions(a.drawnStructure()))
 	}
 	a.boxes = r
 	exporting := a.exportCam != nil // drawn into an image, off screen
@@ -404,22 +404,22 @@ func (a *app) canvasArea(c *ui.Context) {
 	// selected by keys in view.
 	if exporting {
 	} else if a.vp.W > 0 {
-		if root, ok := r.Boxes[shown.Root.ID]; ok && !cam.placed {
+		if root, ok := r.Boxes[shown.Root.ID]; ok && (!cam.placed || cam.placedAs != a.drawnStructure()) {
 			// The mind map centers its root; the one-sided structures
 			// center the whole map while it fits, else start at the left.
 			cam.X = a.vp.W/2 - (root.X+root.W/2)*z
 			cam.Y = a.vp.H/2 - (root.Y+root.H/2)*z
-			switch a.doc.Structure {
+			switch a.drawnStructure() {
 			case model.StructureMindMap, model.StructureOrg:
 			case model.StructureFishbone: // the head on the right
 				cam.X = min((a.vp.W-r.Width*z)/2, a.vp.W-20-r.Width*z)
 			default:
 				cam.X = max((a.vp.W-r.Width*z)/2, 20)
 			}
-			if a.doc.Structure == model.StructureOrg {
+			if a.drawnStructure() == model.StructureOrg {
 				cam.Y = max((a.vp.H-r.Height*z)/2, 60) // from the top
 			}
-			cam.placed = true
+			cam.placed, cam.placedAs = true, a.drawnStructure()
 		}
 		target := a.selected
 		if a.editing != "" {
@@ -529,7 +529,7 @@ func (a *app) canvasArea(c *ui.Context) {
 		soft := func(id string) ui.Color { return color(id) } // the lines in their branch's color
 		lines := func() {
 			a.drawBoundaries(p, r, shown, rect.X+cam.X, rect.Y+cam.Y, z, color)
-			drawEdges(p, r, a.doc.Structure, rect.X+cam.X, rect.Y+cam.Y, z, lk.line, view, soft)
+			drawEdges(p, r, a.drawnStructure(), rect.X+cam.X, rect.Y+cam.Y, z, lk.line, view, soft)
 			a.drawSummaries(p, r, shown, rect.X+cam.X, rect.Y+cam.Y, z, color)
 			a.drawRelations(p, r, rect.X+cam.X, rect.Y+cam.Y, z, relations)
 		}
@@ -583,6 +583,10 @@ func (a *app) canvasArea(c *ui.Context) {
 			if !a.lensQuiet { // nothing chosen: no topic's bar
 				a.nodeBar(c, r, depth)
 			}
+		}
+		if narrowLayout { // a phone's: the chosen topic's keys, and the way back to the middle (phone.go)
+			a.phoneCanvasFoot(c)
+			return
 		}
 		// Zoom and recenter, over the canvas's corner.
 		lifted(ui.Row(c).Absolute().Right(14).Bottom(14).Gap(0).Padding(3, 5).Radius(radiusPill).AlignItems(ui.Center).
@@ -1610,6 +1614,18 @@ func (a *app) canvasKey(ev ui.InputEvent) bool {
 
 // layoutOptions are the layout's spacing for a structure: the logic chart
 // and the bracket chart grow to the right only.
+// drawnStructure is how the canvas lays the map out: as its structure
+// says, but for a mind map on a phone, which grows to the right from the
+// central topic at the left (StructureLogic), down a screen narrow and
+// tall, where both sides of it ran off the screen's edges (the draft's).
+// Nothing of the map changes: the desktop draws it as it was.
+func (a *app) drawnStructure() model.Structure {
+	if narrowLayout && a.doc.Structure == model.StructureMindMap {
+		return model.StructureLogic
+	}
+	return a.doc.Structure
+}
+
 func layoutOptions(s model.Structure) layout.Options {
 	o := layout.DefaultOptions
 	switch s {
