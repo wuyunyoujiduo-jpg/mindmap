@@ -1,7 +1,7 @@
 {
   "name": "MyMind",
   "identifier": "com.wuyunyoujiduo.mindmap",
-  "version": "0.108.1",
+  "version": "0.108.2",
   "out": "build",
   "android": {
     "adaptiveIcon": {

@@ -752,3 +752,42 @@ func TestTaskDetailsFollowOutsideChange(t *testing.T) {
 		t.Fatalf("a name emptied: %q", a.tasks.title)
 	}
 }
+
+// TestTasksFoldLate folds 已逾期 by a click on its name, keeps it folded,
+// and unfolds it again; its 顺延到今天 stays.
+func TestTasksFoldLate(t *testing.T) {
+	a, tt := newTestApp(t)
+	day := today(a.now())
+	login := find(t, a, "登录")
+	a.mutate("", func() {
+		login.SetStatus(model.StatusTodo, a.now())
+		d := day.AddDate(0, 0, -2)
+		login.Task.Due = &d
+	})
+	a.openTasks()
+	tt.Frame()
+	if !tt.HasText("登录") {
+		t.Fatalf("late not shown: %q", tt.Texts())
+	}
+	if err := tt.Click("收起已逾期"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	snapshot(t, tt, "tasks-late-folded")
+	if tt.HasText("登录") || !tt.HasText("顺延到今天") || !slices.Contains(a.cfg.TasksFolded, "已逾期") {
+		t.Fatalf("folded: %q %v", tt.Texts(), a.cfg.TasksFolded)
+	}
+	a.tasks.read = time.Time{} // built again: still folded
+	tt.Frame()
+	if tt.HasText("登录") {
+		t.Fatal("unfolded by itself")
+	}
+	if err := tt.Click("展开已逾期"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	snapshot(t, tt, "tasks-late-open")
+	if !tt.HasText("登录") || slices.Contains(a.cfg.TasksFolded, "已逾期") {
+		t.Fatalf("unfolded: %q %v", tt.Texts(), a.cfg.TasksFolded)
+	}
+}

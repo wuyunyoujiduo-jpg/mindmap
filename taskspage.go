@@ -1262,6 +1262,7 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 				if g.drop != nil {
 					a.dropTaskAt(box, *g.drop, dropDayAlone)
 				}
+				folded := len(g.items) > 0 && slices.Contains(a.cfg.TasksFolded, g.title)
 				box.Children(func() {
 					ui.Row(c).Height(32).Padding(6, 8, 0).Gap(6).AlignItems(ui.Center).FillWidth().Children(func() {
 						// A day of rest's name is on the ground of rest, as its
@@ -1277,10 +1278,35 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 						case len(g.items) == 0:
 							col = faint(t)
 						}
-						ui.Text(c, g.title).FontSize(textCaption).FontWeight(700).LetterSpacing(0.3).TextColor(col)
+						// Its name, with what it holds, folds it and unfolds it,
+						// a chevron before them saying which.
+						name := ui.Row(c.Key("fold")).Gap(5).AlignItems(ui.Center).Radius(radiusSmall).Padding(2, 4).Margin(0, 0, 0, -4)
 						if len(g.items) > 0 {
-							ui.Text(c, fmt.Sprint(len(g.items))).FontSize(textCaption).TextColor(faint(t)).FontFeatures("tnum")
+							word := "收起"
+							if folded {
+								word = "展开"
+							}
+							name.Cursor(ui.CursorPointer).Label(word + g.title).Tooltip(word)
+							if name.Hovered() {
+								name.Background(t.Text.Alpha(0.04))
+							}
+							if name.Clicked() {
+								a.foldTasks(g.title, !folded)
+							}
 						}
+						name.Children(func() {
+							if len(g.items) > 0 {
+								ic := iconDown
+								if folded {
+									ic = iconForward
+								}
+								glyph(c, ic, 10, col)
+							}
+							ui.Text(c, g.title).FontSize(textCaption).FontWeight(700).LetterSpacing(0.3).TextColor(col).PassThrough()
+							if len(g.items) > 0 {
+								ui.Text(c, fmt.Sprint(len(g.items))).FontSize(textCaption).TextColor(faint(t)).FontFeatures("tnum").PassThrough()
+							}
+						})
 						if g.day != nil {
 							holidayMark(c, *g.day)
 						}
@@ -1302,7 +1328,7 @@ func (a *app) taskList(c *ui.Context, items []taskItem) {
 							})
 						}
 					})
-					if len(g.items) > 0 {
+					if len(g.items) > 0 && !folded {
 						listCard(c, "rows").Children(func() {
 							for _, it := range g.items {
 								if view == tasksDone {
@@ -2681,4 +2707,13 @@ func init() {
 			a.tasks.sel = follow(a.tasks.sel[:i]) + a.tasks.sel[i:]
 		}
 	})
+}
+
+// foldTasks folds a group of 今天's lists, or unfolds it, and keeps which.
+func (a *app) foldTasks(group string, fold bool) {
+	a.cfg.TasksFolded = slices.DeleteFunc(a.cfg.TasksFolded, func(g string) bool { return g == group })
+	if fold {
+		a.cfg.TasksFolded = append(a.cfg.TasksFolded, group)
+	}
+	a.cfg.save()
 }

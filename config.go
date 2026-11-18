@@ -21,7 +21,10 @@ type config struct {
 	// ApkChecked is when a phone last looked for a newer version
 	// (apkupdate.go), which NoApkCheck has it not do by itself.
 	ApkChecked time.Time `json:"apkChecked,omitzero"`
-	NoApkCheck bool      `json:"noApkCheck,omitempty"`
+	// TasksFolded are the groups of 今天's lists folded, by their name
+	// (已逾期, 今天, a day): a click on the name folds and unfolds one.
+	TasksFolded []string `json:"tasksFolded,omitempty"`
+	NoApkCheck  bool     `json:"noApkCheck,omitempty"`
 	// SkillsSeen are the AI agents found before (skillsview.go): one not
 	// among them is new, and said so; SkillsScanned is that they were
 	// looked for once, when every one found is taken as seen.
