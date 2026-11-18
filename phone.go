@@ -610,25 +610,13 @@ func (a *app) phoneTopicMore(c *ui.Context, n *model.Node) {
 		depth++
 	}
 	do := func(fn func()) func() { return func() { a.later(fn) } }
-	acts := []mobile.Action{
-		{Label: "复制", OnTap: do(func() { a.copyNodes(false) })},
-		{Label: "剪切", Disabled: depth == 0, OnTap: do(func() { a.copyNodes(true) })},
-		{Label: "粘贴为子主题", OnTap: do(func() { a.paste() })},
-		{Label: "AI 拆解成任务", OnTap: do(a.aiBreakDown)},
-	}
-	if a.diaOf(n.ID) != nil {
-		acts = append(acts, mobile.Action{Label: "看图解", OnTap: do(func() { a.openDia(n.ID, "") })})
-	} else if diaWorth(n) {
-		acts = append(acts, mobile.Action{Label: "画成图解", OnTap: do(func() { a.drawDia(n.ID, "") })})
-	}
+	// Six, the user's (0.108.5): what a phone does to a topic now and
+	// then, with neither the bar's (子主题, 同级, 改字, 任务, 详情, where its
+	// note, tags and links are) nor a desktop's (剪切, 聚焦此分支; 图解 is
+	// among the views of 导图 ▼).
+	var acts []mobile.Action
 	if depth > 0 {
 		acts = append(acts, mobile.Action{Label: "移到其他导图…", OnTap: do(func() { a.openPalette(paletteMove) })})
-	}
-	if a.shownRoot() == n && a.focusNode() != nil {
-		acts = append(acts, mobile.Action{Label: "退出聚焦", OnTap: do(func() { a.focusOn("") })})
-	} else if depth > 0 {
-		id := n.ID
-		acts = append(acts, mobile.Action{Label: "聚焦此分支", OnTap: do(func() { a.focusOn(id) })})
 	}
 	if len(n.Children) > 0 {
 		label := "折叠下级"
@@ -638,7 +626,12 @@ func (a *app) phoneTopicMore(c *ui.Context, n *model.Node) {
 		id := n.ID
 		acts = append(acts, mobile.Action{Label: label, OnTap: do(func() { a.toggleCollapse(id) })})
 	}
-	acts = append(acts, mobile.Action{Label: "删除", Destructive: true, Disabled: depth == 0, OnTap: do(a.deleteSelection)})
+	acts = append(acts,
+		mobile.Action{Label: "复制", OnTap: do(func() { a.copyNodes(false) })},
+		mobile.Action{Label: "粘贴为子主题", OnTap: do(func() { a.paste() })},
+		mobile.Action{Label: "AI 拆解成任务", OnTap: do(a.aiBreakDown)},
+		mobile.Action{Label: "删除", Destructive: true, Disabled: depth == 0, OnTap: do(a.deleteSelection)},
+	)
 	mobile.ActionSheet(c, &a.topicMore, mobile.ActionSheetOptions{Title: n.Title, Cancel: "取消"}, acts...)
 }
 

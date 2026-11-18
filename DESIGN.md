@@ -271,7 +271,9 @@ https://claude.ai/artifact/5ySnmjspG48dmg8MpwcwLt.
   board's columns are a card's width each, swiped through
   (`boardColumn`). A topic's 更多 is a sheet of choices from the foot
   (`phoneTopicMore`, MyGo's `ActionSheet`): the desktop's menu, laid
-  out by Android, ran every row of its submenus past the screen.
+  out by Android, ran every row of its submenus past the screen, and the
+  user asked for less: six, what the bar has not (移到其他导图, 展开/折叠
+  下级, 复制, 粘贴为子主题, AI 拆解成任务, 删除).
   Android's back goes from a map to the place it was opened from and
   from a clip to 收集 (`phoneBack`, by the back key MyGo tries after
   Escape); with nothing taking either it left the app. In the outline, a line written in has
