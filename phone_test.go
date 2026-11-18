@@ -514,3 +514,31 @@ func TestPhoneMoreByFinger(t *testing.T) {
 		t.Fatalf("更多 by a finger: %q", m)
 	}
 }
+
+// TestPhoneDrawerSameRow: the drawer's row of what the page shows, tapped,
+// puts the drawer away as another row does.
+func TestPhoneDrawerSameRow(t *testing.T) {
+	a, tt := newTestApp(t)
+	tt.SetSize(390, 844)
+	a.goToday()
+	tt.Frame()
+	a.drawer = true
+	tt.Frame()
+	tt.Frame()
+	r, ok := tt.Find("今天")
+	for _, e := range tt.AccessAll() {
+		if e.Name == "今天" && e.Bounds.X > 0 && e.Bounds.X < 200 && e.Bounds.Y < 300 && e.Bounds.H >= 30 {
+			r, ok = e.Bounds, true
+			break
+		}
+	}
+	if !ok {
+		t.Fatal("no 今天 in the drawer")
+	}
+	tt.ClickAt(r.X+r.W/2, r.Y+r.H/2)
+	tt.Frame()
+	tt.Frame()
+	if a.drawer {
+		t.Fatal("the drawer stayed, its row of today tapped")
+	}
+}

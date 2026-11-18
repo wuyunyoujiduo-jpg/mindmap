@@ -342,7 +342,7 @@ func (a *app) linksSection(c *ui.Context, n *model.Node) {
 			if back := a.backlinks(n.ID); len(back) > 0 {
 				ui.Text(c, fmt.Sprintf("被 %d 处链接", len(back))).FontSize(11).TextColor(t.TextMuted).Margin(4, 0, 0)
 				for i, b := range back {
-					row := ui.Row(c.Key(fmt.Sprint("back", i))).Gap(6).Cursor(ui.CursorPointer).Label("前往 " + b.title)
+					row := ui.Row(c.Key(fmt.Sprint("back", i))).Gap(6).Cursor(ui.CursorPointer).Label("前往 " + b.title).MinHeight(fingerRow()).AlignItems(ui.Center)
 					if row.Clicked() {
 						b := b
 						a.later(func() { a.goToBacklink(b) })

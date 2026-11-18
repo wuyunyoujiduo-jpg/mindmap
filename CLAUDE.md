@@ -406,7 +406,13 @@ by AI, and an AI assistant.
     window and part of the settings and fails on what runs past the
     screen, a word of a keyboard or a pointer, and what Android's back
     (Escape, then the Back key) does not go back from: a page or window
-    new to a phone is added to it.
+    new to a phone is added to it. `TestPhoneTaps` (MINDMAP_TAPS=1, the user's
+    "相关都排查下" after 更多 did nothing on the phone, 0.108.12) taps
+    every key of a phone's pages with a finger, motion on, and lists the
+    taps that changed nothing; what opens from a tap is drawn outside the
+    canvas, whose finger moves pan it (`phoneCanvasFoot` is
+    `canvasView`'s), and a small thing tapped has a finger's room
+    (`fingerRow`, `fingerPad`, `taskCheck`'s pad).
   - A tag is made where words are written, by #: in a topic's title too,
     offered under it as it is written and made one only when chosen (a
     click or Tab, `titleTagOffer`), else words of the title; on the

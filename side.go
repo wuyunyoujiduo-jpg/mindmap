@@ -60,6 +60,9 @@ func sideRowTrail(c *ui.Context, key, name, count string, on bool, lead, trail f
 	case row.Hovered():
 		row.Background(t.Text.Alpha(0.04))
 	}
+	if on && narrowLayout && row.Clicked() {
+		drawerChosenAgain = true // the drawer goes, as for another row (phoneDrawer)
+	}
 	row.Children(func() {
 		if lead != nil {
 			lead(on || row.Hovered())

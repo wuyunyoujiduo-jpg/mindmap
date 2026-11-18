@@ -533,7 +533,7 @@ func (a *app) mapMaterialSection(c *ui.Context) {
 			if len(thoughts) > 0 {
 				line(fmt.Sprintf("被 %d 条随记或资料提到", len(thoughts)))
 				for _, b := range thoughts {
-					row := ui.Row(c.Key("thought:" + b.clip)).Gap(6).Cursor(ui.CursorPointer).Label("前往 " + b.title)
+					row := ui.Row(c.Key("thought:" + b.clip)).Gap(6).Cursor(ui.CursorPointer).Label("前往 " + b.title).MinHeight(fingerRow()).AlignItems(ui.Center)
 					if row.Clicked() {
 						a.later(func() { a.showClip(b.clip) })
 					}

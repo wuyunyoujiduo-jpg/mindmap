@@ -115,6 +115,9 @@ func (a *app) phoneDrawer(c *ui.Context) {
 	if a.drawer {
 		a.drawerWas = now
 	}
+	if drawerChosenAgain { // the row of what the page shows, tapped: the drawer has done its work too
+		drawerChosenAgain, a.drawer = false, false
+	}
 	mobile.Drawer(c, &a.drawer, mobile.DrawerOptions{Width: drawerWidth}, func() {
 		// It is drawn over the system's bars: what it holds is under them.
 		top, _, bottom, _ := c.SafeArea()
@@ -124,6 +127,11 @@ func (a *app) phoneDrawer(c *ui.Context) {
 		})
 	})
 }
+
+// drawerChosenAgain is set by a row of the left column chosen already and
+// tapped: the drawer goes as for another, which it did not, the user's
+// tap doing nothing seen (0.108.11).
+var drawerChosenAgain bool
 
 // drawerWidth is the left column's width on a phone, wider than beside a
 // page: it is over the page, and a finger is broader than a pointer.
@@ -687,4 +695,21 @@ func phoneMenuLook() ui.PopoverMenuButtonOptions {
 		Panel: func(panel ui.Element) { panel.Radius(14).Padding(6).MinWidth(176) },
 		Item:  func(item ui.Element) { item.Padding(11, 14).Radius(10) },
 	}
+}
+
+// fingerRow is the least height of a small row that is tapped (a link's,
+// 前往 a topic) on a phone, and fingerPad what pads a small word tapped
+// to it: a row of 16 was a tap missed (the taps' sweep, 0.108.11).
+func fingerRow() float32 {
+	if narrowLayout {
+		return 36
+	}
+	return 0
+}
+
+func fingerPad() float32 {
+	if narrowLayout {
+		return 10
+	}
+	return 0
 }

@@ -302,7 +302,13 @@ func (a *app) taskCheck(c *ui.Context, n *model.Node, size float32) ui.Element {
 	if done {
 		tip, label = a.taskSummary(task)+"\n标为未完成", "取消完成 "+n.Title
 	}
-	b := ui.Box(c.Key("task-check")).Size(size, size).Shrink(0).Cursor(ui.CursorPointer).Label(label)
+	// On a phone it takes a finger's tap round it, its look the same:
+	// a box of 15 was a tap missed (the taps' sweep, 0.108.11).
+	pad := float32(0)
+	if narrowLayout {
+		pad = max((32-size)/2, 0)
+	}
+	b := ui.Box(c.Key("task-check")).Size(size+2*pad, size+2*pad).Margin(-pad).Shrink(0).Cursor(ui.CursorPointer).Label(label)
 	if a.mode != viewMap || a.libOpen {
 		// On the canvas, the tip's dark box would sit on the topic's, the
 		// central one's as dark: the panel says the state there.
@@ -322,6 +328,7 @@ func (a *app) taskCheck(c *ui.Context, n *model.Node, size float32) ui.Element {
 		})
 	}
 	b.Draw(func(p *ui.Painter, r ui.Rect) {
+		r = ui.Rect{X: r.X + pad, Y: r.Y + pad, W: r.W - 2*pad, H: r.H - 2*pad}
 		// The status's progress marker, as the markers draw it.
 		p.Fill(r, t.Background, r.W/2)
 		drawMarker(p, r, statusMarker(task.Status))

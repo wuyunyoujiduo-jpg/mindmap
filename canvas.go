@@ -354,7 +354,15 @@ func statusColor(s model.Status) ui.Color {
 // the tabs of the file's canvases.
 func (a *app) canvasView(c *ui.Context) {
 	ui.Column(c).Grow(1).ObserveInput(a.stepEnds).Children(func() {
-		a.canvasArea(c)
+		ui.Column(c.Key("canvas-room")).Grow(1).Basis(0).MinHeight(0).Children(func() {
+			a.canvasArea(c)
+			if narrowLayout {
+				// A phone's keys over the canvas, beside it and not in it:
+				// in it, under its finger's moves, 更多's menu showed a
+				// moment and went on the user's phone (0.108.11).
+				a.phoneCanvasFoot(c)
+			}
+		})
 		a.sheetTabs(c)
 	})
 }
@@ -614,8 +622,7 @@ func (a *app) canvasArea(c *ui.Context) {
 				a.nodeBar(c, r, depth)
 			}
 		}
-		if narrowLayout { // a phone's: the chosen topic's keys, and the way back to the middle (phone.go)
-			a.phoneCanvasFoot(c)
+		if narrowLayout { // a phone's keys are canvasView's, over the canvas (phoneCanvasFoot)
 			return
 		}
 		// Zoom and recenter, over the canvas's corner.

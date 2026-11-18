@@ -268,7 +268,7 @@ func (a *app) nodeRelatedSection(c *ui.Context, n *model.Node) {
 				clip := h.Clip
 				ui.Row(c.Key("nc" + clip.ID)).Gap(6).AlignItems(ui.Center).Children(func() {
 					ui.Box(c).Grow(1).Shrink(1).MinWidth(0).Children(func() { a.clipLink(c, clip) })
-					if ui.Link(c, "挂上", "").FontSize(11).Label("挂上 " + clip.Label()).Tooltip("把这条资料挂到主题上").Clicked() {
+					if ui.Link(c, "挂上", "").FontSize(11).Padding(fingerPad(), fingerPad()*0.6).Label("挂上 " + clip.Label()).Tooltip("把这条资料挂到主题上").Clicked() {
 						attach(clipScheme + clip.ID)
 					}
 				})
@@ -276,7 +276,7 @@ func (a *app) nodeRelatedSection(c *ui.Context, n *model.Node) {
 			for _, p := range nodes {
 				p := p
 				ui.Row(c.Key("nn" + p.id)).Gap(6).AlignItems(ui.Center).Children(func() {
-					row := ui.Row(c).Gap(6).Grow(1).Shrink(1).MinWidth(0).Cursor(ui.CursorPointer).Label("前往 " + p.title)
+					row := ui.Row(c).Gap(6).Grow(1).Shrink(1).MinWidth(0).Cursor(ui.CursorPointer).Label("前往 " + p.title).MinHeight(fingerRow()).AlignItems(ui.Center)
 					if row.Clicked() {
 						a.later(func() { a.goToNode(p.path, p.sheet, p.id) })
 					}
@@ -284,7 +284,7 @@ func (a *app) nodeRelatedSection(c *ui.Context, n *model.Node) {
 						ui.Text(c, "🔗").FontSize(12).Shrink(0)
 						ui.Text(c, p.title).FontSize(12).TextColor(t.Accent).MaxLines(1)
 					})
-					if ui.Link(c, "挂上", "").FontSize(11).Label("挂上 " + p.title).Tooltip("链接到另一张导图的这个主题").Clicked() {
+					if ui.Link(c, "挂上", "").FontSize(11).Padding(fingerPad(), fingerPad()*0.6).Label("挂上 " + p.title).Tooltip("链接到另一张导图的这个主题").Clicked() {
 						attach(a.nodeLinkTo(p.path, p.id))
 					}
 				})
@@ -365,7 +365,7 @@ func (a *app) clipPlacesSection(c *ui.Context, clip *library.Clip) {
 	}, func() {
 		ui.Column(c).Gap(4).Children(func() {
 			for i, b := range back {
-				row := ui.Row(c.Key(fmt.Sprint("cb", i))).Gap(6).Cursor(ui.CursorPointer).Label("前往 " + b.title)
+				row := ui.Row(c.Key(fmt.Sprint("cb", i))).Gap(6).Cursor(ui.CursorPointer).Label("前往 " + b.title).MinHeight(fingerRow()).AlignItems(ui.Center)
 				if row.Clicked() {
 					b := b
 					a.later(func() { a.goToNode(b.path, b.sheet, b.id) })
@@ -701,7 +701,7 @@ func (a *app) clipMentions(c *ui.Context, clip *library.Clip) {
 		ui.Text(c, head).FontSize(textCaption).TextColor(t.TextMuted)
 		for _, cl := range list {
 			id := cl.ID
-			row := ui.Row(c.Key(key + id)).Gap(6).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label("前往 " + cl.Label())
+			row := ui.Row(c.Key(key + id)).Gap(6).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label("前往 " + cl.Label()).MinHeight(fingerRow())
 			if row.Clicked() {
 				a.later(func() { a.libSel, a.libTagText = id, "" })
 			}
