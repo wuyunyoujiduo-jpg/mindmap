@@ -92,6 +92,11 @@ func TestPhonePages(t *testing.T) {
 	shot("map")
 	a.showView(viewOutline)
 	shot("outline")
+	a.showView(viewBoard)
+	shot("board")
+	if r, ok := tt.Find("访销订单详情页"); !ok || r.H > 40 { // a card's words a word a line, as once
+		t.Fatalf("the board's card: %+v %v", r, ok)
+	}
 	a.showView(viewMap)
 	a.panelSheet = true
 	shot("panel")

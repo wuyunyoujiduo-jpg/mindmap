@@ -264,7 +264,12 @@ https://claude.ai/artifact/5ySnmjspG48dmg8MpwcwLt.
   topic takes it up, its ghost under the finger, the topic it would go
   under outlined, and let go there it goes under it with 撤销
   (`carryTopic`): a long press is that, so the topic's menu is the bar's
-  ⋯ and the canvas has none. In the outline, a line written in has
+  ⋯ and the canvas has none. A map is placed with its center at the
+  screen's left, a step smaller (to 0.8) where it is wider than the
+  screen; its bar has no panel key (the topic's bar has 详情), and the
+  canvases' row shows only for two or more (a new one is 视图's). The
+  board's columns are a card's width each, swiped through
+  (`boardColumn`). In the outline, a line written in has
   its keys over the keyboard (`outlineKeys`: out, in, up, down, a task,
   完成).
 

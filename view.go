@@ -415,7 +415,8 @@ func (a *app) toolbar(c *ui.Context) {
 			if !a.panelOff {
 				tip = "收起主题面板"
 			}
-			if iconButton(c, iconPanel, "主题面板", tip, 30, true).Clicked() {
+			// Not on a phone: the topic's bar at the canvas's foot has 详情.
+			if !narrowLayout && iconButton(c, iconPanel, "主题面板", tip, 30, true).Clicked() {
 				a.togglePanel()
 			}
 			if narrowLayout && kubaiKey(c, "sparkles", "AI 助手", "问 AI：问问这张导图", a.aiOpen, false).Clicked() {
@@ -464,6 +465,13 @@ func (a *app) viewTabs(c *ui.Context, room float32) {
 			for _, v := range append(slices.Clone(mainViews), moreViews...) {
 				if m.Item(v.name).Checked(a.mode == v.mode).Chosen() {
 					a.showView(v.mode)
+				}
+			}
+			if narrowLayout && a.file != nil && len(a.file.Sheets) < 2 {
+				// A phone shows no canvases' row for one: the second is made here.
+				m.Separator()
+				if m.Item("新建画布").Chosen() {
+					a.later(a.addSheet)
 				}
 			}
 		}).Label("视图").Shrink(0)

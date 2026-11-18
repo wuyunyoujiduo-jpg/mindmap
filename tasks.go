@@ -85,7 +85,7 @@ func (a *app) boardColumns(c *ui.Context, tasks []model.TaskNode) {
 	t := c.Theme()
 	// Columns on the page itself, not in gray boxes: a heading over a
 	// hairline, then the cards; a column a task is dragged over tints.
-	ui.Row(c).Grow(1).Padding(14, 16).Gap(16).AlignItems(ui.Stretch).Children(func() {
+	cols := func() {
 		a.keyIssueColumn(c)
 		for _, s := range model.Statuses {
 			var col []model.TaskNode
@@ -95,7 +95,7 @@ func (a *app) boardColumns(c *ui.Context, tasks []model.TaskNode) {
 				}
 			}
 			// A hollow in the page, faintly of its state's color.
-			column := ui.Column(c.Key(string(s))).Grow(1).Basis(0).Radius(radiusCard).Padding(0, 6).Background(blockFill(t))
+			column := boardColumn(ui.Column(c.Key(string(s)))).Radius(radiusCard).Padding(0, 6).Background(blockFill(t))
 			if _, over := ui.DragOver[nodeDrag](column); over {
 				column.Background(statusColor(s).Alpha(0.08))
 			}
@@ -126,7 +126,17 @@ func (a *app) boardColumns(c *ui.Context, tasks []model.TaskNode) {
 				})
 			})
 		}
-	})
+	}
+	// On a phone the columns are a finger's swipe apart, each a card's
+	// width (boardColumn): side by side in its width they were a few
+	// characters wide, a word a line.
+	if narrowLayout {
+		ui.ScrollHorizontal(c.Key("board-scroll")).Grow(1).Children(func() {
+			ui.Row(c).FillHeight().Padding(12, 16).Gap(12).AlignItems(ui.Stretch).Children(cols)
+		})
+		return
+	}
+	ui.Row(c).Grow(1).Padding(14, 16).Gap(16).AlignItems(ui.Stretch).Children(cols)
 }
 
 func (a *app) boardList(s model.Status) *ui.ListState {
@@ -169,7 +179,7 @@ func (a *app) keyIssueColumn(c *ui.Context) {
 	t := c.Theme()
 	col := a.keyIssues()
 	red := ui.Hex("#D9605B")
-	column := ui.Column(c.Key("key-issues")).Grow(1).Basis(0).Radius(radiusCard).Background(t.Text.Alpha(0.04)).Padding(0, 6)
+	column := boardColumn(ui.Column(c.Key("key-issues"))).Radius(radiusCard).Background(t.Text.Alpha(0.04)).Padding(0, 6)
 	if _, over := ui.DragOver[nodeDrag](column); over {
 		column.Background(red.Alpha(0.08))
 	}
@@ -308,4 +318,13 @@ func dateRange(task *model.Task) string {
 		return "开始 " + task.Start.Format("1/2")
 	}
 	return ""
+}
+
+// boardColumn sizes a column of the board: a share of the page's width,
+// or on a phone a card's width, the columns swiped through.
+func boardColumn(col ui.Element) ui.Element {
+	if narrowLayout {
+		return col.Width(264).Shrink(0)
+	}
+	return col.Grow(1).Basis(0)
 }

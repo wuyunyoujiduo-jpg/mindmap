@@ -419,6 +419,18 @@ func (a *app) canvasArea(c *ui.Context) {
 			if a.drawnStructure() == model.StructureOrg {
 				cam.Y = max((a.vp.H-r.Height*z)/2, 60) // from the top
 			}
+			if narrowLayout && a.drawnStructure() == model.StructureLogic {
+				// A phone's: a step smaller where the map is wider than the
+				// screen, so that the topics after the main ones show, and
+				// its center at the screen's left edge, the map growing
+				// away from it (the user found it bare and cut, 0.108.4).
+				if r.Width*z > a.vp.W-24 {
+					cam.Zoom = max(0.8, min(1, (a.vp.W-24)/r.Width))
+					z = cam.Zoom
+				}
+				cam.X = 12 - root.X*z
+				cam.Y = a.vp.H/2 - (root.Y+root.H/2)*z
+			}
 			cam.placed, cam.placedAs = true, a.drawnStructure()
 		}
 		target := a.selected
@@ -692,6 +704,9 @@ func (a *app) canvasInput(ev ui.InputEvent) bool {
 // sheetTabs shows the canvases of the file as tabs: a click shows one, a
 // double click renames it, and its context menu copies, moves or deletes it.
 func (a *app) sheetTabs(c *ui.Context) {
+	if narrowLayout && len(a.file.Sheets) < 2 {
+		return // a phone's: no row for one canvas (a new one is 视图's, and the search's)
+	}
 	t := c.Theme()
 	ui.ScrollHorizontal(c.Key("sheets")).Background(t.Background).BorderWidth(1, 0, 0, 0).BorderColor(hairline(t)).Children(func() {
 		ui.Row(c).Padding(5, 10).Gap(2).AlignItems(ui.Center).Children(func() {
