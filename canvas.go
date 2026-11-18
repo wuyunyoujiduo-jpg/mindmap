@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/egoist/mygo/ui"
@@ -446,6 +447,12 @@ func (a *app) canvasArea(c *ui.Context) {
 		c.Invalidate() // lay out once more, with the canvas's size
 	}
 
+	if !exporting && a.pinchLayer(c, cam) {
+		cam = a.drawnCam
+		z = cam.Zoom
+		defer func() { a.drawnCam = nil }()
+	}
+
 	branch := map[string]int{}
 	a.summaryTopics = map[string]bool{}
 	shown.Walk(func(n, p *model.Node, _ int) bool {
@@ -551,6 +558,11 @@ func (a *app) canvasArea(c *ui.Context) {
 			a.drawSummaries(p, r, shown, rect.X+cam.X, rect.Y+cam.Y, z, color)
 			a.drawRelations(p, r, rect.X+cam.X, rect.Y+cam.Y, z, relations)
 		}
+		if s := a.layerS; s != 0 { // a pinch: the lines drawn as they were, scaled with the topics
+			drawn := lines
+			o := a.layerO
+			lines = func() { p.Transform(ui.Scaling(s, s).Then(ui.Translation(o[0], o[1])), rect.X, rect.Y, drawn) }
+		}
 		if exporting {
 			lines()
 		} else {
@@ -566,7 +578,7 @@ func (a *app) canvasArea(c *ui.Context) {
 			if !ok {
 				return
 			}
-			if !exporting && a.vp.W > 0 && n.ID != a.selected && n.ID != a.editing && !a.multi[n.ID] {
+			if !exporting && a.layerS == 0 && a.vp.W > 0 && n.ID != a.selected && n.ID != a.editing && !a.multi[n.ID] {
 				// Off the screen: not built, which a large map needs.
 				x, y := cam.X+box.X*z, cam.Y+box.Y*z
 				if x+box.W*z < -nodeCull || x > a.vp.W+nodeCull || y+box.H*z < -nodeCull || y > a.vp.H+nodeCull {
@@ -676,6 +688,12 @@ func (a *app) canvasInput(ev ui.InputEvent) bool {
 		a.pressAt = [2]float32{ev.X, ev.Y} // where the canvas's menu opens (canvasMenu)
 		return false
 	case ui.InputZoom: // two fingers pinching, on a phone (the Mac's trackpad: watchPinch)
+		if narrowLayout {
+			if !a.pinching {
+				a.pinchFrom, a.pinching = *cam, true // the pinch begins: its topics drawn as they are, scaled (pinchLayer)
+			}
+			a.pinchStep = true // its time is the frame's (pinchLayer)
+		}
 		if ev.Scale > 0 {
 			a.zoomBy(ev.Scale, ev.X, ev.Y, true)
 		}
@@ -824,6 +842,36 @@ func (a *app) commitEditIfAny() {
 	}
 }
 
+// pinchRest is how long after a pinch's last step it is over, and the
+// topics are laid out again at the size it left.
+const pinchRest = 150 * time.Millisecond
+
+// pinchLayer sets, while two fingers pinch a phone's map, the camera its
+// topics are drawn by (the one the pinch began with) and the scale and
+// shift that take that drawing to the camera now: the topics and their
+// lines scaled as one picture, whose text MyGo rasterizes at a few steps
+// of size, rather than every topic laid out again at each step of the
+// zoom, its text at a size of its own each frame, which the user saw
+// tremble (0.108.9). Laid out again pinchRest after.
+func (a *app) pinchLayer(c *ui.Context, cam *camera) bool {
+	a.layerS, a.drawnCam = 0, nil
+	if a.pinchStep {
+		a.pinchAt, a.pinchStep = c.Now(), false
+	}
+	if a.pinching && c.Now().Sub(a.pinchAt) >= pinchRest {
+		a.pinching = false
+	}
+	if !narrowLayout || !a.pinching || a.pinchFrom.Zoom <= 0 {
+		return false
+	}
+	from := a.pinchFrom
+	s := cam.Zoom / from.Zoom
+	a.layerS, a.layerO = s, [2]float32{cam.X - s*from.X, cam.Y - s*from.Y}
+	a.drawnCam = &from
+	c.After(pinchRest)
+	return true
+}
+
 // nodeView draws one node at its box.
 func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect, accent ui.Color) {
 	t := c.Theme()
@@ -838,6 +886,10 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 
 	el := ui.Row(c).Absolute().Left(cam.X+box.X*z).Top(cam.Y+box.Y*z).Size(box.W*z, box.H*z).
 		Padding(0, nodePadX*z).Gap(nodeGap * z).AlignItems(ui.Center).Radius(8 * z)
+	if sc := a.layerS; sc != 0 { // a pinch: as drawn when it began, scaled to the camera now (pinchLayer)
+		x, y := cam.X+box.X*z, cam.Y+box.Y*z
+		el.Transform(ui.Scaling(sc, sc).Then(ui.Translation(a.layerO[0]+(sc-1)*x, a.layerO[1]+(sc-1)*y))).TransformOrigin(0, 0)
+	}
 	iw, ih := thumbSize(n.Image)
 	if iw > 0 { // the title's row goes below the picture
 		el.Padding((nodePadY+ih+thumbGap)*z, nodePadX*z, nodePadY*z)

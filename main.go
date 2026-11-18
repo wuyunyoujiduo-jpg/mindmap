@@ -479,7 +479,7 @@ func main() {
 		a.tourStep = 1 // the first run
 	}
 	mygo.App.WhenReady(func() {
-		win := mygo.NewWindow(mygo.WindowOptions{
+		opts := mygo.WindowOptions{
 			Title:     "MyMind",
 			Width:     1280,
 			Height:    800,
@@ -491,7 +491,21 @@ func main() {
 			TitleBarStyle: mygo.TitleBarHiddenInset,
 			Vibrancy:      mygo.VibrancySidebar,
 			Content:       ui.View(a.view),
-		})
+		}
+		if onPhone {
+			// A phone's page, white or the dark's, under the surface until
+			// its first frame: Android makes the surface again as the app
+			// is come back to, and with no color it showed black a moment
+			// (the user's, 0.108.9).
+			opts.BackgroundColor = "light-dark(#FFFFFF, #1C1C1E)"
+			switch a.cfg.Appearance {
+			case "light":
+				opts.BackgroundColor = "#FFFFFF"
+			case "dark":
+				opts.BackgroundColor = "#1C1C1E"
+			}
+		}
+		win := mygo.NewWindow(opts)
 		plat.win = win
 		if !onPhone { // a phone has no shortcuts of the whole system, no screenshot of the app's, no tray
 			plat.desktopReady(a)

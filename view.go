@@ -30,6 +30,9 @@ func (a *app) view(c *ui.Context) {
 	}
 	groundKey = a.cfg.Ground
 	narrowLayout = a.narrow(c) // a phone's (phone.go)
+	if onPhone {               // the menus drawn in the app's look, not Android's gray list with its check boxes (the user's, 0.108.9)
+		c.SetMenuPresentation(ui.PopoverMenus)
+	}
 	t := quietTheme(c.Theme())
 	c.SetTheme(t)
 	a.lastTheme = t
@@ -429,6 +432,14 @@ func (a *app) toolbar(c *ui.Context) {
 			if !narrowLayout && iconButton(c, iconPanel, "主题面板", tip, 30, true).Clicked() {
 				a.togglePanel()
 			}
+			if narrowLayout { // a phone has no keys to undo with: two arrows, the user's (0.108.9)
+				if iconButton(c, iconUndo, "撤销", "撤销", 34, a.hist.CanUndo()).Clicked() {
+					a.later(a.undo)
+				}
+				if iconButton(c, iconRedo, "恢复", "恢复刚才撤销的", 34, a.hist.CanRedo()).Clicked() {
+					a.later(a.redo)
+				}
+			}
 			if narrowLayout && kubaiKey(c, "sparkles", "AI 助手", "问 AI：问问这张导图", a.aiOpen, false).Clicked() {
 				a.aiOpen = !a.aiOpen // a phone's map has no top row, whose spark this is
 			}
@@ -471,7 +482,7 @@ func (a *app) viewTabs(c *ui.Context, room float32) {
 				name = v.name
 			}
 		}
-		ui.MenuButton(c, name, func(m *ui.Menu) {
+		views := func(m *ui.Menu) {
 			for _, v := range append(slices.Clone(mainViews), moreViews...) {
 				if m.Item(v.name).Checked(a.mode == v.mode).Chosen() {
 					a.showView(v.mode)
@@ -484,7 +495,15 @@ func (a *app) viewTabs(c *ui.Context, room float32) {
 					a.later(a.addSheet)
 				}
 			}
-		}).Label("视图").Shrink(0)
+		}
+		if narrowLayout {
+			// A phone's: the app's key with a chevron, its menu drawn in the
+			// app's look, rows a finger's height: the system's button and
+			// Android's gray list of check boxes the user found ugly (0.108.9).
+			dropButton(c, "view-pick", name, "视图", "切换视图").PopoverMenuButton(views, phoneMenuLook())
+			return
+		}
+		ui.MenuButton(c, name, views).Label("视图").Shrink(0)
 		return
 	}
 	well(ui.Row(c.Key("view-tabs")).Padding(2).Gap(2).Radius(radiusPill).Shrink(0), t).Children(func() {

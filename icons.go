@@ -49,6 +49,8 @@ const (
 	iconLens    // the canvas's lenses: a circle, half of it filled
 	iconUp      // up: a chevron pointing up
 	iconDown    // down: a chevron pointing down
+	iconUndo    // undo: an arrow curving back to the left
+	iconRedo    // redo: the same, to the right
 )
 
 // glyph is an icon drawn in a box of the given side, as a piece of text.
@@ -92,6 +94,14 @@ func drawIcon(p *ui.Painter, r ui.Rect, s float32, ic icon, col ui.Color) {
 			k = -1
 		}
 		p.StrokePath(new(ui.Path).MoveTo(cx-h*0.55, cy+k*h*0.25).LineTo(cx, cy-k*h*0.3).LineTo(cx+h*0.55, cy+k*h*0.25), w*1.1, col)
+	case iconUndo, iconRedo:
+		k := float32(1) // undo's: the arrow at the left
+		if ic == iconRedo {
+			k = -1
+		}
+		p.StrokePath(new(ui.Path).MoveTo(cx+k*h*0.75, cy+h*0.6).
+			CubeTo(cx+k*h*0.75, cy-h*0.35, cx+k*h*0.05, cy-h*0.45, cx-k*h*0.7, cy-h*0.1), w*1.05, col)
+		p.StrokePath(new(ui.Path).MoveTo(cx-k*h*0.3, cy-h*0.5).LineTo(cx-k*h*0.72, cy-h*0.1).LineTo(cx-k*h*0.28, cy+h*0.25), w*1.05, col)
 	case iconSidebar, iconPanel:
 		p.StrokePath(roundedRect(cx-h*0.9, cy-h*0.7, h*1.8, h*1.4, h*0.28), w, col)
 		x := cx - h*0.3

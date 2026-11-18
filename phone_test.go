@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -437,5 +438,45 @@ func TestPhoneBack(t *testing.T) {
 	tt.Frame()
 	if !a.libOpen || a.place() != placeMaps {
 		t.Fatalf("back from a map opened from 项目: place %d", a.place())
+	}
+}
+
+// TestPhonePinchSteady: while two fingers pinch a phone's map its topics
+// are the picture they were, scaled (pinchLayer), and laid out again at
+// the size left once the pinch is over, in the same place.
+func TestPhonePinchSteady(t *testing.T) {
+	was := onPhone
+	onPhone = true
+	defer func() { onPhone = was }()
+	a, tt := newTestApp(t)
+	tt.SetSize(390, 844)
+	phoneSeed(t, a)
+	_ = a.open(filepath.Join(a.dir, model.FileName("ergora")))
+	for range 3 {
+		tt.Frame()
+	}
+	tt.Advance(time.Second)
+	tt.Frame()
+	before, ok := tt.Find("页面")
+	if !ok {
+		t.Fatal("no topic 页面")
+	}
+	z0 := a.cam().Zoom
+	tt.Pinch(100, 400, 1.3)
+	tt.Frame()
+	if a.layerS == 0 {
+		t.Fatal("a pinch laid the topics out again rather than scaling them")
+	}
+	during, _ := tt.Find("页面")
+	tt.Advance(time.Second)
+	tt.Frame()
+	tt.Frame()
+	after, _ := tt.Find("页面")
+	z := a.cam().Zoom
+	if a.layerS != 0 || z <= z0 {
+		t.Fatalf("after the pinch: scale %v, zoom %v from %v", a.layerS, z, z0)
+	}
+	if d := after.X - during.X; d > 2 || d < -2 || after.Y-during.Y > 2 || after.Y-during.Y < -2 {
+		t.Fatalf("the topic moved as the pinch ended: %+v then %+v (before %+v)", during, after, before)
 	}
 }

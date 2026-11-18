@@ -255,6 +255,13 @@ https://claude.ai/artifact/5ySnmjspG48dmg8MpwcwLt.
   screen on a phone (`aiFloat`). A window's width is `modalRoom`, its ✕
   `modalClose` (none on a phone, under ‹ 返回); a menu on a phone has no
   submenu, which Android lays out in its list, nor 在文件夹中显示.
+- **Menus are drawn in the app's look** on a phone (`SetMenuPresentation`
+  with PopoverMenus, `phoneMenuLook` for the views' `dropButton`): a
+  white card, a check by what is chosen, rows a finger's height; the
+  system's gray list of check boxes the user found ugly. A map's top bar
+  has ↶ ↷ (`iconUndo`, `iconRedo`). A pinch scales the topics as one
+  picture and lays them out again as it ends (`pinchLayer`): laid out at
+  each step, their text trembled.
 - **A sheet's focus is on itself**, not on its first field: MyGo moves
   the focus into a sheet as it rises, and a title taking it brought the
   keyboard up over what was to be read.

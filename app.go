@@ -539,36 +539,46 @@ type app struct {
 	orgResult             string
 	pluginSince           time.Time
 	pluginResult          string
-	copies                []*copyJob               // the files being copied into a map (copying)
-	syncChecking          bool                     // the sync's repository is being checked
-	syncByHand            bool                     // the sync going on was asked for: its result is said
-	pluginChecking        bool                     // a newer plugin is being looked for
-	noticeAct             string                   // the name of the notice's key, when not 撤销
-	noticeToasted         time.Time                // the notice shown as a toast already
-	noticeUndo            func()                   // what takes back what the notice says, if it can be
-	exportCam             *camera                  // set while the canvas is drawn into an image
-	tagDraft              string                   // a tag being typed in the node panel
-	tagFocus              int                      // frames left for the node panel's field of a new tag to take the focus
-	vids                  map[string]*vidPlayer    // the players of the videos shown (video.go)
-	vidFrame              int                      // the frames, for the players not shown to be closed
-	videoMuted            bool                     // the videos play without their sound
-	videoBig              string                   // the clip whose video plays larger, over the window
-	grabs                 []*frameGrab             // the videos whose pictures are being taken, the first being stepped
-	vidLens               map[string]time.Duration // the videos' lengths, as kept with their posters
-	vidPosterAsked        map[string]bool          // the videos whose poster was asked for in this run
-	vidPosterHas          map[string]bool          // the videos whose poster is in the cache
-	folds                 map[string]bool          // the folded parts opened (foldKey)
-	vidShots              map[string]vidShots      // the pictures taken of the videos, by clip
-	tagOffered            bool                     // the tags offered under a title being written show
-	tagCaret              string                   // the topic whose title field has its caret put back at its end, a tag taken
-	tagCaretTTL           int                      // frames left for tagCaret to find its field
-	tagDismissed          string                   // the #word whose offer was put away: field|word
-	tagAdding             bool                     // the sidebar's new-tag field is shown
-	tagNew                string
-	tagRenaming           string // the tag renamed in the sidebar
-	tagRenameText         string
-	confirmDelete         bool
-	deletePath            string
+	copies                []*copyJob // the files being copied into a map (copying)
+	syncChecking          bool       // the sync's repository is being checked
+	syncByHand            bool       // the sync going on was asked for: its result is said
+	pluginChecking        bool       // a newer plugin is being looked for
+	noticeAct             string     // the name of the notice's key, when not 撤销
+	noticeToasted         time.Time  // the notice shown as a toast already
+	noticeUndo            func()     // what takes back what the notice says, if it can be
+	exportCam             *camera    // set while the canvas is drawn into an image
+	// A pinch on a phone (pinchLayer): the camera it began with, when its
+	// last step came, the camera the topics are drawn by meanwhile, and the
+	// scale and shift that take that drawing to the camera's.
+	pinchFrom      camera
+	pinching       bool
+	pinchStep      bool // a step came since the last frame
+	pinchAt        time.Time
+	drawnCam       *camera
+	layerS         float32
+	layerO         [2]float32
+	tagDraft       string                   // a tag being typed in the node panel
+	tagFocus       int                      // frames left for the node panel's field of a new tag to take the focus
+	vids           map[string]*vidPlayer    // the players of the videos shown (video.go)
+	vidFrame       int                      // the frames, for the players not shown to be closed
+	videoMuted     bool                     // the videos play without their sound
+	videoBig       string                   // the clip whose video plays larger, over the window
+	grabs          []*frameGrab             // the videos whose pictures are being taken, the first being stepped
+	vidLens        map[string]time.Duration // the videos' lengths, as kept with their posters
+	vidPosterAsked map[string]bool          // the videos whose poster was asked for in this run
+	vidPosterHas   map[string]bool          // the videos whose poster is in the cache
+	folds          map[string]bool          // the folded parts opened (foldKey)
+	vidShots       map[string]vidShots      // the pictures taken of the videos, by clip
+	tagOffered     bool                     // the tags offered under a title being written show
+	tagCaret       string                   // the topic whose title field has its caret put back at its end, a tag taken
+	tagCaretTTL    int                      // frames left for tagCaret to find its field
+	tagDismissed   string                   // the #word whose offer was put away: field|word
+	tagAdding      bool                     // the sidebar's new-tag field is shown
+	tagNew         string
+	tagRenaming    string // the tag renamed in the sidebar
+	tagRenameText  string
+	confirmDelete  bool
+	deletePath     string
 }
 
 // clock is the time a new app starts with as now: the tests' own day, so
@@ -1417,6 +1427,9 @@ func (a *app) cam() *camera {
 	}
 	if a.exportCam != nil {
 		return a.exportCam
+	}
+	if a.drawnCam != nil {
+		return a.drawnCam
 	}
 	c := a.cams[a.doc.ID]
 	if c == nil {

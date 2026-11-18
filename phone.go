@@ -675,3 +675,12 @@ func (a *app) phoneBack(c *ui.Context) {
 		}
 	}
 }
+
+// phoneMenuLook is a menu's look on a phone, drawn in the window (view
+// sets every menu so): a card of the app's corners, rows a finger's height.
+func phoneMenuLook() ui.PopoverMenuButtonOptions {
+	return ui.PopoverMenuButtonOptions{
+		Panel: func(panel ui.Element) { panel.Radius(14).Padding(6).MinWidth(176) },
+		Item:  func(item ui.Element) { item.Padding(11, 14).Radius(10) },
+	}
+}
