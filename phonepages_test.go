@@ -88,7 +88,7 @@ func TestPhonePages(t *testing.T) {
 		t.Fatal("a clip on a phone is no page of its own")
 	}
 	a.libSel = ""
-	_ = a.open(a.files[0].Path)
+	_ = a.open(filepath.Join(a.dir, model.FileName("ergora"))) // not files[0]: maps written in one instant sort as they like
 	shot("map")
 	a.showView(viewOutline)
 	shot("outline")
