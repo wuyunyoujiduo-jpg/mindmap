@@ -80,6 +80,7 @@ func (a *app) view(c *ui.Context) {
 		})
 		if narrowLayout {
 			a.phoneDrawer(c)
+			a.phoneBack(c)
 		} else {
 			a.drawer = false
 		}

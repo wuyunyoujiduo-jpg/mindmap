@@ -390,6 +390,9 @@ func (a *app) phoneCanvasFoot(c *ui.Context) {
 		return
 	}
 	n, _ := a.selectedNode()
+	if n != nil {
+		a.phoneTopicMore(c, n)
+	}
 	bar := n != nil && a.editing == "" && len(a.multi) == 0 && !a.lensQuiet
 	foot := float32(16)
 	if bar {
@@ -438,14 +441,12 @@ func (a *app) phoneCanvasFoot(c *ui.Context) {
 				ui.Text(c, k.name).FontSize(textCaption - 1).TextColor(ink).PassThrough()
 			})
 		}
-		// The rest of what is done to a topic: its menu, which a pointer's
-		// other key opens on a desktop and a phone's long press cannot.
+		// The rest of what is done to a topic, in a sheet from the foot
+		// (phoneTopicMore): its menu, a desktop's, ran past the screen.
 		more := ui.Column(c.Key("更多")).Grow(1).Basis(0).Height(54).Gap(3).Radius(12).Center().Cursor(ui.CursorPointer).Label("更多")
-		depth := max(len(a.shownDoc().Path(n.ID))-1, 0) // as the canvas's bar takes it
-		if a.doc.IsFloating(n.ID) {
-			depth++
+		if more.Clicked() {
+			a.topicMore = true
 		}
-		more.Menu(func(m *ui.Menu) { a.nodeMenu(m, n, depth) })
 		press(more, 0.94)
 		more.Children(func() {
 			glyph(c, iconMore, 18, t.Text)
@@ -594,4 +595,76 @@ func phonePage(c *ui.Context, key string, open *bool, fn func()) ui.Element {
 // clip, read at length, as the draft has it.
 func (a *app) phoneCovered() bool {
 	return narrowLayout && a.libOpen && a.place() == placeCollect && !a.growShown() && a.lib.Find(a.libSel) != nil
+}
+
+// phoneTopicMore is a topic's 更多 on a phone: what its bar has not, as
+// a sheet of choices from the foot, its name at its head. The desktop's
+// menu, laid out by Android, put each submenu's every row in one list
+// past the screen's foot (the user's screenshot, 0.108.5).
+func (a *app) phoneTopicMore(c *ui.Context, n *model.Node) {
+	if !a.topicMore {
+		return
+	}
+	depth := max(len(a.shownDoc().Path(n.ID))-1, 0)
+	if a.doc.IsFloating(n.ID) {
+		depth++
+	}
+	do := func(fn func()) func() { return func() { a.later(fn) } }
+	acts := []mobile.Action{
+		{Label: "复制", OnTap: do(func() { a.copyNodes(false) })},
+		{Label: "剪切", Disabled: depth == 0, OnTap: do(func() { a.copyNodes(true) })},
+		{Label: "粘贴为子主题", OnTap: do(func() { a.paste() })},
+		{Label: "AI 拆解成任务", OnTap: do(a.aiBreakDown)},
+	}
+	if a.diaOf(n.ID) != nil {
+		acts = append(acts, mobile.Action{Label: "看图解", OnTap: do(func() { a.openDia(n.ID, "") })})
+	} else if diaWorth(n) {
+		acts = append(acts, mobile.Action{Label: "画成图解", OnTap: do(func() { a.drawDia(n.ID, "") })})
+	}
+	if depth > 0 {
+		acts = append(acts, mobile.Action{Label: "移到其他导图…", OnTap: do(func() { a.openPalette(paletteMove) })})
+	}
+	if a.shownRoot() == n && a.focusNode() != nil {
+		acts = append(acts, mobile.Action{Label: "退出聚焦", OnTap: do(func() { a.focusOn("") })})
+	} else if depth > 0 {
+		id := n.ID
+		acts = append(acts, mobile.Action{Label: "聚焦此分支", OnTap: do(func() { a.focusOn(id) })})
+	}
+	if len(n.Children) > 0 {
+		label := "折叠下级"
+		if n.Collapsed {
+			label = "展开下级"
+		}
+		id := n.ID
+		acts = append(acts, mobile.Action{Label: label, OnTap: do(func() { a.toggleCollapse(id) })})
+	}
+	acts = append(acts, mobile.Action{Label: "删除", Destructive: true, Disabled: depth == 0, OnTap: do(a.deleteSelection)})
+	mobile.ActionSheet(c, &a.topicMore, mobile.ActionSheetOptions{Title: n.Title, Cancel: "取消"}, acts...)
+}
+
+// phoneBack is Android's back on a phone where nothing open takes it
+// (MyGo hands it to Escape, then to the back key, and leaves the app when
+// neither is taken): a map goes back to the place it was opened from, a
+// clip's page to 收集. It left the app from a map (the user's, 0.108.5).
+func (a *app) phoneBack(c *ui.Context) {
+	if a.libOpen {
+		a.backTo = a.place() // where a map opened now is gone back to
+	}
+	switch {
+	case a.phoneCovered():
+		if c.Shortcut(0, ui.KeyBack) {
+			a.libSel = ""
+		}
+	case !a.libOpen && a.doc != nil && !a.presenting && a.editing == "":
+		if c.Shortcut(0, ui.KeyBack) {
+			to := a.backTo
+			a.later(func() {
+				if to == placeToday || to == placeCollect {
+					a.goPlace(to)
+					return
+				}
+				a.showProjects()
+			})
+		}
+	}
 }

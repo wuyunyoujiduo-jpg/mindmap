@@ -368,6 +368,10 @@ type app struct {
 	// it showed when it came, and a topic's panel over the canvas.
 	drawer, panelSheet bool
 	drawerWas          string
+	// topicMore is a topic's 更多 open on a phone (phoneTopicMore);
+	// backTo the place a map was opened from, which back goes to.
+	topicMore bool
+	backTo    int
 	// A finger panning a map's canvas (fingerPan): the frames counted,
 	// the last one it moved in, how fast, and the glide after a flick.
 	frameN, panSeen int

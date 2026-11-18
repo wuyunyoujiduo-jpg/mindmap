@@ -381,3 +381,42 @@ func TestPhoneSweep(t *testing.T) {
 	a.libReview = reviewDaily
 	shot("lib-review")
 }
+
+// TestPhoneBack: Android's back goes from a map to the place it was
+// opened from, and from a clip's page to 收集, rather than leaving the app;
+// a topic's 更多 is a sheet of choices.
+func TestPhoneBack(t *testing.T) {
+	a, tt := newTestApp(t)
+	tt.SetSize(390, 844)
+	a.goToday()
+	tt.Frame()
+	if err := a.open(a.files[0].Path); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Key(0, ui.KeyBack)
+	tt.Frame()
+	tt.Frame()
+	if !a.libOpen || a.place() != placeToday {
+		t.Fatalf("back from a map opened from 今天: place %d, in a map %v", a.place(), !a.libOpen)
+	}
+	a.showProjects()
+	tt.Frame()
+	_ = a.open(a.files[0].Path)
+	tt.Frame()
+	if err := tt.Click("更多"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !a.topicMore || !tt.HasText("粘贴为子主题") || tt.HasText("插入 › 外框") {
+		t.Fatalf("更多: %v %q", a.topicMore, tt.Texts())
+	}
+	a.topicMore = false
+	tt.Frame()
+	tt.Key(0, ui.KeyBack)
+	tt.Frame()
+	tt.Frame()
+	if !a.libOpen || a.place() != placeMaps {
+		t.Fatalf("back from a map opened from 项目: place %d", a.place())
+	}
+}
