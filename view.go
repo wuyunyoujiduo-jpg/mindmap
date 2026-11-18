@@ -27,6 +27,7 @@ func (a *app) view(c *ui.Context) {
 		c.DisableAnimations()
 	}
 	groundKey = a.cfg.Ground
+	narrowLayout = a.narrow(c) // a phone's (phone.go)
 	t := quietTheme(c.Theme())
 	c.SetTheme(t)
 	a.lastTheme = t
@@ -48,21 +49,20 @@ func (a *app) view(c *ui.Context) {
 			leaf(c, "leaf").Grow(1).Basis(0).MinHeight(0).Margin(0, 6, 6).Children(func() {
 				ui.Row(c.Key("columns")).Grow(1).Basis(0).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
 					if a.sideShown() {
-						switch a.place() {
-						case placeMaps:
-							a.mapTree(c)
-						case placeToday:
-							a.todaySide(c)
-						case placeSkills:
-							a.skillsSide(c)
-						default:
-							a.libSide(c)
-						}
+						a.sideColumn(c)
 					}
 					a.pageView(c)
 				})
 			})
+			if narrowLayout && !a.presenting {
+				a.phoneTabs(c) // the places, at the foot on a phone
+			}
 		})
+		if narrowLayout {
+			a.phoneDrawer(c)
+		} else {
+			a.drawer = false
+		}
 		if a.aiOpen && !a.presenting {
 			a.aiFloat(c)
 		}
@@ -147,7 +147,13 @@ func (a *app) pageView(c *ui.Context) {
 					a.canvasView(c)
 				}
 			})
-			if a.panelShown(c) {
+			if narrowLayout && a.panelShown(c) {
+				// Over the canvas, the way back over it (phone.go).
+				ui.Column(c.Key("panel-sheet")).Absolute().Left(0).Top(0).Right(0).Bottom(0).ZIndex(12).Background(cardColor(c.Theme())).Children(func() {
+					sheetBack(c, func() { a.panelSheet = false })
+					a.panel(c)
+				})
+			} else if a.panelShown(c) {
 				a.panelResizer(c)
 				a.panel(c)
 			}
@@ -392,6 +398,10 @@ func (a *app) toolbar(c *ui.Context) {
 // togglePanel shows the panel of the topic chosen, or puts it away, and
 // keeps which.
 func (a *app) togglePanel() {
+	if narrowLayout { // on a phone, over the canvas for a while, not kept
+		a.panelSheet = !a.panelSheet
+		return
+	}
 	a.panelOff = !a.panelOff
 	a.cfg.PanelOpen = !a.panelOff
 	a.cfg.save()
@@ -527,6 +537,9 @@ const panelMinCanvas = 420
 // panelShown tells whether the right panel shows: not turned off (⌥⌘I),
 // and with room for the map, unless the AI is asked.
 func (a *app) panelShown(c *ui.Context) bool {
+	if narrowLayout { // over the canvas, when asked for (phone.go)
+		return a.panelSheet && !a.libOpen && a.doc != nil
+	}
 	w, _ := c.Size()
 	if a.mode == viewDiagram && !a.libOpen && a.doc != nil && a.diaOf(a.dia.node) != nil {
 		// A diagram says in it where what is chosen comes from: it shows

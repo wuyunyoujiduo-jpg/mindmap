@@ -57,11 +57,19 @@ func pageColumn(c *ui.Context, key string, grow bool) ui.Element {
 	// It starts at the left column's line, on every page: a page's name
 	// stays where it is from a place to another, and the room left is on
 	// the right, where what is chosen opens.
-	col := ui.Column(c.Key(key)).FillWidth().MaxWidth(pageWidth+56).Padding(0, 28)
+	col := ui.Column(c.Key(key)).FillWidth().MaxWidth(pageWidth+56).Padding(0, pagePad())
 	if grow {
 		return col.Grow(1).Basis(0).MinHeight(0)
 	}
 	return col.Shrink(0)
+}
+
+// pagePad is the room at each side of a page: less on a phone's.
+func pagePad() float32 {
+	if narrowLayout {
+		return 16
+	}
+	return 28
 }
 
 // The inks, four and no more (DESIGN.md): the theme's Text for what is
@@ -120,8 +128,20 @@ func figures(c *ui.Context, fs ...figure) ui.Element {
 // right builds. 今天, 项目 and 收集 are headed so.
 func pageHead(c *ui.Context, key, title, sub string, fs []figure, right func()) {
 	t := c.Theme()
-	ui.Row(c.Key(key)).Padding(14, 0, 10).Gap(12).AlignItems(ui.End).Shrink(0).FillWidth().DragWindow().Children(func() {
-		ui.Column(c).Gap(6).Grow(1).Shrink(1).Basis(0).MinWidth(0).Children(func() {
+	line := ui.Row
+	if narrowLayout {
+		line = ui.Column // on a phone, what is at its right goes under it
+	}
+	head := line(c.Key(key)).Padding(14, 0, 10).Gap(12).AlignItems(ui.End).Shrink(0).FillWidth().DragWindow()
+	if narrowLayout {
+		head.AlignItems(ui.Stretch)
+	}
+	head.Children(func() {
+		name := ui.Column(c).Gap(6).Shrink(1).MinWidth(0)
+		if !narrowLayout {
+			name.Grow(1).Basis(0)
+		}
+		name.Children(func() {
 			ui.Row(c).Gap(10).AlignItems(ui.End).Children(func() {
 				ui.Text(c, title).FontSize(26).FontWeight(700).LetterSpacing(-0.7).LineHeight(1.2).NoWrap()
 				if sub != "" {
@@ -869,9 +889,18 @@ func modal(c *ui.Context, key string, open *bool, fn func()) ui.Element {
 
 // sheet is what is chosen, in a column at the leaf's right, a thin line
 // between it and the page: the page beside it stays as it is, so that
-// another row chosen shows in the same column.
-func sheet(c *ui.Context, key string, width float32, body func()) {
+// another row chosen shows in the same column. On a phone it covers the
+// page, under the way back to it, which close takes (phone.go).
+func sheet(c *ui.Context, key string, width float32, close func(), body func()) {
 	t := c.Theme()
+	if narrowLayout {
+		ui.Column(c.Key(key)).Absolute().Left(0).Top(0).Right(0).Bottom(0).ZIndex(12).Background(cardColor(t)).
+			Transition(ui.ElementTransition{Duration: motionSlow, Ease: easeDetent, Enter: &ui.Motion{X: 24}}).Children(func() {
+			sheetBack(c, close)
+			ui.Column(c.Key("body")).Grow(1).Basis(0).MinHeight(0).FillWidth().Children(body)
+		})
+		return
+	}
 	w, _ := c.Size()
 	ui.Column(c.Key(key)).Width(min(width, w*0.4)).Shrink(0).FillHeight().BorderWidth(0, 0, 0, 1).BorderColor(hairline(t)).
 		Transition(ui.ElementTransition{Duration: motionSlow, Ease: easeDetent, Enter: &ui.Motion{X: 24}}).Children(body)
@@ -919,8 +948,14 @@ func setRow(c *ui.Context, title, sub string, control func()) {
 // said under its name as it is written (wrong == "" for nothing).
 func setRowSays(c *ui.Context, title, sub, wrong string, control func()) {
 	t := c.Theme()
-	ui.Row(c.Key("row:"+title)).MinHeight(52).Padding(10, 0).Gap(16).AlignItems(ui.Center).FillWidth().Children(func() {
-		ui.Column(c).Gap(2).Grow(1).Shrink(1).Basis(0).MinWidth(0).Children(func() {
+	row := ui.Row(c.Key("row:"+title)).MinHeight(52).Padding(10, 0).Gap(16).AlignItems(ui.Center).FillWidth()
+	name := float32(0)
+	if narrowLayout { // on a phone, what sets it goes under its name where it has no room beside it
+		row.Wrap()
+		name = 150
+	}
+	row.Children(func() {
+		ui.Column(c).Gap(2).Grow(1).Shrink(1).Basis(name).MinWidth(0).Children(func() {
 			ui.Text(c, title).FontSize(textBody) // a row's name is read, not shouted: regular, its word under it muted
 			switch {
 			case wrong != "":

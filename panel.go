@@ -28,7 +28,13 @@ func (a *app) panel(c *ui.Context) {
 	t := c.Theme()
 	// The topic's page. The AI is not here: it floats over the window
 	// (aiFloat), and takes no room from any page.
-	ui.Column(c).Width(a.panelWidth).FillHeight().Background(t.Background).ObserveInput(a.stepEnds).Children(func() {
+	col := ui.Column(c).FillHeight().Background(t.Background).ObserveInput(a.stepEnds)
+	if narrowLayout {
+		col.Grow(1).Basis(0).MinHeight(0).FillWidth() // the page's, over it (phone.go)
+	} else {
+		col.Width(a.panelWidth)
+	}
+	col.Children(func() {
 		if a.mode == viewDiagram && a.doc != nil && a.diaOf(a.dia.node) != nil {
 			// A diagram's column: where what is chosen in it comes from.
 			ui.Row(c.Key("panel-head")).Height(20).Shrink(0).DragWindow()

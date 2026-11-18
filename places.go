@@ -66,7 +66,6 @@ func (a *app) sideWidth() float32 {
 // then the AI's key, the screenshot's, the search of everything and the
 // settings. It is the window's title bar, and drags it.
 func (a *app) topBar(c *ui.Context) {
-	t := c.Theme()
 	bar := c.TitleBar()
 	now := a.place()
 	ui.Row(c.Key("top-bar")).Height(toolbarHeight).Padding(0, max(10, bar.Right), 0, max(12, bar.Left+6)).Gap(10).AlignItems(ui.Center).
@@ -75,40 +74,19 @@ func (a *app) topBar(c *ui.Context) {
 		if a.cfg.HideTree {
 			side = "显示侧栏"
 		}
-		if kubaiKey(c, "sidebar", side, side, false, true).Clicked() {
+		switch {
+		case narrowLayout: // on a phone, over the page (phoneDrawer)
+			if kubaiKey(c, "sidebar", "侧栏", "侧栏", a.drawer, true).Clicked() {
+				a.drawer = !a.drawer
+			}
+		case kubaiKey(c, "sidebar", side, side, false, true).Clicked():
 			a.cfg.HideTree = !a.cfg.HideTree
 			a.cfg.save()
 		}
-		well(ui.Row(c.Key("places")).Padding(2).Gap(2).Radius(radiusPill).Shrink(0).Label("位置"), t).Children(func() {
-			part := func(p int, name, tip string, click func()) {
-				on := p == now
-				b := ui.Box(c.Key("place:"+name)).Height(30).Padding(0, 16).Radius(radiusPill - 2).Center().Cursor(ui.CursorPointer).
-					Label(name).Tooltip(tip).Background(t.Text.Alpha(0)).Transition(easeLook)
-				if !on && b.Hovered() {
-					b.Background(t.Text.Alpha(0.05))
-				}
-				if b.Clicked() {
-					a.later(click)
-				}
-				press(b, 0.97)
-				b.Children(func() {
-					if on {
-						slidePill(c, "places", radiusPill-2)
-						b.ZIndex(-1) // under the others, which the pill slides behind
-					}
-					txt := ui.Text(c, name).FontSize(textBody).PassThrough()
-					if on {
-						txt.FontWeight(700)
-					} else {
-						txt.TextColor(t.TextMuted)
-					}
-				})
-			}
-			part(placeToday, "今天", "今天要做的，和刚记下的（"+keyLabel("CmdOrCtrl+Alt+1")+"）", a.goToday)
-			part(placeMaps, "项目", "导图：一张就是一个项目（"+keyLabel("CmdOrCtrl+Alt+2")+"）", a.showProjects)
-			part(placeCollect, "收集", "灵感、链接、文档和图片（"+keyLabel("CmdOrCtrl+Alt+3")+"）", a.goCollect)
-			part(placeSkills, "技能", "各个 AI 编程工具的技能：在哪、收进来、链接、同步（"+keyLabel("CmdOrCtrl+Alt+4")+"）", a.showSkills)
-		})
+		// On a phone the places are at the window's foot (phoneTabs).
+		if !narrowLayout {
+			a.placesTrack(c, now)
+		}
 		// The places and the bar by the keyboard, from every page (the
 		// menu 前往 has them too, and takes the keys first where there is
 		// one). ⌘1–3 are the views of a map and ⌘K the commands: these are
@@ -130,8 +108,9 @@ func (a *app) topBar(c *ui.Context) {
 		if kubaiKey(c, "sparkles", "AI 助手", "问 AI：问问导图和资料里的内容", a.aiOpen, false).Clicked() {
 			a.aiOpen = !a.aiOpen
 		}
-		// A screenshot is taken from any page, of any app: its key is here.
-		if kubaiKey(c, "scan", "截图", "截图：框选屏幕、标注后存到收集（"+keyLabel(a.shotKey())+"）", false, true).Clicked() {
+		// A screenshot is taken from any page, of any app: its key is here
+		// (not on a phone, whose system takes them).
+		if !onPhone && kubaiKey(c, "scan", "截图", "截图：框选屏幕、标注后存到收集（"+keyLabel(a.shotKey())+"）", false, true).Clicked() {
 			a.later(a.screenshot)
 		}
 		if kubaiKey(c, "search", "搜索全部", "搜索导图、主题、灵感和资料，#标签 按标签找", false, true).Clicked() {
@@ -140,6 +119,42 @@ func (a *app) topBar(c *ui.Context) {
 		if kubaiKey(c, "settings", "设置", "设置", false, true).Clicked() {
 			a.later(a.openSettings)
 		}
+	})
+}
+
+// placesTrack is the switch of the places in the top row: a track with
+// a pill under the one shown.
+func (a *app) placesTrack(c *ui.Context, now int) {
+	t := c.Theme()
+	well(ui.Row(c.Key("places")).Padding(2).Gap(2).Radius(radiusPill).Shrink(0).Label("位置"), t).Children(func() {
+		part := func(p int, name, tip string, click func()) {
+			on := p == now
+			b := ui.Box(c.Key("place:"+name)).Height(30).Padding(0, 16).Radius(radiusPill - 2).Center().Cursor(ui.CursorPointer).
+				Label(name).Tooltip(tip).Background(t.Text.Alpha(0)).Transition(easeLook)
+			if !on && b.Hovered() {
+				b.Background(t.Text.Alpha(0.05))
+			}
+			if b.Clicked() {
+				a.later(click)
+			}
+			press(b, 0.97)
+			b.Children(func() {
+				if on {
+					slidePill(c, "places", radiusPill-2)
+					b.ZIndex(-1) // under the others, which the pill slides behind
+				}
+				txt := ui.Text(c, name).FontSize(textBody).PassThrough()
+				if on {
+					txt.FontWeight(700)
+				} else {
+					txt.TextColor(t.TextMuted)
+				}
+			})
+		}
+		part(placeToday, "今天", "今天要做的，和刚记下的（"+keyLabel("CmdOrCtrl+Alt+1")+"）", a.goToday)
+		part(placeMaps, "项目", "导图：一张就是一个项目（"+keyLabel("CmdOrCtrl+Alt+2")+"）", a.showProjects)
+		part(placeCollect, "收集", "灵感、链接、文档和图片（"+keyLabel("CmdOrCtrl+Alt+3")+"）", a.goCollect)
+		part(placeSkills, "技能", "各个 AI 编程工具的技能：在哪、收进来、链接、同步（"+keyLabel("CmdOrCtrl+Alt+4")+"）", a.showSkills)
 	})
 }
 

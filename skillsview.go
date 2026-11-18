@@ -562,7 +562,7 @@ func (a *app) skillsPage(c *ui.Context) {
 	ui.Row(c.Key("skills-page")).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Stretch).Label("技能").Children(func() {
 		ui.Column(c).Grow(1).Basis(0).MinWidth(0).Children(func() {
 			ui.Scroll(c.Key("skills-scroll")).Grow(1).Basis(0).MinHeight(0).Children(func() {
-				pageColumn(c, "skills-column", false).MaxWidth(1036).Padding(0, 28, 40).Gap(6).Children(func() {
+				pageColumn(c, "skills-column", false).MaxWidth(1036).Padding(0, pagePad(), 40).Gap(6).Children(func() {
 					sub := ""
 					var fs []figure
 					if r := a.skills.report; r != nil {
@@ -1328,7 +1328,7 @@ func (a *app) skillsSheet(c *ui.Context) {
 		return
 	}
 	if e := r.Entry(a.skills.sel); e != nil {
-		sheet(c, "skill-sheet", 380, func() { a.skillDetail(c, e) })
+		sheet(c, "skill-sheet", 380, func() { a.skills.sel = "" }, func() { a.skillDetail(c, e) })
 	}
 }
 

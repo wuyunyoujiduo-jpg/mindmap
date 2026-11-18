@@ -19,13 +19,15 @@ import (
 const sideWidthOf = 228
 
 // sideShown tells whether the left column shows.
-func (a *app) sideShown() bool { return !a.cfg.HideTree && !a.presenting }
+// On a phone it is over the page when shown (phoneDrawer), and takes no
+// room from it.
+func (a *app) sideShown() bool { return !a.cfg.HideTree && !a.presenting && !narrowLayout }
 
 // sidePane is the left column: what body builds, which scrolls, over what
 // foot builds, if anything.
 func (a *app) sidePane(c *ui.Context, key string, body, foot func()) {
 	t := c.Theme()
-	ui.Column(c.Key(key)).Width(sideWidthOf).Shrink(0).FillHeight().BorderWidth(0, 1, 0, 0).BorderColor(hairline(t)).Children(func() {
+	ui.Column(c.Key(key)).Width(sideWidthNow()).Shrink(0).FillHeight().BorderWidth(0, 1, 0, 0).BorderColor(hairline(t)).Children(func() {
 		ui.Scroll(c.Key("scroll")).Grow(1).Children(func() {
 			ui.Column(c.Key("list")).Padding(10, 8, 14).Gap(1).FillWidth().Children(body)
 		})

@@ -77,6 +77,12 @@ jobs:
       # only now and then.
       - run: GOOS=darwin GOARCH=arm64 go build -o /dev/null .
       - run: GOOS=windows go build -o /dev/null .
+      # And for Android phones (MyGo 0.10), which link with the NDK's clang
+      # (cgo); the runner has an NDK.
+      - name: Vet for Android
+        run: |
+          ndk=$(ls -d "$ANDROID_NDK_LATEST_HOME"/toolchains/llvm/prebuilt/*/bin)
+          GOOS=android GOARCH=arm64 CGO_ENABLED=1 CC="$ndk/aarch64-linux-android26-clang" go vet ./...
       # The embedding model, made by the Embedding model workflow, and
       # what Model2Vec gives, which the tests compare against.
       - name: Get the embedding model
@@ -253,3 +259,86 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
         run: bash .github/publish-updates.sh build/windows-amd64
+
+  # The Android app (MyGo 0.10, phone.go): an .apk for arm64 phones, which
+  # every phone of these years is, kept as an artifact of the run. Signed
+  # by the upload key of the environment mymind's secrets:
+  #   ANDROID_KEYSTORE           the keystore (.jks), in base64
+  #   ANDROID_KEYSTORE_PASSWORD  its password, which is the key's too
+  #   ANDROID_KEY_ALIAS          the key's alias
+  # Without them, by a debug key made anew on each runner: a phone takes
+  # that package over the one installed only once the app is uninstalled.
+  android:
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: mymind
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools platforms;android-36 ndk;27.1.12297006 cmake;3.22.1
+      - name: Set up signing
+        env:
+          ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE" ]; then
+            echo "::warning::没有 ANDROID_KEYSTORE：安装包用这台机器临时的调试密钥签名，手机上要先卸载旧版才能装上它。"
+            exit 0
+          fi
+          echo "$ANDROID_KEYSTORE" | base64 --decode > "$RUNNER_TEMP/upload.jks"
+          jq --arg ks "$RUNNER_TEMP/upload.jks" --arg alias "$ANDROID_KEY_ALIAS" \
+            '.android.keystore = $ks | .android.keyAlias = $alias' mygo.json > mygo.signed.json
+          mv mygo.signed.json mygo.json
+      - name: Build MyMind for Android
+        env:
+          MYGO_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          MYGO_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          go tool mygo build -platform android/arm64
+          ls -l build/android
+      - uses: actions/upload-artifact@v7
+        with:
+          name: MyMind-Android
+          path: build/android/*.apk
+
+  # A release's Android package: on the release the macOS job publishes,
+  # and on mindmap-models' desktop-latest as MyMind.apk, the address the
+  # app's settings give on a phone (phone.go's apkURL), Android having no
+  # updater; prune-updates.sh leaves what is no archive nor delta.
+  android-publish:
+    needs: [macos, android]
+    if: startsWith(github.ref, 'refs/tags/') || inputs.release
+    runs-on: ubuntu-latest
+    environment: mymind
+    permissions:
+      contents: write # adding the package to the release
+    env:
+      RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: MyMind-Android
+          path: android
+      - name: Add the package to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v$(jq -r .version mygo.json)"
+          gh release upload "$tag" android/*.apk --repo "$GITHUB_REPOSITORY" --clobber
+      - name: Publish it where the phones look
+        if: env.RELEASES_TOKEN != ''
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+        run: |
+          cp android/*.apk "$RUNNER_TEMP/MyMind.apk"
+          gh release upload desktop-latest "$RUNNER_TEMP/MyMind.apk" --repo "$UPDATES_REPO" --clobber

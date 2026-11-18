@@ -1,8 +1,15 @@
 {
   "name": "MyMind",
   "identifier": "com.wuyunyoujiduo.mindmap",
-  "version": "0.106.2",
+  "version": "0.107.0",
   "out": "build",
+  "android": {
+    "adaptiveIcon": {
+      "foreground": "resources/android-foreground.png",
+      "background": "#5B5BD6"
+    },
+    "splash": "#F5F5F7"
+  },
   "updates": {
     "publicKey": "QiqxcF4IRxoXZeYeRcxscPP0HCto8pGMHvdFqvDtx/A=",
     "url": "https://github.com/wuyunyoujiduo-jpg/mindmap-models/releases/download/desktop-latest"

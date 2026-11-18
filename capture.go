@@ -777,14 +777,30 @@ func (a *app) settingsView(c *ui.Context) {
 			tabs = append(tabs, "当前导图")
 		}
 		a.settingsTab = min(a.settingsTab, len(tabs)-1)
-		// The parts on the left, as a list; the one chosen on the right.
-		ui.Row(c).Gap(22).Width(min(820, w-80)).AlignItems(ui.Start).Children(func() {
-			ui.Column(c.Key("settings-tabs")).Width(160).Shrink(0).Gap(2).Children(func() {
-				ui.Text(c, "设置").FontSize(26).FontWeight(700).LetterSpacing(-0.7).Margin(0, 12, 14)
+		// The parts on the left, as a list; the one chosen on the right. On
+		// a phone the parts are over it, a few to a line (phone.go).
+		outer, room := ui.Row, min(820, w-80)
+		if narrowLayout {
+			outer, room = ui.Column, w-80
+		}
+		outer(c).Gap(22).Width(room).AlignItems(ui.Start).Children(func() {
+			var list ui.Element
+			if narrowLayout {
+				list = ui.Row(c.Key("settings-tabs")).Wrap().FillWidth().Gap(2)
+			} else {
+				list = ui.Column(c.Key("settings-tabs")).Width(160).Shrink(0).Gap(2)
+			}
+			list.Children(func() {
+				if !narrowLayout {
+					ui.Text(c, "设置").FontSize(26).FontWeight(700).LetterSpacing(-0.7).Margin(0, 12, 14)
+				}
 				for i, name := range tabs {
 					on := i == a.settingsTab
 					row := ui.Row(c.Key("settings-tab:"+name)).Height(36).Padding(0, 10).Gap(10).Radius(radiusRow).AlignItems(ui.Center).
-						FillWidth().Cursor(ui.CursorPointer).Label(name).Background(t.Text.Alpha(0)).Transition(easeLook)
+						Cursor(ui.CursorPointer).Label(name).Background(t.Text.Alpha(0)).Transition(easeLook)
+					if !narrowLayout {
+						row.FillWidth()
+					}
 					hot := on || row.Hovered()
 					if !on && hot {
 						row.Background(t.Text.Alpha(0.05))
@@ -809,7 +825,13 @@ func (a *app) settingsView(c *ui.Context) {
 					})
 				}
 			})
-			ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(10).Children(func() {
+			page := ui.Column(c).Gap(10)
+			if narrowLayout {
+				page.FillWidth()
+			} else {
+				page.Grow(1).Basis(0).MinWidth(0)
+			}
+			page.Children(func() {
 				ui.Row(c).AlignItems(ui.Center).Children(func() {
 					ui.Text(c, tabs[a.settingsTab]).FontSize(textTitle).FontWeight(700).Grow(1)
 					if iconButton(c, iconClose, "关闭", "关闭", 28, true).Clicked() {
@@ -882,9 +904,12 @@ func switchRow(c *ui.Context, on *bool, label, text string, changed func()) {
 	})
 }
 
-// generalSettings are the shortcuts, the menu bar icon and the reminders.
-func (a *app) generalSettings(c *ui.Context) {
-	a.groundSettings(c) // how it looks, first: it is what is looked for here
+// shortcutSettings are the shortcuts that work in any app: none on a
+// phone, which has none.
+func (a *app) shortcutSettings(c *ui.Context) {
+	if onPhone {
+		return
+	}
 	rowsField(c, "全局快捷键", "在任何应用里都能用。点一个快捷键，再按下新的组合键。", func() {
 		rows := []struct {
 			name, title, what, value, def string
@@ -912,6 +937,12 @@ func (a *app) generalSettings(c *ui.Context) {
 			})
 		}
 	})
+}
+
+// generalSettings are the shortcuts, the menu bar icon and the reminders.
+func (a *app) generalSettings(c *ui.Context) {
+	a.groundSettings(c) // how it looks, first: it is what is looked for here
+	a.shortcutSettings(c)
 	rowsField(c, "日历", "", func() {
 		setRow(c, "每周从哪天开始", "日程的周视图、月视图和本周回顾", func() {
 			chosen := 0

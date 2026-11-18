@@ -21,7 +21,7 @@ func (a *app) treeShown() bool { return a.sideShown() && a.place() == placeMaps 
 // the folder the maps are all kept in and how the sync goes.
 func (a *app) mapTree(c *ui.Context) {
 	t := c.Theme()
-	side := ui.Column(c.Key("map-tree")).Width(sideWidthOf).Shrink(0).FillHeight().BorderWidth(0, 1, 0, 0).BorderColor(hairline(t))
+	side := ui.Column(c.Key("map-tree")).Width(sideWidthNow()).Shrink(0).FillHeight().BorderWidth(0, 1, 0, 0).BorderColor(hairline(t))
 	side.Children(func() {
 		a.sideDrawn, a.sideItems = a.sideItems, nil // the keys go by the list drawn
 		ui.Scroll(c.Key("tree-scroll")).Grow(1).Children(func() {
@@ -144,7 +144,7 @@ func (a *app) treeRow(c *ui.Context, depth int, name, count, path string, on boo
 			a.renameInput(c)
 			return
 		}
-		txt := ui.Text(c, midEllipsis(name, sideWidthOf-96-float32(depth)*14)).FontSize(textSmall + 0.5).Grow(1).Shrink(1).MinWidth(0).SingleLine().PassThrough()
+		txt := ui.Text(c, midEllipsis(name, sideWidthNow()-96-float32(depth)*14)).FontSize(textSmall + 0.5).Grow(1).Shrink(1).MinWidth(0).SingleLine().PassThrough()
 		if on {
 			txt.FontWeight(700)
 		}

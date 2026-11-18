@@ -30,14 +30,14 @@ func (a *app) libraryView(c *ui.Context) {
 			})
 			if a.growShown() {
 				// A branch being grown of the tag chosen, in the clip's place.
-				sheet(c, "grow-sheet", 420, func() {
+				sheet(c, "grow-sheet", 420, a.closeGrow, func() {
 					ui.Scroll(c.Key("grow:"+a.collect.grow.tag)).Grow(1).Basis(0).Padding(18, 18, 24).Gap(12).Children(func() {
 						a.growSheet(c)
 					})
 				})
 			} else if sel != nil {
 				// The clip chosen, in a column at the page's right.
-				sheet(c, "clip-sheet", 420, func() {
+				sheet(c, "clip-sheet", 420, func() { a.libSel = "" }, func() {
 					ui.Scroll(c.Key("clip-detail:"+sel.ID)).Grow(1).Basis(0).Padding(14, 18, 20).Gap(12).Children(func() {
 						a.clipDetail(c, sel)
 					})

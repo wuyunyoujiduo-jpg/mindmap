@@ -347,65 +347,69 @@ type app struct {
 	outlineFocusWas           string                   // the focus a frame before: a line it goes to is scrolled to
 
 	// The library of clips.
-	lib           *library.Library
-	libOpen       bool   // the main area shows the library
-	libSel        string // the clip shown
-	libQuery      string
-	libKind       int               // kindAll, kindMaps, kindDocs or kindLinks
-	barOpen       bool              // the one bar is open, a card to write in (bar.go)
-	barKind       int               // what the bar keeps its words as, chosen by hand: barAuto, barATask, barThought
-	keptLast      string            // the clip last left in 收集 from what waits: said there, with the way back
-	projOpen      bool              // 项目, the maps by folder, is the page shown (places.go)
-	projFolder    string            // the folder whose maps 项目 shows: all of them when empty
-	writeRefocus  string            // the card to write in that takes the focus back, after a tool of its was clicked
-	writeRefs     map[string]string // the notes referred to in a draft: the @name written, the clip's ID
-	noMotion      bool              // nothing animates: the tests look at where things end
-	homeDraft     string            // what is typed in 今天's line: a note of 灵感, or a task
-	libDay        time.Time         // the day the list shows, from 概览's dots; zero for any
-	panelOff      bool              // the right panel is hidden
-	sideItems     []string          // the list's maps, in order
-	sideDrawn     []string          // as the frame before drew them
-	sideFocus     string            // "side" while the sidebar has the keys
-	libCat        string            // the category shown, "" all
-	libTag        string            // the tag shown, "" all
-	libQueue      []clipJob
-	libWorking    string            // the clip being read or sorted out
-	libStatus     map[string]string // what is happening to clips, or went wrong
-	libErr        string
-	libNeedKey    string    // the clip whose organizing waits on an API key
-	libMod        time.Time // of the clips folder, as last read or written
-	libTagText    string    // a tag being typed for the clip shown
-	libSynText    string    // the synonyms of the clip libSynFor, as edited
-	libSynFor     string
-	libSynEditing bool
-	libConfirm    bool // deleting the clip shown is being confirmed
-	fetchPage     fetchPager
-	embed         embedFunc
-	qvecs         map[string][]float32 // the vectors of queries, by query
-	qPending      map[string]bool      // queries whose vectors are being made
-	embedBusy     bool                 // clips' vectors are being made
-	embedErr      string               // why making vectors failed, which stops it until the settings change
-	libQueryAt    time.Time            // when the library's search was last typed in
-	libHitsFor    libHitsKey           // what libHitsList was found for
-	libHitsList   []library.Hit
-	relatedFor    string // the clip and library version relatedList is of
-	relatedList   []library.Hit
-	dupe          bool // the last clip kept was kept before
-	backupBusy    bool
-	backupErr     string
-	embedDrafts   [3]string // the settings' fields of the embedding model: address, key, model
-	embedTest     string    // how testing the embedding model went
-	noLocalModel  bool      // tests leave the built-in model out
-	pluginBusy    bool
-	pluginErr     string
-	pluginNote    string
-	pluginDone    int64 // bytes downloaded of pluginSize
-	pluginSize    int64
-	pluginCancel  context.CancelFunc
-	pluginGet     pluginGetter
-	nameTitle     string // the central topic the open map's name was given after
-	dirID         fileID
-	recordingKey  string // the shortcut being recorded, by its label
+	lib          *library.Library
+	libOpen      bool   // the main area shows the library
+	libSel       string // the clip shown
+	libQuery     string
+	libKind      int               // kindAll, kindMaps, kindDocs or kindLinks
+	barOpen      bool              // the one bar is open, a card to write in (bar.go)
+	barKind      int               // what the bar keeps its words as, chosen by hand: barAuto, barATask, barThought
+	keptLast     string            // the clip last left in 收集 from what waits: said there, with the way back
+	projOpen     bool              // 项目, the maps by folder, is the page shown (places.go)
+	projFolder   string            // the folder whose maps 项目 shows: all of them when empty
+	writeRefocus string            // the card to write in that takes the focus back, after a tool of its was clicked
+	writeRefs    map[string]string // the notes referred to in a draft: the @name written, the clip's ID
+	noMotion     bool              // nothing animates: the tests look at where things end
+	homeDraft    string            // what is typed in 今天's line: a note of 灵感, or a task
+	libDay       time.Time         // the day the list shows, from 概览's dots; zero for any
+	panelOff     bool              // the right panel is hidden
+	// On a phone (phone.go): the left column slid in over the page, what
+	// it showed when it came, and a topic's panel over the canvas.
+	drawer, panelSheet bool
+	drawerWas          string
+	sideItems          []string // the list's maps, in order
+	sideDrawn          []string // as the frame before drew them
+	sideFocus          string   // "side" while the sidebar has the keys
+	libCat             string   // the category shown, "" all
+	libTag             string   // the tag shown, "" all
+	libQueue           []clipJob
+	libWorking         string            // the clip being read or sorted out
+	libStatus          map[string]string // what is happening to clips, or went wrong
+	libErr             string
+	libNeedKey         string    // the clip whose organizing waits on an API key
+	libMod             time.Time // of the clips folder, as last read or written
+	libTagText         string    // a tag being typed for the clip shown
+	libSynText         string    // the synonyms of the clip libSynFor, as edited
+	libSynFor          string
+	libSynEditing      bool
+	libConfirm         bool // deleting the clip shown is being confirmed
+	fetchPage          fetchPager
+	embed              embedFunc
+	qvecs              map[string][]float32 // the vectors of queries, by query
+	qPending           map[string]bool      // queries whose vectors are being made
+	embedBusy          bool                 // clips' vectors are being made
+	embedErr           string               // why making vectors failed, which stops it until the settings change
+	libQueryAt         time.Time            // when the library's search was last typed in
+	libHitsFor         libHitsKey           // what libHitsList was found for
+	libHitsList        []library.Hit
+	relatedFor         string // the clip and library version relatedList is of
+	relatedList        []library.Hit
+	dupe               bool // the last clip kept was kept before
+	backupBusy         bool
+	backupErr          string
+	embedDrafts        [3]string // the settings' fields of the embedding model: address, key, model
+	embedTest          string    // how testing the embedding model went
+	noLocalModel       bool      // tests leave the built-in model out
+	pluginBusy         bool
+	pluginErr          string
+	pluginNote         string
+	pluginDone         int64 // bytes downloaded of pluginSize
+	pluginSize         int64
+	pluginCancel       context.CancelFunc
+	pluginGet          pluginGetter
+	nameTitle          string // the central topic the open map's name was given after
+	dirID              fileID
+	recordingKey       string // the shortcut being recorded, by its label
 	// What kept a screenshot from being taken, said in the app's window,
 	// which comes to the front for it.
 	shotAlert                    bool

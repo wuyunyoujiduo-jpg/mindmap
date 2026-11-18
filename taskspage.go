@@ -545,7 +545,7 @@ func (a *app) tasksView(c *ui.Context) {
 				if band && !rail {
 					foot = 22
 				}
-				pageColumn(c, "tasks-column", false).MaxWidth(listWidth+56).Padding(4, 28, foot).Gap(6).Children(func() {
+				pageColumn(c, "tasks-column", false).MaxWidth(listWidth+56).Padding(4, pagePad(), foot).Gap(6).Children(func() {
 					// Which list shows is chosen in the left column (todaySide).
 					if a.tasks.view == tasksWaiting {
 						a.homeWaiting(c)
@@ -576,7 +576,7 @@ func (a *app) tasksView(c *ui.Context) {
 		for _, it := range all {
 			if it.key() == a.tasks.sel {
 				// The task chosen, in a sheet over the page's right.
-				sheet(c, "task-sheet", 400, func() { a.taskDetail(c, it) })
+				sheet(c, "task-sheet", 400, func() { a.saveTaskDrafts(); a.tasks.sel, a.tasks.draftOf = "", "" }, func() { a.taskDetail(c, it) })
 			}
 		}
 	})
@@ -589,7 +589,15 @@ func (a *app) tasksHead(c *ui.Context, all []taskItem) {
 	th := c.Theme()
 	// The day, large, and under it how it stands; at the end what narrows
 	// the tasks and how they show.
-	ui.Row(c.Key("tasks-head")).MinHeight(82).Padding(16, 0, 10).Gap(10).AlignItems(ui.End).Shrink(0).FillWidth().DragWindow().Children(func() {
+	line := ui.Row
+	if narrowLayout {
+		line = ui.Column // on a phone, how they show goes under the day's figures
+	}
+	head := line(c.Key("tasks-head")).MinHeight(82).Padding(16, 0, 10).Gap(10).AlignItems(ui.End).Shrink(0).FillWidth().DragWindow()
+	if narrowLayout {
+		head.AlignItems(ui.Start)
+	}
+	head.Children(func() {
 		ui.Column(c).Gap(3).Grow(1).Shrink(1).MinWidth(0).Children(func() {
 			name := "今天"
 			for _, l := range taskLists {

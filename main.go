@@ -466,7 +466,10 @@ func main() {
 	}
 	// Updates: a window, as Sparkle's, offers a new version once a day and
 	// installs it, then restarts the app (mygo.json's updates).
-	mygo.Use(updaterui.Plugin)
+	// A phone's app is updated by its package (phone.go's apkURL).
+	if !onPhone {
+		mygo.Use(updaterui.Plugin)
+	}
 	screenshot.Log = logShot
 	plat := &desktop{}
 	cfg := loadConfig()
@@ -490,38 +493,11 @@ func main() {
 			Content:       ui.View(a.view),
 		})
 		plat.win = win
-		if err := plat.SetCaptureKey(a.captureKey()); err != nil {
-			log.Printf("快速记录快捷键 %s: %v", a.captureKey(), err)
-			logShot("注册快速记录快捷键 %s 失败：%v", a.captureKey(), err)
-		} else {
-			logShot("已注册快速记录快捷键 %s", a.captureKey())
+		if !onPhone { // a phone has no shortcuts of the whole system, no screenshot of the app's, no tray
+			plat.desktopReady(a)
 		}
-		if err := plat.SetClipKey(a.clipKey()); err != nil {
-			log.Printf("收藏剪贴板快捷键 %s: %v", a.clipKey(), err)
-			logShot("注册收藏剪贴板快捷键 %s 失败：%v", a.clipKey(), err)
-		} else {
-			logShot("已注册收藏剪贴板快捷键 %s", a.clipKey())
-		}
-		// The last screenshot never ended: the app quit in it, most
-		// likely. The system's tool is offered.
-		if log := plat.ShotLog(); shotUnfinished(log) {
-			logShot("上次截图没有完成")
-			a.showShotAlert("上次截图没有完成",
-				"截图时 MyMind 可能意外退出了。截图记录在「帮助 → "+revealWord()+"截图记录」里，可以发给开发者。", false)
-		}
-		screenshot.WatchMenus() // the shortcuts work with a menu open too
-		if err := plat.SetShotKey(a.shotKey()); err != nil {
-			log.Printf("截图快捷键 %s: %v", a.shotKey(), err)
-			logShot("注册截图快捷键 %s 失败：%v", a.shotKey(), err)
-		} else {
-			logShot("已注册截图快捷键 %s", a.shotKey())
-		}
-		plat.SetTray(!a.cfg.NoTray)
 		if a.cfg.Appearance != "" {
 			plat.SetAppearance(a.cfg.Appearance)
-		}
-		if a.cfg.Icon != "" {
-			plat.SetAppIcon(appIconPNG(a.cfg.Icon), trayIcon(a.cfg.Icon))
 		}
 		a.post = func(fn func()) { win.Update(fn) }
 		watchPinch(func(m float64) { a.post(func() { a.pinch(float32(m)) }) })
@@ -663,4 +639,40 @@ func main() {
 		log.Fatal(err)
 	}
 	a.flush()
+}
+
+// desktopReady sets up what a desktop has and a phone has not: the
+// shortcuts of the whole system, the screenshot's, the tray, the icon.
+func (d *desktop) desktopReady(a *app) {
+	plat := d
+	if err := plat.SetCaptureKey(a.captureKey()); err != nil {
+		log.Printf("快速记录快捷键 %s: %v", a.captureKey(), err)
+		logShot("注册快速记录快捷键 %s 失败：%v", a.captureKey(), err)
+	} else {
+		logShot("已注册快速记录快捷键 %s", a.captureKey())
+	}
+	if err := plat.SetClipKey(a.clipKey()); err != nil {
+		log.Printf("收藏剪贴板快捷键 %s: %v", a.clipKey(), err)
+		logShot("注册收藏剪贴板快捷键 %s 失败：%v", a.clipKey(), err)
+	} else {
+		logShot("已注册收藏剪贴板快捷键 %s", a.clipKey())
+	}
+	// The last screenshot never ended: the app quit in it, most
+	// likely. The system's tool is offered.
+	if log := plat.ShotLog(); shotUnfinished(log) {
+		logShot("上次截图没有完成")
+		a.showShotAlert("上次截图没有完成",
+			"截图时 MyMind 可能意外退出了。截图记录在「帮助 → "+revealWord()+"截图记录」里，可以发给开发者。", false)
+	}
+	screenshot.WatchMenus() // the shortcuts work with a menu open too
+	if err := plat.SetShotKey(a.shotKey()); err != nil {
+		log.Printf("截图快捷键 %s: %v", a.shotKey(), err)
+		logShot("注册截图快捷键 %s 失败：%v", a.shotKey(), err)
+	} else {
+		logShot("已注册截图快捷键 %s", a.shotKey())
+	}
+	plat.SetTray(!a.cfg.NoTray)
+	if a.cfg.Icon != "" {
+		plat.SetAppIcon(appIconPNG(a.cfg.Icon), trayIcon(a.cfg.Icon))
+	}
 }

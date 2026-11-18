@@ -13,7 +13,9 @@ by AI, and an AI assistant.
 2. Make the change, matching the code around it.
 3. Check: `gofmt -l .`, `go vet ./...`, `go test ./...`,
    `GOOS=darwin GOARCH=arm64 go build -o /dev/null .`,
-   `GOOS=windows go build -o /dev/null .`, `go tool mygo vet`.
+   `GOOS=windows go build -o /dev/null .`, `go tool mygo vet`; Android's
+   (`GOOS=android`, cgo with the NDK's clang) is vetted by CI's test job,
+   the NDK being out of this container's reach.
    UI snapshots: `MINDMAP_SNAPSHOTS=<dir> go test .`, then look at them.
 4. Work on `main` (the user's choice: a branch left behind once shipped
    a version from an old base over a newer one). Before anything, fetch
@@ -667,4 +669,25 @@ by AI, and an AI assistant.
   a name before Chinese is written in braces, `${name}`
   (`tools/check-release.sh` refuses it otherwise; the pruning stopped so
   on 0.106.0's release).
+- Android (0.107, the user's: "mygo 支持移动端了 帮我搞个android"), by MyGo
+  0.10's phones: the same app, the window the screen. A window narrower
+  than `compactWidth` is laid out as a phone's (`phone.go`,
+  `narrowLayout`, set by `view` each frame for what has no app at hand):
+  the places at the window's foot (`phoneTabs`), the left column a
+  drawer over the page (`phoneDrawer`, `mobile.Drawer`, gone once what it
+  narrows to changes, `drawerSubject`), what is chosen and a topic's
+  panel over the page under ‹ 返回 (`sheet`'s close, `sheetBack`,
+  `panelSheet`), heads stacked, pages 16 in (`pagePad`); `DESIGN.md`'s A
+  phone. What a phone has not is left out by `onPhone`: the updater, the
+  shortcuts of the system, the screenshot, the tray (`desktopReady`). The
+  data is the app's own folder (Android sets HOME to it), shared with the
+  computers by the sync. The workflow's `android` job builds an arm64
+  .apk for a release or a run by hand, and `android-publish` puts it on
+  the release and on mindmap-models' desktop-latest as MyMind.apk, which
+  the settings link to on a phone (`apkURL`): Android has no updater.
+  Signed by the environment's `ANDROID_KEYSTORE`,
+  `ANDROID_KEYSTORE_PASSWORD` and `ANDROID_KEY_ALIAS`; without them by a
+  debug key made anew each run, which a phone takes only after the app
+  is uninstalled. The adaptive icon is `tools/icon/android.py`'s. Tried
+  in snapshots at 390×844 (`TestPhoneLayout`), not yet on a phone.
 - The user writes in Chinese; the app's texts are Chinese.

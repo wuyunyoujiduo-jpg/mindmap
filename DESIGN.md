@@ -199,6 +199,30 @@ Every list and page has all of these, or does not need one:
   `ink2`; under them the page in figures (`figures`), the figure at 700
   in the ink, what it counts muted. 今天, 项目 and 收集 are headed so.
 
+## A phone
+
+A window narrower than `compactWidth` (640) is a phone's, and is laid
+out so (`phone.go`, `narrowLayout`); a desktop's window never is, its
+least width being 900.
+
+- **The places at the foot** (`phoneTabs`): on the window's gray, as the
+  top row, four equal parts, each its Kubai icon (26) over its name at
+  the caption's size; the place shown in the accent, its name at 700. The
+  top row keeps the left column's key, the one bar, the spark, the search
+  and the settings; no screenshot's key, no track of the places.
+- **The left column slides in** over the page from its key
+  (`mobile.Drawer`, 288 wide, white, under the system's bars by their
+  insets) and goes when what it narrows to is chosen (`drawerSubject`),
+  by a finger, a tap beside it, or back. A folder opened keeps it.
+- **What is chosen covers the page** (`sheet`, the map's panel): white,
+  under a row with ‹ 返回 in the accent (`sheetBack`), which is what the
+  column beside the page is on a desktop.
+- **A page is 16 in** at each side (`pagePad`), not 28; a head with
+  something at its right has it under it (`pageHead`, 今天's head), and a
+  row of the settings has what sets it under its name where they do not
+  fit side by side (`setRow`). The settings' parts are pills over the
+  part shown, a few to a line.
+
 ## 项目's cards
 
 A map's card is a card apart as the wall's (`wallCard`), its face a
