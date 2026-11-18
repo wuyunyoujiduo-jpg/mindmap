@@ -45,7 +45,7 @@ func (a *app) clipToTask(cl *library.Clip) {
 	n.Tags = slices.Clone(cl.Tags)
 	err := a.ensureInbox()
 	if err == nil {
-		err = a.editMapAt(a.inboxPath(), "灵感转成任务", func(f *model.File) error {
+		err = a.editMapAt(a.inboxPath(), "随记转成任务", func(f *model.File) error {
 			f.Sheets[0].Root.Children = append(f.Sheets[0].Root.Children, n)
 			return nil
 		})
@@ -86,15 +86,15 @@ func (a *app) taskToMemo(it taskItem, keep bool) {
 	}
 	if keep {
 		ref := clipScheme + cl.ID
-		a.editTask(it, "任务存为灵感", func(n *model.Node) {
+		a.editTask(it, "任务存为随记", func(n *model.Node) {
 			if !slices.Contains(n.Links, ref) {
 				n.Links = append(n.Links, ref)
 			}
 		})
-		a.tell("已存为灵感，任务上有它的链接")
+		a.tell("已存为随记，任务上有它的链接")
 		return
 	}
-	err := a.editMapAt(it.path, "任务改成灵感", func(f *model.File) error {
+	err := a.editMapAt(it.path, "任务改成随记", func(f *model.File) error {
 		// From wherever it is on its canvas: a floating topic, which is a
 		// task of the lists as any other, and a summary's, are not under
 		// the central topic's children.
@@ -105,14 +105,14 @@ func (a *app) taskToMemo(it taskItem, keep bool) {
 		return nil
 	})
 	if err != nil {
-		a.tell("灵感存下了，任务没有去掉：" + err.Error())
+		a.tell("随记存下了，任务没有去掉：" + err.Error())
 		return
 	}
 	if a.tasks.sel == it.key() {
 		a.tasks.sel, a.tasks.draftOf = "", ""
 	}
 	a.tasks.read = time.Time{}
-	a.tell("已改成灵感，在收集里")
+	a.tell("已改成随记，在收集里")
 }
 
 // tagInTitle is a tag written in a thought's words.
@@ -137,17 +137,17 @@ func (a *app) taskClips(n *model.Node) []*library.Clip {
 func (a *app) taskThoughts(c *ui.Context, it taskItem) {
 	t := c.Theme()
 	clips := a.taskClips(it.node)
-	section(c, iconPencil, "灵感", func() {
-		if len(clips) == 0 && ghostButton(c, "存为灵感", "把任务名和备注存成收集里的一条灵感，任务留着并链接过去").Clicked() {
+	section(c, iconPencil, "随记", func() {
+		if len(clips) == 0 && ghostButton(c, "存为随记", "把任务名和备注存成收集里的一条随记，任务留着并链接过去").Clicked() {
 			a.later(func() { a.taskToMemo(it, true) })
 		}
 	}, func() {
 		if len(clips) == 0 {
-			ui.Text(c, "这个任务还没有连着的灵感。").FontSize(textSmall).TextColor(t.TextMuted)
+			ui.Text(c, "这个任务还没有连着的随记。").FontSize(textSmall).TextColor(t.TextMuted)
 		}
 		for _, cl := range clips {
 			card := paper(ui.Column(c.Key("thought:"+cl.ID)).Padding(10, 12).Gap(4).Radius(radiusRow).FillWidth().
-				Cursor(ui.CursorPointer).Label("打开灵感 "+refName(cl)).Tooltip("在收集里打开"), t)
+				Cursor(ui.CursorPointer).Label("打开随记 "+refName(cl)).Tooltip("在收集里打开"), t)
 			if card.Clicked() {
 				a.later(func() {
 					a.saveTaskDrafts()
@@ -163,9 +163,9 @@ func (a *app) taskThoughts(c *ui.Context, it taskItem) {
 				a.noteText(c, body, textSmall+1, 6)
 			})
 		}
-		label, tip := "改成灵感", "存成灵感，并把这个任务去掉：它不再是要做的事"
+		label, tip := "改成随记", "存成随记，并把这个任务去掉：它不再是要做的事"
 		if len(clips) > 0 {
-			label, tip = "不做了，只留灵感", "把这个任务去掉，灵感留在收集里"
+			label, tip = "不做了，只留随记", "把这个任务去掉，随记留在收集里"
 		}
 		if ghostButton(c, label, tip).Margin(0, 0, 0, -8).Clicked() {
 			a.later(func() { a.taskToMemo(it, false) })

@@ -52,8 +52,8 @@ func TestHome(t *testing.T) {
 	a.tasks.view = tasksToday
 	tt.Frame()
 
-	// The line: a day makes it a task, else it is a note of 灵感.
-	if err := tt.Click("记一条灵感或任务"); err != nil {
+	// The line: a day makes it a task, else it is a note of 随记.
+	if err := tt.Click("记一条随记或任务"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Type("今天 写周报 !高")
@@ -63,7 +63,7 @@ func TestHome(t *testing.T) {
 		t.Fatalf("no task: %q %q", a.homeDraft, tt.Texts())
 	}
 	// On 今天 a plain line is a task too, until the bar is told otherwise.
-	tt.Type("灵感来了")
+	tt.Type("随记来了")
 	tt.Frame()
 	if !tt.HasText("记为 任务 · 今天") {
 		t.Fatalf("not read as a task on 今天: %q", tt.Texts())
@@ -72,12 +72,12 @@ func TestHome(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if !tt.HasText("记为 灵感") {
+	if !tt.HasText("记为 随记") {
 		t.Fatalf("not made a thought: %q", tt.Texts())
 	}
 	tt.Key(0, ui.KeyEnter)
 	tt.Frame()
-	if len(a.lib.Clips) != 5 || a.lib.Clips[0].Text != "灵感来了" || !isMemo(a.lib.Clips[0]) {
+	if len(a.lib.Clips) != 5 || a.lib.Clips[0].Text != "随记来了" || !isMemo(a.lib.Clips[0]) {
 		t.Fatalf("no note: %d", len(a.lib.Clips))
 	}
 	snapshot(t, tt, "home-filled")
@@ -132,10 +132,10 @@ func TestHome(t *testing.T) {
 	// list of what waits.
 	a.tasks.view = tasksWaiting
 	tt.Frame()
-	row, _ := tt.Find("记下的 灵感来了")
+	row, _ := tt.Find("记下的 随记来了")
 	tt.Move(row.X+row.W/2, row.Y+row.H/2)
 	tt.Frame()
-	if err := tt.Click("操作 灵感来了"); err != nil {
+	if err := tt.Click("操作 随记来了"); err != nil {
 		t.Fatal(err)
 	}
 	if err := tt.ChooseMenuItem("放到导图…"); err != nil {
@@ -181,14 +181,14 @@ func TestMidEllipsis(t *testing.T) {
 // #标签 in the palette finds what carries the tag: notes, clips, topics.
 func TestPaletteTag(t *testing.T) {
 	a, _ := newTestApp(t)
-	a.addMemo("列表可以用虚拟滚动 #性能", "灵感")
-	a.addMemo("周末去爬山", "灵感")
+	a.addMemo("列表可以用虚拟滚动 #性能", "随记")
+	a.addMemo("周末去爬山", "随记")
 	a.paletteMode, a.paletteQuery = paletteAll, "#性能"
 	var kinds []string
 	for _, it := range a.paletteItems() {
 		kinds = append(kinds, it.kind+":"+it.title)
 	}
-	if len(kinds) != 2 || kinds[0] != "灵感:列表可以用虚拟滚动 #性能" || kinds[1] != "主题:列表加载慢" {
+	if len(kinds) != 2 || kinds[0] != "随记:列表可以用虚拟滚动 #性能" || kinds[1] != "主题:列表加载慢" {
 		t.Fatalf("items %q", kinds)
 	}
 }
@@ -250,7 +250,7 @@ func TestHomeTicksAndReads(t *testing.T) {
 	if len(a.doneToday(testNow)) != 1 || !tt.HasText("已完成") {
 		t.Fatalf("the task done is not shown: %q", tt.Texts())
 	}
-	if err := tt.Click("记一条灵感或任务"); err != nil {
+	if err := tt.Click("记一条随记或任务"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Type("周五 给客户发报价单 #报价")
@@ -347,11 +347,11 @@ func TestOneBar(t *testing.T) {
 	}
 	a.showProjects()
 	tt.Frame()
-	if !tt.HasText("记灵感、加任务，或者问 AI…") || tt.HasText("加粗") {
+	if !tt.HasText("写随记、加任务，或者问 AI…") || tt.HasText("加粗") {
 		t.Fatalf("the bar is not one line on 项目: %q", tt.Texts())
 	}
 	snapshot(t, tt, "bar-closed")
-	if err := tt.Click("记一条灵感或任务"); err != nil {
+	if err := tt.Click("记一条随记或任务"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()

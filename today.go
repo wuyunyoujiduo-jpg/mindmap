@@ -96,7 +96,7 @@ func (a *app) saveHomeLine() {
 			a.tell("没有记下：" + err.Error())
 			return
 		}
-		a.tell("已记到灵感")
+		a.tell("已记到随记")
 	}
 	a.homeDraft, a.barKind = "", barAuto
 	if !a.libOpen {

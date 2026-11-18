@@ -146,7 +146,7 @@ func BenchmarkCollectBacklinks(b *testing.B) {
 	a, tt := benchApp(b)
 	addBenchMaps(b, a, 150)
 	for i := range 120 {
-		c := &library.Clip{Kind: library.KindText, Text: fmt.Sprintf("第 %d 条，一句话的灵感。", i)}
+		c := &library.Clip{Kind: library.KindText, Text: fmt.Sprintf("第 %d 条，一句话的随记。", i)}
 		if err := a.lib.Add(c, testNow.Add(time.Duration(i)*time.Second)); err != nil {
 			b.Fatal(err)
 		}

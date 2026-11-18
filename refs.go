@@ -531,7 +531,7 @@ func (a *app) mapMaterialSection(c *ui.Context) {
 				line(fmt.Sprintf("链接了 %d 张别的导图", maps))
 			}
 			if len(thoughts) > 0 {
-				line(fmt.Sprintf("被 %d 条灵感或资料提到", len(thoughts)))
+				line(fmt.Sprintf("被 %d 条随记或资料提到", len(thoughts)))
 				for _, b := range thoughts {
 					row := ui.Row(c.Key("thought:" + b.clip)).Gap(6).Cursor(ui.CursorPointer).Label("前往 " + b.title)
 					if row.Clicked() {

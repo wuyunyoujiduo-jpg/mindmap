@@ -104,7 +104,7 @@ func TestKeysAndWaysBack(t *testing.T) {
 	tt.Key(ui.Cmd|ui.Alt, ui.Key3)
 	tt.Frame()
 	tt.Frame()
-	if !tt.HasText("灵感和资料") {
+	if !tt.HasText("随记和资料") {
 		t.Fatalf("not on 收集: %q", tt.Texts())
 	}
 	// The arrows go through the wall, Escape closes what they opened.
@@ -358,7 +358,7 @@ func TestWeekReview(t *testing.T) {
 	}
 	tt.Frame()
 	tt.Frame()
-	for _, want := range []string{"这周做完的", "任务 搜索", "拖着的", "任务 登录", "这周记下的灵感", "周报改成三段式", "顺延到今天"} {
+	for _, want := range []string{"这周做完的", "任务 搜索", "拖着的", "任务 登录", "这周记下的随记", "周报改成三段式", "顺延到今天"} {
 		if !tt.HasText(want) {
 			t.Fatalf("no %q: %q", want, tt.Texts())
 		}
@@ -610,7 +610,7 @@ func TestAppearanceIsChosen(t *testing.T) {
 func TestKindAndTagTogether(t *testing.T) {
 	a, tt := newTestApp(t)
 	for i, cl := range []*library.Clip{
-		{Kind: library.KindText, Text: "一条灵感 #待识别", Tags: []string{"待识别"}},
+		{Kind: library.KindText, Text: "一条随记 #待识别", Tags: []string{"待识别"}},
 		{Kind: library.KindLink, URL: "https://example.com/a", Title: "一个链接", Tags: []string{"别的"}},
 	} {
 		if err := a.lib.Add(cl, a.now().Add(time.Duration(i)*time.Minute)); err != nil {
@@ -619,7 +619,7 @@ func TestKindAndTagTogether(t *testing.T) {
 	}
 	a.openList(kindAll, "")
 	tt.Frame()
-	if !tt.HasText("灵感和资料") {
+	if !tt.HasText("随记和资料") {
 		t.Fatalf("head: %q", tt.Texts())
 	}
 	if err := tt.Click("#待识别 1"); err != nil {

@@ -1928,10 +1928,10 @@ func (a *app) taskMenu(m *ui.Menu, it taskItem) {
 	if m.Item("移到导图…").Chosen() {
 		a.later(func() { a.moveTaskTo(it) })
 	}
-	if m.Item("存为灵感").Disabled(len(a.taskClips(it.node)) > 0).Chosen() {
+	if m.Item("存为随记").Disabled(len(a.taskClips(it.node)) > 0).Chosen() {
 		a.later(func() { a.taskToMemo(it, true) })
 	}
-	if m.Item("改成灵感（去掉任务）").Chosen() {
+	if m.Item("改成随记（去掉任务）").Chosen() {
 		a.later(func() { a.taskToMemo(it, false) })
 	}
 	m.Separator()

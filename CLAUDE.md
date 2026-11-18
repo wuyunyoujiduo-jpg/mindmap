@@ -77,7 +77,7 @@ by AI, and an AI assistant.
     a tag and 星标, 未整理 or 含密钥 narrow together, each row chosen
     showing so, and the page says each as a chip with a ✕ of its own
     under its head, with how many are left (`libFilters`, `filterChip`;
-    a page that said 灵感和资料 over nothing found told the user nothing
+    a page that said 随记和资料 (灵感和资料 before 0.107.2) over nothing found told the user nothing
     of why, and one ✕ for all the conditions left no way to take off
     one).
   - The one bar (`bar.go`, `oneBar`) is in the top row: one line until
@@ -344,7 +344,7 @@ by AI, and an AI assistant.
     and leave the thing: the bar open was liked, and was rebuilt as one
     line for covering the page, and had to be put back.
   - What a field will do with the words is said on it, and can be
-    changed there (记为 灵感 / 任务): a rule that decides silently is a
+    changed there (记为 随记 / 任务): a rule that decides silently is a
     way in the user cannot find.
   - Each main thing to do has its way in where it is looked for (the
     line to add a task on 今天's lists), though another way does it too.
@@ -706,5 +706,15 @@ by AI, and an AI assistant.
   come first if ever set. 0.107.0 was signed by a debug key made anew,
   and is uninstalled once. The adaptive icon is `tools/icon/android.py`'s.
   Tried in snapshots at 390×844 (`TestPhoneLayout`, `TestApkUpdate`),
-  not yet on a phone.
+  not yet on a phone. What is built is the desktop's pages fitted to a
+  phone; their redesign for one is drafted at
+  https://claude.ai/artifact/5ySnmjspG48dmg8MpwcwLt (0.107.2, eleven
+  screens: 今天 as a list and a day of hours, a task and a topic in
+  sheets from the foot, 记一下 at the foot over the places, the drawer,
+  项目, a map's canvas and its outline as where a phone edits, 收集 as
+  two columns), not built yet: built to it once the user has corrected it.
+- The notes of 收集 written as they come are 随记 (0.107.2, the user's:
+  灵感 before, on the PC and the phone alike): the word of the UI,
+  never 灵感 again; it is no category the AI gives (`clips.go`), the
+  kind saying it already.
 - The user writes in Chinese; the app's texts are Chinese.

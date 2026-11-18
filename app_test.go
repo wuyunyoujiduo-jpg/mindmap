@@ -2481,7 +2481,7 @@ func TestQuickCaptureAndInbox(t *testing.T) {
 	fp.capture = true
 	ct.Frame()
 	snapshot(t, ct, "capture")
-	a.captureWhere = captureInbox // 任务; 灵感 is the default (TestMemos)
+	a.captureWhere = captureInbox // 任务; 随记 is the default (TestMemos)
 	ct.Type("调研竞品\n  - [ ] 看 XMind 的导出")
 	ct.Key(0, ui.KeyEnter)
 	if fp.capture {
@@ -2814,10 +2814,10 @@ func TestAnnotations(t *testing.T) {
 	if len(a.doc.Floating) != 1 || a.editing != a.doc.Floating[0].ID {
 		t.Fatalf("floating %+v editing %q", a.doc.Floating, a.editing)
 	}
-	tt.Type("灵感")
+	tt.Type("随记")
 	tt.Key(0, ui.KeyEnter)
 	fl := a.doc.Floating[0]
-	if fl.Title != "灵感" {
+	if fl.Title != "随记" {
 		t.Fatalf("title %q", fl.Title)
 	}
 	tt.Frame()
@@ -2845,7 +2845,7 @@ func TestAnnotations(t *testing.T) {
 	// Folding a branch keeps the others shown.
 	a.mutate("", func() { find(t, a, "使用指南").Collapsed = true })
 	tt.Frame()
-	for _, title := range []string{"前端", "登录", "待优化", "灵感"} {
+	for _, title := range []string{"前端", "登录", "待优化", "随记"} {
 		if _, ok := a.boxes.Boxes[find(t, a, title).ID]; !ok {
 			t.Errorf("%s not laid out", title)
 		}

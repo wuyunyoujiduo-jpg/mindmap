@@ -200,7 +200,7 @@ func TestMapTree(t *testing.T) {
 // The one bar is in the top row over a map too.
 func TestBarOverMap(t *testing.T) {
 	a, tt := newTestApp(t)
-	if err := tt.Click("记一条灵感或任务"); err != nil {
+	if err := tt.Click("记一条随记或任务"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
@@ -275,7 +275,7 @@ func TestWideProjectsAndWall(t *testing.T) {
 	a.addTask("今天 写周报", nil)
 	a.addTask("明天 交报销", nil)
 	for i := range 9 {
-		if _, err := a.addMemo(fmt.Sprintf("第 %d 条灵感，长短不一%s", i, strings.Repeat("，再多写一点", i%4)), "手动"); err != nil {
+		if _, err := a.addMemo(fmt.Sprintf("第 %d 条随记，长短不一%s", i, strings.Repeat("，再多写一点", i%4)), "手动"); err != nil {
 			t.Fatal(err)
 		}
 	}

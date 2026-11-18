@@ -142,7 +142,7 @@ func (a *app) writeCard(c *ui.Context, w writeCard) {
 			if !w.inline {
 				ui.Box(c).Width(1).Height(16).Margin(0, 4).Background(hairline(t))
 			}
-			tool("引用", "[[", 0, "链接到灵感、资料、导图、导图里的主题或 AI 技能：写 [[ 再写几个字，从列出的里面选", func() { add("[[") })
+			tool("引用", "[[", 0, "链接到随记、资料、导图、导图里的主题或 AI 技能：写 [[ 再写几个字，从列出的里面选", func() { add("[[") })
 		}
 		reads := func() {
 			if w.reads != nil {

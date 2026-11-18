@@ -71,9 +71,9 @@ func (a *app) weekReview(c *ui.Context, all []taskItem) {
 			a.tell("周报已复制，可以粘贴到别处")
 		}
 	})
-	figures(c, figure{len(done), "件做完"}, figure{len(late), "件拖着"}, figure{len(kept), "条灵感"}, figure{waiting, "条等着归位"})
+	figures(c, figure{len(done), "件做完"}, figure{len(late), "件拖着"}, figure{len(kept), "条随记"}, figure{waiting, "条等着归位"})
 	if len(done)+len(late)+len(kept) == 0 {
-		emptyState(c, "review", "history", "这周还没有可以回顾的", "做完的任务、逾期没做的任务和这周记下的灵感，会汇总在这里。", nil)
+		emptyState(c, "review", "history", "这周还没有可以回顾的", "做完的任务、逾期没做的任务和这周记下的随记，会汇总在这里。", nil)
 		return
 	}
 	part := func(key, title string, n int, right func(), body func()) {
@@ -104,7 +104,7 @@ func (a *app) weekReview(c *ui.Context, all []taskItem) {
 			}
 		})
 	})
-	part("review-kept", "这周记下的灵感", len(kept), nil, func() {
+	part("review-kept", "这周记下的随记", len(kept), nil, func() {
 		for i, cl := range kept {
 			if i == 12 {
 				ui.Text(c, fmt.Sprintf("还有 %d 条，在收集里", len(kept)-i)).FontSize(textCaption).TextColor(faint(t)).Margin(6, 8, 0)
@@ -113,7 +113,7 @@ func (a *app) weekReview(c *ui.Context, all []taskItem) {
 			id := cl.ID
 			text, _, _ := strings.Cut(strings.TrimSpace(library.Mask(cl.Text)), "\n")
 			row := ui.Row(c.Key("kept:"+id)).MinHeight(40).Padding(6, 8).Gap(10).AlignItems(ui.Center).FillWidth().Cursor(ui.CursorPointer).
-				Label("灵感 "+cl.Label()).BorderWidth(0, 0, 1, 0).BorderColor(t.Border.Alpha(0.55)).Background(t.Text.Alpha(0)).Transition(rowMotion)
+				Label("随记 "+cl.Label()).BorderWidth(0, 0, 1, 0).BorderColor(t.Border.Alpha(0.55)).Background(t.Text.Alpha(0)).Transition(rowMotion)
 			if row.Hovered() {
 				row.Background(t.Text.Alpha(0.035))
 			}
@@ -175,7 +175,7 @@ func weekReport(which string, from, last time.Time, done, late []taskItem, kept 
 		}
 	}
 	if len(kept) > 0 {
-		fmt.Fprintf(&b, "\n## 记下的灵感（%d）\n\n", len(kept))
+		fmt.Fprintf(&b, "\n## 记下的随记（%d）\n\n", len(kept))
 		for _, cl := range kept {
 			text, _, _ := strings.Cut(strings.TrimSpace(library.Mask(cl.Text)), "\n")
 			fmt.Fprintf(&b, "- %s\n", text)

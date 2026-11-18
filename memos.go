@@ -9,7 +9,7 @@ import (
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
 )
 
-// 灵感 are the notes written as they come: the library's texts, cards of
+// 随记 are the notes written as they come: the library's texts, cards of
 // 收集 among the clips, whose #tags written in the text sort them. They
 // are found by the library's search, sorted by its AI and put on topics
 // as any clip; the shortcut of quick capture writes them too. 回顾 looks
@@ -97,10 +97,10 @@ func noteHasMarks(s string) bool {
 	}
 }
 
-// isMemo tells whether a clip is one of 灵感: a text of the library.
+// isMemo tells whether a clip is one of 随记: a text of the library.
 func isMemo(c *library.Clip) bool { return c.Kind == library.KindText }
 
-// addMemo keeps a note of 灵感: text, its #tags its tags.
+// addMemo keeps a note of 随记: text, its #tags its tags.
 func (a *app) addMemo(text, source string) (*library.Clip, error) {
 	text = strings.TrimSpace(text)
 	if text == "" {

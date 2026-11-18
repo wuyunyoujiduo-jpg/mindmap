@@ -384,7 +384,7 @@ func askJSON(ctx context.Context, cfg config, send aiSender, sendDS deepseekSend
 	return text, nil
 }
 
-// The same for 灵感 and the library: the AI says the topic each note or
+// The same for 随记 and the library: the AI says the topic each note or
 // clip not yet on a map belongs under; taken, a topic of it is added
 // there, linked to it.
 

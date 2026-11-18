@@ -481,7 +481,7 @@ func TestBacklinksWorkedOutOnce(t *testing.T) {
 	addBenchMaps(t, a, 30)
 	note, _ := a.addClipText("挂在导图上的一条", "手动")
 	for i := range 20 {
-		if _, err := a.addClipText(fmt.Sprintf("第 %d 条灵感", i), "手动"); err != nil {
+		if _, err := a.addClipText(fmt.Sprintf("第 %d 条随记", i), "手动"); err != nil {
 			t.Fatal(err)
 		}
 	}

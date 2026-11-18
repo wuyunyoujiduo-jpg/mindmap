@@ -25,7 +25,7 @@ const (
 	kindDocs // text and files
 	kindLinks
 	kindImages
-	kindMemos  // the notes of 灵感
+	kindMemos  // the notes of 随记
 	kindVideos // the files that are videos
 )
 

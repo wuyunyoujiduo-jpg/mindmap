@@ -26,12 +26,12 @@ func (a *app) oneBar(c *ui.Context) {
 			if !a.barOpen && text == "" {
 				// One line: a click opens the card, and writes in it.
 				field := ui.Row(c.Key("closed")).Height(36).Padding(0, 6, 0, 14).Gap(10).Radius(radiusPill).AlignItems(ui.Center).FillWidth().
-					Background(cardColor(t)).Shadow(0, 0, 0, 0.5, t.Text.Alpha(0.1)).Cursor(ui.CursorText).Label("记一条灵感或任务").Transition(easeLook)
+					Background(cardColor(t)).Shadow(0, 0, 0, 0.5, t.Text.Alpha(0.1)).Cursor(ui.CursorText).Label("记一条随记或任务").Transition(easeLook)
 				if field.Clicked() {
 					a.barOpen, a.writeRefocus = true, "home-line"
 				}
 				field.Children(func() {
-					ui.Text(c, "记灵感、加任务，或者问 AI…").FontSize(textBody).TextColor(t.TextMuted).SingleLine().Grow(1).Shrink(1).MinWidth(0).PassThrough()
+					ui.Text(c, "写随记、加任务，或者问 AI…").FontSize(textBody).TextColor(t.TextMuted).SingleLine().Grow(1).Shrink(1).MinWidth(0).PassThrough()
 				})
 				return
 			}
@@ -52,8 +52,8 @@ func (a *app) barCard(c *ui.Context, text string) {
 		func() {
 			ask, asking := barQuestion(text)
 			a.writeCard(c, writeCard{
-				key: "home-line", label: "记一条灵感或任务", draft: &a.homeDraft, enterSaves: true,
-				placeholder: "记灵感、加任务，或者问 AI…",
+				key: "home-line", label: "记一条随记或任务", draft: &a.homeDraft, enterSaves: true,
+				placeholder: "写随记、加任务，或者问 AI…",
 				sendLabel:   "记下", fileLabel: "加图片", save: a.saveHomeLine, lines: 1, over: true,
 				focused: func() { a.barOpen = true },
 				esc: func() {
@@ -79,7 +79,7 @@ func (a *app) barCard(c *ui.Context, text string) {
 				},
 				reads: func() { // what it is kept as: a click makes a task of a thought, or a thought of a task
 					now := a.now()
-					label, tip := "记为 灵感", "现在会记成灵感（收集里的一条笔记）。可以改成任务"
+					label, tip := "记为 随记", "现在会记成随记（收集里的一条笔记）。可以改成任务"
 					switch {
 					case asking:
 						if ask != "" {
@@ -87,7 +87,7 @@ func (a *app) barCard(c *ui.Context, text string) {
 						}
 						return
 					case a.barTask(text):
-						label, tip = "记为 任务", "现在会记成任务（要做的事，能打勾、定日子、重复）。可以改成灵感"
+						label, tip = "记为 任务", "现在会记成任务（要做的事，能打勾、定日子、重复）。可以改成随记"
 						if lines := checklist(text); len(lines) > 1 { // a checklist: a task a line
 							label = fmt.Sprintf("记为 %d 件任务", len(lines))
 							break

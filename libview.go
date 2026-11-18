@@ -62,7 +62,7 @@ func (a *app) libraryColumn(c *ui.Context) {
 		}
 		// Its head says what is shown: all of it, in figures, or what the
 		// left column and the search narrow it to, and how many that leaves.
-		sub, figs := "灵感和资料", []figure{{len(l.Clips), "条"}, {memos, "条灵感"}, {len(l.Unorganized()), "条未整理"}}
+		sub, figs := "随记和资料", []figure{{len(l.Clips), "条"}, {memos, "条随记"}, {len(l.Unorganized()), "条未整理"}}
 		if len(a.libFilters()) > 0 { // the conditions are chips under the head, each with its ✕
 			sub, figs = "", []figure{{len(a.libHits()), "条符合"}}
 		}
@@ -116,7 +116,7 @@ func (a *app) libraryColumn(c *ui.Context) {
 						}
 					}
 					if a.libReview != reviewOff {
-						icon, title, msg = "history", "还没有可以回顾的", "一周以前的灵感会在这里，每天换几条。"
+						icon, title, msg = "history", "还没有可以回顾的", "一周以前的随记会在这里，每天换几条。"
 					}
 					var act func()
 					if clear != nil && a.libReview == reviewOff {
@@ -701,7 +701,7 @@ func (a *app) clipRow(c *ui.Context, clip *library.Clip) {
 			_, ink := tinted(t, kcol)
 			kind := clipKindLabel(clip)
 			if memo {
-				kind = "灵感"
+				kind = "随记"
 			}
 			mapDot(c, kcol, 6)
 			ui.Text(c, kind).FontSize(textCaption).FontWeight(700).TextColor(ink).NoWrap()
@@ -870,7 +870,7 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 		tile(c, kindTile(clip.Kind), kindColor(clip.Kind), 22)
 		kind := clipKindLabel(clip)
 		if isMemo(clip) {
-			kind = "灵感" // as its card says
+			kind = "随记" // as its card says
 		}
 		ui.Text(c, kind).FontSize(textCaption).Bold().TextColor(kindColor(clip.Kind)).NoWrap().Margin(0, 0, 0, 4)
 		ui.Text(c, cmpOr(clip.Source, "手动")+" · "+clip.Created.Format("2006-01-02 15:04")).FontSize(textCaption).
@@ -1296,7 +1296,7 @@ func (a *app) libFilters() []libFilter {
 		return nil
 	}
 	var fs []libFilter
-	if name := map[int]string{kindMemos: "灵感", kindLinks: "链接", kindDocs: "文档", kindImages: "图片", kindVideos: "视频", kindMaps: "导图"}[a.libKind]; name != "" {
+	if name := map[int]string{kindMemos: "随记", kindLinks: "链接", kindDocs: "文档", kindImages: "图片", kindVideos: "视频", kindMaps: "导图"}[a.libKind]; name != "" {
 		fs = append(fs, libFilter{name, func() { a.libKind = kindAll }})
 	}
 	cat := map[string]string{"★": "星标", "-": "未整理", secretCat: "含密钥"}[a.libCat]

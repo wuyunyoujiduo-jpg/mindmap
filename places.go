@@ -113,7 +113,7 @@ func (a *app) topBar(c *ui.Context) {
 		if !onPhone && kubaiKey(c, "scan", "截图", "截图：框选屏幕、标注后存到收集（"+keyLabel(a.shotKey())+"）", false, true).Clicked() {
 			a.later(a.screenshot)
 		}
-		if kubaiKey(c, "search", "搜索全部", "搜索导图、主题、灵感和资料，#标签 按标签找", false, true).Clicked() {
+		if kubaiKey(c, "search", "搜索全部", "搜索导图、主题、随记和资料，#标签 按标签找", false, true).Clicked() {
 			a.later(func() { a.openPalette(paletteAll) })
 		}
 		if kubaiKey(c, "settings", "设置", "设置", false, true).Clicked() {
@@ -153,7 +153,7 @@ func (a *app) placesTrack(c *ui.Context, now int) {
 		}
 		part(placeToday, "今天", "今天要做的，和刚记下的（"+keyLabel("CmdOrCtrl+Alt+1")+"）", a.goToday)
 		part(placeMaps, "项目", "导图：一张就是一个项目（"+keyLabel("CmdOrCtrl+Alt+2")+"）", a.showProjects)
-		part(placeCollect, "收集", "灵感、链接、文档和图片（"+keyLabel("CmdOrCtrl+Alt+3")+"）", a.goCollect)
+		part(placeCollect, "收集", "随记、链接、文档和图片（"+keyLabel("CmdOrCtrl+Alt+3")+"）", a.goCollect)
 		part(placeSkills, "技能", "各个 AI 编程工具的技能：在哪、收进来、链接、同步（"+keyLabel("CmdOrCtrl+Alt+4")+"）", a.showSkills)
 	})
 }

@@ -317,7 +317,7 @@ func (a *app) libSide(c *ui.Context) {
 		for _, k := range []struct {
 			kind       int
 			name, icon string
-		}{{kindAll, "全部", "layers"}, {kindMemos, "灵感", "lightbulb"}, {kindLinks, "链接", "link"}, {kindDocs, "文档", "file-text"}, {kindImages, "图片", "image"}, {kindVideos, "视频", "video"}} {
+		}{{kindAll, "全部", "layers"}, {kindMemos, "随记", "lightbulb"}, {kindLinks, "链接", "link"}, {kindDocs, "文档", "file-text"}, {kindImages, "图片", "image"}, {kindVideos, "视频", "video"}} {
 			n := a.kindCounts()[k.kind]
 			if k.kind == kindVideos && n == 0 && a.libKind != kindVideos {
 				continue // a row of its own once there is a video
@@ -349,10 +349,10 @@ func (a *app) libSide(c *ui.Context) {
 			}
 		}
 		// Looking back at the old notes, as flomo does.
-		if sideRow(c, "review:daily", "每日回顾", "", a.libReview == reviewDaily, sideIcon(c, "history")).Tooltip("几条以前的灵感，每天换").Clicked() {
+		if sideRow(c, "review:daily", "每日回顾", "", a.libReview == reviewDaily, sideIcon(c, "history")).Tooltip("几条以前的随记，每天换").Clicked() {
 			a.libReview, a.libSel = reviewDaily, ""
 		}
-		if sideRow(c, "review:walk", "随机漫步", "", a.libReview == reviewWalk, sideIcon(c, "shuffle")).Tooltip("一次看一条以前的灵感").Clicked() {
+		if sideRow(c, "review:walk", "随机漫步", "", a.libReview == reviewWalk, sideIcon(c, "shuffle")).Tooltip("一次看一条以前的随记").Clicked() {
 			a.libReview, a.libSel = reviewWalk, ""
 		}
 		if tags := a.clipTags(); len(tags) > 0 {

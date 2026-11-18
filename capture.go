@@ -40,7 +40,7 @@ func (a *app) captureKey() string {
 // Where captured text goes.
 const (
 	captureInbox   = iota
-	captureLibrary // a note of 灵感, a text of the library: the default
+	captureLibrary // a note of 随记, a text of the library: the default
 	captureHere    // under the node selected in the open map
 	captureAuto    // a line that says a day or a priority is a task, else a note
 )
@@ -83,11 +83,11 @@ func (a *app) capture(text string, where int) error {
 			where = captureInbox
 		}
 	}
-	if where == captureLibrary { // a note of 灵感
+	if where == captureLibrary { // a note of 随记
 		if _, err := a.addMemo(text, "快速记录"); err != nil {
 			return err
 		}
-		a.tell("已记到灵感")
+		a.tell("已记到随记")
 		return nil
 	}
 	if where == captureInbox { // tasks, a line each, to the inbox
@@ -230,7 +230,7 @@ func (a *app) captureView(c *ui.Context) {
 				if taskLike(a.captureText, a.now()) { // captureAuto: the window sets no other but captureHere
 					pill(c, "任务 → 收件箱", t.Text.Alpha(0.06), t.Accent)
 				} else {
-					pill(c, "灵感", t.Text.Alpha(0.06), t.TextMuted)
+					pill(c, "随记", t.Text.Alpha(0.06), t.TextMuted)
 				}
 			}
 			if accentButton(c, "记下", "记下并收起这个窗口").Clicked() {

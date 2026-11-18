@@ -19,7 +19,7 @@ func TestMemoTags(t *testing.T) {
 	}
 }
 
-// 灵感 are cards of 收集: written in its box, kept as texts of the library
+// 随记 are cards of 收集: written in its box, kept as texts of the library
 // with their #tags, filtered by a tag; quick capture writes them too, and
 // 回顾 looks back at the old ones.
 func TestMemos(t *testing.T) {
@@ -31,7 +31,7 @@ func TestMemos(t *testing.T) {
 	}
 	tt.Frame()
 	for _, text := range []string{"产品要做减法 #产品", "周报模板改成三段式 #工作"} {
-		tt.Click("记一条灵感或任务")
+		tt.Click("记一条随记或任务")
 		tt.Frame()
 		tt.Type(text)
 		tt.Key(ui.Cmd, ui.KeyEnter)
@@ -75,7 +75,7 @@ func TestMemos(t *testing.T) {
 	if !slices.Equal(m.Tags, []string{"AI给的", "取舍"}) {
 		t.Fatalf("tags after the edit: %q", m.Tags)
 	}
-	// Quick capture writes 灵感 by default.
+	// Quick capture writes 随记 by default.
 	ct := ui.NewTester(a.captureView, 560, 170)
 	a.plat.(*fakePlatform).capture = true
 	ct.Type("随手一记 #想法")
@@ -87,7 +87,7 @@ func TestMemos(t *testing.T) {
 	// 回顾: nothing older than a week yet; then one of the old ones.
 	a.libReview = reviewDaily
 	tt.Frame()
-	if len(a.libHits()) != 0 || !tt.HasText("一周以前的灵感会在这里，每天换几条。") {
+	if len(a.libHits()) != 0 || !tt.HasText("一周以前的随记会在这里，每天换几条。") {
 		t.Fatalf("回顾 with nothing old: %d, %q", len(a.libHits()), tt.Texts())
 	}
 	m.Created = testNow.AddDate(0, 0, -30)
@@ -116,11 +116,11 @@ func TestMemos(t *testing.T) {
 // added there, and the note stays.
 func TestMemoPlaces(t *testing.T) {
 	a, tt := newTestApp(t)
-	m, err := a.addMemo("列表可以用虚拟滚动 #性能", "灵感")
+	m, err := a.addMemo("列表可以用虚拟滚动 #性能", "随记")
 	if err != nil {
 		t.Fatal(err)
 	}
-	a.addMemo("周末去爬山", "灵感")
+	a.addMemo("周末去爬山", "随记")
 	a.openList(kindAll, "")
 	tt.Frame()
 	fake := &fakeClaude{}

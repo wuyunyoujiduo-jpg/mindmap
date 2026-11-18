@@ -361,7 +361,7 @@ type app struct {
 	writeRefocus string            // the card to write in that takes the focus back, after a tool of its was clicked
 	writeRefs    map[string]string // the notes referred to in a draft: the @name written, the clip's ID
 	noMotion     bool              // nothing animates: the tests look at where things end
-	homeDraft    string            // what is typed in 今天's line: a note of 灵感, or a task
+	homeDraft    string            // what is typed in 今天's line: a note of 随记, or a task
 	libDay       time.Time         // the day the list shows, from 概览's dots; zero for any
 	panelOff     bool              // the right panel is hidden
 	// On a phone (phone.go): the left column slid in over the page, what

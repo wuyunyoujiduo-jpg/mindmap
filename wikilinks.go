@@ -76,7 +76,7 @@ func (a *app) findLinkOffers(part string, n int) []linkOffer {
 	for _, cl := range a.clipsNamed(part, n) {
 		kind := "资料"
 		if isMemo(cl) {
-			kind = "灵感"
+			kind = "随记"
 		}
 		out = append(out, linkOffer{clipScheme + cl.ID, refName(cl), kind})
 	}
@@ -138,7 +138,7 @@ func (a *app) offerChips(c *ui.Context, part string) (linkOffer, bool) {
 	got := false
 	offers := a.linkOffers(part, 4)
 	if len(offers) == 0 {
-		ui.Text(c, "没有找到可以链接的：换个词，灵感、资料、导图、主题和技能都能搜").FontSize(textCaption).TextColor(faint(t))
+		ui.Text(c, "没有找到可以链接的：换个词，随记、资料、导图、主题和技能都能搜").FontSize(textCaption).TextColor(faint(t))
 		return chosen, false
 	}
 	for i, o := range offers {

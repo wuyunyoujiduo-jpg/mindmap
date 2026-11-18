@@ -86,7 +86,7 @@ func TestTasksPage(t *testing.T) {
 	snapshot(t, tt, "tasks-7days")
 
 	// Added in a line, to the inbox, on its day.
-	tt.Click("记一条灵感或任务")
+	tt.Click("记一条随记或任务")
 	tt.Type("明天 写周报 !高")
 	tt.Key(0, ui.KeyEnter)
 	tt.Frame()
