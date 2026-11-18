@@ -18,6 +18,10 @@ type config struct {
 	// AgentsSeen is when what the AI agents reported was last looked at
 	// (agents.go): what came since is counted as new.
 	AgentsSeen time.Time `json:"agentsSeen,omitzero"`
+	// ApkChecked is when a phone last looked for a newer version
+	// (apkupdate.go), which NoApkCheck has it not do by itself.
+	ApkChecked time.Time `json:"apkChecked,omitzero"`
+	NoApkCheck bool      `json:"noApkCheck,omitempty"`
 	// SkillsSeen are the AI agents found before (skillsview.go): one not
 	// among them is new, and said so; SkillsScanned is that they were
 	// looked for once, when every one found is taken as seen.

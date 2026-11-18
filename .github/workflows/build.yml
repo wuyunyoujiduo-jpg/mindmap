@@ -262,12 +262,13 @@ jobs:
 
   # The Android app (MyGo 0.10, phone.go): an .apk for arm64 phones, which
   # every phone of these years is, kept as an artifact of the run. Signed
-  # by the upload key of the environment mymind's secrets:
-  #   ANDROID_KEYSTORE           the keystore (.jks), in base64
-  #   ANDROID_KEYSTORE_PASSWORD  its password, which is the key's too
-  #   ANDROID_KEY_ALIAS          the key's alias
-  # Without them, by a debug key made anew on each runner: a phone takes
-  # that package over the one installed only once the app is uninstalled.
+  # by the upload key, which must stay the same from version to version,
+  # or a phone will not install a package over the one it has. The key is
+  # .github/android-upload.sealed, sealed to the updates' key and opened by
+  # MYGO_UPDATER_PRIVATE_KEY (tools/androidkey: GitHub's secrets cannot be
+  # written from where it was made); the environment's secrets
+  # ANDROID_KEYSTORE (base64), ANDROID_KEYSTORE_PASSWORD and
+  # ANDROID_KEY_ALIAS come first, if ever set.
   android:
     needs: test
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
@@ -288,20 +289,30 @@ jobs:
       - name: Set up signing
         env:
           ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
         run: |
-          if [ -z "$ANDROID_KEYSTORE" ]; then
-            echo "::warning::没有 ANDROID_KEYSTORE：安装包用这台机器临时的调试密钥签名，手机上要先卸载旧版才能装上它。"
+          key="$RUNNER_TEMP/android-key"
+          mkdir -p "$key"
+          if [ -n "$ANDROID_KEYSTORE" ]; then
+            echo "$ANDROID_KEYSTORE" | base64 --decode > "$key/upload.jks"
+            printf '%s' "$ANDROID_KEYSTORE_PASSWORD" > "$key/password"
+            printf '%s' "$ANDROID_KEY_ALIAS" > "$key/alias"
+          elif [ -n "$MYGO_UPDATER_PRIVATE_KEY" ]; then
+            go run ./tools/androidkey open .github/android-upload.sealed "$key"
+          else
+            echo "::warning::没有签名密钥：安装包用这台机器临时的调试密钥签名，手机上要先卸载旧版才能装上它。"
             exit 0
           fi
-          echo "$ANDROID_KEYSTORE" | base64 --decode > "$RUNNER_TEMP/upload.jks"
-          jq --arg ks "$RUNNER_TEMP/upload.jks" --arg alias "$ANDROID_KEY_ALIAS" \
+          pw="$(cat "$key/password")"
+          echo "::add-mask::$pw"
+          echo "MYGO_ANDROID_KEYSTORE_PASSWORD=$pw" >> "$GITHUB_ENV"
+          echo "MYGO_ANDROID_KEY_PASSWORD=$pw" >> "$GITHUB_ENV"
+          jq --arg ks "$key/upload.jks" --arg alias "$(cat "$key/alias")" \
             '.android.keystore = $ks | .android.keyAlias = $alias' mygo.json > mygo.signed.json
           mv mygo.signed.json mygo.json
       - name: Build MyMind for Android
-        env:
-          MYGO_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          MYGO_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
           go tool mygo build -platform android/arm64
           ls -l build/android
@@ -311,9 +322,11 @@ jobs:
           path: build/android/*.apk
 
   # A release's Android package: on the release the macOS job publishes,
-  # and on mindmap-models' desktop-latest as MyMind.apk, the address the
-  # app's settings give on a phone (phone.go's apkURL), Android having no
-  # updater; prune-updates.sh leaves what is no archive nor delta.
+  # and on mindmap-models' desktop-latest with android.json, which the
+  # phones read once a day to offer it (apkupdate.go): its version, what
+  # is new in it (its section of CHANGELOG.md), where it is and its
+  # SHA-256. MyMind.apk there is for 0.107.0, which linked to it.
+  # prune-updates.sh leaves what is no archive nor delta.
   android-publish:
     needs: [macos, android]
     if: startsWith(github.ref, 'refs/tags/') || inputs.release
@@ -340,5 +353,16 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
         run: |
-          cp android/*.apk "$RUNNER_TEMP/MyMind.apk"
+          v="$(jq -r .version mygo.json)"
+          apk="$(ls android/*.apk | head -1)"
+          name="$(basename "$apk")"
+          notes="$(awk -v h="## $v" '$0 == h { on = 1; next } on && /^## / { exit } on' CHANGELOG.md | sed '/./,$!d')"
+          jq -n --arg version "$v" --arg notes "$notes" \
+            --arg url "https://github.com/$GITHUB_REPOSITORY/releases/download/v$v/$name" \
+            --arg sha256 "$(sha256sum "$apk" | cut -d' ' -f1)" --argjson size "$(stat -c %s "$apk")" \
+            '{version: $version, notes: $notes, url: $url, sha256: $sha256, size: $size}' > "$RUNNER_TEMP/android.json"
+          cat "$RUNNER_TEMP/android.json"
+          cp "$apk" "$RUNNER_TEMP/MyMind.apk"
           gh release upload desktop-latest "$RUNNER_TEMP/MyMind.apk" --repo "$UPDATES_REPO" --clobber
+          # Last: what has the phones download it.
+          gh release upload desktop-latest "$RUNNER_TEMP/android.json" --repo "$UPDATES_REPO" --clobber

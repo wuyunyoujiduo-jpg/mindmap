@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/apkinstall"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/ghsync"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/layout"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
@@ -448,8 +449,13 @@ type app struct {
 	async        asyncRunner
 	post         func(fn func()) // runs fn on the main thread, from any
 
-	tasks  tasksState  // the tasks of all the maps (taskspage.go)
-	skills skillsState // the skills of the AI agents (skillsview.go)
+	tasks tasksState // the tasks of all the maps (taskspage.go)
+	// The Android app's updates (apkupdate.go): the system's installer,
+	// nil where there is none, and how the package downloads.
+	apk       apkState
+	apkGet    apkGetter
+	installer apkinstall.Installer
+	skills    skillsState // the skills of the AI agents (skillsview.go)
 	// holidaysAsked is when each year's notice of the holidays was last
 	// asked for (holidays.go).
 	holidaysAsked map[int]time.Time
@@ -569,6 +575,7 @@ func newApp(plat platform, cfg config) *app {
 		fetchPage:     library.FetchPage,
 		embed:         embedWith,
 		pluginGet:     httpGet,
+		apkGet:        httpDownload,
 		keyErr:        map[string]string{},
 		syncRun:       ghsync.Sync,
 		syncCheckRepo: ghsync.Check,

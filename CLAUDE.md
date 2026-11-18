@@ -683,11 +683,26 @@ by AI, and an AI assistant.
   data is the app's own folder (Android sets HOME to it), shared with the
   computers by the sync. The workflow's `android` job builds an arm64
   .apk for a release or a run by hand, and `android-publish` puts it on
-  the release and on mindmap-models' desktop-latest as MyMind.apk, which
-  the settings link to on a phone (`apkURL`): Android has no updater.
-  Signed by the environment's `ANDROID_KEYSTORE`,
-  `ANDROID_KEYSTORE_PASSWORD` and `ANDROID_KEY_ALIAS`; without them by a
-  debug key made anew each run, which a phone takes only after the app
-  is uninstalled. The adaptive icon is `tools/icon/android.py`'s. Tried
-  in snapshots at 390×844 (`TestPhoneLayout`), not yet on a phone.
+  the release, and on mindmap-models' desktop-latest with `android.json`
+  (its version, its section of CHANGELOG.md, its address on the release,
+  its SHA-256; and as MyMind.apk, which 0.107.0 linked to). Android has
+  no updater, so the app updates half by itself (0.107.1, the user's,
+  `apkupdate.go`): a look at `android.json` once a day, a window with
+  what is new, the package downloaded as a card of the long work and
+  checked, and the system's installer opened on it (`internal/apkinstall`,
+  a native module of MyGo in Kotlin, the app's one; the permission
+  REQUEST_INSTALL_PACKAGES in `mygo.json`); the user allows 安装未知应用
+  once, sent there by `AllowInstall`, and the installer opens as the app
+  is come back to (`App.OnActivate`, which a phone's resume is). A
+  package installs over the app only when signed by the same key: it is
+  `.github/android-upload.sealed`, in the repository sealed to the
+  updates' Ed25519 key (`tools/androidkey`: NaCl's anonymous box, the
+  key taken as X25519, as age does), opened by the workflow with
+  `MYGO_UPDATER_PRIVATE_KEY`; the user asked for it to be set up, and
+  GitHub's secrets cannot be written from here. The environment's
+  `ANDROID_KEYSTORE`, `ANDROID_KEYSTORE_PASSWORD` and `ANDROID_KEY_ALIAS`
+  come first if ever set. 0.107.0 was signed by a debug key made anew,
+  and is uninstalled once. The adaptive icon is `tools/icon/android.py`'s.
+  Tried in snapshots at 390×844 (`TestPhoneLayout`, `TestApkUpdate`),
+  not yet on a phone.
 - The user writes in Chinese; the app's texts are Chinese.

@@ -519,6 +519,11 @@ func main() {
 		a.skills.tidy = true
 		a.skillsRescan()
 		mygo.App.OnDidBecomeActive(func() { win.Update(a.skillsActive) })
+		// A phone's updates (apkupdate.go): a look once a day, and the
+		// installer once the app may install, come back to from the system.
+		a.installer = apkInstaller()
+		a.apkDue()
+		mygo.App.OnActivate(func(bool) { win.Update(a.apkActive) })
 		item := func(label, accel string, fn func()) *mygo.MenuItem {
 			return &mygo.MenuItem{Label: label, Accelerator: accel, Click: func(*mygo.MenuItem, *mygo.Window) {
 				win.Update(fn)

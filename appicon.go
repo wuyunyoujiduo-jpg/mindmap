@@ -167,6 +167,10 @@ func (a *app) groundSettings(c *ui.Context) {
 
 // updateSettings shows the version, and checks for a newer one.
 func (a *app) updateSettings(c *ui.Context) {
+	if a.apkUpdates() { // an Android app's: by the system's installer (apkupdate.go)
+		a.apkSettings(c)
+		return
+	}
 	if onPhone { // no updater on a phone: the newest package, installed over this one
 		rowsField(c, "版本", "下载后打开安装包即可更新，导图和收集都还在。", func() {
 			setRow(c, appName+" "+version, "", func() {

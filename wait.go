@@ -316,6 +316,9 @@ func (a *app) jobs() []jobCard {
 	for i, j := range a.copies {
 		out = append(out, jobCard{key: fmt.Sprint("copy:", i, ":", j.name), icon: "import", title: "正在加上附件", line: j.name, frac: -1, since: j.since})
 	}
+	if job, ok := a.apkJob(now); ok { // the Android app's new version
+		out = append(out, job)
+	}
 	switch {
 	case a.pluginBusy:
 		line, frac := "正在连接…", float32(-1)
