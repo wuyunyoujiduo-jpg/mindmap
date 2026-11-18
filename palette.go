@@ -138,7 +138,12 @@ func (a *app) commands() []command {
 	}
 	if onPhone { // no keyboard's keys said, nor what a computer alone has
 		cmds = slices.DeleteFunc(cmds, func(c command) bool {
-			return slices.Contains([]string{"快速记录", "收藏剪贴板到收集", "从代码仓库生成架构…", "快捷键速查"}, c.title)
+			// and what the bar under a topic does, or 更多 (phoneCanvasFoot,
+			// phoneTopicMore), or no finger does on a phone's canvas: the
+			// user's screenshot of a list of them (0.108.7).
+			return slices.Contains([]string{"快速记录", "收藏剪贴板到收集", "从代码仓库生成架构…", "快捷键速查",
+				"添加子主题", "添加同级主题", "在上方添加同级主题", "关联线到…（所选主题连到另一个主题）",
+				"复制主题", "粘贴为子主题", "回到中心"}, c.title)
 		})
 		for i := range cmds {
 			cmds[i].keys = ""
@@ -695,9 +700,21 @@ func (a *app) paletteView(c *ui.Context) {
 		if a.paletteMode == paletteClip && a.floatAt != nil {
 			placeholder = "在收集里查找要放到画布上的那一条…"
 		}
-		w, _ := c.Size()
-		ui.Column(c).Width(min(640, w-80)).Gap(8).Children(func() {
-			in := ui.TextInput(c.Key("palette-query"), &a.paletteQuery).Placeholder(placeholder).AutoFocus().FontSize(15)
+		w, h := c.Size()
+		width, tall := min(640, w-80), float32(420)
+		if narrowLayout { // the page's width and height, under ‹ 返回 (phonePage)
+			width, tall = w-2*pagePad(), max(h-140, 200)
+			if a.paletteMode == paletteAll {
+				placeholder = "搜索导图、主题、随记，或输入命令"
+			}
+		}
+		ui.Column(c).Width(width).Gap(8).Children(func() {
+			var in ui.Element
+			if narrowLayout { // the app's field of search, the page's width
+				in = searchBox(c, "palette-query", &a.paletteQuery, placeholder, "搜索", "", width).AutoFocus()
+			} else {
+				in = ui.TextInput(c.Key("palette-query"), &a.paletteQuery).Placeholder(placeholder).AutoFocus().FontSize(15)
+			}
 			if in.Changed() {
 				a.paletteIndex = 0
 			}
@@ -715,7 +732,7 @@ func (a *app) paletteView(c *ui.Context) {
 			case in.Submitted():
 				run(a.paletteIndex)
 			}
-			ui.Scroll(c.Key("palette-list")).MaxHeight(420).Children(func() {
+			ui.Scroll(c.Key("palette-list")).MaxHeight(tall).Children(func() {
 				ui.Column(c).Gap(1).Children(func() {
 					for i, it := range items {
 						row := ui.Row(c.Key(fmt.Sprint("item", i))).Padding(8, 12).Gap(10).Radius(radiusRow).AlignItems(ui.Center).

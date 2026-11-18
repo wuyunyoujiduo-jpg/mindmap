@@ -243,6 +243,11 @@ https://claude.ai/artifact/5ySnmjspG48dmg8MpwcwLt.
   foot. A phone's 连接 is the AI alone, so its row is 助手 and opens it.
   Six pills over the page with its name said again under them, and a
   block cut at its side, were the user's screenshot (0.108.6).
+- **A page over the drawer puts it away** (`openSettings`): the
+  settings, opened from its foot, were drawn with the drawer still open
+  under them (0.108.7). The search is the page's width, in the app's
+  field of search (`searchBox`), and lists no command a topic's bar or
+  更多 has.
 - **A sheet's focus is on itself**, not on its first field: MyGo moves
   the focus into a sheet as it rises, and a title taking it brought the
   keyboard up over what was to be read.

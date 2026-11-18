@@ -761,6 +761,7 @@ func (a *app) trayTitle() string {
 // openSettings opens the settings, with the fields as saved.
 func (a *app) openSettings() {
 	a.settingsOpen, a.settingsHome = true, true
+	a.drawer = false // its page over the place's, the drawer put away under it (the user's, 0.108.7)
 	a.embedDrafts = [3]string{a.cfg.EmbedURL, a.cfg.EmbedKey, a.cfg.EmbedModel}
 	a.syncDrafts = [2]string{a.cfg.SyncRepo, a.cfg.SyncToken}
 }

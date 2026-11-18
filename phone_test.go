@@ -349,7 +349,11 @@ func TestPhoneSweep(t *testing.T) {
 		tt.Frame()
 		snapshot(t, tt, "sweep-"+name)
 	}
-	a.openSettings()
+	a.drawer = true
+	a.openSettings() // from the drawer's foot
+	if a.drawer {
+		t.Fatal("the settings opened over the drawer, which stayed open under them")
+	}
 	shot("settings") // the list of the parts (phonesettings.go)
 	if !tt.HasText("设置") || !tt.HasText("同步") || !tt.HasText("AI 助手") || tt.HasText("连接") {
 		t.Fatalf("a phone's settings are a list of their parts: %q", tt.Texts())
