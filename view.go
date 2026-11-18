@@ -14,6 +14,7 @@ import (
 // tasks in the middle, and the selected node's details on the right.
 func (a *app) view(c *ui.Context) {
 	a.tick(c)
+	a.frameN++
 	a.sweepVideos()
 	if a.tagFocus > 0 {
 		a.tagFocus--

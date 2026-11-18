@@ -231,8 +231,19 @@ func (a *app) historyView(c *ui.Context) {
 			ui.Text(c, "还没有历史版本。编辑、或者其他程序修改这个导图后，这里会自动保留版本。").TextColor(t.TextMuted).Wrap()
 			return
 		}
-		ui.Row(c).Gap(16).Width(min(900, w-80)).Height(min(560, h-160)).AlignItems(ui.Stretch).Children(func() {
-			ui.Scroll(c.Key("versions")).Width(240).Shrink(0).Children(func() {
+		// The versions beside what one was; on a phone over it.
+		line, room, tall := ui.Row, min(900, w-80), min(560, h-160)
+		if narrowLayout {
+			line, room, tall = ui.Column, w-2*pagePad(), h-150
+		}
+		line(c).Gap(16).Width(room).Height(tall).AlignItems(ui.Stretch).Children(func() {
+			list := ui.Scroll(c.Key("versions")).Shrink(0)
+			if narrowLayout {
+				list.Height(min(200, tall/3))
+			} else {
+				list.Width(240)
+			}
+			list.Children(func() {
 				ui.Column(c).Gap(2).Children(func() {
 					for i, v := range a.historyList {
 						row := ui.Column(c.Key(fmt.Sprint("v", i))).Padding(6, 10).Radius(6).Cursor(ui.CursorPointer).

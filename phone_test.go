@@ -1,10 +1,13 @@
 package main
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
 
 // TestPhoneLayout lays the window out as a phone's (phone.go): the places
@@ -228,4 +231,153 @@ func TestPhoneShot(t *testing.T) {
 		t.Fatal("no outline keys while a line is written in")
 	}
 	snapshot(t, tt, "shot-outline")
+	a.outlineFocus = ""
+	// The tour and the settings, as a phone has them.
+	for step := 2; step <= 3; step++ {
+		a.tourStep = step
+		tt.Frame()
+		tt.Frame()
+		snapshot(t, tt, fmt.Sprintf("shot-tour%d", step))
+	}
+	a.tourStep = 0
+	a.openSettings()
+	tt.Frame()
+	tt.Frame()
+	if !tt.HasText("返回") {
+		t.Fatal("the settings are no page on a phone")
+	}
+	snapshot(t, tt, "shot-settings")
+}
+
+// TestPhoneMapFingers: on a phone a finger pans the map, on its blank and
+// across a topic, and two fingers zoom it.
+func TestPhoneMapFingers(t *testing.T) {
+	a, tt := newTestApp(t)
+	tt.SetSize(390, 844)
+	if err := a.open(a.files[0].Path); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Frame()
+	swipe := func(x, y, dx, dy float32) {
+		tt.FingerDown(x, y)
+		tt.Frame()
+		for i := 1; i <= 4; i++ {
+			tt.FingerMove(x+dx*float32(i)/4, y+dy*float32(i)/4)
+			tt.Advance(16 * time.Millisecond)
+			tt.Frame()
+		}
+		tt.FingerUp(x+dx, y+dy)
+		tt.Frame()
+		tt.Frame()
+	}
+	// The blank at the top of the canvas.
+	cam := *a.cam()
+	swipe(200, 160, -60, 40)
+	if moved := a.cam(); moved.X-cam.X > -50 || moved.Y-cam.Y < 30 {
+		t.Fatalf("the blank: from %v,%v to %v,%v", cam.X, cam.Y, moved.X, moved.Y)
+	}
+	// Across a topic, at once: the map pans, the topic stays in the tree.
+	n := a.doc.Root.Children[0]
+	b := a.boxes.Boxes[n.ID]
+	c := a.cam()
+	x, y := a.vp.X+c.X+(b.X+b.W/2)*c.Zoom, a.vp.Y+c.Y+(b.Y+b.H/2)*c.Zoom
+	cam = *a.cam()
+	swipe(x, y, 0, 70)
+	if moved := a.cam(); moved.Y-cam.Y < 50 {
+		t.Fatalf("across a topic: from %v to %v", cam.Y, moved.Y)
+	}
+	if _, p := a.doc.Find(n.ID); p != a.doc.Root {
+		t.Fatal("a swipe moved the topic out of its place")
+	}
+	// A topic held still is taken up, and let go over another goes under it.
+	from, to := a.doc.Root.Children[0], a.doc.Root.Children[1]
+	tt.Frame()
+	c = a.cam()
+	at := func(n *model.Node) (float32, float32) {
+		b := a.boxes.Boxes[n.ID]
+		return a.vp.X + c.X + (b.X+b.W/2)*c.Zoom, a.vp.Y + c.Y + (b.Y+b.H/2)*c.Zoom
+	}
+	x, y = at(from)
+	tx, ty := at(to)
+	tt.FingerDown(x, y)
+	tt.Frame()
+	tt.Advance(900 * time.Millisecond)
+	tt.Frame()
+	tt.Frame()
+	if a.carry != from.ID {
+		t.Fatalf("not taken up: %q", a.carry)
+	}
+	for i := 1; i <= 6; i++ {
+		tt.FingerMove(x+(tx-x)*float32(i)/6, y+(ty-y)*float32(i)/6)
+		tt.Advance(16 * time.Millisecond)
+		tt.Frame()
+	}
+	if a.carryOver != to.ID {
+		t.Fatalf("over %q, not %q", a.carryOver, to.ID)
+	}
+	tt.FingerUp(tx, ty)
+	tt.Frame()
+	tt.Frame()
+	if _, p := a.doc.Find(from.ID); p == nil || p.ID != to.ID {
+		t.Fatal("let go over a topic, it did not go under it")
+	}
+	if !strings.Contains(a.notice, "已移到") {
+		t.Fatalf("said %q", a.notice)
+	}
+	// Two fingers.
+	z := a.cam().Zoom
+	tt.Pinch(200, 400, 1.5)
+	tt.Frame()
+	if a.cam().Zoom <= z {
+		t.Fatalf("pinched: zoom %v to %v", z, a.cam().Zoom)
+	}
+}
+
+// TestPhoneSweep snapshots, as a phone has them, every part of the
+// settings and the windows the app opens, for a look at what does not fit
+// a phone (MINDMAP_SNAPSHOTS); it fails on what runs past the screen.
+func TestPhoneSweep(t *testing.T) {
+	was := onPhone
+	onPhone = true
+	defer func() { onPhone = was }()
+	a, tt := newTestApp(t)
+	tt.SetSize(390, 844)
+	shot := func(name string) {
+		t.Helper()
+		tt.Frame()
+		tt.Frame()
+		snapshot(t, tt, "sweep-"+name)
+	}
+	a.openSettings()
+	for i := range len(settingsTabs) + 1 {
+		a.settingsTab = i
+		shot(fmt.Sprint("settings-", i))
+	}
+	a.settingsOpen = false
+	for _, w := range []struct {
+		name string
+		open func()
+		shut func()
+	}{
+		{"palette", func() { a.openPalette(paletteAll) }, func() { a.paletteOpen = false }},
+		{"templates", func() { a.templatesOpen = true }, func() { a.templatesOpen = false }},
+		{"history", a.openHistory, func() { a.historyOpen = false }},
+		{"ai", func() { a.aiOpen = true }, func() { a.aiOpen = false }},
+		{"cheats", func() { a.cheatsOpen = true }, func() { a.cheatsOpen = false }},
+	} {
+		w.open()
+		shot(w.name)
+		w.shut()
+		tt.Frame()
+	}
+	a.goToday()
+	a.tasks.view = tasksReview
+	shot("review")
+	a.tasks.view = tasksWaiting
+	shot("waiting")
+	a.tasks.view = tasksToday
+	a.showLibrary()
+	a.libReview = reviewDaily
+	shot("lib-review")
 }

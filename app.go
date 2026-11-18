@@ -368,49 +368,63 @@ type app struct {
 	// it showed when it came, and a topic's panel over the canvas.
 	drawer, panelSheet bool
 	drawerWas          string
-	sideItems          []string // the list's maps, in order
-	sideDrawn          []string // as the frame before drew them
-	sideFocus          string   // "side" while the sidebar has the keys
-	libCat             string   // the category shown, "" all
-	libTag             string   // the tag shown, "" all
-	libQueue           []clipJob
-	libWorking         string            // the clip being read or sorted out
-	libStatus          map[string]string // what is happening to clips, or went wrong
-	libErr             string
-	libNeedKey         string    // the clip whose organizing waits on an API key
-	libMod             time.Time // of the clips folder, as last read or written
-	libTagText         string    // a tag being typed for the clip shown
-	libSynText         string    // the synonyms of the clip libSynFor, as edited
-	libSynFor          string
-	libSynEditing      bool
-	libConfirm         bool // deleting the clip shown is being confirmed
-	fetchPage          fetchPager
-	embed              embedFunc
-	qvecs              map[string][]float32 // the vectors of queries, by query
-	qPending           map[string]bool      // queries whose vectors are being made
-	embedBusy          bool                 // clips' vectors are being made
-	embedErr           string               // why making vectors failed, which stops it until the settings change
-	libQueryAt         time.Time            // when the library's search was last typed in
-	libHitsFor         libHitsKey           // what libHitsList was found for
-	libHitsList        []library.Hit
-	relatedFor         string // the clip and library version relatedList is of
-	relatedList        []library.Hit
-	dupe               bool // the last clip kept was kept before
-	backupBusy         bool
-	backupErr          string
-	embedDrafts        [3]string // the settings' fields of the embedding model: address, key, model
-	embedTest          string    // how testing the embedding model went
-	noLocalModel       bool      // tests leave the built-in model out
-	pluginBusy         bool
-	pluginErr          string
-	pluginNote         string
-	pluginDone         int64 // bytes downloaded of pluginSize
-	pluginSize         int64
-	pluginCancel       context.CancelFunc
-	pluginGet          pluginGetter
-	nameTitle          string // the central topic the open map's name was given after
-	dirID              fileID
-	recordingKey       string // the shortcut being recorded, by its label
+	// A finger panning a map's canvas (fingerPan): the frames counted,
+	// the last one it moved in, how fast, and the glide after a flick.
+	frameN, panSeen int
+	panning         bool
+	panV, glide     [2]float32
+	// A topic a finger took up on a phone (carryTopic): it, where its
+	// ghost is in the canvas, and the topic it would go under.
+	carry, carryOver string
+	carryAt          [2]float32
+	hold             struct { // the topic a finger is on, since when, and whether it moved
+		id    string
+		at    time.Time
+		moved bool
+	}
+	sideItems     []string // the list's maps, in order
+	sideDrawn     []string // as the frame before drew them
+	sideFocus     string   // "side" while the sidebar has the keys
+	libCat        string   // the category shown, "" all
+	libTag        string   // the tag shown, "" all
+	libQueue      []clipJob
+	libWorking    string            // the clip being read or sorted out
+	libStatus     map[string]string // what is happening to clips, or went wrong
+	libErr        string
+	libNeedKey    string    // the clip whose organizing waits on an API key
+	libMod        time.Time // of the clips folder, as last read or written
+	libTagText    string    // a tag being typed for the clip shown
+	libSynText    string    // the synonyms of the clip libSynFor, as edited
+	libSynFor     string
+	libSynEditing bool
+	libConfirm    bool // deleting the clip shown is being confirmed
+	fetchPage     fetchPager
+	embed         embedFunc
+	qvecs         map[string][]float32 // the vectors of queries, by query
+	qPending      map[string]bool      // queries whose vectors are being made
+	embedBusy     bool                 // clips' vectors are being made
+	embedErr      string               // why making vectors failed, which stops it until the settings change
+	libQueryAt    time.Time            // when the library's search was last typed in
+	libHitsFor    libHitsKey           // what libHitsList was found for
+	libHitsList   []library.Hit
+	relatedFor    string // the clip and library version relatedList is of
+	relatedList   []library.Hit
+	dupe          bool // the last clip kept was kept before
+	backupBusy    bool
+	backupErr     string
+	embedDrafts   [3]string // the settings' fields of the embedding model: address, key, model
+	embedTest     string    // how testing the embedding model went
+	noLocalModel  bool      // tests leave the built-in model out
+	pluginBusy    bool
+	pluginErr     string
+	pluginNote    string
+	pluginDone    int64 // bytes downloaded of pluginSize
+	pluginSize    int64
+	pluginCancel  context.CancelFunc
+	pluginGet     pluginGetter
+	nameTitle     string // the central topic the open map's name was given after
+	dirID         fileID
+	recordingKey  string // the shortcut being recorded, by its label
 	// What kept a screenshot from being taken, said in the app's window,
 	// which comes to the front for it.
 	shotAlert                    bool

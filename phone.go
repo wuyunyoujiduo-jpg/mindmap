@@ -2,11 +2,15 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/mobile"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/layout"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
 )
 
 // The app on a phone (Android, by MyGo 0.10; the same holds for an iPhone).
@@ -376,6 +380,15 @@ func (a *app) phoneKinds(c *ui.Context) {
 // zoom is the fingers'; the lenses and the rest are the desktop's.
 func (a *app) phoneCanvasFoot(c *ui.Context) {
 	t := c.Theme()
+	if a.carry != "" { // a topic taken up: its ghost under the finger
+		if n, _ := a.doc.Find(a.carry); n != nil {
+			lifted(ui.Box(c.Key("carried")).Absolute().Left(a.carryAt[0]-60).Top(a.carryAt[1]-44).Width(120).Height(36).
+				Padding(0, 12).Radius(10).Center().Background(cardColor(t)).PassThrough().Label("拿起的主题"), t).Children(func() {
+				ui.Text(c, n.Title).FontSize(textBody).FontWeight(700).SingleLine().PassThrough()
+			})
+		}
+		return
+	}
 	n, _ := a.selectedNode()
 	bar := n != nil && a.editing == "" && len(a.multi) == 0 && !a.lensQuiet
 	foot := float32(16)
@@ -425,5 +438,153 @@ func (a *app) phoneCanvasFoot(c *ui.Context) {
 				ui.Text(c, k.name).FontSize(textCaption - 1).TextColor(ink).PassThrough()
 			})
 		}
+		// The rest of what is done to a topic: its menu, which a pointer's
+		// other key opens on a desktop and a phone's long press cannot.
+		more := ui.Column(c.Key("更多")).Grow(1).Basis(0).Height(54).Gap(3).Radius(12).Center().Cursor(ui.CursorPointer).Label("更多")
+		depth := max(len(a.shownDoc().Path(n.ID))-1, 0) // as the canvas's bar takes it
+		if a.doc.IsFloating(n.ID) {
+			depth++
+		}
+		more.Menu(func(m *ui.Menu) { a.nodeMenu(m, n, depth) })
+		press(more, 0.94)
+		more.Children(func() {
+			glyph(c, iconMore, 18, t.Text)
+			ui.Text(c, "更多").FontSize(textCaption - 1).PassThrough()
+		})
 	})
+}
+
+// fingerPan moves the canvas with a finger dragging its blank: the map
+// follows the finger, as a list follows it, and a finger landing stops a
+// glide. (A topic does the same, carryTopic.)
+func (a *app) fingerPan(c *ui.Context, el ui.Element, cam *camera) {
+	if dx, dy, pressed := el.Dragged(); pressed {
+		a.panBy(cam, dx, dy, el)
+	}
+}
+
+// panBy moves the canvas by what a finger pressing el moved since the
+// last frame, keeping how fast for the glide after it lets go.
+func (a *app) panBy(cam *camera, dx, dy float32, el ui.Element) {
+	if !a.panning || a.panSeen < a.frameN-1 { // a finger landing
+		a.glide, a.panV = [2]float32{}, [2]float32{}
+	}
+	cam.X += dx
+	cam.Y += dy
+	if vx, vy := el.DragVelocity(); vx != 0 || vy != 0 {
+		a.panV = [2]float32{vx, vy}
+	}
+	a.panning, a.panSeen = true, a.frameN
+}
+
+// panGlide carries the canvas on after a flick, slowing as a list does,
+// and stops it when slow. A pan let go is one no frame since moved.
+func (a *app) panGlide(c *ui.Context, cam *camera) {
+	if a.panning && a.panSeen < a.frameN-1 {
+		a.panning = false
+		if math.Hypot(float64(a.panV[0]), float64(a.panV[1])) > 250 {
+			a.glide = a.panV
+		}
+		a.panV = [2]float32{}
+	}
+	if a.glide == [2]float32{} || a.noMotion {
+		a.glide = [2]float32{}
+		return
+	}
+	const step = 1.0 / 60
+	cam.X += a.glide[0] * step
+	cam.Y += a.glide[1] * step
+	a.glide[0] *= 0.93
+	a.glide[1] *= 0.93
+	if math.Hypot(float64(a.glide[0]), float64(a.glide[1])) < 30 {
+		a.glide = [2]float32{}
+	}
+	c.Invalidate()
+}
+
+// carryTopic is a topic under a finger on a phone: held still for half a
+// second (a long press) it is taken up, its ghost following the finger
+// and the topic it would go under outlined, and let go there it goes
+// under it, said with 撤销; a finger that moves at once pans the map.
+// The desktop's drag of a topic (Drag) would hold every finger on a topic
+// till a long press, so that the map could not be panned from one.
+func (a *app) carryTopic(c *ui.Context, el ui.Element, n *model.Node, box layout.Rect, cam *camera) {
+	z := cam.Zoom
+	// Asked every frame, so that MyGo hands the topic a finger's moves,
+	// and, held still, its moves after (rather than scrolling what is
+	// under it, or taking the press for a long press of its own, which
+	// would leave no move to carry the topic by).
+	dx, dy, pressed := el.Dragged()
+	if !pressed {
+		if a.hold.id == n.ID {
+			a.hold.id = ""
+		}
+		if a.carry == n.ID { // let go
+			id, to := n.ID, a.carryOver
+			a.carry, a.carryOver = "", ""
+			if to != "" {
+				a.later(func() { a.carryDrop(id, to) })
+			}
+		}
+		return
+	}
+	if a.hold.id != n.ID { // a finger landing on it
+		a.hold.id, a.hold.at, a.hold.moved = n.ID, c.Now(), false
+	}
+	switch {
+	case a.carry == n.ID:
+		a.carryAt[0] += dx
+		a.carryAt[1] += dy
+		a.carryOver = a.nodeAt((a.carryAt[0]-cam.X)/z, (a.carryAt[1]-cam.Y)/z, n)
+	case dx != 0 || dy != 0:
+		a.hold.moved = true
+		a.panBy(cam, dx, dy, el)
+	case !a.hold.moved && a.carry == "" && c.Now().Sub(a.hold.at) >= carryAfter:
+		a.carry, a.carryOver = n.ID, ""
+		a.carryAt = [2]float32{cam.X + (box.X+box.W/2)*z, cam.Y + (box.Y+box.H/2)*z}
+		a.selected, a.multi = n.ID, nil
+		a.glide = [2]float32{}
+	case !a.hold.moved:
+		c.Invalidate() // till the half second is up
+	}
+}
+
+// carryAfter is how long a finger holds a topic still to take it up: a
+// long press's, as the systems have it.
+const carryAfter = 500 * time.Millisecond
+
+// carryDrop puts a topic a finger carried under the topic it was let go
+// over, and says so with the way back.
+func (a *app) carryDrop(id, to string) {
+	n, _ := a.doc.Find(id)
+	t, _ := a.doc.Find(to)
+	if n == nil || t == nil {
+		return
+	}
+	edits := a.edits
+	a.moveNode(id, to)
+	if a.edits != edits {
+		a.tellUndo("已移到「"+t.Title+"」下", a.stepBack())
+	}
+}
+
+// phonePage is on a phone what a window over the page is on a desktop
+// (modal): a page of its own over the place's, under a row with the way
+// back, which back and Escape take too. A window there ran past the
+// screen's edge with what it held, the user saw (0.108.1).
+func phonePage(c *ui.Context, key string, open *bool, fn func()) ui.Element {
+	if !*open {
+		return ui.Box(c.Key(key)).Size(0, 0)
+	}
+	t := c.Theme()
+	page := ui.Column(c.Key(key)).Absolute().Left(0).Top(0).Right(0).Bottom(0).ZIndex(40).Background(cardColor(t)).
+		Transition(ui.ElementTransition{Duration: motionSlow, Ease: easeDetent, Enter: &ui.Motion{X: 24}})
+	if c.Shortcut(0, ui.KeyEscape) {
+		*open = false
+	}
+	page.Children(func() {
+		sheetBack(c, func() { *open = false })
+		ui.Column(c.Key("body")).Grow(1).Basis(0).MinHeight(0).Padding(12, pagePad(), 0).FillWidth().Children(fn)
+	})
+	return page
 }

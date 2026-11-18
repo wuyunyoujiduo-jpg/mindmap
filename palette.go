@@ -136,6 +136,14 @@ func (a *app) commands() []command {
 	for _, s := range model.Statuses {
 		cmds = append(cmds, command{"所选设为「" + s.Label() + "」", "", func() { a.setStatusAll(s) }, hasDoc})
 	}
+	if onPhone { // no keyboard's keys said, nor what a computer alone has
+		cmds = slices.DeleteFunc(cmds, func(c command) bool {
+			return slices.Contains([]string{"快速记录", "收藏剪贴板到收集", "从代码仓库生成架构…", "快捷键速查"}, c.title)
+		})
+		for i := range cmds {
+			cmds[i].keys = ""
+		}
+	}
 	return cmds
 }
 
@@ -759,7 +767,9 @@ func (a *app) paletteView(c *ui.Context) {
 					}
 				})
 			})
-			ui.Text(c, "↑↓ 选择 · ↩ 执行 · Esc 关闭 · ⌘K 全部 · ⌘P 导图 · ⌘⇧F 搜索所有导图").FontSize(11).TextColor(t.TextMuted)
+			if !onPhone { // a keyboard's keys
+				ui.Text(c, "↑↓ 选择 · ↩ 执行 · Esc 关闭 · ⌘K 全部 · ⌘P 导图 · ⌘⇧F 搜索所有导图").FontSize(11).TextColor(t.TextMuted)
+			}
 		})
 	})
 }

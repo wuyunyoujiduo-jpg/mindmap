@@ -464,6 +464,10 @@ func (a *app) canvasArea(c *ui.Context) {
 		cv.Focusable().FocusRing(false).Bind(&a.canvas)
 	}
 	cv.HandleInput(a.canvasInput)
+	if narrowLayout && !exporting { // a finger pans the canvas, and a flick glides on (phone.go)
+		a.panGlide(c, cam)
+		a.fingerPan(c, cv, cam)
+	}
 	if !exporting {
 		a.overCanvas = cv.Hovered()
 	}
@@ -504,7 +508,9 @@ func (a *app) canvasArea(c *ui.Context) {
 			a.justFloated = true
 		})
 	}
-	if !exporting && shown == a.doc {
+	if !exporting && shown == a.doc && !narrowLayout {
+		// Not on a phone: there a finger held on the canvas is a topic
+		// being taken up (carryTopic), which a long press's menu would end.
 		cv.ContextMenu(a.canvasMenu)
 	}
 	cv.Draw(func(p *ui.Painter, rect ui.Rect) {
@@ -657,6 +663,11 @@ func (a *app) canvasInput(ev ui.InputEvent) bool {
 	case ui.InputPointerDown:
 		a.pressAt = [2]float32{ev.X, ev.Y} // where the canvas's menu opens (canvasMenu)
 		return false
+	case ui.InputZoom: // two fingers pinching, on a phone (the Mac's trackpad: watchPinch)
+		if ev.Scale > 0 {
+			a.zoomBy(ev.Scale, ev.X, ev.Y, true)
+		}
+		return true
 	case ui.InputScroll:
 		mods := ev.Mods | a.mods
 		if mods&(ui.Cmd|ui.Ctrl) != 0 {
@@ -1000,8 +1011,14 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 			el.Cursor(ui.CursorGrab)
 		} else {
 			// Other nodes are dropped on a node to move under it, and on
-			// the bare canvas to stand there, out of the tree.
-			el.Drag(nodeDrag{n.ID}).Cursor(ui.CursorPointer)
+			// the bare canvas to stand there, out of the tree. On a phone
+			// a finger held still takes one up (MyGo's long press), and one
+			// that moves at once pans the canvas, as on its blank.
+			if narrowLayout {
+				a.carryTopic(c, el, n, box, cam)
+			} else {
+				el.Drag(nodeDrag{n.ID}).Cursor(ui.CursorPointer)
+			}
 			if at, ok := el.DragMissed(); ok && !summary {
 				id := n.ID
 				a.later(func() { a.floatDropped(id, at.X, at.Y) })
@@ -1019,8 +1036,11 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 				}
 			}
 		}
-		if a.floatOver == n.ID {
+		if a.floatOver == n.ID || a.carryOver == n.ID && a.carry != "" {
 			el.Border(2*z, t.Accent).BorderStyle(ui.BorderDashed)
+		}
+		if a.carry == n.ID {
+			el.Opacity(0.35) // taken up: its ghost follows the finger (phoneCanvasFoot)
 		}
 		if d, ok := ui.Drop[canvasDrop](el); ok {
 			id := n.ID
@@ -1035,7 +1055,9 @@ func (a *app) nodeView(c *ui.Context, n *model.Node, depth int, box layout.Rect,
 				a.later(func() { a.dropMaterial(id, d) })
 			}
 		}
-		el.ContextMenu(func(m *ui.Menu) { a.nodeMenu(m, n, depth) })
+		if !narrowLayout { // a phone's long press takes the topic up; its menu is the bar's ⋯
+			el.ContextMenu(func(m *ui.Menu) { a.nodeMenu(m, n, depth) })
+		}
 		if files := el.DroppedFiles(); len(files) > 0 {
 			a.later(func() { a.dropFiles(n, files) })
 		}

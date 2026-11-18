@@ -770,10 +770,14 @@ func (a *app) openSettings() {
 func (a *app) settingsView(c *ui.Context) {
 	t := c.Theme()
 	// On the ground, as a page: its parts are white cards.
-	modal(c, "settings", &a.settingsOpen, func() {
+	frame := modal
+	if narrowLayout { // a page of its own on a phone (phonePage)
+		frame = phonePage
+	}
+	frame(c, "settings", &a.settingsOpen, func() {
 		w, h := c.Size()
 		tabs := slices.Clone(settingsTabs)
-		if a.file != nil {
+		if a.file != nil && !onPhone { // a map's code folder and baseline: a computer's
 			tabs = append(tabs, "当前导图")
 		}
 		a.settingsTab = min(a.settingsTab, len(tabs)-1)
@@ -781,7 +785,7 @@ func (a *app) settingsView(c *ui.Context) {
 		// a phone the parts are over it, a few to a line (phone.go).
 		outer, room := ui.Row, min(820, w-80)
 		if narrowLayout {
-			outer, room = ui.Column, w-80
+			outer, room = ui.Column, w-2*pagePad()
 		}
 		outer(c).Gap(22).Width(room).AlignItems(ui.Start).Children(func() {
 			var list ui.Element
@@ -834,13 +838,17 @@ func (a *app) settingsView(c *ui.Context) {
 			page.Children(func() {
 				ui.Row(c).AlignItems(ui.Center).Children(func() {
 					ui.Text(c, tabs[a.settingsTab]).FontSize(textTitle).FontWeight(700).Grow(1)
-					if iconButton(c, iconClose, "关闭", "关闭", 28, true).Clicked() {
+					if !narrowLayout && iconButton(c, iconClose, "关闭", "关闭", 28, true).Clicked() {
 						a.settingsOpen = false
 					}
 				})
 				// The same height for every tab, so that the window does not
 				// jump when switching; a long tab scrolls.
-				ui.Scroll(c.Key(fmt.Sprint("settings", a.settingsTab))).Gap(20).Height(max(min(580, h-190), 200)).Padding(2, 12, 24, 2).Margin(0, -2).Label("设置内容").Children(func() {
+				tall := max(min(580, h-190), 200)
+				if narrowLayout { // the page's, under its parts
+					tall = max(h-250, 200)
+				}
+				ui.Scroll(c.Key(fmt.Sprint("settings", a.settingsTab))).Gap(20).Height(tall).Padding(2, 12, 24, 2).Margin(0, -2).Label("设置内容").Children(func() {
 					switch tabs[a.settingsTab] {
 					case "通用":
 						a.generalSettings(c)
@@ -970,14 +978,20 @@ func (a *app) generalSettings(c *ui.Context) {
 			}
 		})
 	})
-	rowsField(c, "菜单栏和提醒", "", func() {
-		tray := !a.cfg.NoTray
-		switchRow(c, &tray, "菜单栏图标", "显示今天到期和已逾期的任务数，点开列出任务、快速记录、收藏剪贴板", func() {
-			a.cfg.NoTray = !tray
-			a.cfg.save()
-			a.plat.SetTray(tray)
-		})
-		setLine(c)
+	part := "菜单栏和提醒"
+	if onPhone {
+		part = "提醒"
+	}
+	rowsField(c, part, "", func() {
+		if !onPhone { // a phone has no menu bar
+			tray := !a.cfg.NoTray
+			switchRow(c, &tray, "菜单栏图标", "显示今天到期和已逾期的任务数，点开列出任务、快速记录、收藏剪贴板", func() {
+				a.cfg.NoTray = !tray
+				a.cfg.save()
+				a.plat.SetTray(tray)
+			})
+			setLine(c)
+		}
 		on := !a.cfg.NoReminders
 		switchRow(c, &on, "到期提醒", "任务今天到期或已逾期时，每天发一次系统通知", func() {
 			a.cfg.NoReminders = !on
@@ -990,7 +1004,11 @@ func (a *app) generalSettings(c *ui.Context) {
 			}
 		})
 	})
-	a.shotSettings(c)
+	if !onPhone { // the app's screenshot and the Dock's icon are a computer's
+		a.shotSettings(c)
+	}
 	a.updateSettings(c)
-	a.iconSettings(c)
+	if !onPhone {
+		a.iconSettings(c)
+	}
 }

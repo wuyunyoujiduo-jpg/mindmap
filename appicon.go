@@ -128,7 +128,7 @@ func (a *app) groundSettings(c *ui.Context) {
 	t := c.Theme()
 	rowsField(c, "外观", "", func() {
 		// Light, dark, or as the system is; said where it is looked for.
-		setRow(c, "深浅", "跟随系统时，随 macOS 的外观一起变", func() {
+		setRow(c, "深浅", "跟随系统时，随系统的外观一起变", func() {
 			looks := []string{"", "light", "dark"}
 			at := max(slices.Index(looks, a.cfg.Appearance), 0)
 			ui.Row(c).Width(260).Shrink(0).Children(func() {

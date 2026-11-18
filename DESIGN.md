@@ -227,6 +227,13 @@ https://claude.ai/artifact/5ySnmjspG48dmg8MpwcwLt.
   92%, a topic's panel at 60% and 92%): a task, a skill, a branch being
   grown, a topic's details. A clip, which is read at length, covers the
   page under ‹ 收集 in the accent (`sheetBackTo`).
+- **A window is a page** (`phonePage`): the settings, the search, the
+  history, the templates, the cards to share, over the place's page
+  under ‹ 返回. A few lines and keys stay a window (`smallModals`: the
+  tour, an update, a merge), their keys one under another where a row
+  ran past the edge (`tourKeysPhone`). A phone's words name no key of a
+  keyboard and nothing a computer alone has (`phoneTourCards`, the
+  palette's commands, the settings' parts).
 - **A page is 16 in** (`pagePad`); a head with something at its right has
   it under it (`pageHead`, 今天's head); a row of the settings has what
   sets it under its name where they do not fit side by side (`setRow`).
@@ -246,7 +253,13 @@ https://claude.ai/artifact/5ySnmjspG48dmg8MpwcwLt.
   a topic chosen, its keys float at the canvas's foot in a bar of their
   own (`phoneCanvasFoot`: 子主题, 同级, 改字, 任务, 详情, a finger's size
   each, the last in the accent); one round key over it goes back to the
-  middle. The zoom is the fingers'. In the outline, a line written in has
+  middle. The zoom is the fingers'. A finger pans the map, from its
+  blank or across a topic, and glides on after a flick (`fingerPan`,
+  `panGlide`); two pinch it (`InputZoom`); one held half a second on a
+  topic takes it up, its ghost under the finger, the topic it would go
+  under outlined, and let go there it goes under it with 撤销
+  (`carryTopic`): a long press is that, so the topic's menu is the bar's
+  ⋯ and the canvas has none. In the outline, a line written in has
   its keys over the keyboard (`outlineKeys`: out, in, up, down, a task,
   完成).
 

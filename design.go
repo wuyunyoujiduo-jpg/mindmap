@@ -880,6 +880,9 @@ func emptyNote(c *ui.Context, text string) {
 // modal is a dialog over the dimmed window, as ui.Modal's, in the app's
 // look: large round corners, lifted well over the page.
 func modal(c *ui.Context, key string, open *bool, fn func()) ui.Element {
+	if narrowLayout && !smallModals[key] { // a page of its own on a phone (phonePage)
+		return phonePage(c, key, open, fn)
+	}
 	t := c.Theme()
 	m := ui.Modal(c.Key(key), open, fn).Radius(20)
 	if t.Dark {
@@ -887,6 +890,10 @@ func modal(c *ui.Context, key string, open *bool, fn func()) ui.Element {
 	}
 	return m.Shadow(0, 4, 12, 0, ui.RGBA(0, 0, 0, 0.05)).Shadow(0, 30, 80, -10, ui.RGBA(0, 0, 0, 0.22))
 }
+
+// smallModals are the windows that stay windows on a phone: a few lines
+// and keys, which fit one there. The others are pages (phonePage).
+var smallModals = map[string]bool{"tour": true, "apk-update": true, "merge": true}
 
 // sheetsOpen are the phone's sheets' flags, by the sheet (sheet).
 var sheetsOpen = map[string]*bool{}
@@ -989,7 +996,11 @@ func setRowSays(c *ui.Context, title, sub, wrong string, control func()) {
 			}
 		})
 		if control != nil {
-			ui.Row(c).Gap(8).AlignItems(ui.Center).Shrink(0).Children(control)
+			keys := ui.Row(c).Gap(8).AlignItems(ui.Center).Shrink(0)
+			if narrowLayout { // a few to a line, as the screen holds them
+				keys.Wrap().GapY(8).Shrink(1).MinWidth(0)
+			}
+			keys.Children(control)
 		}
 	})
 }

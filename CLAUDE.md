@@ -386,6 +386,15 @@ by AI, and an AI assistant.
     as a sheet over a dimmed page, which the user found not good to look
     at (0.108), as the one bar on a desktop opens over the page from its
     line.
+  - A phone is tried with fingers, as the user tries it (0.108.1, the
+    user's first look on a phone: the map took no finger, the settings
+    ran past the screen, the tour spoke of keys). What a pointer does
+    has its finger's way there (`fingerPan`, `carryTopic`,
+    `TestPhoneMapFingers`: MyGo gives a finger's moves to an element
+    that asks `Dragged` each frame, and a long press to one with a
+    menu, which ends the press), a window is a page (`phonePage`), and
+    every window and part of the settings is looked at as a phone has
+    it (`TestPhoneSweep`, with `onPhone` set) before a version goes.
   - A tag is made where words are written, by #: in a topic's title too,
     offered under it as it is written and made one only when chosen (a
     click or Tab, `titleTagOffer`), else words of the title; on the
