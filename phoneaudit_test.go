@@ -71,12 +71,16 @@ func TestPhoneAudit(t *testing.T) {
 		tt.Frame()
 	}
 	// back is Android's: Escape, and the Back key where Escape was not
-	// taken (MyGo's surface.back); a change of what shows tells it.
-	back := func() {
+	// taken (MyGo's surface.back). A phone has no pointer: none rests on
+	// a key to show its tip, which an Escape would close first (CI's
+	// fonts put a key under where the last click was).
+	back := func(done func() bool) {
+		tt.Move(-50, -50)
+		settle()
 		was := strings.Join(tt.Texts(), "|")
 		tt.Key(0, ui.KeyEscape)
 		settle()
-		if strings.Join(tt.Texts(), "|") == was {
+		if !done() && strings.Join(tt.Texts(), "|") == was {
 			tt.Key(0, ui.KeyBack)
 			settle()
 		}
@@ -180,14 +184,19 @@ func TestPhoneAudit(t *testing.T) {
 		if s.name == "today" { // the app's first page: back leaves it, as Android's apps do
 			continue
 		}
-		back()
+		done := s.gone
+		if s.places {
+			done = func() bool { return a.libOpen && a.place() == placeToday && a.tasks.view == tasksToday }
+		}
+		back(done)
 		switch {
 		case s.places:
 			if !a.libOpen || a.place() != placeToday || a.tasks.view != tasksToday {
 				say(s.name, "back did not go to 今天 (place %d, view %d)", a.place(), a.tasks.view)
 			}
 		case !s.gone():
-			say(s.name, "back did not close it")
+			_, typing := tt.TextCaret()
+			say(s.name, "back did not close it (typing %v, showing %.300q)", typing, strings.Join(tt.Texts(), "|"))
 		}
 	}
 	for _, f := range found {
