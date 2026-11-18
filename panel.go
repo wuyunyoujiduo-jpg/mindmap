@@ -222,11 +222,15 @@ func (a *app) nodePanel(c *ui.Context) {
 				if !links {
 					add("＋ 链接", "链接到网址、文件、其他主题、资料或 AI 技能", "links")
 				}
+				imageTip, filesTip := "给主题配一张图片（也可以选中后 ⌘V 粘贴）", "把文件附在主题上（也可以拖到主题上）"
+				if onPhone { // no keyboard nor pointer to drop with
+					imageTip, filesTip = "给主题配一张图片", "把文件附在主题上"
+				}
 				if !image {
-					add("＋ 图片", "给主题配一张图片（也可以选中后 ⌘V 粘贴）", "image")
+					add("＋ 图片", imageTip, "image")
 				}
 				if !files {
-					add("＋ 附件", "把文件附在主题上（也可以拖到主题上）", "files")
+					add("＋ 附件", filesTip, "files")
 				}
 				if diaWorth(n) && a.diaOf(n.ID) == nil && a.diaBusy != n.ID &&
 					addButton(c, "＋ 图解", "让 AI 把这一支画成流程、状态、判定表和名词，帮你看懂、记住").Clicked() {

@@ -261,8 +261,7 @@ func (a *app) mcpView(c *ui.Context) {
 			"- 开始或完成任务时用 update_node 改状态；新想到的待办和发现的问题用 capture 记下，不要自己调整导图结构；\n" +
 			"- 在几个方案里做了取舍，用 log_decision 记下决定、原因和没选的方案；\n" +
 			"- 结束前用 log_session 用一两句话记下这次做了什么，留下的事放进 todos。"
-		w, _ := c.Size()
-		ui.Column(c).Gap(14).Width(min(680, w-80)).Children(func() {
+		ui.Column(c).Gap(14).Width(modalRoom(c, "mcp", 680)).Children(func() {
 			ui.Row(c).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "连接 AI 编程工具（MCP）").FontSize(17).Bold().Grow(1)
 				if iconButton(c, iconClose, "关闭", "关闭（Esc）", 28, true).Clicked() {

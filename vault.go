@@ -600,8 +600,7 @@ func (a *app) vaultView(c *ui.Context) {
 	}
 	t := c.Theme()
 	modal(c, "vault", &k.open, func() {
-		w, _ := c.Size()
-		ui.Column(c).Gap(12).Width(min(400, w-80)).Children(func() {
+		ui.Column(c).Gap(12).Width(modalRoom(c, "vault", 400)).Children(func() {
 			title := func(s string) { ui.Text(c, s).FontSize(17).FontWeight(700) }
 			says := func(s string) {
 				ui.Text(c, s).FontSize(textSmall).TextColor(ink2(t)).LineHeight(1.5).Wrap()

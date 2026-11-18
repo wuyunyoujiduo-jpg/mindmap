@@ -895,6 +895,32 @@ func modal(c *ui.Context, key string, open *bool, fn func()) ui.Element {
 // and keys, which fit one there. The others are pages (phonePage).
 var smallModals = map[string]bool{"tour": true, "apk-update": true, "merge": true}
 
+// modalRoom is how wide what a window holds is: at most most, 40 in from
+// the window's sides; on a phone a page's width (phonePage), or a small
+// window's 24 in. A width of the window less 80 left a page cut short of
+// a phone's side (the user's screenshot of the search, 0.108.7).
+func modalRoom(c *ui.Context, key string, most float32) float32 {
+	w, _ := c.Size()
+	switch {
+	case narrowLayout && !smallModals[key]:
+		return w - 2*pagePad()
+	case narrowLayout:
+		return min(most, w-48)
+	}
+	return min(most, w-80)
+}
+
+// modalClose is a window's ✕ at its head's end: none on a phone, whose
+// page has ‹ 返回 over it and the system's back.
+func modalClose(c *ui.Context, open *bool) {
+	if narrowLayout {
+		return
+	}
+	if iconButton(c, iconClose, "关闭", "关闭（Esc）", 28, true).Clicked() {
+		*open = false
+	}
+}
+
 // sheetsOpen are the phone's sheets' flags, by the sheet (sheet).
 var sheetsOpen = map[string]*bool{}
 
@@ -950,7 +976,11 @@ func field(c *ui.Context, title string, body func()) ui.Element {
 
 // button is the system's button in the app's look: a pill.
 func button(c *ui.Context, text string) ui.Element {
-	return ui.Button(c, text).Radius(radiusPill).Padding(0, 14).MinHeight(30)
+	b := ui.Button(c, text).Radius(radiusPill).Padding(0, 14).MinHeight(30)
+	if narrowLayout { // a finger's: 36 high, as the phone's other keys
+		b.MinHeight(36)
+	}
+	return b
 }
 
 // rowsField is a part of the settings whose card holds rows (setRow),

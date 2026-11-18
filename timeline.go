@@ -14,10 +14,18 @@ import (
 // with today and the weekends. Dragging a bar moves its dates; dragging
 // its right end changes its due date.
 
+// tlLabelW is the width of the column of the topics' names: on a phone
+// less, which left the days a third of the screen.
+func tlLabelW() float32 {
+	if narrowLayout {
+		return 120
+	}
+	return 220
+}
+
 const (
-	tlLabelW = 220
-	tlRowH   = 30
-	tlHeadH  = 52
+	tlRowH  = 30
+	tlHeadH = 52
 )
 
 // tlRow is a line of the timeline: a group's heading or a task.
@@ -95,12 +103,14 @@ func (a *app) timelineView(c *ui.Context) {
 		}
 	}
 	days := daysBetween(first, last) + 1
-	width := tlLabelW + float32(days)*dayW
-	x := func(d time.Time) float32 { return tlLabelW + float32(daysBetween(first, d))*dayW }
+	width := tlLabelW() + float32(days)*dayW
+	x := func(d time.Time) float32 { return tlLabelW() + float32(daysBetween(first, d))*dayW }
 
 	ui.Column(c).Grow(1).Children(func() {
 		ui.Row(c).Padding(8, 12).Gap(10).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "时间线").Bold()
+			if !narrowLayout { // a phone's bar names the view, and has no room for the words
+				ui.Text(c, "时间线").Bold()
+			}
 			scale := 0
 			if a.tlWeeks {
 				scale = 1
@@ -108,8 +118,10 @@ func (a *app) timelineView(c *ui.Context) {
 			if ui.Segmented(c, &scale, "按天", "按周").Changed() {
 				a.tlWeeks = scale == 1
 			}
-			ui.Spacer(c)
-			ui.Text(c, "拖动条形调整日期，拖右端改截止日期").FontSize(12).TextColor(t.TextMuted)
+			if !narrowLayout {
+				ui.Spacer(c)
+				ui.Text(c, "拖动条形调整日期，拖右端改截止日期").FontSize(12).TextColor(t.TextMuted)
+			}
 		})
 		ui.Divider(c)
 		if len(rows) == 0 && len(unplanned) == 0 {
@@ -122,7 +134,7 @@ func (a *app) timelineView(c *ui.Context) {
 				// Weekends, iterations, the days' heads and today.
 				for i := 0; i < days; i++ {
 					d := first.AddDate(0, 0, i)
-					dx := r.X + tlLabelW + float32(i)*dayW
+					dx := r.X + tlLabelW() + float32(i)*dayW
 					if wd := d.Weekday(); wd == time.Saturday || wd == time.Sunday {
 						p.Fill(ui.Rect{X: dx, Y: r.Y + tlHeadH, W: dayW, H: r.H - tlHeadH}, t.Text.Alpha(0.035), 0)
 					}
@@ -135,7 +147,7 @@ func (a *app) timelineView(c *ui.Context) {
 						p.Line(dx, r.Y+tlHeadH-4, dx, r.Y+tlHeadH, 1, t.Border)
 					}
 				}
-				p.Line(r.X+tlLabelW, r.Y+tlHeadH, r.X+r.W, r.Y+tlHeadH, 1, t.Border)
+				p.Line(r.X+tlLabelW(), r.Y+tlHeadH, r.X+r.W, r.Y+tlHeadH, 1, t.Border)
 				tx := r.X + x(day) + dayW/2
 				p.Line(tx, r.Y+tlHeadH-4, tx, r.Y+r.H, 1.5, t.Danger.Alpha(0.7))
 			})
@@ -215,7 +227,7 @@ func (a *app) timelineRow(c *ui.Context, row tlRow, first time.Time, dayW, width
 	n := row.task.Node
 	task := n.Task
 	from, to, _ := span(task)
-	left := tlLabelW + float32(daysBetween(first, from))*dayW
+	left := tlLabelW() + float32(daysBetween(first, from))*dayW
 	w := float32(daysBetween(from, to)+1) * dayW
 	if d := a.tlDrag; d.id == n.ID {
 		if d.edge {
@@ -229,7 +241,7 @@ func (a *app) timelineRow(c *ui.Context, row tlRow, first time.Time, dayW, width
 		line.Background(t.Accent.Alpha(0.07))
 	}
 	line.Children(func() {
-		label := ui.Row(c).Width(tlLabelW).Height(tlRowH).Padding(0, 8, 0, 24).Gap(6).AlignItems(ui.Center).
+		label := ui.Row(c).Width(tlLabelW()).Height(tlRowH).Padding(0, 8, 0, 24).Gap(6).AlignItems(ui.Center).
 			Cursor(ui.CursorPointer).Label(n.Title)
 		if label.Clicked() {
 			a.selectTask(row.task)

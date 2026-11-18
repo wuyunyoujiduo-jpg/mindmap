@@ -190,6 +190,15 @@ func (a *app) pageView(c *ui.Context) {
 // one thing on the page with a shadow, for it floats.
 func (a *app) aiFloat(c *ui.Context) {
 	t := c.Theme()
+	if narrowLayout { // a phone's: the whole screen, risen from its foot (the draft's), back closing it
+		if c.Shortcut(0, ui.KeyEscape) {
+			a.aiOpen = false
+		}
+		ui.Column(c.Key("ai-float")).Absolute().Left(0).Top(0).Right(0).Bottom(0).ZIndex(40).Background(cardColor(t)).Label("AI 窗口").
+			Transition(ui.ElementTransition{Duration: motionSlow, Ease: easeDetent, Enter: &ui.Motion{Y: 40}}).
+			Children(func() { a.aiPanel(c) })
+		return
+	}
 	w, h := c.Size()
 	lifted(ui.Column(c.Key("ai-float")).Absolute().Right(16).Bottom(16).Width(min(392, w-32)).Height(min(580, (h-toolbarHeight)*0.78)).
 		Radius(16).Clip().ZIndex(25).Background(cardColor(t)).Label("AI 窗口"), t).

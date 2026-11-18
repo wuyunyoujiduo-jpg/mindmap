@@ -248,6 +248,13 @@ https://claude.ai/artifact/5ySnmjspG48dmg8MpwcwLt.
   under them (0.108.7). The search is the page's width, in the app's
   field of search (`searchBox`), and lists no command a topic's bar or
   更多 has.
+- **Back goes a step, then out** (`phoneBack`, `TestPhoneAudit`): a
+  sheet, a page, the bar open, the AI, then a place or a list other
+  than today's to 今天's list, and only from there out of the app, as
+  Android's apps with places at their foot do. The AI is the whole
+  screen on a phone (`aiFloat`). A window's width is `modalRoom`, its ✕
+  `modalClose` (none on a phone, under ‹ 返回); a menu on a phone has no
+  submenu, which Android lays out in its list, nor 在文件夹中显示.
 - **A sheet's focus is on itself**, not on its first field: MyGo moves
   the focus into a sheet as it rises, and a title taking it brought the
   keyboard up over what was to be read.

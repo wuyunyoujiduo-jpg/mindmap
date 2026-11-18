@@ -65,7 +65,7 @@ func (a *app) folderMenu(m *ui.Menu, path string) {
 	if m.Item("重命名").Chosen() {
 		a.renaming, a.renameText = path, filepath.Base(path)
 	}
-	if m.Item(revealWord()).Chosen() {
+	if !onPhone && m.Item(revealWord()).Chosen() {
 		a.plat.ShowInFolder(path)
 	}
 	m.Separator()
@@ -125,7 +125,7 @@ func (a *app) mapMenu(m *ui.Menu, path string) {
 		// and is to be there always (the user, 0.96.6).
 		m.Item("默认的收件箱：没说放哪的任务先到这里").Disabled(true)
 		m.Separator()
-		if m.Item(revealWord()).Chosen() {
+		if !onPhone && m.Item(revealWord()).Chosen() {
 			a.plat.ShowInFolder(path)
 		}
 		return
@@ -154,7 +154,7 @@ func (a *app) mapMenu(m *ui.Menu, path string) {
 		}
 	})
 	m.Separator()
-	if m.Item(revealWord()).Chosen() {
+	if !onPhone && m.Item(revealWord()).Chosen() {
 		a.plat.ShowInFolder(path)
 	}
 	if m.Item("移到" + trashWord() + "…").Chosen() {

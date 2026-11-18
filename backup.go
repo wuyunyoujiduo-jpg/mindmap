@@ -150,6 +150,10 @@ func (a *app) backupNow() {
 				a.saveErr = "备份失败：" + err.Error()
 				return
 			}
+			if onPhone { // no folder to show on a phone
+				a.tell("已备份到 " + filepath.Base(path))
+				return
+			}
 			a.tellAct("已备份到 "+filepath.Base(path), revealWord(), func() { a.plat.ShowInFolder(path) })
 		})
 	})

@@ -278,8 +278,8 @@ func (a *app) askRepo() {
 func (a *app) fromTextView(c *ui.Context) {
 	t := c.Theme()
 	modal(c, "from-text", &a.fromTextOpen, func() {
-		w, h := c.Size()
-		ui.Column(c).Gap(12).Width(min(640, w-80)).Children(func() {
+		_, h := c.Size()
+		ui.Column(c).Gap(12).Width(modalRoom(c, "from-text", 640)).Children(func() {
 			ui.Text(c, "从文本生成导图").FontSize(17).Bold()
 			ui.Text(c, "粘贴需求文档、会议记录或和 AI 的对话，AI 会整理成主题挂在当前画布的中心主题下，你确认后才添加。没有设置 AI 时，按缩进 / 列表直接转成主题。").
 				FontSize(12).TextColor(t.TextMuted).Wrap()

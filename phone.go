@@ -648,6 +648,20 @@ func (a *app) phoneBack(c *ui.Context) {
 		if c.Shortcut(0, ui.KeyBack) {
 			a.libSel = ""
 		}
+	case a.libOpen && a.barOpen: // the bar open goes back to its line, what is written kept
+		if c.Shortcut(0, ui.KeyEscape) {
+			a.barOpen = false
+		}
+	case a.libOpen && (a.place() != placeToday || a.tasks.view != tasksToday || a.tasks.onMap != ""):
+		// A place or a list other than today's goes back to it, and from
+		// there out of the app, as Android's apps with places at their
+		// foot do: back on 项目 left the app (0.108.8).
+		if c.Shortcut(0, ui.KeyBack) {
+			a.later(func() {
+				a.goPlace(placeToday)
+				a.tasks.view, a.tasks.onMap = tasksToday, ""
+			})
+		}
 	case !a.libOpen && a.doc != nil && !a.presenting && a.editing == "":
 		if c.Shortcut(0, ui.KeyBack) {
 			to := a.backTo

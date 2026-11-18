@@ -437,7 +437,7 @@ func (a *app) projectsView(c *ui.Context) {
 					if m.Item("打开其他文件夹…").Shortcut(ui.Cmd, ui.KeyO).Chosen() {
 						a.pickWorkspace()
 					}
-					if m.Item(revealWord()).Chosen() {
+					if !onPhone && m.Item(revealWord()).Chosen() {
 						a.plat.ShowInFolder(a.dir)
 					}
 				})

@@ -683,6 +683,9 @@ func (a *app) tasksHead(c *ui.Context, all []taskItem) {
 			if a.tasks.view == tasksDay {
 				mode = 1
 			}
+			if a.tasks.view != tasksToday && a.tasks.view != tasksDay {
+				return // of today's list alone: 等着归位 and 本周回顾 showed it, chosen as 列表
+			}
 			ui.Row(c.Key("tasks-mode-row")).FillWidth().Margin(4, 0, 0).Children(func() {
 				if m := segmented(c, "tasks-mode", "列表或日程", []string{"列表", "日程"}, mode); m != mode {
 					a.tasks.view = []int{tasksToday, tasksDay}[m]
@@ -2047,14 +2050,16 @@ func (a *app) taskMenu(m *ui.Menu, it taskItem) {
 		set(nil)
 	}
 	m.Separator()
-	m.Submenu("优先级", func(m *ui.Menu) {
-		for _, p := range []model.Priority{model.PriorityHigh, model.PriorityMedium, model.PriorityLow, model.PriorityNone} {
-			if m.Item(p.Label()).Checked(it.node.Task.Priority == p).Chosen() {
-				a.later(func() { a.editTask(it, "改优先级", func(n *model.Node) { n.Task.Priority = p }) })
+	if !onPhone { // no submenu on a phone, whose menu lays it out in the list (a task's priority is in its details)
+		m.Submenu("优先级", func(m *ui.Menu) {
+			for _, p := range []model.Priority{model.PriorityHigh, model.PriorityMedium, model.PriorityLow, model.PriorityNone} {
+				if m.Item(p.Label()).Checked(it.node.Task.Priority == p).Chosen() {
+					a.later(func() { a.editTask(it, "改优先级", func(n *model.Node) { n.Task.Priority = p }) })
+				}
 			}
-		}
-	})
-	m.Separator()
+		})
+		m.Separator()
+	}
 	if m.Item("移到导图…").Chosen() {
 		a.later(func() { a.moveTaskTo(it) })
 	}

@@ -86,7 +86,7 @@ func (a *app) brokenBar(c *ui.Context) {
 		if button(c, "从历史版本恢复").Clicked() {
 			a.later(func() { a.restoreBroken(path) })
 		}
-		if button(c, revealWord()).Clicked() {
+		if !onPhone && button(c, revealWord()).Clicked() {
 			a.plat.ShowInFolder(path)
 		}
 		if button(c, "忽略").Clicked() {
@@ -223,9 +223,7 @@ func (a *app) historyView(c *ui.Context) {
 		}
 		ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
 			ui.Text(c, "历史版本 · "+mapName(a.path)).FontSize(17).Bold().Grow(1)
-			if iconButton(c, iconClose, "关闭", "关闭（Esc）", 28, true).Clicked() {
-				a.historyOpen = false
-			}
+			modalClose(c, &a.historyOpen)
 		})
 		if len(a.historyList) == 0 {
 			ui.Text(c, "还没有历史版本。编辑、或者其他程序修改这个导图后，这里会自动保留版本。").TextColor(t.TextMuted).Wrap()

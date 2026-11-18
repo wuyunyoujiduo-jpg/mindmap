@@ -201,16 +201,13 @@ func (a *app) deleteTemplate(tp template) {
 func (a *app) templatesView(c *ui.Context) {
 	t := c.Theme()
 	modal(c, "templates", &a.templatesOpen, func() {
-		w, _ := c.Size()
-		ui.Column(c).Gap(14).Width(min(720, w-80)).Children(func() {
+		ui.Column(c).Gap(14).Width(modalRoom(c, "templates", 720)).Children(func() {
 			ui.Row(c).AlignItems(ui.Center).Gap(8).Children(func() {
 				ui.Text(c, "从模板新建").FontSize(17).Bold().Grow(1)
 				if a.file != nil && button(c, "把当前导图存为模板").Clicked() {
 					a.saveAsTemplate()
 				}
-				if iconButton(c, iconClose, "关闭", "关闭（Esc）", 28, true).Clicked() {
-					a.templatesOpen = false
-				}
+				modalClose(c, &a.templatesOpen)
 			})
 			ui.Grid(c).Columns(2).Gap(10).Children(func() {
 				for _, tp := range a.templates() {

@@ -48,8 +48,17 @@ func (a *app) overviewView(c *ui.Context) {
 	if all > 0 {
 		pct = done * 100 / all
 	}
+	// On a phone the page's width (the audit of 0.108.8: the bars and the
+	// cards of fixed widths ran past the screen): tiles two to a line,
+	// a branch's name and bar sharing the line, the cards one under another.
+	w, _ := c.Size()
+	pad, nameW, barW, cardW := float32(24), float32(220), float32(280), float32(300)
+	if narrowLayout {
+		pad, nameW = pagePad(), 96
+		barW, cardW = max(w-2*pad-nameW-2*12-40, 60), w-2*pad-2
+	}
 	ui.Scroll(c.Key("overview")).Grow(1).Children(func() {
-		ui.Column(c).Padding(20, 24).Gap(22).MaxWidth(980).Children(func() {
+		ui.Column(c).Padding(20, pad).Gap(22).MaxWidth(980).Children(func() {
 			ui.Row(c).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "总览 · "+mapName(a.path)).FontSize(18).Bold().Grow(1)
 				on := !a.cfg.NoReminders
@@ -59,7 +68,11 @@ func (a *app) overviewView(c *ui.Context) {
 					a.cfg.save()
 				}
 			})
-			ui.Row(c).Gap(12).Wrap().Children(func() {
+			tiles := ui.Row(c).Gap(12).Wrap()
+			if narrowLayout {
+				tiles = ui.Grid(c).Columns(2).Gap(10)
+			}
+			tiles.Children(func() {
 				tile := func(label, value string, col ui.Color) {
 					ui.Column(c.Key(label)).Padding(12, 16).Gap(4).Radius(10).Background(t.Surface).Border(1, t.Border).MinWidth(130).Children(func() {
 						ui.Text(c, label).FontSize(12).TextColor(t.TextMuted)
@@ -95,8 +108,8 @@ func (a *app) overviewView(c *ui.Context) {
 							a.later(func() { a.goToNode(a.path, sheet, id) })
 						}
 						row.Children(func() {
-							ui.Text(c, name).FontSize(13).Width(220).MaxLines(1)
-							progressBar(c, float32(bd)/float32(bt), 280)
+							ui.Text(c, name).FontSize(13).Width(nameW).MaxLines(1)
+							progressBar(c, float32(bd)/float32(bt), barW)
 							ui.Text(c, fmt.Sprintf("%d/%d", bd, bt)).FontSize(12).TextColor(t.TextMuted)
 						})
 					}
@@ -112,7 +125,7 @@ func (a *app) overviewView(c *ui.Context) {
 							if i == overviewCards {
 								break
 							}
-							ui.Box(c.Key(tn.Node.ID)).Width(300).Children(func() { a.taskCard(c, tn, true) })
+							ui.Box(c.Key(tn.Node.ID)).Width(cardW).Children(func() { a.taskCard(c, tn, true) })
 						}
 					})
 					if len(tasks) > overviewCards {

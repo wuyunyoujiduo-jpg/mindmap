@@ -395,6 +395,12 @@ by AI, and an AI assistant.
     menu, which ends the press), a window is a page (`phonePage`), and
     every window and part of the settings is looked at as a phone has
     it (`TestPhoneSweep`, with `onPhone` set) before a version goes.
+    `TestPhoneAudit` (0.108.8, the user's: what the corrections of 0.108
+    found one by one, looked for everywhere) goes through every page,
+    window and part of the settings and fails on what runs past the
+    screen, a word of a keyboard or a pointer, and what Android's back
+    (Escape, then the Back key) does not go back from: a page or window
+    new to a phone is added to it.
   - A tag is made where words are written, by #: in a topic's title too,
     offered under it as it is written and made one only when chosen (a
     click or Tab, `titleTagOffer`), else words of the title; on the

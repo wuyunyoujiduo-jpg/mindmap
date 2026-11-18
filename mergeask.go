@@ -197,8 +197,8 @@ func (a *app) mergeView(c *ui.Context) {
 	t := c.Theme()
 	m := a.merges[0]
 	if modal(c, "merge", &a.mergeOpen, func() {
-		w, h := c.Size()
-		ui.Column(c).Gap(12).Width(min(600, w-80)).Children(func() {
+		_, h := c.Size()
+		ui.Column(c).Gap(12).Width(modalRoom(c, "merge", 600)).Children(func() {
 			ui.Text(c, "合并「"+mapName(m.path)+"」").FontSize(17).Bold()
 			said := "两台电脑都改了这张导图，各自改的已合在一起。"
 			if m.outside {

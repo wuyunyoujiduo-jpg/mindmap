@@ -922,8 +922,17 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 		// A part with a secret in it is in dots, and not written in, till
 		// the secrets are asked for (fieldText).
 		a.lineField(t, clip, "title", clip.Title, func(title *string) ui.Element {
+			if narrowLayout { // a long title wraps on a phone, cut at its side on one line
+				lines := 1
+				if *title == "" { // what stands for it, which grows no field: as many lines as it takes, about
+					w, _ := c.Size()
+					lines = min(4, 1+len([]rune(clip.Label()))*int(textHeadline)/int(max(w-2*pagePad()-20, 100)))
+				}
+				return inlineArea(c.Key("clip-title"), title, textHeadline, lines, 4, clip.Label(), "资料标题").FontWeight(700).LineHeight(1.3)
+			}
 			return inlineInput(c.Key("clip-title"), title, textHeadline, true, clip.Label(), "资料标题")
 		}, func(title string) {
+			title = strings.ReplaceAll(title, "\n", " ") // a title is one line, wrapped or not
 			clip.Title = title
 			a.clipTyped(clip, "title") // kept when the typing pauses (collecttyped.go)
 			a.fieldTyped(clip, "title", title, clip.Title)

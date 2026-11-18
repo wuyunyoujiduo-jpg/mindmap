@@ -297,9 +297,9 @@ func (a *app) apkUpdateView(c *ui.Context) {
 		return
 	}
 	t := c.Theme()
-	w, h := c.Size()
+	_, h := c.Size()
 	modal(c, "apk-update", &a.apk.open, func() {
-		ui.Column(c).Width(min(420, w-80)).Gap(14).Children(func() {
+		ui.Column(c).Width(modalRoom(c, "apk-update", 420)).Gap(14).Children(func() {
 			if a.apk.allow {
 				ui.Text(c, "允许 MyMind 安装更新").FontSize(textTitle).FontWeight(700)
 				ui.Text(c, "安卓要先允许 MyMind「安装未知应用」，只用允许这一次。在打开的设置里打开开关，再回到 MyMind，就会接着安装 "+r.Version+"。").
