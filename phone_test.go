@@ -90,7 +90,7 @@ func TestPhoneLayout(t *testing.T) {
 	}
 
 	// The other places, from the foot.
-	for _, p := range []string{"收集", "技能", "项目"} {
+	for _, p := range []string{"收集", "项目"} {
 		tab(p)
 		tt.Frame()
 		tt.Frame()

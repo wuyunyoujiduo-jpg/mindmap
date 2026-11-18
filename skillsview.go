@@ -429,6 +429,10 @@ func othersTools(e *skills.Entry) []string {
 // showSkills shows 技能, the AI agents' skills, looked at again when it
 // was not lately.
 func (a *app) showSkills() {
+	if onPhone { // the agents are the computers' (phone.go)
+		a.tell("技能在电脑上的 MyMind 里管理")
+		return
+	}
 	a.showLibrary()
 	a.skillsOpen = true
 	if a.skills.report == nil || a.now().Sub(a.skills.scanned) > 10*time.Second {

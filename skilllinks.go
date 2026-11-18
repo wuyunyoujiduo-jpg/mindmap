@@ -79,6 +79,9 @@ func (a *app) showSkill(name string) {
 		return
 	}
 	a.showSkills()
+	if !a.skillsOpen { // a phone's: none shown
+		return
+	}
 	a.skills.side, a.skills.tool, a.skills.find = "", "", ""
 	if e := a.skillNamed(name); e != nil {
 		a.skills.sel, a.skills.want = e.Key, ""

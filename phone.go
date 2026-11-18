@@ -46,11 +46,14 @@ func (a *app) narrow(c *ui.Context) bool {
 	return w < compactWidth
 }
 
-// phonePlaces are the places at the window's foot, with their icons.
+// phonePlaces are the places at the window's foot, with their icons: not
+// 技能, the AI agents' skills, which are of the computers the agents run
+// on (the user's, 0.107.1); a phone neither looks for them nor shows them
+// (onPhone).
 var phonePlaces = []struct {
 	place      int
 	name, icon string
-}{{placeToday, "今天", "calendar"}, {placeMaps, "项目", "folder"}, {placeCollect, "收集", "layers"}, {placeSkills, "技能", "puzzle"}}
+}{{placeToday, "今天", "calendar"}, {placeMaps, "项目", "folder"}, {placeCollect, "收集", "layers"}}
 
 // phoneTabs is the row of the places at the window's foot: on the
 // window's gray, as the top row, the place shown in the accent.
@@ -87,8 +90,6 @@ func (a *app) goPlace(p int) {
 		a.showProjects()
 	case placeCollect:
 		a.goCollect()
-	case placeSkills:
-		a.showSkills()
 	}
 }
 

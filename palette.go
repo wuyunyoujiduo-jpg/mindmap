@@ -50,6 +50,7 @@ type command struct {
 
 func (a *app) commands() []command {
 	hasDoc := func() bool { return a.doc != nil }
+	notPhone := func() bool { return !onPhone } // what a phone has not (phone.go)
 	view := func(m int) func() { return func() { a.showView(m) } }
 	cmds := []command{
 		{"新建导图", "⌘N", a.newMap, nil},
@@ -125,10 +126,10 @@ func (a *app) commands() []command {
 		// place 收集 has the places' key (⌥⌘3, 前往).
 		{"打开收集", "", a.showLibrary, nil},
 		{"收藏剪贴板到收集", keyLabel(a.clipKey()), a.clipFromShortcut, nil},
-		{"截图", keyLabel(a.shotKey()), a.screenshot, nil},
+		{"截图", keyLabel(a.shotKey()), a.screenshot, notPhone},
 		{"AI 整理收集的资料", "", func() { a.showLibrary(); a.organizeAll() }, func() bool { return len(a.lib.Unorganized()) > 0 }},
 		{"设置", "⌘,", a.openSettings, nil},
-		{"连接 AI 编程工具（MCP）", "", func() { a.mcpOpen = true }, nil},
+		{"连接 AI 编程工具（MCP）", "", func() { a.mcpOpen = true }, notPhone},
 		{"撤销", "⌘Z", a.undo, hasDoc},
 		{"重做", "⌘⇧Z", a.redo, hasDoc},
 	}

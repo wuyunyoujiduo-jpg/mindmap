@@ -867,6 +867,9 @@ func (a *app) settingsView(c *ui.Context) {
 									a.loadKeyDrafts()
 								}
 							})
+							if onPhone { // the agents are the computers' (phone.go)
+								return
+							}
 							setLine(c)
 							setRow(c, "AI 编程工具（MCP）", "让 Claude Code、Cursor 等读写导图、检索收集的资料", func() {
 								if button(c, "连接说明…").Clicked() {

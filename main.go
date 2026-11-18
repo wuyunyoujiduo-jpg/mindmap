@@ -514,11 +514,14 @@ func main() {
 		}
 		// The agents and their skills, looked at now and whenever the app
 		// is come back to: one may have been installed meanwhile.
-		a.skillsFetchTable()
+		// Not on a phone, whose agents there are none (phone.go).
 		a.holidaysFetch()
-		a.skills.tidy = true
-		a.skillsRescan()
-		mygo.App.OnDidBecomeActive(func() { win.Update(a.skillsActive) })
+		if !onPhone {
+			a.skillsFetchTable()
+			a.skills.tidy = true
+			a.skillsRescan()
+			mygo.App.OnDidBecomeActive(func() { win.Update(a.skillsActive) })
+		}
 		// A phone's updates (apkupdate.go): a look once a day, and the
 		// installer once the app may install, come back to from the system.
 		a.installer = apkInstaller()

@@ -673,7 +673,9 @@ by AI, and an AI assistant.
   0.10's phones: the same app, the window the screen. A window narrower
   than `compactWidth` is laid out as a phone's (`phone.go`,
   `narrowLayout`, set by `view` each frame for what has no app at hand):
-  the places at the window's foot (`phoneTabs`), the left column a
+  the places at the window's foot (`phoneTabs`; 今天, 项目 and 收集: 技能 is
+  the computers', the user's, 0.107.1, and a phone neither scans for
+  the agents nor shows them, `onPhone`, `showSkills`), the left column a
   drawer over the page (`phoneDrawer`, `mobile.Drawer`, gone once what it
   narrows to changes, `drawerSubject`), what is chosen and a topic's
   panel over the page under ‹ 返回 (`sheet`'s close, `sheetBack`,
