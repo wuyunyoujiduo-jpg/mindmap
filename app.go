@@ -16,6 +16,7 @@ import (
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/layout"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/library"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/model"
+	"github.com/wuyunyoujiduo-jpg/mindmap/internal/resumecover"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/vault"
 	"github.com/wuyunyoujiduo-jpg/mindmap/internal/versions"
 )
@@ -474,7 +475,13 @@ type app struct {
 	apk       apkState
 	apkGet    apkGetter
 	installer apkinstall.Installer
-	skills    skillsState // the skills of the AI agents (skillsview.go)
+	// cover lays the window's last picture over it while a phone's app is
+	// away (resume.go); coverFrames counts the frames drawn since it came
+	// back, coverSince when.
+	cover       resumecover.Cover
+	coverFrames int
+	coverSince  time.Time
+	skills      skillsState // the skills of the AI agents (skillsview.go)
 	// holidaysAsked is when each year's notice of the holidays was last
 	// asked for (holidays.go).
 	holidaysAsked map[int]time.Time

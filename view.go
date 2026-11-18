@@ -30,7 +30,8 @@ func (a *app) view(c *ui.Context) {
 	}
 	groundKey = a.cfg.Ground
 	narrowLayout = a.narrow(c) // a phone's (phone.go)
-	if onPhone {               // the menus drawn in the app's look, not Android's gray list with its check boxes (the user's, 0.108.9)
+	a.coverTick(c)
+	if onPhone { // the menus drawn in the app's look, not Android's gray list with its check boxes (the user's, 0.108.9)
 		c.SetMenuPresentation(ui.PopoverMenus)
 	}
 	t := quietTheme(c.Theme())

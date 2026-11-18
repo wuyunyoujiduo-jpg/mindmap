@@ -395,6 +395,12 @@ by AI, and an AI assistant.
     menu, which ends the press), a window is a page (`phonePage`), and
     every window and part of the settings is looked at as a phone has
     it (`TestPhoneSweep`, with `onPhone` set) before a version goes.
+    As the app comes back from away it shows the picture it last had
+    until it has drawn again (`resume.go`, `internal/resumecover`: taken
+    by PixelCopy as the activity pauses, laid over the window, lifted by
+    `coverTick` a few frames after, or by itself 1.5 s on): Android makes
+    the surface anew, black till the first frame; the user asked for the
+    last picture rather than a color (0.108.10).
     `TestPhoneAudit` (0.108.8, the user's: what the corrections of 0.108
     found one by one, looked for everywhere) goes through every page,
     window and part of the settings and fails on what runs past the
@@ -712,7 +718,7 @@ by AI, and an AI assistant.
   `apkupdate.go`): a look at `android.json` once a day, a window with
   what is new, the package downloaded as a card of the long work and
   checked, and the system's installer opened on it (`internal/apkinstall`,
-  a native module of MyGo in Kotlin, the app's one; the permission
+  a native module of MyGo in Kotlin; the permission
   REQUEST_INSTALL_PACKAGES in `mygo.json`); the user allows 安装未知应用
   once, sent there by `AllowInstall`, and the installer opens as the app
   is come back to (`App.OnActivate`, which a phone's resume is). A

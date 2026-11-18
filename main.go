@@ -541,6 +541,10 @@ func main() {
 		a.installer = apkInstaller()
 		a.apkDue()
 		mygo.App.OnActivate(func(bool) { win.Update(a.apkActive) })
+		if onPhone { // the last picture over the window as the app comes back (resume.go)
+			a.cover = resumeCover()
+			mygo.App.OnDidBecomeActive(func() { win.Update(a.coverBack) })
+		}
 		item := func(label, accel string, fn func()) *mygo.MenuItem {
 			return &mygo.MenuItem{Label: label, Accelerator: accel, Click: func(*mygo.MenuItem, *mygo.Window) {
 				win.Update(fn)
