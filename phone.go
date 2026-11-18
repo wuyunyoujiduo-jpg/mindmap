@@ -390,9 +390,6 @@ func (a *app) phoneCanvasFoot(c *ui.Context) {
 		return
 	}
 	n, _ := a.selectedNode()
-	if n != nil {
-		a.phoneTopicMore(c, n)
-	}
 	bar := n != nil && a.editing == "" && len(a.multi) == 0 && !a.lensQuiet
 	foot := float32(16)
 	if bar {
@@ -441,12 +438,12 @@ func (a *app) phoneCanvasFoot(c *ui.Context) {
 				ui.Text(c, k.name).FontSize(textCaption - 1).TextColor(ink).PassThrough()
 			})
 		}
-		// The rest of what is done to a topic, in a sheet from the foot
-		// (phoneTopicMore): its menu, a desktop's, ran past the screen.
-		more := ui.Column(c.Key("更多")).Grow(1).Basis(0).Height(54).Gap(3).Radius(12).Center().Cursor(ui.CursorPointer).Label("更多")
-		if more.Clicked() {
-			a.topicMore = true
-		}
+		// The rest of what is done to a topic, in a short menu over the key
+		// (topicMoreMenu).
+		look := phoneMenuLook()
+		look.At, look.Self = ui.AnchorTopEnd, ui.AnchorBottomEnd // over the key, at the bar's end
+		more := ui.Column(c.Key("更多")).Grow(1).Basis(0).Height(54).Gap(3).Radius(12).Center().Cursor(ui.CursorPointer).Label("更多").
+			PopoverMenuButton(a.topicMoreMenu(n), look)
 		press(more, 0.94)
 		more.Children(func() {
 			glyph(c, iconMore, 18, t.Text)
@@ -597,42 +594,49 @@ func (a *app) phoneCovered() bool {
 	return narrowLayout && a.libOpen && a.place() == placeCollect && !a.growShown() && a.lib.Find(a.libSel) != nil
 }
 
-// phoneTopicMore is a topic's 更多 on a phone: what its bar has not, as
-// a sheet of choices from the foot, its name at its head. The desktop's
-// menu, laid out by Android, put each submenu's every row in one list
-// past the screen's foot (the user's screenshot, 0.108.5).
-func (a *app) phoneTopicMore(c *ui.Context, n *model.Node) {
-	if !a.topicMore {
-		return
-	}
-	depth := max(len(a.shownDoc().Path(n.ID))-1, 0)
-	if a.doc.IsFloating(n.ID) {
-		depth++
-	}
-	do := func(fn func()) func() { return func() { a.later(fn) } }
-	// Six, the user's (0.108.5): what a phone does to a topic now and
-	// then, with neither the bar's (子主题, 同级, 改字, 任务, 详情, where its
-	// note, tags and links are) nor a desktop's (剪切, 聚焦此分支; 图解 is
-	// among the views of 导图 ▼).
-	var acts []mobile.Action
-	if depth > 0 {
-		acts = append(acts, mobile.Action{Label: "移到其他导图…", OnTap: do(func() { a.openPalette(paletteMove) })})
-	}
-	if len(n.Children) > 0 {
-		label := "折叠下级"
-		if n.Collapsed {
-			label = "展开下级"
+// topicMoreMenu is a topic's 更多 on a phone: what its bar has not, as a
+// short menu above the key, drawn in the app's look (phoneMenuLook). The
+// desktop's menu, laid out by Android, put each submenu's every row in one
+// list past the screen's foot (0.108.5); then a sheet from the foot rose
+// under the finger that had tapped and went with it, showing a moment and
+// nothing (the user's, 0.108.11).
+func (a *app) topicMoreMenu(n *model.Node) func(m *ui.Menu) {
+	return func(m *ui.Menu) {
+		depth := max(len(a.shownDoc().Path(n.ID))-1, 0)
+		if a.doc.IsFloating(n.ID) {
+			depth++
 		}
-		id := n.ID
-		acts = append(acts, mobile.Action{Label: label, OnTap: do(func() { a.toggleCollapse(id) })})
+		// Six, the user's (0.108.5): what a phone does to a topic now and
+		// then, with neither the bar's (子主题, 同级, 改字, 任务, 详情, where
+		// its note, tags and links are) nor a desktop's (剪切, 聚焦此分支;
+		// 图解 is among the views of 导图 ▼).
+		if depth > 0 && m.Item("移到其他导图…").Chosen() {
+			a.later(func() { a.openPalette(paletteMove) })
+		}
+		if len(n.Children) > 0 {
+			label := "折叠下级"
+			if n.Collapsed {
+				label = "展开下级"
+			}
+			id := n.ID
+			if m.Item(label).Chosen() {
+				a.later(func() { a.toggleCollapse(id) })
+			}
+		}
+		if m.Item("复制").Chosen() {
+			a.later(func() { a.copyNodes(false) })
+		}
+		if m.Item("粘贴为子主题").Chosen() {
+			a.later(func() { a.paste() })
+		}
+		if m.Item("AI 拆解成任务").Chosen() {
+			a.later(a.aiBreakDown)
+		}
+		m.Separator()
+		if m.Item("删除").Danger().Disabled(depth == 0).Chosen() {
+			a.later(a.deleteSelection)
+		}
 	}
-	acts = append(acts,
-		mobile.Action{Label: "复制", OnTap: do(func() { a.copyNodes(false) })},
-		mobile.Action{Label: "粘贴为子主题", OnTap: do(func() { a.paste() })},
-		mobile.Action{Label: "AI 拆解成任务", OnTap: do(a.aiBreakDown)},
-		mobile.Action{Label: "删除", Destructive: true, Disabled: depth == 0, OnTap: do(a.deleteSelection)},
-	)
-	mobile.ActionSheet(c, &a.topicMore, mobile.ActionSheetOptions{Title: n.Title, Cancel: "取消"}, acts...)
 }
 
 // phoneBack is Android's back on a phone where nothing open takes it

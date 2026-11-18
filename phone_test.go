@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -428,10 +429,10 @@ func TestPhoneBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if !a.topicMore || !tt.HasText("粘贴为子主题") || tt.HasText("插入 › 外框") {
-		t.Fatalf("更多: %v %q", a.topicMore, tt.Texts())
+	if m := tt.Menu(); !slices.Contains(m, "粘贴为子主题") || len(m) > 8 {
+		t.Fatalf("更多: %q", m)
 	}
-	a.topicMore = false
+	tt.CloseMenu()
 	tt.Frame()
 	tt.Key(0, ui.KeyBack)
 	tt.Frame()
@@ -478,5 +479,38 @@ func TestPhonePinchSteady(t *testing.T) {
 	}
 	if d := after.X - during.X; d > 2 || d < -2 || after.Y-during.Y > 2 || after.Y-during.Y < -2 {
 		t.Fatalf("the topic moved as the pinch ended: %+v then %+v (before %+v)", during, after, before)
+	}
+}
+
+// TestPhoneMoreByFinger: a finger's tap on 更多 under a topic opens its
+// sheet, and it stays (it showed a moment and went, drawn in the canvas).
+func TestPhoneMoreByFinger(t *testing.T) {
+	was := onPhone
+	onPhone = true
+	defer func() { onPhone = was }()
+	a, tt := newTestApp(t)
+	tt.SetSize(390, 844)
+	phoneSeed(t, a)
+	_ = a.open(filepath.Join(a.dir, model.FileName("ergora")))
+	tt.Frame()
+	a.selectNode(a.doc.Root.Children[0].ID)
+	for range 3 {
+		tt.Frame()
+	}
+	r, ok := tt.Find("更多")
+	if !ok {
+		t.Fatal("no 更多")
+	}
+	x, y := r.X+r.W/2, r.Y+r.H/2
+	tt.FingerDown(x, y)
+	tt.Frame()
+	tt.FingerUp(x, y)
+	for range 4 {
+		tt.Frame()
+	}
+	tt.Advance(time.Second)
+	tt.Frame()
+	if m := tt.Menu(); !slices.Contains(m, "粘贴为子主题") {
+		t.Fatalf("更多 by a finger: %q", m)
 	}
 }

@@ -87,7 +87,8 @@ func TestPhoneAudit(t *testing.T) {
 	}
 	home := func() {
 		a.settingsOpen, a.paletteOpen, a.historyOpen, a.templatesOpen, a.aiOpen = false, false, false, false, false
-		a.drawer, a.barOpen, a.panelSheet, a.topicMore, a.tourStep = false, false, false, false, 0
+		a.drawer, a.barOpen, a.panelSheet, a.tourStep = false, false, false, 0
+		tt.CloseMenu()
 		a.libSel = ""
 		a.goToday()
 		a.tasks.view = tasksToday
@@ -151,7 +152,13 @@ func TestPhoneAudit(t *testing.T) {
 		{name: "map", open: func() { _ = a.open(ergora) }, gone: func() bool { return a.libOpen }},
 		{name: "map-topic", open: func() { _ = a.open(ergora); settle(); a.selectNode(a.doc.Root.Children[0].ID) }, gone: func() bool { return a.libOpen || a.selected == "" }},
 		{name: "map-panel", open: func() { _ = a.open(ergora); settle(); a.panelSheet = true }, gone: func() bool { return !a.panelSheet }},
-		{name: "map-more", open: func() { _ = a.open(ergora); settle(); a.topicMore = true }, gone: func() bool { return !a.topicMore }},
+		{name: "map-more", open: func() {
+			_ = a.open(ergora)
+			settle()
+			a.selectNode(a.doc.Root.Children[0].ID)
+			settle()
+			_ = tt.Click("更多")
+		}, gone: func() bool { return tt.Menu() == nil }},
 		{name: "outline", open: func() { _ = a.open(ergora); settle(); a.showView(viewOutline) }, gone: func() bool { return a.libOpen }},
 		{name: "board", open: func() { _ = a.open(ergora); settle(); a.showView(viewBoard) }, gone: func() bool { return a.libOpen }, sideways: true},
 		{name: "timeline", open: func() { _ = a.open(ergora); settle(); a.showView(viewTimeline) }, gone: func() bool { return a.libOpen }},

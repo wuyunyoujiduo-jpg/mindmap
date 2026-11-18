@@ -139,7 +139,7 @@ func (a *app) commands() []command {
 	if onPhone { // no keyboard's keys said, nor what a computer alone has
 		cmds = slices.DeleteFunc(cmds, func(c command) bool {
 			// and what the bar under a topic does, or 更多 (phoneCanvasFoot,
-			// phoneTopicMore), or no finger does on a phone's canvas: the
+			// topicMoreMenu), or no finger does on a phone's canvas: the
 			// user's screenshot of a list of them (0.108.7).
 			return slices.Contains([]string{"快速记录", "收藏剪贴板到收集", "从代码仓库生成架构…", "快捷键速查",
 				"添加子主题", "添加同级主题", "在上方添加同级主题", "关联线到…（所选主题连到另一个主题）",

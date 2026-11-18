@@ -297,11 +297,14 @@ https://claude.ai/artifact/5ySnmjspG48dmg8MpwcwLt.
   screen; its bar has no panel key (the topic's bar has 详情), and the
   canvases' row shows only for two or more (a new one is 视图's). The
   board's columns are a card's width each, swiped through
-  (`boardColumn`). A topic's 更多 is a sheet of choices from the foot
-  (`phoneTopicMore`, MyGo's `ActionSheet`): the desktop's menu, laid
-  out by Android, ran every row of its submenus past the screen, and the
+  (`boardColumn`). A topic's 更多 is a short menu over its key, in the app's
+  look (`topicMoreMenu`, `phoneMenuLook`): the desktop's menu, laid out
+  by Android, ran every row of its submenus past the screen, and the
   user asked for less: six, what the bar has not (移到其他导图, 展开/折叠
-  下级, 复制, 粘贴为子主题, AI 拆解成任务, 删除).
+  下级, 复制, 粘贴为子主题, AI 拆解成任务, 删除). A sheet from the foot
+  (MyGo's `ActionSheet`) rose under the finger that had tapped and went
+  with it, a moment's flash on the phone (0.108.11): nothing that opens
+  under a finger is to be dragged by it.
   Android's back goes from a map to the place it was opened from and
   from a clip to 收集 (`phoneBack`, by the back key MyGo tries after
   Escape); with nothing taking either it left the app. In the outline, a line written in has
