@@ -907,7 +907,7 @@ func (a *app) clipDetail(c *ui.Context, clip *library.Clip) {
 			esc, a.escLeave = false, true
 		}
 		a.escRest(c)
-		if iconButton(c, iconClose, "关闭详情", "关闭", 28, true).Clicked() || esc {
+		if !narrowLayout && iconButton(c, iconClose, "关闭详情", "关闭", 28, true).Clicked() || esc { // a phone's is ‹ 收集
 			a.libSel = ""
 		}
 	})

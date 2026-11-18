@@ -53,7 +53,7 @@ func (a *app) view(c *ui.Context) {
 			switch {
 			case !narrowLayout:
 				a.topBar(c)
-			case a.libOpen: // a place's page, under its row of keys; a map has its own bar
+			case a.libOpen && !a.phoneCovered(): // a place's page, under its row of keys; a map has its own bar
 				a.phoneTop(c)
 			}
 			page := leaf(c, "leaf")
@@ -70,7 +70,7 @@ func (a *app) view(c *ui.Context) {
 					a.pageView(c)
 				})
 			})
-			if narrowLayout && !a.presenting && a.libOpen {
+			if narrowLayout && !a.presenting && a.libOpen && !a.phoneCovered() {
 				// At the foot on a phone: the bar to write in, and the places.
 				a.phoneBar(c)
 				if !a.barOpen { // the keyboard is under the bar while it is open
@@ -172,7 +172,7 @@ func (a *app) pageView(c *ui.Context) {
 				// From the foot, over the canvas, which a finger pulls away (phone.go).
 				if a.panelShown(c) {
 					mobile.Sheet(c, &a.panelSheet, mobile.SheetOptions{Detents: []float32{0.6, 0.92}, Label: "主题面板"}, func() {
-						ui.Column(c.Key("panel-sheet")).Grow(1).Basis(0).MinHeight(0).FillWidth().Children(func() { a.panel(c) })
+						ui.Column(c.Key("panel-sheet")).Grow(1).Basis(0).MinHeight(0).FillWidth().Focusable().FocusRing(false).Children(func() { a.panel(c) })
 					})
 				}
 			} else if a.panelShown(c) {

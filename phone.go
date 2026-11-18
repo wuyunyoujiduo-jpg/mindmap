@@ -211,7 +211,7 @@ func (a *app) drawerFoot(c *ui.Context) {
 // (the settings are at the drawer's foot, the one bar at the window's,
 // phoneBar).
 func (a *app) phoneTop(c *ui.Context) {
-	ui.Row(c.Key("phone-top")).Height(48).Padding(0, 8).Gap(4).AlignItems(ui.Center).Shrink(0).FillWidth().Children(func() {
+	ui.Row(c.Key("phone-top")).Height(44).Padding(0, 8).Gap(4).AlignItems(ui.Center).Shrink(0).FillWidth().Children(func() {
 		if kubaiKey(c, "sidebar", "侧栏", "侧栏", a.drawer, true).Clicked() {
 			a.drawer = !a.drawer
 		}
@@ -587,4 +587,11 @@ func phonePage(c *ui.Context, key string, open *bool, fn func()) ui.Element {
 		ui.Column(c.Key("body")).Grow(1).Basis(0).MinHeight(0).Padding(12, pagePad(), 0).FillWidth().Children(fn)
 	})
 	return page
+}
+
+// phoneCovered tells whether what is shown on a phone is a page of its
+// own over the place's, with no row of keys, bar nor places round it: a
+// clip, read at length, as the draft has it.
+func (a *app) phoneCovered() bool {
+	return narrowLayout && a.libOpen && a.place() == placeCollect && !a.growShown() && a.lib.Find(a.libSel) != nil
 }

@@ -422,7 +422,11 @@ func (a *app) projectsView(c *ui.Context) {
 			if a.treeShown() {
 				return // the directory has them at its foot
 			}
-			// Where the maps are kept, and how the sync goes.
+			// Where the maps are kept, and how the sync goes (a phone's
+			// keeps its maps in the app, and says the sync in the drawer).
+			if narrowLayout {
+				return
+			}
 			ui.Row(c.Key("projects-foot")).Height(36).Gap(8).AlignItems(ui.Center).Shrink(0).FillWidth().Children(func() {
 				where := ui.Row(c.Key("folder-switch")).Height(30).Padding(0, 10).Gap(8).Radius(radiusPill).AlignItems(ui.Center).Shrink(1).MinWidth(0).
 					Cursor(ui.CursorPointer).Label("切换文件夹").Tooltip("导图所在的文件夹：" + a.dir).Background(t.Text.Alpha(0)).Transition(easeLook)

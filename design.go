@@ -134,8 +134,8 @@ func pageHead(c *ui.Context, key, title, sub string, fs []figure, right func()) 
 		line = ui.Column // on a phone, what is at its right goes under it
 	}
 	head := line(c.Key(key)).Padding(14, 0, 10).Gap(12).AlignItems(ui.End).Shrink(0).FillWidth().DragWindow()
-	if narrowLayout {
-		head.AlignItems(ui.Stretch)
+	if narrowLayout { // under the row of keys at once, its parts one under another
+		head.AlignItems(ui.Stretch).Padding(2, 0, 10).Gap(10)
 	}
 	head.Children(func() {
 		name := ui.Column(c).Gap(6).Shrink(1).MinWidth(0)
@@ -916,7 +916,9 @@ func sheet(c *ui.Context, key string, width float32, close func(), body func()) 
 		}
 		*open = true
 		mobile.Sheet(c, open, mobile.SheetOptions{Detents: []float32{0.92}, Label: "详情"}, func() {
-			ui.Column(c.Key(key)).Grow(1).Basis(0).MinHeight(0).FillWidth().Children(body)
+			// The focus a sheet moves into it lands on it, not on its first
+			// field, which would bring the keyboard up over what is read.
+			ui.Column(c.Key(key)).Grow(1).Basis(0).MinHeight(0).FillWidth().Focusable().FocusRing(false).Children(body)
 		})
 		if !*open {
 			close()

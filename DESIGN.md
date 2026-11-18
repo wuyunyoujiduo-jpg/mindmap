@@ -234,6 +234,11 @@ https://claude.ai/artifact/5ySnmjspG48dmg8MpwcwLt.
   ran past the edge (`tourKeysPhone`). A phone's words name no key of a
   keyboard and nothing a computer alone has (`phoneTourCards`, the
   palette's commands, the settings' parts).
+- **A sheet's focus is on itself**, not on its first field: MyGo moves
+  the focus into a sheet as it rises, and a title taking it brought the
+  keyboard up over what was to be read.
+- **A clip is a page of its own** (`phoneCovered`): no row of keys, bar
+  nor places round it, ‹ 收集 its one way back.
 - **A page is 16 in** (`pagePad`); a head with something at its right has
   it under it (`pageHead`, 今天's head); a row of the settings has what
   sets it under its name where they do not fit side by side (`setRow`).

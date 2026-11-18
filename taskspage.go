@@ -599,7 +599,7 @@ func (a *app) tasksHead(c *ui.Context, all []taskItem) {
 	}
 	head := line(c.Key("tasks-head")).MinHeight(82).Padding(16, 0, 10).Gap(10).AlignItems(ui.End).Shrink(0).FillWidth().DragWindow()
 	if narrowLayout {
-		head.AlignItems(ui.Start)
+		head.AlignItems(ui.Stretch).MinHeight(0).Padding(2, 0, 8)
 	}
 	head.Children(func() {
 		ui.Column(c).Gap(3).Grow(1).Shrink(1).MinWidth(0).Children(func() {
@@ -683,9 +683,11 @@ func (a *app) tasksHead(c *ui.Context, all []taskItem) {
 			if a.tasks.view == tasksDay {
 				mode = 1
 			}
-			if m := tabGroup(c, "tasks-mode", []string{"列表", "日程"}, mode); m != mode {
-				a.tasks.view = []int{tasksToday, tasksDay}[m]
-			}
+			ui.Row(c.Key("tasks-mode-row")).FillWidth().Margin(4, 0, 0).Children(func() {
+				if m := segmented(c, "tasks-mode", "列表或日程", []string{"列表", "日程"}, mode); m != mode {
+					a.tasks.view = []int{tasksToday, tasksDay}[m]
+				}
+			})
 			return
 		}
 		if a.cfg.HideTree { // with no left column, the map to narrow by is here
@@ -1825,8 +1827,8 @@ func (a *app) taskRowBody(c *ui.Context, it taskItem, overdue, once bool) {
 				}
 			})
 			sub := it.mapName
-			if it.where != "" && it.where != it.mapName {
-				sub += " · " + it.where
+			if w := it.placeIn(); w != "" {
+				sub += " · " + w
 			}
 			if table { // its map has a column of its own: here only where in it
 				if it.where != "" && it.where != it.mapName && a.tasks.onMap == "" {
@@ -2716,4 +2718,14 @@ func (a *app) foldTasks(group string, fold bool) {
 		a.cfg.TasksFolded = append(a.cfg.TasksFolded, group)
 	}
 	a.cfg.save()
+}
+
+// placeIn is where in its map a task is, without the map's central topic
+// when that is the map's name: 「ergora · ergora › 架构」 said it twice.
+func (it taskItem) placeIn() string {
+	w := strings.TrimPrefix(it.where, it.mapName+" › ")
+	if w == it.mapName {
+		return ""
+	}
+	return w
 }
